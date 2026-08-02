@@ -2,12 +2,13 @@
 sp_history_simulation.py — reproduce S&P 500 inclusion/exclusion decisions in
 our independent simulation, and track our reimplementation vs the actuals.
 
-WHAT THIS DOES (foundation)
----------------------------
+WHAT THIS DOES
+--------------
 1. Reconstructs a POINT-IN-TIME (PIT) membership history of the S&P 500 from
-   `sp500_constituents.parquet` (`date_added`). A current member is treated as
-   IN the index from its `date_added` onward. This is a real, if addition-only,
-   membership timeline (we do not yet have removal/ deletion events; see LIMITS).
+   `sp500_changes.parquet` (real Effective Date / Added / Removed events,
+   1976-2026) plus `sp500_constituents.parquet` (date_added for current members).
+   A ticker is a member as of `d` iff it was added on/before `d` and not removed
+   before/at `d`. This is a REAL membership timeline including removals.
 2. On each simulated rebalance date, scores every candidate with our S&P-style
    methodology (`sp_index_methodology.evaluate(as_of=...)`) and compares the
    predicted inclusion set against the reconstructed actual membership.
@@ -16,15 +17,14 @@ WHAT THIS DOES (foundation)
 
 LIMITS (honest)
 ---------------
-- Our fundamentals store is a SINGLE snapshot (PIT-backfilled, constant over
-  time), so per-date fundamentals don't yet vary. The simulation therefore
-  shows our *current* methodology applied at each past date, not the methodology
-  we would have run *with then-available data*. Multi-snapshot fundamentals
-  (see pit_snapshots TODO) are the prerequisite for a fully historical replay.
-- Removal events (companies dropped from the index) are not yet modeled; actual
-  membership is addition-only. Precision is exact; recall is a lower bound.
-- We only hold fundamentals for 142 names, so most historical constituents are
-  predicted-False (false negatives) — a coverage gap, surfaced per date.
+- Our fundamentals store is multi-snapshot (real quarterly history, 2024-2026,
+  549 tickers after the yfinance backfill), but it does NOT reach back to the
+   pre-2024 membership timeline. So for rebalance dates before ~2024-06, the
+  scored set only covers names we have history for; earlier actuals include
+  names we cannot score (surfaced as false negatives — a coverage gap, not a
+  methodology error).
+- `sp500_changes.parquet` is scraped from Wikipedia and may lag the official
+  index; it is the best open add/remove source available (not fabricated).
 
 Design: duckdb-only at import (pandas optional). Reads stock_monitor data files.
 """
@@ -46,17 +46,64 @@ REBALANCE_QUARTER_ENDS = True
 
 
 def pit_membership_as_of(as_of: dt.date) -> set[str]:
-    """Actual S&P 500 members as of `as_of`, reconstructed from date_added.
+    """Actual S&P 500 members as of `as_of`, reconstructed from REAL add/remove
+    events (`sp500_changes.parquet`, 1976-2026) plus constituents' `date_added`.
 
-    A current constituent is a member iff date_added <= as_of."""
+    Membership model (honest about coverage gaps):
+      - ADDS: union of every constituent's `date_added` (current members) and
+        every `sp500_changes.added` event. Earliest known add date is used.
+      - REMOVALS: every `sp500_changes.removed` event (earliest removal date).
+      - A ticker removed but with NO known add record (Wikipedia's changes table
+        is sparse before ~2010) is given a SENTINEL add date of the index
+        inception (1928-01-02): we KNOW it was a member, we just don't know the
+        exact add date. This keeps removed names visible as members until their
+        removal date instead of vanishing.
+      - A name is a member as of `d` iff add_date <= d AND (no removal OR
+        removal_date > d).
+    """
     con = duckdb.connect()
-    rows = con.execute(
-        f"""
-        SELECT ticker FROM read_parquet('{(DATA_DIR / 'sp500_constituents.parquet').as_posix()}')
-        WHERE current AND date_added IS NOT NULL AND date_added <= DATE '{as_of}'
-        """
-    ).fetchall()
-    return {r[0] for r in rows}
+    # Cache the membership timeline (add/remove sets) once per process.
+    cache = _MEMBERSHIP_CACHE.get("timeline")
+    if cache is None:
+        cache = con.execute(
+            f"""
+            WITH adds_raw AS (
+                SELECT ticker, d FROM (
+                    SELECT ticker, date_added AS d
+                      FROM read_parquet('{(DATA_DIR / 'sp500_constituents.parquet').as_posix()}')
+                     WHERE date_added IS NOT NULL
+                    UNION ALL
+                    SELECT added AS ticker, event_date AS d
+                      FROM read_parquet('{(DATA_DIR / 'sp500_changes.parquet').as_posix()}')
+                     WHERE added IS NOT NULL
+                )
+            ),
+            adds AS (
+                SELECT ticker, MIN(d) AS d FROM adds_raw GROUP BY ticker
+                UNION ALL
+                SELECT removed AS ticker, DATE '1928-01-02' AS d
+                  FROM read_parquet('{(DATA_DIR / 'sp500_changes.parquet').as_posix()}')
+                 WHERE removed IS NOT NULL
+                   AND removed NOT IN (SELECT ticker FROM adds_raw)
+            ),
+            removes AS (
+                SELECT removed AS ticker, MIN(event_date) AS d
+                  FROM read_parquet('{(DATA_DIR / 'sp500_changes.parquet').as_posix()}')
+                 WHERE removed IS NOT NULL GROUP BY removed
+            )
+            SELECT a.ticker, a.d AS add_d, r.d AS remove_d
+            FROM adds a LEFT JOIN removes r ON r.ticker = a.ticker
+            """
+        ).fetchall()
+        _MEMBERSHIP_CACHE["timeline"] = cache
+    members = set()
+    for tk, add_d, remove_d in cache:
+        if add_d <= as_of and (remove_d is None or remove_d > as_of):
+            members.add(tk)
+    return members
+
+
+_MEMBERSHIP_CACHE: dict = {}
 
 
 def rebalance_dates(start: dt.date, end: dt.date):
