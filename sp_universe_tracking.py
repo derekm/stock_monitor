@@ -128,9 +128,11 @@ def main():
     n_ds = sum(1 for r in rows if r["tier"] == "dual_strong")
     n_dw = sum(1 for r in rows if r["tier"] == "dual_weak")
     print(f"\ncoverage: {n_scored}/{len(rows)} scored; dual_strong={n_ds} dual_weak={n_dw}")
-    print("NOTE: 361 constituents lack fundamentals in our store -> 'unscored'.")
-    print("      Their vertical/basket tracking is real (GICS); metric fill needs a")
-    print("      real fundamentals fetch (not fabricated).")
+    if n_scored < len(rows):
+        print("NOTE: some constituents still lack real fundamentals -> 'unscored'.")
+        print("      Run backfill_constituents.py to fill them with real yfinance data.")
+    else:
+        print("Full coverage: every current constituent has real fundamentals + scored tiers.")
 
 
 if __name__ == "__main__":
