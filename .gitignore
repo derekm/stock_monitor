@@ -21,9 +21,7 @@ secrets.env
 # --- dashboard cache (regenerated) ---
 dashboard_data/cache/
 
-# NOTE: real data files (*.parquet, *.csv) ARE committed intentionally.
-# Total dataset is ~46 MB parquet + ~50 MB csv — small enough for plain git.
-# Revisit only if a single file exceeds ~100 MB; then switch to git-lfs:
-#   git lfs install
-#   git lfs track "*.parquet"
-# Long-term, historical/versioned data belongs in a DuckLake (see README.md).
+# --- transient / provenance-only downloads (regenerable via parse_sp500.py) ---
+sp500_wiki.html
+*.bak
+
