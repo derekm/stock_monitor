@@ -1,0 +1,9 @@
+# Granite Time Series forecasting stack
+torch>=2.0
+transformers>=4.36
+accelerate
+granite-tsfm
+# or: pip install "tsfm_public @ git+https://github.com/ibm-granite/granite-tsfm.git"
+pandas
+numpy
+pyarrow

@@ -1,0 +1,3912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Portfolio Decision Dashboard · DuckDB-Wasm</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #1a2332; --border: #2d3a4f;
+    --text: #e7ecf3; --muted: #8b9bb4; --accent: #3b82f6;
+    --good: #22c55e; --bad: #ef4444; --warn: #f59e0b; --chip: #243044;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #152033, var(--bg)); }
+  header h1 { margin: 0 0 0.25rem; font-size: 1.35rem; font-weight: 650; }
+  header p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+  nav { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(15,20,25,0.92); backdrop-filter: blur(8px); z-index: 10; }
+  nav button { background: var(--chip); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 0.35rem 0.85rem; cursor: pointer; font-size: 0.82rem; }
+  nav button.active, nav button:hover { background: var(--accent); border-color: var(--accent); }
+  main { padding: 1rem 1.5rem 3rem; max-width: 1400px; margin: 0 auto; }
+  section { display: none; }
+  section.active { display: block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
+  section h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
+  section h3 { font-size: 0.95rem; color: #c5d0e0; margin: 1rem 0 0.5rem; }
+  #rules-box { background: var(--panel) !important; color: var(--text); border: 1px solid var(--border); }
+  .widget-toolbar { padding: 0.75rem 1rem; }
+
+  .widget-live-bar {
+    display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+    margin: 0 0 0.75rem; padding: 0.4rem 0;
+  }
+  .widget-live-bar .widget-status {
+    color: var(--muted); font-size: 0.78rem; margin-left: 0.25rem;
+  }
+  .widget-card-title {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;
+  }
+
+  .widget-toolbar label { font-size: 0.78rem; color: var(--muted); }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.1rem; }
+  .card h3 { margin: 0 0 0.6rem; font-size: 0.95rem; color: #c5d0e0; }
+  .kpi { font-size: 1.6rem; font-weight: 700; }
+  .kpi small { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  th, td { padding: 0.4rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+  tr:hover td { background: rgba(59,130,246,0.08); }
+  .tag { display: inline-block; padding: 0.12rem 0.45rem; border-radius: 6px; font-size: 0.72rem; font-weight: 600; }
+  .tag-in { background: rgba(34,197,94,0.15); color: var(--good); }
+  .tag-out { background: rgba(139,155,180,0.15); color: var(--muted); }
+  .tag-bull { background: rgba(34,197,94,0.15); color: var(--good); }
+  .tag-bear { background: rgba(239,68,68,0.15); color: var(--bad); }
+  .tag-neutral { background: rgba(245,158,11,0.15); color: var(--warn); }
+  .decision { border-left: 3px solid var(--accent); padding-left: 0.85rem; margin-bottom: 0.9rem; }
+  .decision h4 { margin: 0 0 0.25rem; font-size: 0.92rem; }
+  .decision p { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
+  .scroll { max-height: 420px; overflow: auto; }
+  #sql-input { width: 100%; min-height: 90px; background: #0c1017; color: #d6e4ff; border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; font-family: ui-monospace, monospace; font-size: 0.82rem; }
+  .sql-actions { display: flex; gap: 0.5rem; margin: 0.5rem 0 1rem; flex-wrap: wrap; }
+  .sql-actions button, .chip-btn { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 0.45rem 0.9rem; cursor: pointer; font-size: 0.82rem; }
+  .chip-btn { background: var(--chip); border: 1px solid var(--border); color: var(--text); }
+  .chip-btn:hover { border-color: var(--accent); }
+  #sql-status { color: var(--muted); font-size: 0.8rem; margin-left: 0.5rem; }
+  .chart-wrap { position: relative; height: 280px; }
+  .hl { background: rgba(59,130,246,0.12); }
+  footer { color: var(--muted); font-size: 0.75rem; padding: 1rem 1.5rem 2rem; border-top: 1px solid var(--border); }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem; }
+
+  .qb { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
+  @media (max-width: 900px) { .qb { grid-template-columns: 1fr; } }
+  .qb label { display: block; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.25rem; }
+  .qb select, .qb input, .qb textarea {
+    width: 100%; background: #0c1017; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.45rem 0.55rem; font-size: 0.82rem;
+  }
+  .qb-cols { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; max-height: 120px; overflow: auto;
+    background: #0c1017; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem; }
+  .qb-cols label { display: flex; align-items: center; gap: 0.3rem; color: var(--text); font-size: 0.78rem; margin: 0; }
+  .qb-filters { display: flex; flex-direction: column; gap: 0.4rem; }
+  .qb-filter-row { display: grid; grid-template-columns: 1.2fr 0.8fr 1.2fr auto; gap: 0.35rem; align-items: center; }
+  .qb-filter-row select, .qb-filter-row input { font-size: 0.78rem; }
+  .qb-preview { font-family: ui-monospace, monospace; font-size: 0.78rem; color: #9ec1ff; background: #0c1017;
+    border: 1px dashed var(--border); border-radius: 8px; padding: 0.6rem 0.75rem; white-space: pre-wrap; margin: 0.5rem 0; }
+
+</style>
+</head>
+<body>
+<header>
+  <h1>Portfolio Decision Dashboard</h1>
+  <p>DuckDB-Wasm · value screens · sector structure · forecasts · anomalies · inclusion rationale</p>
+</header>
+<nav id="nav">
+  <button data-tab="decisions" class="active">Decisions</button>
+  <button data-tab="portfolio">Portfolio</button>
+  <button data-tab="value">Value Screens</button>
+  <button data-tab="sectors">Sectors</button>
+  <button data-tab="forecasts">Forecasts</button>
+    <button type="button" data-tab="pipelines">Pipelines</button>
+  <button data-tab="anomalies">Anomalies</button>
+  <button data-tab="indexes">Index Backtest</button>
+  <button data-tab="sql">SQL Lab</button>
+  <button data-tab="fisher">Fisher Indexes</button>
+  <button data-tab="inclusion">Inclusion Rules</button>
+  <button data-tab="stress">Stress / ETFs</button>
+  <button data-tab="regime">Regime / KF</button>
+  <button data-tab="quality">Quality / Dual</button>
+  <button data-tab="rolling">Rolling</button>
+  <button data-tab="sleeves">Sleeves / Groups</button>
+  <button data-tab="manage">Manage</button>
+  <button data-tab="ops">Ops / Services</button>
+  <button data-tab="csvcat">CSV Catalog</button>
+</nav>
+<main>
+  <!-- DECISIONS -->
+  <section id="decisions" class="active">
+    <div class="sql-actions" style="margin-bottom:0.75rem">
+      <button type="button" class="chip-btn" id="live-refresh-decisions">Live: trifecta via DuckDB</button>
+      <button type="button" class="chip-btn" id="live-refresh-holdings">Live: holdings</button>
+      <span id="live-status" style="color:var(--muted);font-size:0.78rem"></span>
+    </div>
+
+    <div class="badge-row">
+      <span class="tag tag-in">Inclusion drivers</span>
+      <span class="tag tag-neutral">Highlighted analyses</span>
+    </div>
+    <div class="grid" style="margin-bottom:1rem">
+      <div class="card"><div class="kpi" id="kpi-holdings">—</div><small>Holdings</small></div>
+      <div class="card"><div class="kpi" id="kpi-trifecta">—</div><small>Value trifecta names</small></div>
+      <div class="card"><div class="kpi" id="kpi-univ">—</div><small>Monitored universe</small></div>
+      <div class="card"><div class="kpi" id="kpi-anom">—</div><small>Recent anomaly events</small></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Decision memos (portfolio inclusion)</h3>
+      <div id="decision-list"></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h3>Value trifecta (EV/EBITDA≤9, P/B≤1.5, MktCap/Assets≤0.5)</h3>
+        <div class="scroll"><div class="card" style="margin-bottom:1rem">
+      <h3>Buy candidates (gates + momentum + factors)</h3>
+      <div class="scroll"><table id="tbl-buys"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <table id="tbl-trifecta"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Portfolio valuation rank</h3>
+        <div class="scroll"><table id="tbl-port-val"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PORTFOLIO -->
+  <section id="portfolio">
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Holdings</h3>
+      <div class="scroll"><table id="tbl-holdings"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3>Asset ↔ sector correlation (home vs market)</h3>
+      <div class="scroll"><table id="tbl-asset-sector"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- VALUE -->
+  <section id="value">
+    <div class="sql-actions" style="margin-bottom:0.75rem">
+      <button type="button" class="chip-btn" id="live-refresh-value">Live: value screens (DuckDB)</button>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Lowest EV/EBITDA (top 20)</h3>
+        <div class="scroll"><table id="tbl-low-ev"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Lowest P/B (top 15)</h3>
+        <div class="scroll"><table id="tbl-low-pb"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>Full fundamentals (sortable via SQL Lab)</h3>
+      <div class="scroll" style="max-height:360px"><table id="tbl-fund"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- SECTORS -->
+  <section id="sectors">
+    <div class="grid">
+      <div class="card">
+        <h3>Sector correlation heatmap (approx)</h3>
+        <div class="chart-wrap"><canvas id="chart-sector-corr"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Rolling corr stability (higher std = less stable)</h3>
+        <div class="scroll"><table id="tbl-stability"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>HMM regime conditional correlations</h3>
+      <div class="scroll"><table id="tbl-hmm"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- FORECASTS -->
+  <section id="forecasts">
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Live Granite forecast studio</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        Always runs <strong>live</strong> forecasts via <code>granite_service.py</code>
+        (POST <code>/forecast</code>). Prior runs stay in-memory for comparison.
+        API: <code id="api-url-label">http://127.0.0.1:5055</code>
+      </p>
+      <div class="qb">
+        <div>
+          <label>Target source</label>
+          <select id="fc-source">
+            <option value="portfolio">Portfolio</option>
+            <option value="index">Named index(es)</option>
+            <option value="tickers">Custom tickers</option>
+            <option value="sectors">Sector EW indexes</option>
+            <option value="embedded">Embedded snapshot only</option>
+          </select>
+        </div>
+        <div>
+          <label>Index name(s)</label>
+          <input id="fc-index" value="portfolio" placeholder="portfolio,growth,defensive or all" />
+        </div>
+        <div>
+          <label>Tickers (custom)</label>
+          <input id="fc-tickers" value="MOS,CF,SHEL" />
+        </div>
+        <div>
+          <label>Horizon</label>
+          <input id="fc-horizon" type="number" min="1" max="96" value="10" />
+        </div>
+        <div>
+          <label>Context</label>
+          <input id="fc-context" type="number" min="32" max="512" value="512" />
+        </div>
+        <div>
+          <label>Days ago (history)</label>
+          <input id="fc-days-ago" type="number" min="0" max="512" value="0" title="0 = full / first-trade rules" />
+        </div>
+        <div>
+          <label>From first trade (forecast start / hold window)</label>
+          <select id="fc-first-trade">
+            <option value="1" selected>Yes</option>
+            <option value="0">No</option>
+          </select>
+        </div>
+        <div>
+          <label>Multivariate</label>
+          <select id="fc-multivariate">
+            <option value="0" selected>Off</option>
+            <option value="1">On</option>
+          </select>
+        </div>
+        <div>
+          <label>Peer mode</label>
+          <select id="fc-peer-mode">
+            <option value="none" selected>None</option>
+            <option value="index">Index members</option>
+            <option value="correlated">Most correlated</option>
+            <option value="uncorrelated">Least correlated</option>
+            <option value="custom">Custom peers</option>
+          </select>
+        </div>
+        <div>
+          <label>Peer index</label>
+          <input id="fc-peer-index" value="defensive" placeholder="defensive,growth,sectors…" />
+        </div>
+        <div>
+          <label>Peer tickers</label>
+          <input id="fc-peer-tickers" value="" placeholder="SPY,XLP,…" />
+        </div>
+        <div>
+          <label>Peer top N</label>
+          <input id="fc-peer-topn" type="number" min="1" max="20" value="5" />
+        </div>
+        <div>
+          <label>Run label</label>
+          <input id="fc-run-label" value="" placeholder="optional name for comparison" />
+        </div>
+        <div>
+          <label>API base URL</label>
+          <input id="fc-api" value="http://127.0.0.1:5055" />
+        </div>
+      </div>
+      <div class="sql-actions">
+        <button type="button" id="fc-run">Run live forecast</button>
+        <button type="button" class="chip-btn" id="fc-health">Health</button>
+        <button type="button" class="chip-btn" id="fc-indexes">Load indexes</button>
+        <button type="button" class="chip-btn" id="fc-clear-runs">Clear run history</button>
+        <span id="fc-status" style="color:var(--muted);font-size:0.8rem"></span>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Run history (in-memory multi-shot comparison)</h3>
+      <p style="color:var(--muted);font-size:0.8rem">Select runs to overlay on the path chart. Latest run is always shown.</p>
+      <div id="fc-run-list" class="sql-actions" style="flex-wrap:wrap;gap:0.4rem"></div>
+      <div class="scroll" style="max-height:180px;margin-top:0.5rem">
+        <table id="tbl-fc-runs"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Price path — history + forecast (compare runs)</h3>
+      <div class="chart-wrap" style="height:380px"><canvas id="chart-forecast-path"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Horizon % change snapshot (active run)</h3>
+      <div class="chart-wrap"><canvas id="chart-forecast"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Forecast table (active run)</h3>
+      <div class="scroll"><table id="tbl-forecast"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  
+  <section id="pipelines">
+    <div class="card">
+      <h3>Data pipelines</h3>
+      <p style="color:var(--muted);font-size:0.82rem">
+        Rerun loads, backfills, analytics, backtests via <code>pipeline_service.py</code>
+        (<span id="pipe-url-label">http://127.0.0.1:5056</span>).
+      </p>
+      <div class="qb">
+        <div>
+          <label>Pipeline API</label>
+          <input id="pipe-api" value="http://127.0.0.1:5056" />
+        </div>
+        <div>
+          <label>Job</label>
+          <select id="pipe-job">
+            <option value="export">export — dashboard data.json</option>
+            <option value="prices">prices — update_prices</option>
+            <option value="backfill">backfill — 1y history</option>
+            <option value="analytics">analytics — daily suite</option>
+            <option value="preferred">preferred — metrics / screens</option>
+            <option value="inclusion">inclusion — candidates</option>
+            <option value="stress">stress — dual-pass scenarios</option>
+            <option value="forecast_bt">forecast_bt — from first trade</option>
+            <option value="forecast_reliability">forecast_reliability — setup sweep</option>
+            <option value="monte_carlo">monte_carlo — regime MC</option>
+            <option value="mcmc">mcmc — regime means</option>
+            <option value="hmm">hmm — regime detection</option>
+            <option value="fisher">fisher — index rebuild</option>
+            <option value="index_bt">index_bt — parameterized sleeve backtest</option>
+            <option value="all">all — prices + analytics + export</option>
+          </select>
+        </div>
+      </div>
+      <div class="sql-actions">
+        <button type="button" id="pipe-run">Run job</button>
+        <button type="button" class="chip-btn" id="pipe-status-btn">Status</button>
+        <button type="button" class="chip-btn" id="pipe-jobs-btn">List jobs</button>
+        <span id="pipe-status" style="color:var(--muted);font-size:0.8rem"></span>
+      </div>
+      <div class="scroll" style="max-height:200px;margin-top:0.5rem">
+        <table id="tbl-pipe-hist"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ANOMALIES -->
+  <section id="anomalies">
+    <div class="sql-actions" style="margin-bottom:0.75rem">
+      <button type="button" class="chip-btn" id="live-refresh-anomalies">Live: anomalies (DuckDB)</button>
+    </div>
+
+    <div class="card">
+      <h3>Recent statistical / TSPulse-ready anomalies</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        Residual / return z-scores from the statistical anomaly pipeline (TSPulse-ready schema).
+        Sorted by |score|. Use SQL Lab for filters (e.g. <code>abs(score) &gt;= 3</code>).
+      </p>
+      <div class="scroll" style="max-height:480px"><table id="tbl-anom"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- INDEXES -->
+  <section id="indexes">
+    <div class="sql-actions" style="margin-bottom:0.75rem">
+      <button type="button" class="chip-btn" id="live-refresh-index">Live: index stats (DuckDB)</button>
+    </div>
+
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Live parameterized backtest</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        Runs <code>live_index_backtest.py</code> via pipeline service
+        (<span id="bt-pipe-label">http://127.0.0.1:5056</span>). Daily returns clipped to limit tick noise.
+      </p>
+      <div class="qb">
+        <div>
+          <label>Indexes</label>
+          <input id="bt-indexes" value="fertilizer,defensive,portfolio,growth" placeholder="fertilizer,defensive,portfolio,growth" />
+        </div>
+        <div>
+          <label>Years</label>
+          <input id="bt-years" type="number" min="0.25" max="20" step="0.25" value="1" />
+        </div>
+        <div>
+          <label>Risk-free (rf)</label>
+          <input id="bt-rf" type="number" min="0" max="0.2" step="0.005" value="0.04" />
+        </div>
+        <div>
+          <label>Clip daily ±</label>
+          <input id="bt-clip" type="number" min="0" max="1" step="0.05" value="0.25" />
+        </div>
+        <div>
+          <label>Benchmark</label>
+          <input id="bt-bench" value="SPY" />
+        </div>
+        <div>
+          <label>Include benchmark</label>
+          <select id="bt-incl-bench"><option value="1" selected>Yes</option><option value="0">No</option></select>
+        </div>
+      </div>
+      <div class="sql-actions">
+        <button type="button" id="bt-run">Run backtest</button>
+        <button type="button" class="chip-btn" id="bt-run-fc">Run forecast backtest</button>
+        <span id="bt-status" style="color:var(--muted);font-size:0.8rem"></span>
+      </div>
+    </div>
+    <div class="grid" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Sharpe ratio comparison</h3>
+        <div class="chart-wrap"><canvas id="chart-sharpe"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Ann return vs vol</h3>
+        <div class="chart-wrap"><canvas id="chart-ret-vol"></canvas></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Index / sleeve backtest</h3>
+      <div class="scroll"><table id="tbl-index"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Sharpe ranking table</h3>
+      <div class="scroll"><table id="tbl-sharpe"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Factor / rotation sleeve performance</h3>
+      <div class="scroll"><table id="tbl-factor-rot"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3>Forecast backtest metrics</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        Granite / fallback walk-forward accuracy (MAE, RMSE, directional accuracy).
+      </p>
+      <div class="scroll"><table id="tbl-fc-bt"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- SQL -->
+  <section id="sql">
+    <div class="card" style="margin-bottom:1rem">
+      <h3>SQL Query Builder</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        Point-and-click SELECT · decision templates · then edit/run in the lab below.
+      </p>
+      <div class="qb">
+        <div>
+          <label>Table</label>
+          <select id="qb-table"></select>
+        </div>
+        <div>
+          <label>Limit</label>
+          <input id="qb-limit" type="number" min="1" max="5000" value="50" />
+        </div>
+        <div style="grid-column: 1 / -1">
+          <label>Columns (empty = *)</label>
+          <div class="qb-cols" id="qb-cols"></div>
+        </div>
+        <div style="grid-column: 1 / -1">
+          <label>Filters</label>
+          <div class="qb-filters" id="qb-filters"></div>
+          <button type="button" class="chip-btn" id="qb-add-filter" style="margin-top:0.4rem">+ Add filter</button>
+        </div>
+        <div>
+          <label>Order by</label>
+          <select id="qb-order-col"><option value="">—</option></select>
+        </div>
+        <div>
+          <label>Direction</label>
+          <select id="qb-order-dir"><option value="ASC">ASC</option><option value="DESC">DESC</option></select>
+        </div>
+      </div>
+      <div class="qb-preview" id="qb-preview">SELECT * FROM value_trifecta LIMIT 50</div>
+      <div class="sql-actions">
+        <button type="button" id="qb-apply">Apply to editor</button>
+        <button type="button" id="qb-run">Build &amp; Run</button>
+        <button type="button" class="chip-btn" id="qb-clear">Reset builder</button>
+      </div>
+      <div class="sql-actions" style="margin-top:0">
+        <span style="color:var(--muted);font-size:0.78rem;align-self:center">Decision templates:</span>
+        <button type="button" class="chip-btn qb-tpl" data-tpl="trifecta_out">Trifecta not in portfolio</button>
+        <button type="button" class="chip-btn qb-tpl" data-tpl="port_val">Portfolio valuation</button>
+        <button type="button" class="chip-btn qb-tpl" data-tpl="low_ev">Cheap EV/EBITDA</button>
+        <button type="button" class="chip-btn qb-tpl" data-tpl="home_beta">Home-sector corr</button>
+        <button type="button" class="chip-btn qb-tpl" data-tpl="fc_rank">Forecast ranking</button>
+        <button type="button" class="chip-btn qb-tpl" data-tpl="anom">Strong anomalies</button>
+        <button type="button" class="chip-btn qb-tpl" data-tpl="index_bt">Index backtest</button>
+        <button type="button" class="chip-btn qb-tpl" data-tpl="mos_cf">MOS vs peers Materials</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card" style="margin-bottom:1rem;border-style:dashed">
+        <h3>Local resources (CSV / Parquet)</h3>
+        <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
+          Discovered dynamically from <code>dashboard_data/data_catalog.json</code>.
+          Click to load into DuckDB (lazy). Search filters the list.
+        </p>
+        <div class="qb">
+          <div style="grid-column:1/-1">
+            <label>Filter resources</label>
+            <input id="sql-catalog-filter" placeholder="e.g. fisher, preferred, corr" />
+          </div>
+        </div>
+        <div id="sql-catalog" class="qb-cols" style="max-height:160px;overflow:auto;margin-top:0.5rem"></div>
+        <div class="sql-actions" style="margin-top:0.5rem">
+          <button type="button" class="chip-btn" id="sql-refresh-catalog">Refresh catalog</button>
+          <button type="button" class="chip-btn" id="sql-load-visible">Load filtered into DuckDB</button>
+          <button type="button" class="chip-btn" id="sql-show-tables">Show tables</button>
+          <span id="sql-catalog-status" style="color:var(--muted);font-size:0.78rem"></span>
+        </div>
+      </div>
+      <h3>DuckDB-Wasm SQL Lab</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.5rem">
+        In-memory exports + <strong>lazy local files</strong> from the static server (CSV/Parquet).
+        Use single-quoted paths in <code>read_csv_auto('file.csv')</code> / <code>read_parquet('file.parquet')</code>
+        or <code>SELECT * FROM table_name</code> after auto-register. Tables:
+        fertilizer_corr, asset_sector_corr, index_backtest, forecasts, forecasts_hmax, anomalies,
+        corr_stability, corr_stability_metrics, hmm_regime_corr, hmm_regimes, granger_matrix,
+        forecast_backtest, kalman_corr, rolling_sector_corr, rolling_cross_asset,
+        sector_tickers, fisher_indexes, fisher_indexes_duckdb, price_qty_panel, decision_notes, csv_catalog
+      </p>
+      <textarea id="sql-input">-- Decision: candidates not yet in portfolio that clear value trifecta
+SELECT ticker, name, sector, pb_ratio, mktcap_to_assets, ev_ebitda, market_cap_b
+FROM value_trifecta
+WHERE COALESCE(in_portfolio, false) = false
+ORDER BY ev_ebitda;</textarea>
+      <div class="sql-actions">
+        <button id="sql-run">Run</button>
+        <button type="button" class="chip-btn" id="sql-show-tables">Show tables</button>
+        <button class="chip-btn" data-sql="SELECT ticker, name, sector, pb_ratio, mktcap_to_assets, ev_ebitda FROM fundamentals WHERE in_portfolio = true ORDER BY pb_ratio">Portfolio valuation</button>
+        <button class="chip-btn" data-sql="SELECT ticker, name, sector, ev_ebitda, pb_ratio, mktcap_to_assets FROM low_ev_ebitda ORDER BY ev_ebitda LIMIT 15">Cheap EV/EBITDA</button>
+        <button class="chip-btn" data-sql="SELECT ticker, sector, corr FROM asset_sector_corr WHERE is_home_sector = true ORDER BY corr DESC">Home-sector beta</button>
+        <button class="chip-btn" data-sql="SELECT ticker, last_close, forecast_close, pct_change FROM forecasts_hmax ORDER BY pct_change DESC">Forecast ranking</button>
+        <button class="chip-btn" data-sql="SELECT ticker, date, close, score, ret_z FROM anomalies WHERE abs(score) >= 3 ORDER BY date DESC LIMIT 25">Strong anomalies</button>
+        <button class="chip-btn" data-sql="SELECT * FROM index_backtest">Index backtest</button>
+        <button class="chip-btn" data-sql="SELECT * FROM read_csv_auto('preferred_metrics.csv') LIMIT 30">read_csv preferred</button>
+        <button class="chip-btn" data-sql="SELECT * FROM read_parquet('trades.parquet') LIMIT 20">read_parquet trades</button>
+        <button class="chip-btn" data-sql="SHOW TABLES">SHOW TABLES</button>
+        <span id="sql-status"></span>
+      </div>
+      <div class="scroll"><table id="tbl-sql"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+
+  <section id="fisher">
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Chained Laspeyres · Paasche · Fisher indexes</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        Price (p)=close, quantity (q)=volume. Links chained from first date = 100. <strong>Compute in DuckDB-Wasm</strong> runs the same SQL as <code>run_fisher_duckdb.py</code> in-browser; Chart.js renders Laspeyres / Paasche / Fisher / nominal paths.
+        <strong>Nominal √(Fisher_P × Fisher_Q)</strong> tracks the geometric value index;
+        <strong>Fisher_P × Fisher_Q</strong> matches the nominal value ratio path.
+      </p>
+      <div class="qb">
+        <div>
+          <label>Universe preset</label>
+          <select id="fi-universe">
+            <option value="portfolio">portfolio</option>
+            <option value="fertilizer">fertilizer</option>
+            <option value="defensive">defensive</option>
+            <option value="Materials">Materials sector</option>
+            <option value="growth_tech">growth_tech</option>
+            <option value="custom">custom (from checkboxes)</option>
+          </select>
+        </div>
+        <div>
+          <label>Reference date (base = 100)</label>
+          <input id="fi-ref-date" type="date" />
+        </div>
+        <div>
+          <label>Series to plot</label>
+          <select id="fi-series">
+            <option value="decomp">Inflation vs growth vs nominal</option>
+            <option value="fisher_p">Fisher price (inflation path)</option>
+            <option value="fisher_q">Fisher quantity (growth path)</option>
+            <option value="nominal_fisher_product">Fisher_P × Fisher_Q nominal</option>
+            <option value="nominal_sqrt_fisher">√(Fisher_P × Fisher_Q)</option>
+            <option value="laspeyres_p">Laspeyres price</option>
+            <option value="paasche_p">Paasche price</option>
+            <option value="all_p">All price indexes</option>
+            <option value="rates">Period rates π, g, n</option>
+          </select>
+        </div>
+        <div style="grid-column:1/-1">
+          <label>Custom assets (used when universe = custom)</label>
+          <div class="qb-cols" id="fi-tickers"></div>
+        </div>
+      </div>
+      <p style="color:var(--muted);font-size:0.8rem;margin:0.4rem 0 0.75rem">
+        <strong>Identity:</strong> (1 + π)·(1 + g) = (1 + n) on Fisher links, where
+        π = price inflation (Fisher_P link − 1), g = real/quantity growth (Fisher_Q link − 1),
+        n = nominal value growth (Fisher_P×Fisher_Q link − 1). Default reference = first date of the series (or 1y lookback when longer).
+      </p>
+      <div class="sql-actions">
+        <button type="button" id="fi-load">Load &amp; rebase</button>
+        <button type="button" id="fi-recompute">Recompute (JS)</button>
+        <button type="button" id="fi-duckdb">Compute in DuckDB-Wasm</button>
+        <button type="button" class="chip-btn" id="fi-backfill">Backfill indexes</button>
+        <button type="button" class="chip-btn" id="fi-to-sql">Open as SQL</button>
+        <span id="fi-status" style="color:var(--muted);font-size:0.8rem"></span>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Index levels (reference-rebased)</h3>
+      <div class="chart-wrap" style="height:340px"><canvas id="chart-fisher"></canvas></div>
+    </div>
+    <div class="grid" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Cumulative factors (π, g, nominal)</h3>
+        <div class="chart-wrap" style="height:280px"><canvas id="chart-fisher-decomp"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Period rates % (π, g, n)</h3>
+        <div class="chart-wrap" style="height:280px"><canvas id="chart-fisher-rates"></canvas></div>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h3>Latest levels &amp; rates</h3>
+        <div class="scroll">
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Sector baskets within index (EW levels)</h3>
+      <p style="color:var(--muted);font-size:0.78rem">SP500 sleeve (and other indexes) split by sector — chart one basket or compare several.</p>
+      <div class="qb">
+        <div>
+          <label>Index</label>
+          <select id="fi-basket-index"><option value="sp500">sp500</option></select>
+        </div>
+        <div>
+          <label>Sectors (multi)</label>
+          <select id="fi-basket-sectors" multiple size="6" style="min-width:220px"></select>
+        </div>
+      </div>
+      <div class="sql-actions" style="margin-top:0.5rem">
+        <button type="button" id="fi-basket-plot">Chart selected baskets</button>
+        <button type="button" class="chip-btn" id="fi-basket-all">Select all sectors</button>
+      </div>
+      <div class="chart-wrap" style="height:320px;margin-top:0.75rem"><canvas id="chart-fi-baskets"></canvas></div>
+      <div class="scroll" style="max-height:220px;margin-top:0.5rem"><table id="tbl-fi-baskets"><thead></thead><tbody></tbody></table></div>
+    </div>
+
+<table id="tbl-fisher-latest"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Series tail</h3>
+        <div class="scroll"><table id="tbl-fisher-tail"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  
+  
+  
+  
+  <section id="regime">
+    <h2>Regime / Kalman / VIX</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
+      HMM regime correlations, Kalman filter path, VIX-style term structure proxy,
+      regime-aware dual-pass thresholds, and transition triggers.
+    </p>
+    <div class="sql-actions" style="margin-bottom:0.75rem">
+      <button type="button" class="chip-btn" id="live-refresh-regime">Live: regime tables (DuckDB)</button>
+      <button type="button" class="chip-btn" id="live-refresh-regime-json">Reload from data.json</button>
+      <span id="regime-status" style="color:var(--muted);font-size:0.78rem"></span>
+    </div>
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Regime correlation breakdown</h3>
+        <div class="scroll"><table id="tbl-regcorr"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>HMM posterior / entropy summary</h3>
+        <div class="scroll"><table id="tbl-hmm-sum"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>HMM transition triggers</h3>
+      <div class="scroll"><table id="tbl-trig"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Kalman gain path (recent)</h3>
+      <div class="scroll" style="max-height:280px"><table id="tbl-kgain"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>VIX term structure proxy (recent)</h3>
+        <div class="scroll" style="max-height:260px"><table id="tbl-vix"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>VIX / Kalman summaries</h3>
+        <div class="scroll"><table id="tbl-regime-meta"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Threshold logic screen (dual-pass first)</h3>
+      <div class="scroll"><table id="tbl-thr"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="stress">
+    <h2>Stress / ETFs / crisis &amp; hedges</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
+      Dual-pass threshold stress, leave-one-leg sensitivity, defensive ETF screens,
+      crisis correlation regimes, tail-risk overlays, factor rotation, and ALLPAIRS summaries.
+    </p>
+    <div class="sql-actions" style="margin-bottom:0.75rem">
+      <button type="button" class="chip-btn" id="live-refresh-stress">Live: reload stress tables (DuckDB)</button>
+      <button type="button" class="chip-btn" id="live-refresh-stress-json">Reload from data.json</button>
+      <span id="stress-status" style="color:var(--muted);font-size:0.78rem"></span>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Dual-pass stress tests</h3>
+      <div class="scroll"><table id="tbl-stress"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Leave-one-leg sensitivity</h3>
+        <div class="scroll"><table id="tbl-sens"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Defensive value ETFs</h3>
+        <div class="scroll"><table id="tbl-etf"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:1rem">
+      <div class="card">
+        <h3>Crisis correlation regimes</h3>
+        <div class="scroll"><table id="tbl-crisis"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Tail-risk hedge performance</h3>
+        <div class="scroll"><table id="tbl-tail"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>Rolling correlation (avg pairwise)</h3>
+      <div class="scroll" style="max-height:280px"><table id="tbl-rollcorr"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="grid2" style="margin-top:1rem">
+      <div class="card">
+        <h3>Factor rotation performance</h3>
+        <div class="scroll"><table id="tbl-frot"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>ALLPAIRS correlation summary</h3>
+        <div class="scroll"><table id="tbl-apsum"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>ALLPAIRS sector matrix (latest)</h3>
+      <div class="scroll"><table id="tbl-apsec"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="inclusion">
+    <h2>Inclusion / exclusion criteria</h2>
+    <div id="rules-box" class="card" style="white-space:pre-wrap;font-size:0.85rem;padding:12px;border-radius:8px"></div>
+    <div class="grid2">
+      <div>
+        <h3>Inclusion candidates</h3>
+        <div class="scroll"><table id="tbl-inc"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div>
+        <h3>Exclusion candidates</h3>
+        <div class="scroll"><table id="tbl-exc"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <h3>Near-dual (1–2 legs short)</h3>
+    <div class="scroll"><table id="tbl-near"><thead></thead><tbody></tbody></table></div>
+    <h3>Defensive value exploration</h3>
+    <div class="scroll"><table id="tbl-defexp"><thead></thead><tbody></tbody></table></div>
+    <h3>Sector correlation matrix</h3>
+    <div class="scroll"><table id="tbl-scorr"><thead></thead><tbody></tbody></table></div>
+    <h3>Asset correlation matrix (subset)</h3>
+    <div class="scroll" style="max-height:420px"><table id="tbl-acorr"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="quality">
+    <h2>Quality / Dual (Buffett + trifecta)</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
+      Dual-pass = Buffett quality (ROE/ROIC/leverage) <strong>and</strong> value trifecta (EV/EBITDA, P/B, MktCap/Assets).
+      Low MktCap/Assets can mean cheap assets <em>or</em> a leveraged balance sheet — use D/E, coverage, and equity multiplier together.
+    </p>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Live dual-pass thresholds (defaults = benchmarks)</h3>
+      <div class="qb">
+        <div><label>ROE min</label><input id="th-roe" type="number" step="0.01" min="0" max="1" value="0.15" /></div>
+        <div><label>ROIC min</label><input id="th-roic" type="number" step="0.01" min="0" max="1" value="0.15" /></div>
+        <div><label>D/E max</label><input id="th-de" type="number" step="0.05" min="0" max="5" value="1.0" /></div>
+        <div><label>Interest cov. min</label><input id="th-ic" type="number" step="0.5" min="0" max="50" value="3" /></div>
+        <div><label>EV/EBITDA max</label><input id="th-ev" type="number" step="0.5" min="0" max="40" value="9" /></div>
+        <div><label>P/B max</label><input id="th-pb" type="number" step="0.1" min="0" max="10" value="1.5" /></div>
+        <div><label>MktCap/Assets max</label><input id="th-mca" type="number" step="0.05" min="0" max="3" value="0.5" /></div>
+        <div><label>Earn. stability min</label><input id="th-stab" type="number" step="0.05" min="0" max="1" value="0.25" /></div>
+      </div>
+      <div class="sql-actions" style="margin-top:0.5rem">
+        <button type="button" id="th-apply">Apply thresholds</button>
+        <button type="button" class="chip-btn" id="th-reset">Reset benchmarks</button>
+        <button type="button" class="chip-btn" id="live-refresh-quality">Live: DuckDB</button>
+        <button type="button" class="chip-btn" id="live-refresh-quality-json">Reload data.json</button>
+        <span id="quality-status" style="color:var(--muted);font-size:0.78rem"></span>
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Decision mix (live)</h3>
+        <div class="scroll"><table id="tbl-quality-mix"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Leverage vs low MCA (discriminators)</h3>
+        <p style="color:var(--muted);font-size:0.78rem;margin:0 0 0.4rem">
+          MCA ≤ threshold with high D/E or weak coverage → “levered-assets” caution; low D/E → “cheap assets”.
+        </p>
+        <div class="scroll"><table id="tbl-lev-disc"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>INCLUDE_CORE (dual pass, live)</h3>
+        <div class="scroll"><table id="tbl-dual"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Preferred metrics (top composite)</h3>
+        <div class="scroll" style="max-height:360px"><table id="tbl-preferred"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>DuPont ROE quality + leverage</h3>
+      <p style="color:var(--muted);font-size:0.78rem;margin:0 0 0.4rem">
+        Identity: <strong>ROE = PM × AT × EM</strong> where EM ≈ 1+D/E.
+        High ROE with high EM is leverage-driven; Buffett prefers high <code>pm_x_at</code> (ops) and modest EM.
+      </p>
+      <div class="scroll" style="max-height:320px"><table id="tbl-dupont"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>Screen backtest through time</h3>
+      <div class="scroll"><table id="tbl-screen-bt"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="rolling">
+    <h2>Rolling windows</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
+      Risk stats over rolling return windows, and how often each name clears Buffett / trifecta / dual screens across history.
+    </p>
+    <div class="sql-actions" style="margin-bottom:0.75rem">
+      <button type="button" class="chip-btn" id="live-refresh-rolling">Live: rolling tables (DuckDB)</button>
+      <button type="button" class="chip-btn" id="live-refresh-rolling-json">Reload from data.json</button>
+      <span id="rolling-status" style="color:var(--muted);font-size:0.78rem"></span>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Rolling window risk metrics</h3>
+      <div class="scroll"><table id="tbl-rolling"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Screen stability (Buffett / trifecta / dual rates)</h3>
+      <div class="scroll" style="max-height:380px"><table id="tbl-roll-stab"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3>Rolling avg pairwise correlation (recent)</h3>
+      <div class="scroll" style="max-height:280px"><table id="tbl-roll-corr-tab"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="sleeves">
+    <h2>Sleeves / Groups explorer</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
+      Aerospace / Starlink was a thematic <strong>growth sleeve</strong> (not a GICS sector).
+      This page is a reusable browser for <em>any</em> sector, index membership flag, or growth_sleeve / value_sleeve grouping.
+    </p>
+    <div class="widget-toolbar card" style="margin-bottom:1rem">
+      <div class="qb">
+        <div>
+          <label>Group by</label>
+          <select id="slv-mode">
+            <option value="growth_sleeve">growth_sleeve</option>
+            <option value="value_sleeve">value_sleeve</option>
+            <option value="sector">sector</option>
+            <option value="index">index membership</option>
+            <option value="industry">industry</option>
+          </select>
+        </div>
+        <div>
+          <label>Group</label>
+          <select id="slv-group"><option value="">— all —</option></select>
+        </div>
+        <div>
+          <label>Filter ticker</label>
+          <input id="slv-filter" placeholder="e.g. RKLB" />
+        </div>
+      </div>
+      <div class="sql-actions" style="margin-top:0.5rem">
+        <button type="button" id="slv-apply">Apply</button>
+        <button type="button" class="chip-btn" id="slv-aero">Preset: aerospace/Starlink</button>
+        <button type="button" class="chip-btn" id="slv-reload">Reload stocks</button>
+        <span id="slv-status" style="color:var(--muted);font-size:0.78rem"></span>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Group counts</h3>
+        <div class="scroll" style="max-height:280px"><table id="tbl-slv-counts"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Members</h3>
+        <div class="scroll" style="max-height:280px"><table id="tbl-slv-members"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>Detail (legacy aerospace_supply + monitored match)</h3>
+      <div class="scroll"><table id="tbl-aero"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="manage">
+    <h2>Manage stocks · indexes · sectors</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
+      Client-side draft editor for membership flags. Persist via pipeline
+      <code>manage_stocks.py</code> / analytics jobs (POST body not written to disk from the browser alone).
+    </p>
+    <div class="widget-toolbar card" style="margin-bottom:1rem">
+      <div class="qb">
+        <div><label>Ticker</label><input id="mg-ticker" placeholder="TICK" /></div>
+        <div><label>Name</label><input id="mg-name" placeholder="Company" /></div>
+        <div><label>Sector</label><input id="mg-sector" placeholder="Industrials" /></div>
+        <div><label>Industry</label><input id="mg-industry" placeholder="Aerospace & Defense" /></div>
+        <div><label>growth_sleeve</label><input id="mg-gsleeve" placeholder="starlink_supply" /></div>
+        <div><label>value_sleeve</label><input id="mg-vsleeve" placeholder="" /></div>
+        <div>
+          <label>Flags</label>
+          <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.25rem">
+            <label><input type="checkbox" id="mg-fert" /> fertilizer</label>
+            <label><input type="checkbox" id="mg-def" /> defensive</label>
+            <label><input type="checkbox" id="mg-growth" /> growth_tech</label>
+            <label><input type="checkbox" id="mg-port" /> in_portfolio</label>
+          </div>
+        </div>
+      </div>
+      <div class="sql-actions" style="margin-top:0.5rem">
+        <button type="button" id="mg-add">Stage add/update</button>
+        <button type="button" class="chip-btn" id="mg-export">Download draft JSON</button>
+        <button type="button" class="chip-btn" id="mg-run-list">Pipeline: list stocks</button>
+        <span id="mg-status" style="color:var(--muted);font-size:0.78rem"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Staged changes</h3>
+      <div class="scroll"><table id="tbl-mg-staged"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card" style="margin-top:1rem">
+      <h3>Current monitored_stocks (sample)</h3>
+      <div class="scroll" style="max-height:360px"><table id="tbl-mg-stocks"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="ops">
+    <h2>Microservices / daily ops</h2>
+    <p style="color:var(--muted);font-size:0.85rem">
+      Analytics API: <code id="ops-api-label">http://127.0.0.1:8767</code>
+      · Granite forecasts: <code>:5055</code>
+      · Pipeline jobs: <code>:5056</code>
+      · Static UI: <code>:8765</code>
+    </p>
+    <div class="qb"><div><label>Analytics API</label><input id="ops-api" value="http://127.0.0.1:8767" /></div></div>
+    <div class="ops-btns" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0">
+      <button type="button" class="ops" data-job="/run/preferred-metrics">Preferred metrics</button>
+      <button type="button" class="ops" data-job="/run/rolling">Rolling windows</button>
+      <button type="button" class="ops" data-job="/run/fundamentals-snapshot">Fundamentals snapshot</button>
+      <button type="button" class="ops" data-job="/run/screen-backtest">Screen backtest</button>
+      <button type="button" class="ops" data-job="/run/growth-analytics">Growth analytics</button>
+      <button type="button" class="ops" data-job="/run/alerts">Alerts dry-run</button>
+      <button type="button" class="ops" data-job="/run/export-dashboard">Export dashboard JSON</button>
+      <button type="button" class="ops" data-job="/run/all-daily">Run all daily</button>
+    </div>
+    <pre id="ops-log" style="background:#111;color:#0f0;padding:12px;max-height:320px;overflow:auto;font-size:12px"></pre>
+  </section>
+
+  <section id="csvcat">
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Reproduce analysis CSV files via SQL</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        Each button loads the exact SELECT used to materialize that artifact into the SQL Lab and runs it in DuckDB-Wasm.
+        Derived screens (trifecta, low EV/P/B) match the decision tables exported from fundamentals.
+      </p>
+      <div id="csv-catalog-btns" class="sql-actions" style="flex-direction:column;align-items:stretch;gap:0.35rem"></div>
+    </div>
+    <div class="card">
+      <h3>Catalog result</h3>
+      <div class="sql-actions"><span id="csv-cat-status" style="color:var(--muted);font-size:0.82rem"></span></div>
+      <div class="scroll" style="max-height:480px"><table id="tbl-csvcat"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+</main>
+<footer>
+  Data embedded from stock_monitor parquet/csv analyses. DuckDB-Wasm runs entirely in-browser.
+  Granite TTM / TSPulse forecasts and anomalies use offline fallbacks when model weights are absent.
+  Not investment advice — decision memos summarize prior research workflow.
+</footer>
+
+<script type="module">
+import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
+const DATA_URL = "dashboard_data/data.json";
+const GRANITE_API = localStorage.getItem("GRANITE_API") || "http://127.0.0.1:5055";
+/** @type {Array<{id:string,label:string,ts:string,config:object,result:object}>} */
+const FC_RUNS = [];
+let FC_ACTIVE = null;
+let forecastBarChart = null;
+let forecastPathChart = null;
+
+let DB = null, CONN = null, DATA = null;
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+
+/* ========== Shared dashboard widgets ========== */
+function widgetStatus(idOrEl, msg) {
+  const el = typeof idOrEl === "string" ? document.getElementById(idOrEl) : idOrEl;
+  if (el) el.textContent = msg || "";
+}
+
+function widgetBtn(label, className, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = className || "chip-btn";
+  b.textContent = label;
+  if (onClick) b.addEventListener("click", onClick);
+  return b;
+}
+
+/** Mount a standard live toolbar on a section: DuckDB queries + optional JSON reload */
+function mountLiveToolbar(sectionId, opts) {
+  const sec = document.getElementById(sectionId);
+  if (!sec) return null;
+  if (sec.querySelector(".widget-live-bar[data-widget='live']")) return sec.querySelector(".widget-live-bar");
+  const bar = document.createElement("div");
+  bar.className = "widget-live-bar";
+  bar.dataset.widget = "live";
+  const status = document.createElement("span");
+  status.className = "widget-status";
+  status.id = (opts && opts.statusId) || (sectionId + "-status");
+
+  const queries = (opts && opts.queries) || [];
+  if (queries.length) {
+    bar.appendChild(widgetBtn(opts.duckLabel || "Live: DuckDB", "chip-btn", async () => {
+      widgetStatus(status, "DuckDB…");
+      try {
+        for (const q of queries) {
+          await duckQuery(q.sql, q.tableId, q.limit || 80);
+        }
+        widgetStatus(status, "Updated from DuckDB");
+      } catch (e) {
+        widgetStatus(status, e.message || String(e));
+      }
+    }));
+  }
+  if (!opts || opts.reloadJson !== false) {
+    bar.appendChild(widgetBtn("Reload data.json", "chip-btn", async () => {
+      widgetStatus(status, "Reloading…");
+      try {
+        if (typeof loadAllLateTabs === "function") await loadAllLateTabs();
+        if (typeof window._tabReload === "function") await window._tabReload(sectionId);
+        widgetStatus(status, "Reloaded data.json");
+      } catch (e) {
+        widgetStatus(status, e.message || String(e));
+      }
+    }));
+  }
+  if (opts && opts.extraButtons) {
+    for (const xb of opts.extraButtons) {
+      bar.appendChild(widgetBtn(xb.label, xb.className || "chip-btn", xb.onClick));
+    }
+  }
+  bar.appendChild(status);
+
+  // insert after first heading/paragraph block if possible
+  const h2 = sec.querySelector("h2");
+  if (h2 && h2.nextSibling) {
+    h2.parentNode.insertBefore(bar, h2.nextSibling);
+  } else {
+    sec.insertBefore(bar, sec.firstChild);
+  }
+  return bar;
+}
+
+/** Card wrapper helper (DOM) */
+function widgetEnsureCardTable(sectionId, tableId, title) {
+  let tbl = document.getElementById(tableId);
+  if (tbl) return tbl;
+  const sec = document.getElementById(sectionId);
+  if (!sec) return null;
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.marginTop = "1rem";
+  card.innerHTML = `<h3>${title || tableId}</h3><div class="scroll"><table id="${tableId}"><thead></thead><tbody></tbody></table></div>`;
+  sec.appendChild(card);
+  return card.querySelector("table");
+}
+
+/** Registry of per-tab live query packs — single place to maintain */
+const LIVE_TAB_WIDGETS = {
+  decisions: {
+    duckLabel: "Live: buys + trifecta",
+    queries: [
+      { sql: "SELECT ticker, action, buy_score, decision, momentum_score, factor_composite, sp500_sector, reasons FROM buy_candidates WHERE action IN ('BUY','ACCUMULATE') ORDER BY buy_score DESC", tableId: "tbl-buys", limit: 30 },
+      { sql: "SELECT ticker, name, sector, ev_ebitda, pb_ratio, mktcap_to_assets, in_portfolio FROM value_trifecta ORDER BY ev_ebitda", tableId: "tbl-trifecta", limit: 50 },
+    ],
+  },
+  portfolio: {
+    duckLabel: "Live: holdings",
+    queries: [
+      { sql: "SELECT ticker, shares, avg_cost, last_close, market_value, unrealized_pl_pct, weight, sector FROM holdings ORDER BY weight DESC", tableId: "tbl-holdings", limit: 50 },
+    ],
+  },
+  value: {
+    duckLabel: "Live: value + momentum",
+    queries: [
+      { sql: "SELECT ticker, name, sector, ev_ebitda, pb_ratio, mktcap_to_assets, market_cap_b, in_portfolio FROM low_ev_ebitda ORDER BY ev_ebitda", tableId: "tbl-low-ev", limit: 20 },
+      { sql: "SELECT ticker, name, sector, pb_ratio, mktcap_to_assets, ev_ebitda, in_portfolio FROM low_pb ORDER BY pb_ratio", tableId: "tbl-low-pb", limit: 15 },
+      { sql: "SELECT ticker, momentum_score, mom_12_1, ret_63d, resid_mom_63, momentum_quintile FROM momentum_metrics ORDER BY momentum_score DESC", tableId: "tbl-fund", limit: 40 },
+    ],
+  },
+  anomalies: {
+    duckLabel: "Live: anomalies",
+    queries: [
+      { sql: "SELECT date, ticker, close, score, ret_z, resid_z, vol_z, backend FROM anomalies ORDER BY abs(score) DESC", tableId: "tbl-anom", limit: 150 },
+    ],
+  },
+  indexes: {
+    duckLabel: "Live: index stats",
+    queries: [
+      { sql: "SELECT * FROM index_backtest_stats ORDER BY sharpe DESC", tableId: "tbl-index", limit: 20 },
+    ],
+  },
+  stress: {
+    duckLabel: "Live: stress tables",
+    queries: [
+      { sql: "SELECT mode, param, value, n_pass, delta_vs_base, tickers, port_vol, port_max_dd FROM dual_pass_stress ORDER BY mode, param", tableId: "tbl-stress", limit: 100 },
+      { sql: "SELECT * FROM dual_pass_sensitivity", tableId: "tbl-sens", limit: 20 },
+      { sql: "SELECT ticker, pb_ratio, ev_ebitda, roe, roic, mktcap_to_assets, notes FROM defensive_value_etfs", tableId: "tbl-etf", limit: 20 },
+      { sql: "SELECT * FROM crisis_correlation_summary", tableId: "tbl-crisis", limit: 20 },
+      { sql: "SELECT strategy, ann_ret, ann_vol, sharpe, max_dd, cvar_5pct FROM tail_risk_hedge_performance ORDER BY sharpe DESC", tableId: "tbl-tail", limit: 20 },
+    ],
+  },
+  regime: {
+    duckLabel: "Live: regime tables",
+    queries: [
+      { sql: "SELECT * FROM regime_corr_breakdown", tableId: "tbl-regcorr", limit: 20 },
+      { sql: "SELECT date, from_regime, to_regime, mkt_ret, vol21, avg_corr FROM hmm_transition_triggers ORDER BY date", tableId: "tbl-trig", limit: 30 },
+      { sql: "SELECT date, regime, mkt_ret, vol21, kf_level, gain_ret, gain_vol FROM kalman_gain_path ORDER BY date DESC", tableId: "tbl-kgain", limit: 40 },
+      { sql: "SELECT date, VIX9D_proxy, VIX_proxy, VIX3M_proxy, term_slope_21_63, contango FROM vix_term_structure ORDER BY date DESC", tableId: "tbl-vix", limit: 30 },
+      { sql: "SELECT ticker, regime, label, dual_pass, roe, roic, ev_ebitda, pb_ratio FROM threshold_logic_screen WHERE dual_pass = true OR dual_pass = 1", tableId: "tbl-thr", limit: 50 },
+    ],
+  },
+  quality: {
+    duckLabel: "Live: quality (DuckDB)",
+    queries: [
+      { sql: "SELECT ticker, decision, composite_score, roe, roic, debt_to_equity, leverage_flag, ev_ebitda, pb_ratio, mktcap_to_assets FROM preferred_metrics WHERE decision = 'INCLUDE_CORE' OR (buffett_pass AND trifecta_pass) ORDER BY composite_score DESC", tableId: "tbl-dual", limit: 40 },
+      { sql: "SELECT ticker, decision, composite_score, buffett_pass, trifecta_pass, leverage_flag, roe, roic, debt_to_equity, sizing_action FROM preferred_metrics ORDER BY composite_score DESC", tableId: "tbl-preferred", limit: 50 },
+      { sql: "SELECT ticker, roe, roic, equity_multiplier, pm_x_at, roe_quality, leverage_flag FROM dupont_analysis ORDER BY roe DESC", tableId: "tbl-dupont", limit: 60 },
+      { sql: "SELECT ticker, decision, factor_composite, f_value, f_quality, f_momentum, leverage_flag, momentum_score FROM factor_panel ORDER BY factor_composite DESC", tableId: "tbl-screen-bt", limit: 40 },
+    ],
+  },
+  rolling: {
+    duckLabel: "Live: rolling",
+    queries: [
+      { sql: "SELECT universe, ticker, window, vol, ann_ret, sharpe, max_dd, beta, vol_stability FROM rolling_window_metrics ORDER BY universe, ticker, window", tableId: "tbl-rolling", limit: 80 },
+      { sql: "SELECT ticker, n_dates, buffett_rate, trifecta_rate, dual_rate, median_composite, composite_std FROM rolling_screen_stability ORDER BY dual_rate DESC, buffett_rate DESC", tableId: "tbl-roll-stab", limit: 120 },
+      { sql: "SELECT date, window, avg_pairwise_corr, median_pairwise_corr, mkt_vol FROM rolling_corr_avg_timeseries ORDER BY date DESC", tableId: "tbl-roll-corr-tab", limit: 60 },
+    ],
+  },
+  inclusion: {
+    duckLabel: "Live: inclusion",
+    queries: [
+      { sql: "SELECT * FROM inclusion_candidates", tableId: "tbl-inc", limit: 40 },
+      { sql: "SELECT * FROM exclusion_candidates", tableId: "tbl-exc", limit: 40 },
+      { sql: "SELECT * FROM near_dual_candidates", tableId: "tbl-near", limit: 30 },
+    ],
+  },
+  sleeves: {
+    duckLabel: "Live: monitored_stocks",
+    queries: [
+      { sql: "SELECT ticker, name, sector, industry, growth_sleeve, value_sleeve, index_member, defensive_value_index, growth_tech_index FROM monitored_stocks", tableId: "tbl-slv-members", limit: 120 },
+    ],
+    extraButtons: null, // filled at runtime
+  },
+  sectors: {
+    duckLabel: "Live: sector tables",
+    queries: [
+      { sql: "SELECT * FROM corr_stability", tableId: "tbl-stability", limit: 40 },
+      { sql: "SELECT * FROM hmm_regime_corr", tableId: "tbl-hmm", limit: 40 },
+    ],
+  },
+  manage: {
+    duckLabel: "Live: monitored_stocks",
+    queries: [
+      { sql: "SELECT ticker, name, sector, growth_sleeve, value_sleeve, index_member, defensive_value_index, growth_tech_index, in_portfolio FROM monitored_stocks", tableId: "tbl-mg-stocks", limit: 80 },
+    ],
+  },
+};
+
+
+function cleanupDuplicateLiveBars() {
+  document.querySelectorAll("section").forEach(sec => {
+    const widget = sec.querySelector(".widget-live-bar[data-widget='live']");
+    if (!widget) return;
+    sec.querySelectorAll(".sql-actions").forEach(bar => {
+      if (bar.classList.contains("widget-live-bar")) return;
+      const btns = [...bar.querySelectorAll("button")];
+      if (!btns.length) return;
+      const onlyLive = btns.every(b => /live-refresh|Reload data|Reload from data/i.test((b.textContent || "") + (b.id || "")));
+      if (onlyLive) bar.style.display = "none";
+    });
+  });
+}
+
+function mountAllLiveToolbars() {
+  for (const [sectionId, spec] of Object.entries(LIVE_TAB_WIDGETS)) {
+    try {
+      // Avoid duplicating if hand-written toolbar with same actions already prominent
+      mountLiveToolbar(sectionId, spec);
+    } catch (e) {
+      console.warn("toolbar", sectionId, e);
+    }
+  }
+}
+
+
+
+function fmt(v, d=2) {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  if (typeof v === "number") return v.toFixed(d);
+  return v;
+}
+function tagPortfolio(v) {
+  return v ? '<span class="tag tag-in">IN</span>' : '<span class="tag tag-out">watch</span>';
+}
+function tagSignal(pct) {
+  if (pct > 3) return '<span class="tag tag-bull">BULL</span>';
+  if (pct < -3) return '<span class="tag tag-bear">BEAR</span>';
+  return '<span class="tag tag-neutral">NEUTRAL</span>';
+}
+
+function fillTable(tableId, rows, columns) {
+  const table = document.getElementById(tableId);
+  if (!table || !rows) return;
+  const cols = columns || (rows[0] ? Object.keys(rows[0]) : []);
+  table.querySelector("thead").innerHTML = "<tr>" + cols.map(c => `<th>${c}</th>`).join("") + "</tr>";
+  table.querySelector("tbody").innerHTML = rows.map(r => {
+    const hl = r.in_portfolio || r.is_home_sector ? ' class="hl"' : '';
+    return "<tr" + hl + ">" + cols.map(c => {
+      let v = r[c];
+      if (c === "in_portfolio" || c === "index_member" || c === "defensive_value_index") return `<td>${tagPortfolio(!!v)}</td>`;
+      if (c === "pct_change") return `<td>${fmt(v,2)}% ${tagSignal(v)}</td>`;
+      if (typeof v === "number") return `<td>${fmt(v, c.includes("pct") || c.includes("corr") || c.includes("ratio") ? 2 : 2)}</td>`;
+      return `<td>${v ?? "—"}</td>`;
+    }).join("") + "</tr>";
+  }).join("");
+}
+
+function renderDecisions() {
+  if (!DATA) return;
+  const holdings = DATA.holdings || [];
+  const trifecta = DATA.value_trifecta || [];
+  const fund = DATA.fundamentals || [];
+  const anom = DATA.anomalies || [];
+  const notes = DATA.decision_notes || [];
+  const el = (id) => document.getElementById(id);
+  if (el("kpi-holdings")) el("kpi-holdings").innerHTML = `${holdings.length}<br><small>positions</small>`;
+  if (el("kpi-trifecta")) el("kpi-trifecta").innerHTML = `${trifecta.length}<br><small>pass screen</small>`;
+  if (el("kpi-univ")) el("kpi-univ").innerHTML = `${fund.length}<br><small>names</small>`;
+  if (el("kpi-anom")) el("kpi-anom").innerHTML = `${anom.length}<br><small>listed</small>`;
+  if (el("decision-list")) {
+    el("decision-list").innerHTML = notes.length
+      ? notes.map(n => `<div class="decision"><h4>${n.title || ""}</h4><p>${n.detail || ""}</p></div>`).join("")
+      : '<div class="decision"><h4>No decision notes</h4><p>Re-run export_dashboard_data.py after analytics.</p></div>';
+  }
+  fillTable("tbl-trifecta", trifecta, ["ticker","name","sector","ev_ebitda","pb_ratio","mktcap_to_assets","in_portfolio"]);
+  const portFund = fund.filter(r => r.in_portfolio).sort((a,b)=> (a.pb_ratio??9)-(b.pb_ratio??9));
+  fillTable("tbl-port-val", portFund, ["ticker","sector","pb_ratio","mktcap_to_assets","ev_ebitda","market_cap_b"]);
+}
+
+function renderPortfolio() {
+  if (!DATA) return;
+  const holdings = DATA.holdings || [];
+  // Prefer portfolio holdings; show weight as percent in display via fillTable numbers
+  fillTable("tbl-holdings", holdings, [
+    "ticker","shares","avg_cost","last_close","market_value","unrealized_pl_pct","weight","sector"
+  ]);
+  const corrRows = DATA.asset_sector_corr || [];
+  const byT = {};
+  corrRows.forEach(r => {
+    if (!r || !r.ticker) return;
+    if (!byT[r.ticker]) byT[r.ticker] = { ticker: r.ticker };
+    if (r.is_home_sector) {
+      byT[r.ticker].home_sector = r.sector;
+      byT[r.ticker].corr_home = r.corr;
+    }
+    if (r.sector === "MARKET_EW") byT[r.ticker].corr_mkt = r.corr;
+  });
+  // If corr file covers more than holdings, still show all; sort holdings first
+  const holdSet = new Set(holdings.map(h => h.ticker));
+  const rows = Object.values(byT).sort((a, b) => {
+    const ah = holdSet.has(a.ticker) ? 0 : 1;
+    const bh = holdSet.has(b.ticker) ? 0 : 1;
+    if (ah !== bh) return ah - bh;
+    return String(a.ticker).localeCompare(String(b.ticker));
+  });
+  fillTable("tbl-asset-sector", rows, ["ticker","home_sector","corr_home","corr_mkt"]);
+}
+
+function renderValue() {
+  if (!DATA) return;
+  const lowEv = DATA.low_ev_ebitda || [];
+  const lowPb = DATA.low_pb || [];
+  const fund = DATA.fundamentals || [];
+  fillTable("tbl-low-ev", lowEv, ["ticker","name","sector","ev_ebitda","pb_ratio","mktcap_to_assets","market_cap_b","in_portfolio"]);
+  fillTable("tbl-low-pb", lowPb, ["ticker","name","sector","pb_ratio","mktcap_to_assets","ev_ebitda","in_portfolio"]);
+  fillTable("tbl-fund", fund.slice(0, 80), ["ticker","name","sector","pb_ratio","mktcap_to_assets","ev_ebitda","in_portfolio","index_member"]);
+}
+
+function renderSectors() {
+  if (!DATA) return;
+  const stability = DATA.corr_stability || DATA.corr_stability_metrics || [];
+  const hmm = DATA.hmm_regime_corr || [];
+  // Prefer readable columns when present
+  const stabCols = stability.length
+    ? (["pair","mean","std","min","max","stability"].every(c => c in stability[0])
+        ? ["pair","mean","std","min","max","stability"]
+        : null)
+    : null;
+  const hmmCols = hmm.length
+    ? (["pair","corr_Calm","corr_Transition","corr_Stress","corr_all","delta_stress_calm"].every(c => c in hmm[0])
+        ? ["pair","corr_Calm","corr_Transition","corr_Stress","corr_all","delta_stress_calm"]
+        : null)
+    : null;
+  fillTable("tbl-stability", stability, stabCols);
+  fillTable("tbl-hmm", hmm, hmmCols);
+
+  const ctx = document.getElementById("chart-sector-corr");
+  if (!ctx || typeof Chart === "undefined") return;
+  const rows = DATA.sector_corr || [];
+  if (!rows.length) return;
+
+  const labelKey = ("sector" in rows[0]) ? "sector" : Object.keys(rows[0])[0];
+  const labels = rows.map(r => String(r[labelKey] || "").slice(0, 14));
+  const vals = rows.map(r => {
+    const nums = Object.entries(r)
+      .filter(([k, v]) => k !== labelKey && typeof v === "number" && isFinite(v) && k !== String(r[labelKey]))
+      .map(([, v]) => Math.abs(v));
+    // exclude self-corr ~1 by dropping max if it looks like diagonal
+    const filtered = nums.filter(x => x < 0.999);
+    const use = filtered.length ? filtered : nums;
+    return use.length ? use.reduce((a, b) => a + b, 0) / use.length : 0;
+  });
+
+  if (window._sectorCorrChart) {
+    try { window._sectorCorrChart.destroy(); } catch (e) {}
+  }
+  window._sectorCorrChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Mean |corr| vs other sectors",
+        data: vals,
+        backgroundColor: "#3b82f6aa",
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#c5d0e0" } } },
+      scales: {
+        x: { ticks: { color: "#8b9bb4", maxRotation: 45, minRotation: 0 } },
+        y: { ticks: { color: "#8b9bb4" }, suggestedMin: 0, suggestedMax: 1 },
+      },
+    },
+  });
+}
+
+function fcConfigFromForm() {
+  return {
+    source: $("#fc-source")?.value || "portfolio",
+    index: ($("#fc-index")?.value || "").trim(),
+    tickers: ($("#fc-tickers")?.value || "").trim(),
+    horizon: parseInt($("#fc-horizon")?.value || "10", 10),
+    context: parseInt($("#fc-context")?.value || "512", 10),
+    days_ago: parseInt($("#fc-days-ago")?.value || "0", 10) || null,
+    from_first_trade: ($("#fc-first-trade")?.value || "1") === "1",
+    multivariate: ($("#fc-multivariate")?.value || "0") === "1",
+    peer_mode: $("#fc-peer-mode")?.value || "none",
+    peer_index: ($("#fc-peer-index")?.value || "").trim(),
+    peer_tickers: ($("#fc-peer-tickers")?.value || "").trim(),
+    peer_top_n: parseInt($("#fc-peer-topn")?.value || "5", 10),
+    label: ($("#fc-run-label")?.value || "").trim(),
+    api: ($("#fc-api")?.value || GRANITE_API).replace(/\/$/, ""),
+  };
+}
+
+function renderForecasts() {
+  if (!DATA) return;
+  const rows = DATA.forecasts_hmax || [];
+  const cols = ["ticker","last_close","forecast_close","pct_change","history_n","backend"];
+  // include backend from model field if needed
+  const norm = rows.map(r => ({
+    ...r,
+    backend: r.backend || r.model || "—",
+  }));
+  fillTable("tbl-forecast", norm, cols);
+  renderForecastBar(norm);
+  // empty path chart until live run
+  if (!FC_ACTIVE) {
+    renderForecastPaths({}, []);
+  }
+  if (!$("#fc-run")?.dataset?.bound) {
+    const runBtn = $("#fc-run");
+    if (!runBtn) return;
+    runBtn.dataset.bound = "1";
+    $("#fc-api").value = GRANITE_API;
+    $("#api-url-label").textContent = GRANITE_API;
+    runBtn.addEventListener("click", fetchGraniteForecasts);
+    $("#fc-health")?.addEventListener("click", async () => {
+      const base = ($("#fc-api").value || GRANITE_API).replace(/\/$/, "");
+      try {
+        const r = await fetch(base + "/health");
+        const j = await r.json();
+        $("#fc-status").textContent = j.ok
+          ? (`OK · live=${j.live} · indexes=${(j.indexes||[]).join(",")}`)
+          : JSON.stringify(j);
+      } catch (e) {
+        $("#fc-status").textContent = "Service unreachable: " + e.message;
+      }
+    });
+    $("#fc-indexes")?.addEventListener("click", async () => {
+      const base = ($("#fc-api").value || GRANITE_API).replace(/\/$/, "");
+      try {
+        const r = await fetch(base + "/indexes");
+        const j = await r.json();
+        $("#fc-status").textContent = j.ok
+          ? ("Indexes: " + (j.indexes || []).join(", "))
+          : JSON.stringify(j);
+        if (j.indexes && !$("#fc-index").value) $("#fc-index").value = j.indexes[0];
+      } catch (e) {
+        $("#fc-status").textContent = "Indexes error: " + e.message;
+      }
+    });
+    $("#fc-clear-runs")?.addEventListener("click", () => {
+      FC_RUNS.length = 0;
+      FC_ACTIVE = null;
+      renderRunList();
+      $("#fc-status").textContent = "Run history cleared";
+    });
+  }
+}
+
+function renderForecastBar(rows) {
+  const ctx = document.getElementById("chart-forecast");
+  if (!ctx || typeof Chart === "undefined") return;
+  if (forecastBarChart) forecastBarChart.destroy();
+  const sorted = [...(rows || [])].sort((a, b) => (b.pct_change || 0) - (a.pct_change || 0));
+  forecastBarChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: sorted.map(r => r.ticker),
+      datasets: [{
+        label: "% change @ horizon",
+        data: sorted.map(r => r.pct_change),
+        backgroundColor: sorted.map(r => (r.pct_change || 0) >= 0 ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)"),
+      }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+  });
+}
+
+function renderForecastPaths(charts, overlayRuns) {
+  const ctx = document.getElementById("chart-forecast-path");
+  if (!ctx || typeof Chart === "undefined") return;
+  const datasets = [];
+  const palette = ["#38bdf8","#a78bfa","#f472b6","#34d399","#fbbf24","#fb7185","#2dd4bf","#c084fc"];
+  let colorIdx = 0;
+  const allDates = new Set();
+  const collect = (ch) => {
+    Object.values(ch || {}).forEach(c => {
+      (c.history || []).forEach(p => allDates.add(p.date));
+      (c.forecast || []).forEach(p => allDates.add(p.date));
+    });
+  };
+  collect(charts);
+  (overlayRuns || []).forEach(run => collect(run.result?.charts || {}));
+  const labels = [...allDates].sort();
+  const seriesFrom = (points) => {
+    const map = Object.fromEntries((points || []).map(p => [p.date, p.close]));
+    return labels.map(d => (map[d] != null ? map[d] : null));
+  };
+  const addCharts = (ch, labelPrefix, dashed) => {
+    Object.entries(ch || {}).forEach(([ticker, c]) => {
+      const col = palette[colorIdx++ % palette.length];
+      const histPts = c.history || [];
+      const fcPts = c.forecast || [];
+      if (histPts.length) {
+        datasets.push({
+          label: `${labelPrefix}${ticker} hist`,
+          data: seriesFrom(histPts),
+          borderColor: col,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          spanGaps: false,
+          borderDash: dashed ? [4, 4] : [],
+        });
+      }
+      if (fcPts.length) {
+        // bridge: last hist + forecast dates only
+        const bridgePts = histPts.length
+          ? [histPts[histPts.length - 1], ...fcPts]
+          : fcPts;
+        datasets.push({
+          label: `${labelPrefix}${ticker} fc`,
+          data: seriesFrom(bridgePts),
+          borderColor: col,
+          pointRadius: 2,
+          borderWidth: 2,
+          spanGaps: false,
+          borderDash: dashed ? [6, 3] : [2, 2],
+        });
+      }
+    });
+  };
+  addCharts(charts || {}, "", false);
+  (overlayRuns || []).forEach(run => {
+    if (run === FC_ACTIVE) return;
+    addCharts(run.result?.charts || {}, `[${run.label}] `, true);
+  });
+  if (forecastPathChart) {
+    try { forecastPathChart.destroy(); } catch (e) {}
+  }
+  forecastPathChart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { boxWidth: 12, font: { size: 10 }, color: "#c5d0e0" } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 12, autoSkip: true, color: "#8b9bb4" } },
+        y: { ticks: { callback: v => Number(v).toFixed(2), color: "#8b9bb4" } },
+      },
+    },
+  });
+}
+
+function renderRunList() {
+  const host = $("#fc-run-list");
+  if (!host) return;
+  host.innerHTML = "";
+  FC_RUNS.forEach((run, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip-btn" + (FC_ACTIVE && FC_ACTIVE.id === run.id ? " active" : "");
+    btn.textContent = `${run.label} (${run.result?.tickers?.length || 0}t · ${run.result?.elapsed_ms || "?"}ms)`;
+    btn.title = JSON.stringify(run.config);
+    btn.addEventListener("click", () => {
+      FC_ACTIVE = run;
+      applyRunToUI(run);
+      renderRunList();
+    });
+    host.appendChild(btn);
+  });
+  const rows = FC_RUNS.map(r => ({
+    id: r.id,
+    label: r.label,
+    ts: r.ts,
+    tickers: (r.result?.tickers || []).join(","),
+    horizon: r.config?.horizon,
+    multivariate: r.config?.multivariate,
+    peer_mode: r.config?.peer_mode,
+    backend: r.result?.backend,
+    elapsed_ms: r.result?.elapsed_ms,
+  }));
+  fillTable("tbl-fc-runs", rows, ["id","label","ts","tickers","horizon","multivariate","peer_mode","backend","elapsed_ms"]);
+}
+
+function applyRunToUI(run) {
+  const charts = run.result?.charts || {};
+  const rows = [];
+  Object.entries(charts).forEach(([ticker, c]) => {
+    const fc = c.forecast || [];
+    if (!fc.length) return;
+    const last = fc[fc.length - 1];
+    rows.push({
+      ticker, last_close: c.last_close, forecast_close: last.close,
+      pct_change: last.pct_change, horizon: last.horizon, backend: c.backend, as_of: c.as_of,
+      peers: (c.peers || []).join(","),
+    });
+  });
+  fillTable("tbl-forecast", rows, ["ticker","as_of","last_close","forecast_close","pct_change","horizon","backend","peers"]);
+  renderForecastBar(rows);
+  const overlays = FC_RUNS.filter(r => r.id !== run.id).slice(-3);
+  renderForecastPaths(charts, overlays);
+}
+
+async function fetchGraniteForecasts() {
+  const cfg = fcConfigFromForm();
+  localStorage.setItem("GRANITE_API", cfg.api);
+  $("#api-url-label").textContent = cfg.api;
+  $("#fc-status").textContent = "Running live forecast…";
+  if (cfg.source === "embedded") {
+    renderForecasts();
+    $("#fc-status").textContent = "Embedded snapshot (not live)";
+    return;
+  }
+  const body = {
+    horizon: cfg.horizon,
+    context: cfg.context,
+    from_first_trade: cfg.from_first_trade,
+    days_ago: cfg.days_ago && cfg.days_ago > 0 ? cfg.days_ago : null,
+    multivariate: cfg.multivariate,
+    peer_mode: cfg.multivariate ? cfg.peer_mode : "none",
+    peer_index: cfg.peer_index || null,
+    peer_tickers: cfg.peer_tickers || null,
+    peer_top_n: cfg.peer_top_n,
+  };
+  if (cfg.source === "portfolio") {
+    body.tickers = null;
+    body.index = "portfolio";
+    body.index_name = "portfolio";
+  } else if (cfg.source === "index") {
+    body.index = cfg.index || "portfolio";
+    body.index_name = cfg.index || "portfolio";
+  } else if (cfg.source === "sectors") {
+    body.index = "sectors";
+    body.index_name = "sectors";
+  } else {
+    body.tickers = cfg.tickers || "MOS";
+  }
+  try {
+    const r = await fetch(cfg.api + "/forecast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "forecast failed");
+    const id = "run_" + Date.now();
+    const label = cfg.label || `${cfg.source}:${(d.tickers||[]).slice(0,3).join("+")}@H${cfg.horizon}`;
+    const run = { id, label, ts: new Date().toISOString(), config: cfg, result: d };
+    FC_RUNS.push(run);
+    if (FC_RUNS.length > 12) FC_RUNS.shift();
+    FC_ACTIVE = run;
+    renderRunList();
+    applyRunToUI(run);
+    $("#fc-status").textContent =
+      `LIVE · ${ (d.tickers||[]).length } tickers · H${d.horizon} · ${d.backend || ""} · ${d.elapsed_ms || "?"}ms` +
+      (d.multivariate ? " · multivariate" : "");
+  } catch (e) {
+    $("#fc-status").textContent = "Error: " + e.message + " (start: ./start_dashboard.sh or python granite_service.py)";
+  }
+}
+
+
+function renderAnomalies() {
+  if (!DATA) return;
+  let rows = [...(DATA.anomalies || [])];
+  rows.sort((a, b) => Math.abs(b.score || 0) - Math.abs(a.score || 0));
+  // normalize date strings for display
+  rows = rows.map(r => ({
+    ...r,
+    date: (r.date || "").toString().slice(0, 10),
+    mkt_dispersion_shock: r.mkt_dispersion_shock ? "yes" : "",
+  }));
+  fillTable("tbl-anom", rows, [
+    "date","ticker","close","score","ret_z","resid_z","vol_z","mkt_dispersion_shock","backend"
+  ]);
+}
+let sharpeChart = null;
+let retVolChart = null;
+
+function renderSharpeCharts(stats) {
+  const rows = [...(stats || [])].filter(r => r && r.index != null);
+  const ctx1 = document.getElementById("chart-sharpe");
+  const ctx2 = document.getElementById("chart-ret-vol");
+  if (!rows.length) return;
+  const sorted = [...rows].sort((a, b) => (b.sharpe || -999) - (a.sharpe || -999));
+  if (ctx1 && typeof Chart !== "undefined") {
+    if (sharpeChart) try { sharpeChart.destroy(); } catch (e) {}
+    sharpeChart = new Chart(ctx1, {
+      type: "bar",
+      data: {
+        labels: sorted.map(r => r.index),
+        datasets: [{
+          label: "Sharpe",
+          data: sorted.map(r => r.sharpe),
+          backgroundColor: sorted.map(r => (r.sharpe || 0) >= 0 ? "rgba(34,197,94,0.75)" : "rgba(239,68,68,0.75)"),
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: "#8b9bb4" } },
+          y: { ticks: { color: "#8b9bb4" }, title: { display: true, text: "Sharpe", color: "#8b9bb4" } },
+        },
+      },
+    });
+  }
+  if (ctx2 && typeof Chart !== "undefined") {
+    if (retVolChart) try { retVolChart.destroy(); } catch (e) {}
+    retVolChart = new Chart(ctx2, {
+      type: "scatter",
+      data: {
+        datasets: [{
+          label: "Sleeves",
+          data: rows.map(r => ({ x: r.ann_vol_pct, y: r.ann_return_pct, label: r.index })),
+          backgroundColor: "#3b82f6",
+          pointRadius: 6,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (c) => {
+                const r = rows[c.dataIndex];
+                return `${r.index}: ret ${r.ann_return_pct}% · vol ${r.ann_vol_pct}% · Sharpe ${r.sharpe}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { title: { display: true, text: "Ann vol %", color: "#8b9bb4" }, ticks: { color: "#8b9bb4" } },
+          y: { title: { display: true, text: "Ann return %", color: "#8b9bb4" }, ticks: { color: "#8b9bb4" } },
+        },
+      },
+    });
+  }
+}
+
+function renderIndexes(liveStats) {
+  if (!DATA && !liveStats) return;
+  const idx = liveStats || DATA.index_backtest || [];
+  const fc = (DATA && DATA.forecast_backtest) || [];
+  const fr = (DATA && (DATA.factor_rotation_performance || (DATA.tables && DATA.tables.factor_rotation_performance))) || [];
+  const sc = (DATA && DATA.sharpe_comparison) || [];
+
+  const idxCols = idx.length && "index" in idx[0]
+    ? ["index","start","end","total_return_pct","ann_return_pct","ann_vol_pct","sharpe","max_dd_pct","calmar","final_level","n_members","sharpe_rank"].filter(c => (c in idx[0]) || c === "sharpe_rank")
+    : (idx.length ? Object.keys(idx[0]) : null);
+  const idxSorted = [...idx].sort((a, b) => (b.sharpe || -999) - (a.sharpe || -999));
+  fillTable("tbl-index", idxSorted, idxCols);
+
+  const sharpeRows = sc.length ? sc : idxSorted.map((r, i) => ({
+    index: r.index, sharpe: r.sharpe, ann_return_pct: r.ann_return_pct,
+    ann_vol_pct: r.ann_vol_pct, max_dd_pct: r.max_dd_pct, sharpe_rank: r.sharpe_rank || (i + 1),
+  }));
+  fillTable("tbl-sharpe", sharpeRows, ["sharpe_rank","index","sharpe","ann_return_pct","ann_vol_pct","max_dd_pct","vs_best_sharpe"].filter(c => sharpeRows[0] && (c in sharpeRows[0] || c === "vs_best_sharpe")));
+  renderSharpeCharts(idxSorted);
+
+  const frCols = fr.length && "strategy" in fr[0] ? ["strategy","ann_ret","ann_vol","sharpe","max_dd"] : null;
+  fillTable("tbl-factor-rot", fr, frCols);
+
+  const fcCols = fc.length
+    ? ["ticker","horizon","n_origins","mae","rmse","mape_pct","directional_accuracy","backend","model"].filter(c => c in fc[0])
+    : null;
+  const fcSorted = [...fc].sort((a, b) => (b.directional_accuracy || 0) - (a.directional_accuracy || 0));
+  fillTable("tbl-fc-bt", fcSorted, fcCols);
+
+  if (!$("#bt-run")?.dataset?.bound) bindBacktestStudio();
+}
+
+function bindBacktestStudio() {
+  const run = $("#bt-run");
+  if (!run || run.dataset.bound) return;
+  run.dataset.bound = "1";
+  const pipe = localStorage.getItem("PIPE_API") || "http://127.0.0.1:5056";
+  if ($("#bt-pipe-label")) $("#bt-pipe-label").textContent = pipe;
+
+  async function postJob(job, args) {
+    const base = ($("#pipe-api")?.value || pipe).replace(/\/$/, "");
+    const r = await fetch(base + "/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job, args, async: false }),
+    });
+    return r.json();
+  }
+
+  run.addEventListener("click", async () => {
+    const status = $("#bt-status");
+    const indexes = ($("#bt-indexes")?.value || "fertilizer,defensive,portfolio").trim();
+    const years = $("#bt-years")?.value || "1";
+    const rf = $("#bt-rf")?.value || "0.04";
+    const clip = $("#bt-clip")?.value || "0.25";
+    const bench = ($("#bt-bench")?.value || "SPY").trim();
+    const incl = ($("#bt-incl-bench")?.value || "1") === "1";
+    const args = [
+      "--indexes", indexes,
+      "--years", String(years),
+      "--rf", String(rf),
+      "--clip-daily", String(clip),
+      "--benchmark", bench,
+      "--json",
+    ];
+    if (!incl) args.push("--no-benchmark");
+    else args.push("--include-benchmark");
+    if (status) status.textContent = "Running index backtest…";
+    try {
+      const j = await postJob("index_bt", args);
+      if (!j.ok) throw new Error(j.error || j.log_tail || "backtest failed");
+      const stats = j.result?.stats || j.result?.sharpe_comparison;
+      if (j.result?.stats) {
+        if (!DATA) window.DATA = {};
+        DATA.index_backtest = j.result.stats;
+        DATA.sharpe_comparison = j.result.sharpe_comparison || [];
+        renderIndexes(j.result.stats);
+      }
+      if (status) {
+        const best = (j.result?.stats || [])[0];
+        status.textContent = best
+          ? `OK · best Sharpe ${best.index}=${best.sharpe} (${j.elapsed_sec || "?"}s)`
+          : `OK · ${j.elapsed_sec || "?"}s`;
+      }
+    } catch (e) {
+      if (status) status.textContent = "Error: " + e.message + " — start pipeline_service";
+    }
+  });
+
+  $("#bt-run-fc")?.addEventListener("click", async () => {
+    const status = $("#bt-status");
+    if (status) status.textContent = "Running forecast backtest…";
+    try {
+      const indexes = ($("#bt-indexes")?.value || "portfolio").split(",")[0].trim() || "portfolio";
+      const j = await postJob("forecast_bt", ["--index", indexes, "--from-first-trade", "--horizon", "10"]);
+      if (status) {
+        status.textContent = j.ok
+          ? `Forecast BT OK · ${j.elapsed_sec || "?"}s — re-export or refresh for table`
+          : `Forecast BT fail: ${j.error || j.returncode}`;
+      }
+    } catch (e) {
+      if (status) status.textContent = "Error: " + e.message;
+    }
+  });
+}
+
+
+async function duckQuery(sql, tableId, limit) {
+  if (!CONN) throw new Error("DuckDB not ready");
+  let q = (sql || "").trim();
+  if (!q) return [];
+  // trigger same autoload path as runSQL by parsing identifiers
+  const names = (q.match(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g) || []);
+  for (const n of names) {
+    if (window.SQL_LOADED && window.SQL_LOADED.has(n)) continue;
+    const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === n);
+    if (meta) {
+      try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind); } catch (e) {}
+    }
+  }
+  if (limit && !/\blimit\b/i.test(q)) q = q.replace(/;?\s*$/, "") + `\nLIMIT ${limit}`;
+  if (!q.endsWith(";")) q += ";";
+  const result = await CONN.query(q);
+  const fields = result.schema.fields.map(f => f.name);
+  const rows = result.toArray().map(r => {
+    const o = {};
+    for (const k of fields) {
+      let v = r[k];
+      if (typeof v === "bigint") v = Number(v);
+      o[k] = v;
+    }
+    return o;
+  });
+  if (tableId) fillTable(tableId, rows, fields);
+  return rows;
+}
+
+
+const QUALITY_BENCH = {
+  roe_min: 0.15, roic_min: 0.15, de_max: 1.0, ic_min: 3.0,
+  ev_max: 9.0, pb_max: 1.5, mca_max: 0.5, stab_min: 0.25,
+};
+
+function readQualityThresholds() {
+  const num = (id, d) => {
+    const v = parseFloat($("#" + id)?.value);
+    return Number.isFinite(v) ? v : d;
+  };
+  return {
+    roe_min: num("th-roe", QUALITY_BENCH.roe_min),
+    roic_min: num("th-roic", QUALITY_BENCH.roic_min),
+    de_max: num("th-de", QUALITY_BENCH.de_max),
+    ic_min: num("th-ic", QUALITY_BENCH.ic_min),
+    ev_max: num("th-ev", QUALITY_BENCH.ev_max),
+    pb_max: num("th-pb", QUALITY_BENCH.pb_max),
+    mca_max: num("th-mca", QUALITY_BENCH.mca_max),
+    stab_min: num("th-stab", QUALITY_BENCH.stab_min),
+  };
+}
+
+function resetQualityThresholds() {
+  const map = {
+    "th-roe": "roe_min", "th-roic": "roic_min", "th-de": "de_max", "th-ic": "ic_min",
+    "th-ev": "ev_max", "th-pb": "pb_max", "th-mca": "mca_max", "th-stab": "stab_min",
+  };
+  for (const [id, k] of Object.entries(map)) {
+    if ($("#" + id)) $("#" + id).value = QUALITY_BENCH[k];
+  }
+}
+
+function enrichLeverageMetrics(row, mcaMax) {
+  const de = +row.debt_to_equity;
+  const mca = +row.mktcap_to_assets;
+  const ic = +row.interest_coverage;
+  const mca_max = (mcaMax != null) ? mcaMax : 0.5;
+  const em = Number.isFinite(de) ? (1 + Math.max(de, 0)) : null; // DuPont EM ≈ 1 + D/E
+  const da = Number.isFinite(de) && de > -0.999 ? (de / (1 + de)) : null;
+  let leverage_flag = row.leverage_flag || "";
+  if (!leverage_flag && Number.isFinite(mca) && mca <= mca_max) {
+    if (Number.isFinite(de) && de > 1.0) leverage_flag = "levered-assets";
+    else if (Number.isFinite(de) && de <= 0.5 && (!Number.isFinite(ic) || ic >= 5))
+      leverage_flag = "cheap-assets";
+    else if (Number.isFinite(de) && de <= 1.0) leverage_flag = "mixed-assets";
+    else leverage_flag = "low-MCA";
+  }
+  return {
+    ...row,
+    equity_multiplier: em != null ? +em.toFixed(3) : row.equity_multiplier,
+    debt_to_assets: da != null ? +da.toFixed(3) : row.debt_to_assets,
+    interest_coverage: Number.isFinite(ic) ? ic : row.interest_coverage,
+    leverage_flag,
+    leverage_flag: leverage_flag, // alias for older UI
+  };
+}
+
+function scoreDualPass(row, th) {
+  const roe = +row.roe, roic = +row.roic, de = +row.debt_to_equity;
+  const ic = +row.interest_coverage, stab = +row.earnings_stability;
+  const ev = +row.ev_ebitda, pb = +row.pb_ratio, mca = +row.mktcap_to_assets;
+  const failed = [];
+  const pass_roe = Number.isFinite(roe) && roe >= th.roe_min; if (!pass_roe) failed.push("roe");
+  const pass_roic = Number.isFinite(roic) && roic >= th.roic_min; if (!pass_roic) failed.push("roic");
+  const pass_de = !Number.isFinite(de) || de <= th.de_max; if (!pass_de) failed.push("de");
+  const pass_ic = !Number.isFinite(ic) || ic >= th.ic_min; if (!pass_ic) failed.push("ic");
+  const pass_stab = !Number.isFinite(stab) || stab >= th.stab_min; if (!pass_stab) failed.push("stab");
+  const pass_ev = Number.isFinite(ev) && ev > 0 && ev <= th.ev_max; if (!pass_ev) failed.push("ev");
+  const pass_pb = Number.isFinite(pb) && pb > 0 && pb <= th.pb_max; if (!pass_pb) failed.push("pb");
+  const pass_mca = Number.isFinite(mca) && mca > 0 && mca <= th.mca_max; if (!pass_mca) failed.push("mca");
+  const buffett_pass = pass_roe && pass_roic && pass_de && pass_ic && pass_stab;
+  const trifecta_pass = pass_ev && pass_pb && pass_mca;
+  let dual_pass = buffett_pass && trifecta_pass;
+  let enriched = enrichLeverageMetrics({
+    ...row,
+    buffett_pass, trifecta_pass,
+    n_failed: failed.length, failed_legs: failed.join(","),
+  }, th.mca_max);
+  // Scoring impact of leverage flags
+  let comp = +(row.composite_score || 0);
+  let adj = 0;
+  if (enriched.leverage_flag === "cheap-assets") { adj = 0.03; comp = Math.min(1, comp + adj); }
+  else if (enriched.leverage_flag === "levered-assets") { adj = -0.10; comp = Math.max(0, comp + adj); }
+  else if (enriched.leverage_flag === "low-MCA") { adj = -0.02; comp = Math.max(0, comp + adj); }
+  // Gate dual-pass: levered-assets needs IC ≥ 5
+  if (dual_pass && enriched.leverage_flag === "levered-assets" && !(Number.isFinite(ic) && ic >= 5)) {
+    dual_pass = false;
+    failed.push("lev_flag");
+    enriched.failed_legs = failed.join(",");
+    enriched.n_failed = failed.length;
+  }
+  let decision = row.decision;
+  if (dual_pass) decision = "INCLUDE_CORE";
+  else if (buffett_pass && !trifecta_pass) decision = "INCLUDE_QUALITY";
+  else if (trifecta_pass && !buffett_pass) decision = "INCLUDE_VALUE";
+  else if ((pass_roe || pass_roic) && (pass_ev || pass_pb)) decision = "SATELLITE";
+  else if (failed.length >= 5) decision = "AVOID";
+  else decision = "WATCH";
+  return {
+    ...enriched,
+    dual_pass,
+    decision,
+    leverage_score_adj: adj,
+    composite_score: +comp.toFixed(4),
+  };
+}
+
+function applyQualityThresholds() {
+  const th = readQualityThresholds();
+  const raw = (window._qualityPreferred || (DATA && DATA.tables && DATA.tables.preferred_metrics) || []);
+  if (!raw.length) {
+    if ($("#quality-status")) $("#quality-status").textContent = "No preferred_metrics in memory";
+    return;
+  }
+  const scored = raw.map(r => scoreDualPass(r, th));
+  window._qualityScored = scored;
+  const dual = scored.filter(r => r.dual_pass).sort((a,b)=>(b.composite_score||0)-(a.composite_score||0));
+  fillSimple("#tbl-dual", dual, [
+    "ticker","decision","roe","roic","debt_to_equity","debt_to_assets","equity_multiplier",
+    "interest_coverage","ev_ebitda","pb_ratio","mktcap_to_assets","leverage_flag","composite_score"
+  ], 40);
+  const pref = scored.slice().sort((a,b)=>(b.composite_score||0)-(a.composite_score||0));
+  fillSimple("#tbl-preferred", pref, [
+    "ticker","decision","composite_score","buffett_pass","trifecta_pass",
+    "roe","roic","debt_to_equity","interest_coverage","ev_ebitda","pb_ratio","mktcap_to_assets","leverage_flag"
+  ], 50);
+  // decision mix
+  const mixMap = {};
+  for (const r of scored) mixMap[r.decision] = (mixMap[r.decision] || 0) + 1;
+  fillSimple("#tbl-quality-mix",
+    Object.entries(mixMap).map(([decision,n])=>({decision,n})).sort((a,b)=>b.n-a.n),
+    ["decision","n"]);
+  // leverage discriminators: low MCA names
+  const lev = scored
+    .filter(r => Number.isFinite(+r.mktcap_to_assets) && +r.mktcap_to_assets <= th.mca_max)
+    .map(r => ({
+      ticker: r.ticker,
+      mktcap_to_assets: r.mktcap_to_assets,
+      debt_to_equity: r.debt_to_equity,
+      debt_to_assets: r.debt_to_assets,
+      equity_multiplier: r.equity_multiplier,
+      interest_coverage: r.interest_coverage,
+      leverage_flag: r.leverage_flag,
+      dual_pass: r.dual_pass,
+      decision: r.decision,
+      failed_legs: r.failed_legs,
+    }))
+    .sort((a,b)=>(+a.mktcap_to_assets)-(+b.mktcap_to_assets));
+  fillSimple("#tbl-lev-disc", lev, null, 40);
+  if ($("#quality-status")) {
+    $("#quality-status").textContent =
+      `Dual-pass ${dual.length} / ${scored.length} · thresholds ROE≥${th.roe_min} ROIC≥${th.roic_min} D/E≤${th.de_max} MCA≤${th.mca_max}`;
+  }
+}
+
+
+
+/** Shared toolbar helpers */
+// function widgetStatus(id, msg) { const el = $("#"+id); if (el) el.textContent = msg; }
+
+function getMonitoredRows() {
+  if (window._monitoredStocks && window._monitoredStocks.length) return window._monitoredStocks;
+  const T = (DATA && DATA.tables) || {};
+  const top = (DATA && DATA.monitored_stocks) || T.monitored_stocks || [];
+  if (top.length) {
+    window._monitoredStocks = top;
+    return top;
+  }
+  const fromPref = (T.preferred_metrics || []).map(r => ({
+    ticker: r.ticker, sector: r.sector, name: r.name,
+    growth_sleeve: r.growth_sleeve, value_sleeve: r.value_sleeve,
+    index_member: r.index_member, defensive_value_index: r.defensive_value_index,
+    growth_tech_index: r.growth_tech_index, in_portfolio: r.in_portfolio,
+  }));
+  window._monitoredStocks = fromPref;
+  return fromPref;
+}
+
+async function loadMonitoredFromCatalog() {
+  // try parquet/csv via DuckDB or fetch CSV export if present
+  try {
+    if (typeof ensureLocalTable === "function" && window.SQL_CATALOG) {
+      const meta = window.SQL_CATALOG.find(f => f.sql_name === "monitored_stocks");
+      if (meta) {
+        await ensureLocalTable(meta.sql_name, meta.url, meta.kind);
+        const rows = await duckQuery("SELECT * FROM monitored_stocks", null, 500);
+        if (rows && rows.length) {
+          window._monitoredStocks = rows;
+          return rows;
+        }
+      }
+    }
+  } catch (e) { console.warn(e); }
+  return getMonitoredRows();
+}
+
+function sleevesPopulateGroups() {
+  const mode = $("#slv-mode")?.value || "growth_sleeve";
+  const rows = getMonitoredRows();
+  const set = new Set();
+  if (mode === "index") {
+    ["fertilizer (index_member)","defensive","growth_tech","in_portfolio"].forEach(x => set.add(x));
+  } else {
+    rows.forEach(r => {
+      const v = r[mode];
+      if (v != null && String(v).trim() !== "") set.add(String(v));
+    });
+  }
+  const sel = $("#slv-group");
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— all —</option>' +
+    [...set].sort().map(v => `<option value="${v}">${v}</option>`).join("");
+  if ([...set].includes(cur)) sel.value = cur;
+}
+
+function sleevesApply() {
+  const mode = $("#slv-mode")?.value || "growth_sleeve";
+  const group = $("#slv-group")?.value || "";
+  const filt = (($("#slv-filter")?.value) || "").trim().toUpperCase();
+  let rows = getMonitoredRows().map(r => ({...r}));
+  // counts
+  const counts = {};
+  const keyFn = (r) => {
+    if (mode === "index") {
+      const flags = [];
+      if (r.index_member) flags.push("fertilizer");
+      if (r.defensive_value_index) flags.push("defensive");
+      if (r.growth_tech_index) flags.push("growth_tech");
+      if (r.in_portfolio) flags.push("in_portfolio");
+      return flags.length ? flags.join(",") : "(none)";
+    }
+    return r[mode] != null && String(r[mode]).trim() !== "" ? String(r[mode]) : "(none)";
+  };
+  rows.forEach(r => { const k = keyFn(r); counts[k] = (counts[k]||0)+1; });
+  fillSimple("#tbl-slv-counts",
+    Object.entries(counts).map(([group,n])=>({group,n})).sort((a,b)=>b.n-a.n),
+    ["group","n"]);
+
+  let members = rows;
+  if (mode === "index" && group) {
+    const map = {
+      "fertilizer (index_member)": r => r.index_member,
+      fertilizer: r => r.index_member,
+      defensive: r => r.defensive_value_index,
+      growth_tech: r => r.growth_tech_index,
+      in_portfolio: r => r.in_portfolio,
+    };
+    const pred = map[group];
+    if (pred) members = members.filter(pred);
+  } else if (group) {
+    members = members.filter(r => String(r[mode]||"") === group);
+  }
+  if (filt) members = members.filter(r => String(r.ticker||"").toUpperCase().includes(filt));
+  fillSimple("#tbl-slv-members", members, ["ticker","name","sector","industry","growth_sleeve","value_sleeve","status"], 120);
+  widgetStatus("slv-status", `${members.length} members · mode=${mode}` + (group ? ` · ${group}` : ""));
+}
+
+function sleevesPresetAero() {
+  if ($("#slv-mode")) $("#slv-mode").value = "growth_sleeve";
+  sleevesPopulateGroups();
+  const sel = $("#slv-group");
+  if (sel) {
+    // prefer starlink or aerospace
+    const opts = [...sel.options].map(o => o.value);
+    const pick = opts.find(v => /starlink|aerospace|launch/i.test(v)) || "";
+    sel.value = pick;
+  }
+  sleevesApply();
+  // also show aerospace_supply detail
+  if (typeof loadAllLateTabs === "function") {
+    // tbl-aero already filled by loadAllLateTabs
+  }
+}
+
+window._manageStaged = window._manageStaged || [];
+function manageStage() {
+  const ticker = ($("#mg-ticker")?.value || "").trim().toUpperCase();
+  if (!ticker) { widgetStatus("mg-status", "Ticker required"); return; }
+  const row = {
+    ticker,
+    name: $("#mg-name")?.value || "",
+    sector: $("#mg-sector")?.value || "",
+    industry: $("#mg-industry")?.value || "",
+    growth_sleeve: $("#mg-gsleeve")?.value || "",
+    value_sleeve: $("#mg-vsleeve")?.value || "",
+    index_member: !!$("#mg-fert")?.checked,
+    defensive_value_index: !!$("#mg-def")?.checked,
+    growth_tech_index: !!$("#mg-growth")?.checked,
+    in_portfolio: !!$("#mg-port")?.checked,
+  };
+  const i = window._manageStaged.findIndex(r => r.ticker === ticker);
+  if (i >= 0) window._manageStaged[i] = row;
+  else window._manageStaged.push(row);
+  fillSimple("#tbl-mg-staged", window._manageStaged);
+  widgetStatus("mg-status", `Staged ${window._manageStaged.length} change(s)`);
+}
+
+function manageRenderStocks() {
+  const rows = getMonitoredRows().slice(0, 80);
+  fillSimple("#tbl-mg-stocks", rows, ["ticker","name","sector","growth_sleeve","value_sleeve","index_member","defensive_value_index","growth_tech_index","in_portfolio"], 80);
+}
+
+function bindSleevesManage() {
+  $("#slv-mode")?.addEventListener("change", () => { sleevesPopulateGroups(); sleevesApply(); });
+  $("#slv-group")?.addEventListener("change", sleevesApply);
+  $("#slv-filter")?.addEventListener("input", sleevesApply);
+  $("#slv-apply")?.addEventListener("click", sleevesApply);
+  $("#slv-aero")?.addEventListener("click", sleevesPresetAero);
+  $("#slv-reload")?.addEventListener("click", async () => {
+    widgetStatus("slv-status", "Loading…");
+    await loadMonitoredFromCatalog();
+    sleevesPopulateGroups();
+    sleevesApply();
+    manageRenderStocks();
+  });
+  $("#mg-add")?.addEventListener("click", manageStage);
+  $("#mg-export")?.addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(window._manageStaged, null, 2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "staged_stock_updates.json";
+    a.click();
+  });
+  // Apply staged changes via pipeline (expects staged_stock_updates.json in project root)
+  (function(){
+    const bar = document.querySelector("#manage .sql-actions");
+    if (!bar || document.getElementById("mg-apply-pipe")) return;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip-btn"; b.id = "mg-apply-pipe"; b.textContent = "Apply via pipeline";
+    bar.appendChild(b);
+    b.addEventListener("click", async () => {
+      try {
+        const payload = JSON.stringify(window._manageStaged || [], null, 2);
+        const blob = new Blob([payload], {type: "application/json"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob); a.download = "staged_stock_updates.json"; a.click();
+        widgetStatus("mg-status", "Save downloaded JSON as staged_stock_updates.json in stock_monitor/, then retry if apply fails");
+        const base = (localStorage.getItem("PIPE_API") || "http://127.0.0.1:5056").replace(/\/$/, "");
+        const r = await fetch(base + "/run", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ job: "manage_apply", async: false }),
+        });
+        const j = await r.json();
+        widgetStatus("mg-status", j.ok ? ("Apply OK " + (j.elapsed_sec || "") + "s") : (j.error || j.log_tail || "fail"));
+      } catch (e) { widgetStatus("mg-status", e.message); }
+    });
+  })();
+
+  $("#mg-run-list")?.addEventListener("click", async () => {
+    try {
+      const base = (localStorage.getItem("PIPE_API") || "http://127.0.0.1:5056").replace(/\/$/, "");
+      const r = await fetch(base + "/run", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ job: "manage_list", args: ["list"], async: false }),
+      });
+      const j = await r.json();
+      widgetStatus("mg-status", j.ok ? `list OK ${j.elapsed_sec||"?"}s` : (j.error||"fail"));
+    } catch (e) { widgetStatus("mg-status", e.message); }
+  });
+  sleevesPopulateGroups();
+  sleevesApply();
+  manageRenderStocks();
+}
+
+
+
+let fiBasketChart = null;
+function initFisherBaskets() {
+  const T = (DATA && DATA.tables) || {};
+  const rows = T.fisher_sector_baskets_latest || T.fisher_sector_baskets || [];
+  const idxs = [...new Set(rows.map(r => r.index_name).filter(Boolean))];
+  const selI = $("#fi-basket-index");
+  const selS = $("#fi-basket-sectors");
+  if (selI && idxs.length) {
+    selI.innerHTML = idxs.map(i => `<option value="${i}">${i}</option>`).join("");
+  }
+  function refillSectors() {
+    if (!selS) return;
+    const idx = selI?.value || "sp500";
+    const secs = [...new Set(rows.filter(r => r.index_name === idx).map(r => r.sector))].sort();
+    selS.innerHTML = secs.map(s => `<option value="${s}" selected>${s}</option>`).join("");
+  }
+  refillSectors();
+  selI?.addEventListener("change", refillSectors);
+  $("#fi-basket-all")?.addEventListener("click", () => {
+    [...(selS?.options || [])].forEach(o => o.selected = true);
+  });
+  $("#fi-basket-plot")?.addEventListener("click", plotFisherBaskets);
+  // fill latest table
+  fillSimple("#tbl-fi-baskets", (T.fisher_sector_baskets_latest || []).slice().sort((a,b)=>(b.ret_63d||0)-(a.ret_63d||0)),
+    ["index_name","sector","date","level","n_members","ret_63d"], 30);
+  // auto plot top sectors
+  if (selS && selS.options.length) plotFisherBaskets();
+}
+function plotFisherBaskets() {
+  const T = (DATA && DATA.tables) || {};
+  const series = T.fisher_sector_baskets || [];
+  if (!series.length) return;
+  const idx = $("#fi-basket-index")?.value || "sp500";
+  const chosen = [...($("#fi-basket-sectors")?.selectedOptions || [])].map(o => o.value);
+  if (!chosen.length) return;
+  const byKey = {};
+  for (const r of series) {
+    if (r.index_name !== idx) continue;
+    if (!chosen.includes(r.sector)) continue;
+    const k = r.sector;
+    if (!byKey[k]) byKey[k] = [];
+    byKey[k].push(r);
+  }
+  const colors = ["#5b8def","#3ecf8e","#f5a623","#e85d5d","#a78bfa","#2dd4bf","#f472b6","#94a3b8","#facc15","#38bdf8","#c084fc"];
+  const datasets = Object.keys(byKey).sort().map((k,i) => {
+    const pts = byKey[k].slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    // last 180 points
+    const tail = pts.slice(-180);
+    return {
+      label: k,
+      data: tail.map(p => ({x: p.date, y: p.level})),
+      borderColor: colors[i % colors.length],
+      backgroundColor: "transparent",
+      tension: 0.15,
+      pointRadius: 0,
+      borderWidth: 1.5,
+    };
+  });
+  // unify labels
+  const labels = datasets[0] ? datasets[0].data.map(d => d.x) : [];
+  const canvas = document.getElementById("chart-fi-baskets");
+  if (!canvas || typeof Chart === "undefined") return;
+  if (fiBasketChart) fiBasketChart.destroy();
+  fiBasketChart = new Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: datasets.map(ds => ({
+        ...ds,
+        data: ds.data.map(d => d.y),
+      })),
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#c7d2e0", boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { color: "#8b9bb4", maxTicksLimit: 8 } },
+        y: { ticks: { color: "#8b9bb4" } },
+      },
+    },
+  });
+}
+
+async function initDuckDB(data) {
+  const status = $("#sql-status");
+  const setStatus = (t) => { if (status) status.textContent = t; };
+  window.SQL_TABLES = window.SQL_TABLES || [];
+  window.SQL_CATALOG = window.SQL_CATALOG || [];
+  window.SQL_LOADED = window.SQL_LOADED || new Set();
+  try {
+    setStatus("Loading DuckDB-Wasm…");
+    const JSDELIVR = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/";
+    const manualBundles = {
+      mvp: {
+        mainModule: JSDELIVR + "duckdb-mvp.wasm",
+        mainWorker: JSDELIVR + "duckdb-browser-mvp.worker.js",
+      },
+      eh: {
+        mainModule: JSDELIVR + "duckdb-eh.wasm",
+        mainWorker: JSDELIVR + "duckdb-browser-eh.worker.js",
+      },
+    };
+    const bundle = await duckdb.selectBundle(manualBundles);
+    const workerUrl = URL.createObjectURL(
+      new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" })
+    );
+    const worker = new Worker(workerUrl);
+    const logger = new duckdb.ConsoleLogger();
+    DB = new duckdb.AsyncDuckDB(logger, worker);
+    await DB.instantiate(bundle.mainModule, bundle.pthreadWorker);
+    CONN = await DB.connect();
+
+    // 1) In-memory tables from data.json (top-level arrays + tables.*)
+    const catalogMem = {};
+    for (const [name, rows] of Object.entries(data || {})) {
+      if (name === "tables" && rows && typeof rows === "object" && !Array.isArray(rows)) {
+        for (const [tname, trows] of Object.entries(rows)) {
+          if (Array.isArray(trows) && trows.length) catalogMem[tname] = trows;
+        }
+      } else if (Array.isArray(rows) && rows.length) {
+        catalogMem[name] = rows;
+      }
+    }
+    const loaded = [];
+    for (const [name, rows] of Object.entries(catalogMem)) {
+      const safe = String(name).replace(/[^A-Za-z0-9_]/g, "_");
+      if (!safe) continue;
+      try {
+        await DB.registerFileText(`${safe}.json`, JSON.stringify(rows));
+        await CONN.query(`CREATE OR REPLACE TABLE "${safe}" AS SELECT * FROM read_json_auto('${safe}.json')`);
+        loaded.push(safe);
+        window.SQL_LOADED.add(safe);
+      } catch (err) {
+        console.warn("mem table fail", name, err);
+      }
+    }
+    window.SQL_TABLES = loaded.sort();
+
+    // 2) Local file catalog (CSV/Parquet) — lazy load on demand
+    await refreshDataCatalog();
+    setStatus(`DuckDB ready · ${loaded.length} in-memory · ${window.SQL_CATALOG.length} local files`);
+    renderSqlCatalog();
+    if (typeof qbPopulateTables === "function") qbPopulateTables(window.SQL_TABLES);
+  } catch (e) {
+    console.error(e);
+    setStatus("DuckDB init failed: " + e.message);
+  }
+}
+
+async function refreshDataCatalog() {
+  try {
+    const r = await fetch("dashboard_data/data_catalog.json?ts=" + Date.now());
+    if (!r.ok) throw new Error("catalog HTTP " + r.status);
+    const j = await r.json();
+    window.SQL_CATALOG = j.files || [];
+    const st = $("#sql-catalog-status");
+    if (st) st.textContent = `${window.SQL_CATALOG.length} resources`;
+  } catch (e) {
+    window.SQL_CATALOG = window.SQL_CATALOG || [];
+    const st = $("#sql-catalog-status");
+    if (st) st.textContent = "Catalog missing — run: python build_data_catalog.py";
+  }
+}
+
+function renderSqlCatalog() {
+  const host = $("#sql-catalog");
+  if (!host) return;
+  const q = (($("#sql-catalog-filter")?.value) || "").toLowerCase().trim();
+  const files = (window.SQL_CATALOG || []).filter(f => {
+    if (!q) return true;
+    return (f.sql_name + " " + f.filename + " " + f.path).toLowerCase().includes(q);
+  });
+  host.innerHTML = files.slice(0, 200).map(f => {
+    const loaded = window.SQL_LOADED && window.SQL_LOADED.has(f.sql_name);
+    const sizeKb = (f.size / 1024).toFixed(1);
+    return `<label title="${f.path}" style="display:flex;gap:0.35rem;align-items:center">
+      <input type="checkbox" data-sql-name="${f.sql_name}" data-url="${f.url}" data-kind="${f.kind}" ${loaded ? "checked" : ""} />
+      <span><code>${f.sql_name}</code> <small style="color:var(--muted)">${f.kind} · ${sizeKb}KB${loaded ? " · loaded" : ""}</small></span>
+    </label>`;
+  }).join("") || "<span style='color:var(--muted)'>No matching files</span>";
+}
+
+/** Lazy-load a local CSV/Parquet into DuckDB via static server URL */
+async function ensureLocalTable(sqlName, url, kind) {
+  if (!CONN || !DB) throw new Error("DuckDB not ready");
+  if (window.SQL_LOADED.has(sqlName)) return sqlName;
+  const status = $("#sql-status");
+  if (status) status.textContent = `Fetching ${url}…`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
+  const buf = new Uint8Array(await resp.arrayBuffer());
+  // size guard ~40MB
+  if (buf.byteLength > 40 * 1024 * 1024) {
+    throw new Error(`${url} too large (${(buf.byteLength/1e6).toFixed(1)}MB) — query with read_* on a sample offline`);
+  }
+  const fname = url.split("/").pop();
+  await DB.registerFileBuffer(fname, buf);
+  const safe = sqlName.replace(/[^A-Za-z0-9_]/g, "_");
+  if (kind === "parquet" || fname.endsWith(".parquet")) {
+    await CONN.query(`CREATE OR REPLACE TABLE "${safe}" AS SELECT * FROM read_parquet('${fname}')`);
+  } else if (kind === "json" || fname.endsWith(".json")) {
+    await CONN.query(`CREATE OR REPLACE TABLE "${safe}" AS SELECT * FROM read_json_auto('${fname}')`);
+  } else {
+    await CONN.query(`CREATE OR REPLACE TABLE "${safe}" AS SELECT * FROM read_csv_auto('${fname}', HEADER=true, IGNORE_ERRORS=true)`);
+  }
+  window.SQL_LOADED.add(safe);
+  if (!window.SQL_TABLES.includes(safe)) {
+    window.SQL_TABLES.push(safe);
+    window.SQL_TABLES.sort();
+  }
+  if (typeof qbPopulateTables === "function") qbPopulateTables(window.SQL_TABLES);
+  return safe;
+}
+
+async function loadCheckedCatalogFiles() {
+  const boxes = [...document.querySelectorAll("#sql-catalog input[type=checkbox]:checked")];
+  const status = $("#sql-catalog-status");
+  let n = 0;
+  for (const b of boxes) {
+    try {
+      await ensureLocalTable(b.dataset.sqlName, b.dataset.url, b.dataset.kind);
+      n++;
+    } catch (e) {
+      console.warn(e);
+      if (status) status.textContent = `Fail ${b.dataset.sqlName}: ${e.message}`;
+    }
+  }
+  renderSqlCatalog();
+  if (status) status.textContent = `Loaded ${n} / ${boxes.length}`;
+  if ($("#sql-status")) $("#sql-status").textContent = `DuckDB · ${window.SQL_TABLES.length} tables`;
+}
+
+async function runSQL(sql) {
+  const status = $("#sql-status");
+  const setStatus = (t) => { if (status) status.textContent = t; };
+  if (!CONN) {
+    setStatus("DuckDB not ready — wait for init or check console / CDN");
+    return;
+  }
+  let q = (sql || "").trim();
+  if (!q) { setStatus("Empty query"); return; }
+
+  // Auto-register tables referenced as bare identifiers if present in catalog
+  try {
+    const names = (q.match(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g) || []);
+    for (const n of names) {
+      if (window.SQL_LOADED.has(n)) continue;
+      const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === n);
+      if (meta) {
+        try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind); }
+        catch (e) { console.warn("autoload", n, e); }
+      }
+    }
+    // Support read_csv_auto('file.csv') / read_parquet('file.parquet') by pre-registering
+    const pathRe = /read_(?:csv_auto|csv|parquet|json_auto)\(\s*'([^']+)'/gi;
+    let m;
+    while ((m = pathRe.exec(q)) !== null) {
+      const path = m[1];
+      const base = path.split("/").pop();
+      const meta = (window.SQL_CATALOG || []).find(f => f.filename === base || f.url === path || f.path === path);
+      if (meta && !window.SQL_LOADED.has(meta.sql_name)) {
+        try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind); } catch (e) {}
+      } else if (!meta) {
+        // try fetch path directly
+        try {
+          const kind = base.endsWith(".parquet") ? "parquet" : base.endsWith(".json") ? "json" : "csv";
+          const sqlName = base.replace(/\.(csv|parquet|json)$/i, "").replace(/[^A-Za-z0-9_]/g, "_");
+          await ensureLocalTable(sqlName, path, kind);
+        } catch (e) { console.warn(e); }
+      }
+    }
+  } catch (e) { console.warn(e); }
+
+  setStatus("Running…");
+  try {
+    const result = await CONN.query(q);
+    const fields = result.schema.fields.map(f => f.name);
+    const rows = result.toArray().map(r => {
+      const o = {};
+      for (const k of fields) {
+        let v = r[k];
+        if (typeof v === "bigint") v = Number(v);
+        o[k] = v;
+      }
+      return o;
+    });
+    fillTable("tbl-sql", rows, fields);
+    setStatus(`${rows.length} rows · ${window.SQL_TABLES.length} tables`);
+  } catch (e) {
+    setStatus(String(e.message || e));
+    fillTable("tbl-sql", [], []);
+  }
+}
+
+
+// Tabs
+$$("#nav button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    $$("#nav button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    $$("main > section").forEach(s => s.classList.remove("active"));
+    $("#" + btn.dataset.tab).classList.add("active");
+  });
+});
+
+$("#sql-run").addEventListener("click", () => runSQL($("#sql-input").value));
+$("#sql-show-tables")?.addEventListener("click", () => {
+  $("#sql-input").value = "SHOW TABLES;";
+  runSQL("SHOW TABLES;");
+});
+$("#sql-catalog-filter")?.addEventListener("input", () => renderSqlCatalog());
+$("#sql-refresh-catalog")?.addEventListener("click", async () => {
+  await refreshDataCatalog();
+  renderSqlCatalog();
+});
+$("#sql-load-visible")?.addEventListener("click", () => loadCheckedCatalogFiles());
+document.getElementById("sql-catalog")?.addEventListener("change", async (ev) => {
+  const t = ev.target;
+  if (t && t.matches("input[type=checkbox]") && t.checked) {
+    try {
+      await ensureLocalTable(t.dataset.sqlName, t.dataset.url, t.dataset.kind);
+      renderSqlCatalog();
+      if ($("#sql-status")) $("#sql-status").textContent = `Loaded ${t.dataset.sqlName}`;
+    } catch (e) {
+      t.checked = false;
+      if ($("#sql-status")) $("#sql-status").textContent = String(e.message || e);
+    }
+  }
+});
+
+$$(".chip-btn[data-sql]").forEach(b => b.addEventListener("click", () => {
+  $("#sql-input").value = b.dataset.sql;
+  runSQL(b.dataset.sql);
+}));
+
+
+/* —— SQL Query Builder —— */
+const QB_OPS = ["=", "!=", ">", ">=", "<", "<=", "LIKE", "IS TRUE", "IS FALSE", "IS NULL"];
+const QB_TEMPLATES = {
+  trifecta_out: {
+    table: "value_trifecta",
+    cols: ["ticker","name","sector","pb_ratio","mktcap_to_assets","ev_ebitda","market_cap_b"],
+    filters: [{col:"in_portfolio", op:"IS FALSE", val:""}],
+    order: "ev_ebitda", dir: "ASC", limit: 50
+  },
+  port_val: {
+    table: "fundamentals",
+    cols: ["ticker","name","sector","pb_ratio","mktcap_to_assets","ev_ebitda"],
+    filters: [{col:"in_portfolio", op:"IS TRUE", val:""}],
+    order: "pb_ratio", dir: "ASC", limit: 50
+  },
+  low_ev: {
+    table: "low_ev_ebitda",
+    cols: ["ticker","name","sector","ev_ebitda","pb_ratio","mktcap_to_assets"],
+    filters: [],
+    order: "ev_ebitda", dir: "ASC", limit: 15
+  },
+  home_beta: {
+    table: "asset_sector_corr",
+    cols: ["ticker","sector","corr"],
+    filters: [{col:"is_home_sector", op:"IS TRUE", val:""}],
+    order: "corr", dir: "DESC", limit: 50
+  },
+  fc_rank: {
+    table: "forecasts_hmax",
+    cols: ["ticker","last_close","forecast_close","pct_change"],
+    filters: [],
+    order: "pct_change", dir: "DESC", limit: 50
+  },
+  anom: {
+    table: "anomalies",
+    cols: ["ticker","date","close","score","ret_z"],
+    filters: [{col:"score", op:">=", val:"3"}],
+    order: "date", dir: "DESC", limit: 25
+  },
+  index_bt: {
+    table: "index_backtest",
+    cols: [],
+    filters: [],
+    order: "", dir: "ASC", limit: 20
+  },
+  mos_cf: {
+    table: "fundamentals",
+    cols: ["ticker","name","sector","pb_ratio","mktcap_to_assets","ev_ebitda","market_cap_b","index_member","in_portfolio"],
+    filters: [{col:"sector", op:"=", val:"Materials"}],
+    order: "ev_ebitda", dir: "ASC", limit: 30
+  },
+};
+
+function qbTables() {
+  const names = new Set();
+  if (window.SQL_TABLES) window.SQL_TABLES.forEach(n => names.add(n));
+  if (window.SQL_CATALOG) window.SQL_CATALOG.forEach(f => names.add(f.sql_name));
+  if (DATA) {
+    Object.keys(DATA).filter(k => Array.isArray(DATA[k]) && DATA[k].length).forEach(k => names.add(k));
+    if (DATA.tables && typeof DATA.tables === "object") {
+      Object.keys(DATA.tables).forEach(k => {
+        if (Array.isArray(DATA.tables[k]) && DATA.tables[k].length) names.add(k);
+      });
+    }
+  }
+  return [...names].sort();
+}
+
+function qbColumns(table) {
+  if (!DATA || !table) return [];
+  let rows = DATA[table];
+  if ((!rows || !rows.length) && DATA.tables) rows = DATA.tables[table];
+  if (!rows || !rows.length) return [];
+  return Object.keys(rows[0]);
+}
+
+function qbPopulateTables(list) {
+  const sel = $("#qb-table");
+  if (!sel) return;
+  const tables = (list && list.length) ? list : qbTables();
+  const cur = sel.value;
+  sel.innerHTML = tables.map(t => `<option value="${t}">${t}</option>`).join("");
+  if (tables.includes(cur)) sel.value = cur;
+  else if (tables.includes("value_trifecta")) sel.value = "value_trifecta";
+  else if (tables.length) sel.value = tables[0];
+  qbPopulateColumns();
+}
+
+function qbEscapeIdent(id) {
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(id)) return id;
+  return '"' + id.replace(/"/g, '""') + '"';
+}
+
+function qbLit(val, op) {
+  if (op === "IS TRUE" || op === "IS FALSE" || op === "IS NULL") return "";
+  const v = String(val ?? "").trim();
+  if (v === "") return "''";
+  if (/^-?\d+(\.\d+)?$/.test(v)) return v;
+  if (v.toLowerCase() === "true" || v.toLowerCase() === "false") return v.toLowerCase();
+  return "'" + v.replace(/'/g, "''") + "'";
+}
+
+function qbBuildSQL() {
+  const table = $("#qb-table").value;
+  if (!table) return "";
+  const cols = [...document.querySelectorAll("#qb-cols input:checked")].map(c => c.value);
+  const select = cols.length ? cols.map(qbEscapeIdent).join(", ") : "*";
+  let sql = `SELECT ${select}\nFROM ${qbEscapeIdent(table)}`;
+  const filters = [];
+  document.querySelectorAll("#qb-filters .qb-filter-row").forEach(row => {
+    const col = row.querySelector(".qf-col").value;
+    const op = row.querySelector(".qf-op").value;
+    const val = row.querySelector(".qf-val").value;
+    if (!col) return;
+    if (op === "IS TRUE" || op === "IS FALSE" || op === "IS NULL") {
+      filters.push(`${qbEscapeIdent(col)} ${op}`);
+    } else if (op === "LIKE") {
+      filters.push(`${qbEscapeIdent(col)} LIKE ${qbLit(val.includes("%") ? val : `%${val}%`, op)}`);
+    } else {
+      filters.push(`${qbEscapeIdent(col)} ${op} ${qbLit(val, op)}`);
+    }
+  });
+  if (filters.length) sql += "\nWHERE " + filters.join("\n  AND ");
+  const orderCol = $("#qb-order-col").value;
+  if (orderCol) sql += `\nORDER BY ${qbEscapeIdent(orderCol)} ${$("#qb-order-dir").value}`;
+  const limit = parseInt($("#qb-limit").value, 10);
+  if (limit > 0) sql += `\nLIMIT ${limit}`;
+  return sql + ";";
+}
+
+function qbRefreshPreview() {
+  const el = $("#qb-preview");
+  if (el) el.textContent = qbBuildSQL() || "—";
+}
+
+function qbPopulateColumns() {
+  const table = $("#qb-table").value;
+  const cols = qbColumns(table);
+  const box = $("#qb-cols");
+  box.innerHTML = cols.map(c =>
+    `<label><input type="checkbox" value="${c}" /> ${c}</label>`
+  ).join("");
+  box.querySelectorAll("input").forEach(inp => inp.addEventListener("change", qbRefreshPreview));
+  const order = $("#qb-order-col");
+  order.innerHTML = '<option value="">—</option>' + cols.map(c => `<option value="${c}">${c}</option>`).join("");
+  // refresh filter col dropdowns
+  document.querySelectorAll("#qb-filters .qf-col").forEach(sel => {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">—</option>' + cols.map(c => `<option value="${c}">${c}</option>`).join("");
+    if (cols.includes(cur)) sel.value = cur;
+  });
+  qbRefreshPreview();
+}
+
+function qbAddFilter(preset) {
+  const cols = qbColumns($("#qb-table").value);
+  const row = document.createElement("div");
+  row.className = "qb-filter-row";
+  row.innerHTML = `
+    <select class="qf-col"><option value="">—</option>${cols.map(c => `<option value="${c}">${c}</option>`).join("")}</select>
+    <select class="qf-op">${QB_OPS.map(o => `<option value="${o}">${o}</option>`).join("")}</select>
+    <input class="qf-val" placeholder="value" />
+    <button type="button" class="chip-btn qf-del">×</button>`;
+  if (preset) {
+    if (preset.col) row.querySelector(".qf-col").value = preset.col;
+    if (preset.op) row.querySelector(".qf-op").value = preset.op;
+    if (preset.val != null) row.querySelector(".qf-val").value = preset.val;
+  }
+  const syncVal = () => {
+    const op = row.querySelector(".qf-op").value;
+    const needs = !(op === "IS TRUE" || op === "IS FALSE" || op === "IS NULL");
+    row.querySelector(".qf-val").style.visibility = needs ? "visible" : "hidden";
+    qbRefreshPreview();
+  };
+  row.querySelector(".qf-op").addEventListener("change", syncVal);
+  row.querySelector(".qf-col").addEventListener("change", qbRefreshPreview);
+  row.querySelector(".qf-val").addEventListener("input", qbRefreshPreview);
+  row.querySelector(".qf-del").addEventListener("click", () => { row.remove(); qbRefreshPreview(); });
+  $("#qb-filters").appendChild(row);
+  syncVal();
+}
+
+function qbApplyTemplate(key) {
+  const t = QB_TEMPLATES[key];
+  if (!t) return;
+  $("#qb-table").value = t.table;
+  qbPopulateColumns();
+  $("#qb-filters").innerHTML = "";
+  (t.filters || []).forEach(f => qbAddFilter(f));
+  const colset = new Set(t.cols || []);
+  document.querySelectorAll("#qb-cols input").forEach(inp => { inp.checked = colset.has(inp.value); });
+  $("#qb-order-col").value = t.order || "";
+  $("#qb-order-dir").value = t.dir || "ASC";
+  $("#qb-limit").value = t.limit || 50;
+  qbRefreshPreview();
+  const sql = qbBuildSQL();
+  $("#sql-input").value = sql;
+}
+
+
+function renderCsvCatalog() {
+  const host = $("#csv-catalog-btns") || document.getElementById("csv-catalog-btns");
+  // fallback: entire section body
+  const section = document.getElementById("csvcat");
+  if (!host && !section) return;
+  const files = (window.SQL_CATALOG && window.SQL_CATALOG.length)
+    ? window.SQL_CATALOG
+    : (DATA && DATA.csv_catalog) || [];
+  const target = host || section;
+  if (!files.length) {
+    if (host) host.innerHTML = "<p style='color:var(--muted)'>No catalog — run build_data_catalog.py</p>";
+    return;
+  }
+  const htmlRows = files.slice(0, 250).map((c, i) => {
+    const name = c.sql_name || c.name || c.filename;
+    const path = c.url || c.path || c.filename;
+    const kind = c.kind || "";
+    const size = c.size ? ((c.size/1024).toFixed(1) + "KB") : "";
+    return `<div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;padding:0.4rem 0.5rem;border:1px solid var(--border);border-radius:8px;background:var(--panel)">
+      <button type="button" class="chip-btn csv-preview" data-path="${path}" data-sql="${name}" data-kind="${kind}">Preview</button>
+      <button type="button" class="chip-btn csv-sql" data-sql="${name}" data-path="${path}" data-kind="${kind}">SQL</button>
+      <code>${name}</code>
+      <small style="color:var(--muted)">${kind} · ${size} · ${path}</small>
+    </div>`;
+  }).join("");
+  if (host) host.innerHTML = htmlRows;
+  else {
+    let box = section.querySelector("#csv-catalog-btns");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "csv-catalog-btns";
+      box.style.cssText = "display:flex;flex-direction:column;gap:0.4rem;max-height:70vh;overflow:auto";
+      section.appendChild(box);
+    }
+    box.innerHTML = htmlRows;
+  }
+  target.querySelectorAll(".csv-sql").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const n = btn.dataset.sql;
+      const path = btn.dataset.path;
+      const kind = btn.dataset.kind;
+      const sql = kind === "parquet"
+        ? `SELECT * FROM read_parquet('${path}') LIMIT 30;`
+        : kind === "json"
+          ? `SELECT * FROM read_json_auto('${path}') LIMIT 30;`
+          : `SELECT * FROM read_csv_auto('${path}', HEADER=true) LIMIT 30;`;
+      const inp = $("#sql-input");
+      if (inp) inp.value = sql;
+      document.querySelector('[data-tab="sql"]')?.click();
+      runSQL(sql);
+    });
+  });
+  target.querySelectorAll(".csv-preview").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      try {
+        await ensureLocalTable(btn.dataset.sql, btn.dataset.path, btn.dataset.kind);
+        await runSQL(`SELECT * FROM "${btn.dataset.sql}" LIMIT 25;`);
+        document.querySelector('[data-tab="sql"]')?.click();
+      } catch (e) {
+        alert(e.message || e);
+      }
+    });
+  });
+}
+
+
+
+let fisherChart = null;
+let fisherCurrent = [];
+
+const FISHER_CORE_SQL = `
+CREATE OR REPLACE TEMP TABLE pq AS
+SELECT
+  date,
+  ticker,
+  price,
+  COALESCE(
+    last_value(qty IGNORE NULLS) OVER (
+      PARTITION BY ticker ORDER BY date
+      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ),
+    1.0
+  ) AS qty
+FROM price_qty
+WHERE ticker IN (SELECT ticker FROM tickers)
+  AND price IS NOT NULL AND price > 0;
+
+CREATE OR REPLACE TEMP TABLE date_pairs AS
+WITH c AS (SELECT DISTINCT date FROM pq)
+SELECT date AS date_t, lag(date) OVER (ORDER BY date) AS date_0
+FROM c;
+
+CREATE OR REPLACE TEMP TABLE period_links AS
+SELECT
+  d.date_t AS date,
+  d.date_0,
+  sum(p1.price * p0.qty) AS sum_p1q0,
+  sum(p0.price * p0.qty) AS sum_p0q0,
+  sum(p1.price * p1.qty) AS sum_p1q1,
+  sum(p0.price * p1.qty) AS sum_p0q1,
+  count(*)::BIGINT AS n_items
+FROM date_pairs d
+JOIN pq p0 ON p0.date = d.date_0
+JOIN pq p1 ON p1.date = d.date_t AND p1.ticker = p0.ticker
+WHERE d.date_0 IS NOT NULL AND p0.qty > 0 AND p1.qty > 0
+GROUP BY 1, 2;
+
+CREATE OR REPLACE TEMP TABLE links AS
+SELECT
+  date,
+  n_items,
+  CASE WHEN sum_p0q0 > 0 THEN sum_p1q0 / sum_p0q0 ELSE 1.0 END AS link_lp,
+  CASE WHEN sum_p0q1 > 0 THEN sum_p1q1 / sum_p0q1 ELSE 1.0 END AS link_pp,
+  CASE WHEN sum_p0q0 > 0 THEN sum_p0q1 / sum_p0q0 ELSE 1.0 END AS link_lq,
+  CASE WHEN sum_p1q0 > 0 THEN sum_p1q1 / sum_p1q0 ELSE 1.0 END AS link_pq
+FROM period_links;
+
+CREATE OR REPLACE TEMP TABLE links_f AS
+SELECT
+  date,
+  n_items,
+  link_lp, link_pp,
+  CASE WHEN link_lp > 0 AND link_pp > 0 THEN sqrt(link_lp * link_pp) ELSE 1.0 END AS link_fp,
+  link_lq, link_pq,
+  CASE WHEN link_lq > 0 AND link_pq > 0 THEN sqrt(link_lq * link_pq) ELSE 1.0 END AS link_fq
+FROM links;
+
+CREATE OR REPLACE TEMP TABLE fisher_chained AS
+WITH base AS (
+  SELECT min(date_0) AS date FROM period_links
+),
+seed AS (
+  SELECT date, CAST(NULL AS BIGINT) AS n_items,
+         1.0 AS link_lp, 1.0 AS link_pp, 1.0 AS link_fp,
+         1.0 AS link_lq, 1.0 AS link_pq, 1.0 AS link_fq
+  FROM base
+  UNION ALL
+  SELECT date, n_items, link_lp, link_pp, link_fp, link_lq, link_pq, link_fq
+  FROM links_f
+),
+ch AS (
+  SELECT
+    date,
+    n_items,
+    link_lp, link_pp, link_fp, link_lq, link_pq, link_fq,
+    100 * exp(sum(ln(greatest(link_lp, 1e-12))) OVER w) AS laspeyres_p,
+    100 * exp(sum(ln(greatest(link_pp, 1e-12))) OVER w) AS paasche_p,
+    100 * exp(sum(ln(greatest(link_fp, 1e-12))) OVER w) AS fisher_p,
+    100 * exp(sum(ln(greatest(link_lq, 1e-12))) OVER w) AS laspeyres_q,
+    100 * exp(sum(ln(greatest(link_pq, 1e-12))) OVER w) AS paasche_q,
+    100 * exp(sum(ln(greatest(link_fq, 1e-12))) OVER w) AS fisher_q
+  FROM seed
+  WINDOW w AS (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+)
+SELECT
+  date,
+  laspeyres_p, paasche_p, fisher_p,
+  laspeyres_q, paasche_q, fisher_q,
+  fisher_p * fisher_q AS nominal_fisher_product,
+  sqrt(greatest(fisher_p, 0) * greatest(fisher_q, 0)) AS nominal_sqrt_fisher,
+  link_lp AS link_laspeyres_p,
+  link_pp AS link_paasche_p,
+  link_fp AS link_fisher_p,
+  link_lq AS link_laspeyres_q,
+  link_pq AS link_paasche_q,
+  link_fq AS link_fisher_q,
+  n_items
+FROM ch
+ORDER BY date;
+`;
+
+function fiInitTickers() {
+  const host = $("#fi-tickers");
+  if (!host || !DATA.price_qty_panel) return;
+  const tickers = [...new Set(DATA.price_qty_panel.map(r => r.ticker))].sort();
+  const preset = (DATA.fisher_universes && DATA.fisher_universes.portfolio) || [];
+  host.innerHTML = tickers.map(t => {
+    const checked = preset.includes(t) ? "checked" : "";
+    return `<label><input type="checkbox" value="${t}" ${checked}/> ${t}</label>`;
+  }).join("");
+}
+
+function fiSelectedTickers() {
+  const uni = $("#fi-universe").value;
+  if (uni !== "custom" && DATA.fisher_universes && DATA.fisher_universes[uni]) {
+    return DATA.fisher_universes[uni];
+  }
+  return [...document.querySelectorAll("#fi-tickers input:checked")].map(i => i.value);
+}
+
+
+let fisherDecompChart = null;
+let fisherRatesChart = null;
+
+function fiDefaultRefDate(rows) {
+  if (!rows || !rows.length) return "";
+  const dates = rows.map(r => (r.date || "").toString().slice(0, 10)).filter(Boolean).sort();
+  if (!dates.length) return "";
+  const last = dates[dates.length - 1];
+  const lastT = Date.parse(last);
+  const target = lastT - 365.25 * 24 * 3600 * 1000; // ~1y lookback
+  let pick = dates[0];
+  for (const d of dates) {
+    if (Date.parse(d) <= target) pick = d;
+    else break;
+  }
+  // if series shorter than ~1y, use first date
+  if (Date.parse(pick) > target + 30 * 86400000) pick = dates[0];
+  return pick;
+}
+
+function fiEnsureRateFields(rows) {
+  // Derive period rates if missing (from links or level pct change)
+  return rows.map((r, i, arr) => {
+    const o = { ...r };
+    if (o.infl_rate == null) {
+      if (o.link_fisher_p != null) o.infl_rate = (+o.link_fisher_p) - 1;
+      else if (i > 0 && arr[i - 1].fisher_p) o.infl_rate = (+o.fisher_p) / (+arr[i - 1].fisher_p) - 1;
+      else o.infl_rate = 0;
+    }
+    if (o.growth_rate == null) {
+      if (o.link_fisher_q != null) o.growth_rate = (+o.link_fisher_q) - 1;
+      else if (i > 0 && arr[i - 1].fisher_q) o.growth_rate = (+o.fisher_q) / (+arr[i - 1].fisher_q) - 1;
+      else o.growth_rate = 0;
+    }
+    if (o.nominal_rate == null) {
+      o.nominal_rate = (1 + (+o.infl_rate || 0)) * (1 + (+o.growth_rate || 0)) - 1;
+    }
+    if (o.identity_gap == null) {
+      o.identity_gap = (1 + (+o.nominal_rate || 0)) - (1 + (+o.infl_rate || 0)) * (1 + (+o.growth_rate || 0));
+    }
+    return o;
+  });
+}
+
+function fiRebaseRows(rows, refDate) {
+  if (!rows || !rows.length) return rows || [];
+  let rows2 = fiEnsureRateFields(rows).map(r => ({
+    ...r,
+    date: (r.date || "").toString().slice(0, 10),
+  })).sort((a, b) => a.date.localeCompare(b.date));
+
+  const ref = (refDate || "").slice(0, 10);
+  if (!ref) return rows2;
+
+  // nearest on or before ref
+  let base = null;
+  for (const r of rows2) {
+    if (r.date <= ref) base = r;
+    else break;
+  }
+  if (!base) base = rows2[0];
+
+  const levelCols = [
+    "laspeyres_p","paasche_p","fisher_p","laspeyres_q","paasche_q","fisher_q",
+    "nominal_fisher_product","nominal_sqrt_fisher",
+  ];
+  const out = rows2.map(r => {
+    const o = { ...r, ref_date: base.date };
+    for (const c of levelCols) {
+      if (r[c] != null && base[c] != null && +base[c] !== 0) {
+        o[c] = (+r[c]) / (+base[c]) * 100;
+      }
+    }
+    return o;
+  });
+  // recompute cumulative factors from rates after rebase still same rates
+  let ci = 1, cg = 1, cn = 1;
+  return out.map((r, i) => {
+    if (i === 0) { ci = cg = cn = 1; }
+    else {
+      ci *= (1 + (+r.infl_rate || 0));
+      cg *= (1 + (+r.growth_rate || 0));
+      cn *= (1 + (+r.nominal_rate || 0));
+    }
+    return {
+      ...r,
+      cum_infl_factor: ci * 100,
+      cum_growth_factor: cg * 100,
+      cum_nominal_factor: cn * 100,
+    };
+  });
+}
+
+function fiLoadPrecomputed() {
+  const uniRaw = $("#fi-universe")?.value || "portfolio";
+  const uni = uniRaw === "custom" ? "portfolio" : uniRaw;
+  const src =
+    (DATA.fisher_indexes_duckdb && DATA.fisher_indexes_duckdb.length ? DATA.fisher_indexes_duckdb : null) ||
+    (DATA.fisher_indexes && DATA.fisher_indexes.length ? DATA.fisher_indexes : null) ||
+    (DATA.tables && DATA.tables.fisher_indexes) ||
+    [];
+  let rows = src.filter(r => String(r.universe || "") === uni);
+  if (!rows.length) {
+    rows = src.filter(r => String(r.universe || "").toLowerCase() === uni.toLowerCase());
+  }
+  const status = $("#fi-status");
+  if (!rows.length) {
+    if (status) status.textContent = `No precomputed rows for universe="${uni}" — Backfill or Recompute`;
+    return;
+  }
+  // default reference date once
+  const refInput = $("#fi-ref-date");
+  if (refInput && !refInput.value) {
+    refInput.value = fiDefaultRefDate(rows);
+  }
+  const ref = refInput?.value || fiDefaultRefDate(rows);
+  fisherCurrent = fiRebaseRows(rows, ref);
+  const engine = (DATA.fisher_indexes_duckdb && DATA.fisher_indexes_duckdb.length)
+    ? "DuckDB-precomputed" : "Python-precomputed";
+  if (status) {
+    const last = fisherCurrent[fisherCurrent.length - 1];
+    status.textContent =
+      `${fisherCurrent.length} pts · ${uni} · ref=${ref || "first"} · ${engine} · ` +
+      `π=${((last.infl_rate||0)*100).toFixed(2)}% g=${((last.growth_rate||0)*100).toFixed(2)}%`;
+  }
+  fiRender(fisherCurrent);
+}
+
+
+/** Port of fisher_index.py — pure JS fallback */
+function fiRecompute() {
+  const tickers = fiSelectedTickers();
+  if (!tickers.length) { $("#fi-status").textContent = "Select tickers"; return; }
+  const panel = (DATA.price_qty_panel || []).filter(r => tickers.includes(r.ticker));
+  if (!panel.length) { $("#fi-status").textContent = "No price/qty panel rows"; return; }
+  const byDate = {};
+  panel.forEach(r => {
+    const d = (r.date || "").toString().slice(0, 10);
+    if (!byDate[d]) byDate[d] = {};
+    byDate[d][r.ticker] = { p: +r.close, q: (+r.volume > 0 ? +r.volume : null) };
+  });
+  const dates = Object.keys(byDate).sort();
+  let prevQ = {};
+  dates.forEach(d => {
+    tickers.forEach(t => {
+      const cell = byDate[d][t];
+      if (!cell) return;
+      if (cell.q == null || cell.q <= 0) cell.q = prevQ[t] || 1;
+      prevQ[t] = cell.q;
+    });
+  });
+  let Lp=100,Pp=100,Fp=100,Lq=100,Pq=100,Fq=100,nomP=100,nomG=100;
+  const out = [];
+  for (let i=0;i<dates.length;i++) {
+    const d = dates[i];
+    if (i===0) {
+      out.push({date:d, laspeyres_p:100, paasche_p:100, fisher_p:100, laspeyres_q:100, paasche_q:100, fisher_q:100,
+        nominal_fisher_product:100, nominal_sqrt_fisher:100, n_items: tickers.filter(t=>byDate[d][t]).length, universe:"js"});
+      continue;
+    }
+    const d0 = dates[i-1];
+    let s_p1q0=0,s_p0q0=0,s_p1q1=0,s_p0q1=0, n=0;
+    tickers.forEach(t => {
+      const a = byDate[d0][t], b = byDate[d][t];
+      if (!a || !b || !(a.p>0) || !(b.p>0) || !(a.q>0) || !(b.q>0)) return;
+      s_p1q0 += b.p * a.q; s_p0q0 += a.p * a.q; s_p1q1 += b.p * b.q; s_p0q1 += a.p * b.q; n++;
+    });
+    const link_lp = s_p0q0>0 ? s_p1q0/s_p0q0 : 1;
+    const link_pp = s_p0q1>0 ? s_p1q1/s_p0q1 : 1;
+    const link_fp = (link_lp>0 && link_pp>0) ? Math.sqrt(link_lp*link_pp) : 1;
+    const link_lq = s_p0q0>0 ? s_p0q1/s_p0q0 : 1;
+    const link_pq = s_p1q0>0 ? s_p1q1/s_p1q0 : 1;
+    const link_fq = (link_lq>0 && link_pq>0) ? Math.sqrt(link_lq*link_pq) : 1;
+    Lp*=link_lp; Pp*=link_pp; Fp*=link_fp; Lq*=link_lq; Pq*=link_pq; Fq*=link_fq;
+    nomP*=link_fp*link_fq; nomG*=Math.sqrt(Math.max(link_fp,0)*Math.max(link_fq,0))||1;
+    out.push({date:d, laspeyres_p:Lp, paasche_p:Pp, fisher_p:Fp, laspeyres_q:Lq, paasche_q:Pq, fisher_q:Fq,
+      nominal_fisher_product:nomP, nominal_sqrt_fisher:nomG, n_items:n, universe:"js"});
+  }
+  fisherCurrent = out;
+  $("#fi-status").textContent = `JS · ${out.length} days · ${tickers.length} names · last n=${out.at(-1)?.n_items}`;
+  fiRender(out);
+}
+
+/** Port of run_fisher_duckdb.py CORE_SQL → DuckDB-Wasm */
+async function fiComputeDuckDB() {
+  const status = $("#fi-status");
+  if (!CONN || !DB) {
+    status.textContent = "DuckDB-Wasm not ready — JS fallback";
+    fiRecompute();
+    return;
+  }
+  const tickers = fiSelectedTickers();
+  if (!tickers.length) { status.textContent = "Select tickers"; return; }
+  status.textContent = "Running Fisher SQL in DuckDB-Wasm…";
+  try {
+    const panel = (DATA.price_qty_panel || []).filter(r => tickers.includes(r.ticker));
+    if (!panel.length) throw new Error("No price_qty_panel rows for selection");
+
+    const rows = panel.map(r => ({
+      date: (r.date || "").toString().slice(0, 10),
+      ticker: r.ticker,
+      price: +r.close,
+      qty: (+r.volume > 0 ? +r.volume : null)
+    }));
+    await DB.registerFileText("fi_price_qty.json", JSON.stringify(rows));
+    await CONN.query(`CREATE OR REPLACE TABLE price_qty AS
+      SELECT CAST(date AS DATE) AS date, ticker,
+             CAST(price AS DOUBLE) AS price, CAST(qty AS DOUBLE) AS qty
+      FROM read_json_auto('fi_price_qty.json')`);
+
+    await DB.registerFileText("fi_tickers.json", JSON.stringify(tickers.map(t => ({ticker: t}))));
+    await CONN.query(`CREATE OR REPLACE TABLE tickers AS SELECT ticker FROM read_json_auto('fi_tickers.json')`);
+
+    const stmts = FISHER_CORE_SQL.split(";").map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of stmts) {
+      await CONN.query(stmt);
+    }
+
+    const result = await CONN.query(`
+      SELECT date, laspeyres_p, paasche_p, fisher_p, laspeyres_q, paasche_q, fisher_q,
+             nominal_fisher_product, nominal_sqrt_fisher,
+             link_laspeyres_p, link_paasche_p, link_fisher_p,
+             link_laspeyres_q, link_paasche_q, link_fisher_q, n_items
+      FROM fisher_chained ORDER BY date`);
+    const out = result.toArray().map(r => {
+      const o = {};
+      for (const f of result.schema.fields) {
+        let v = r[f.name];
+        if (typeof v === "bigint") v = Number(v);
+        if (f.name === "date" && v != null) v = String(v).slice(0, 10);
+        o[f.name] = v;
+      }
+      o.universe = "duckdb-wasm";
+      return o;
+    });
+    const ref = $("#fi-ref-date")?.value || fiDefaultRefDate(out);
+    if ($("#fi-ref-date") && !$("#fi-ref-date").value) $("#fi-ref-date").value = ref;
+    fisherCurrent = fiRebaseRows(out, ref);
+    status.textContent = `DuckDB-Wasm · ${fisherCurrent.length} days · ${tickers.length} names · ref=${ref} · Fisher_P=${(+fisherCurrent.at(-1)?.fisher_p||0).toFixed(2)}`;
+    fiRender(fisherCurrent);
+    fillTable("tbl-sql", out.slice(-30), out[0] ? Object.keys(out[0]) : []);
+  } catch (e) {
+    console.error(e);
+    status.textContent = "DuckDB-Wasm Fisher failed: " + e.message + " — JS fallback";
+    fiRecompute();
+  }
+}
+
+function fiRender(rows) {
+  if (!rows || !rows.length) return;
+  const series = ($("#fi-series") && $("#fi-series").value) || "fisher_p";
+  const labels = rows.map(r => (r.date || "").toString().slice(0, 10));
+  const mk = (key, label, color) => ({
+    label, data: rows.map(r => r[key] != null ? +r[key] : null),
+    borderColor: color, backgroundColor: color + "22",
+    tension: 0.15, pointRadius: 0, borderWidth: 2, spanGaps: true
+  });
+  let datasets;
+  if (series === "all_p") {
+    datasets = [
+      mk("laspeyres_p", "Laspeyres P", "#3b82f6"),
+      mk("paasche_p", "Paasche P", "#f59e0b"),
+      mk("fisher_p", "Fisher P", "#22c55e"),
+    ];
+  } else if (series === "all_nominal") {
+    datasets = [
+      mk("fisher_p", "Fisher P", "#22c55e"),
+      mk("fisher_q", "Fisher Q", "#a78bfa"),
+      mk("nominal_sqrt_fisher", "√(Fp×Fq)", "#38bdf8"),
+      mk("nominal_fisher_product", "Fp×Fq", "#f472b6"),
+    ];
+  } else if (series === "decomp") {
+    datasets = [
+      mk("fisher_p", "Fisher_P (1+π path)", "#ef4444"),
+      mk("fisher_q", "Fisher_Q (1+g path)", "#22c55e"),
+      mk("nominal_fisher_product", "Nominal (1+π)(1+g)", "#3b82f6"),
+    ];
+  } else if (series === "rates") {
+    datasets = [
+      {
+        label: "π infl %", data: rows.map(r => (+r.infl_rate || 0) * 100),
+        borderColor: "#ef4444", tension: 0.15, pointRadius: 0, borderWidth: 1.5, spanGaps: true,
+      },
+      {
+        label: "g growth %", data: rows.map(r => (+r.growth_rate || 0) * 100),
+        borderColor: "#22c55e", tension: 0.15, pointRadius: 0, borderWidth: 1.5, spanGaps: true,
+      },
+      {
+        label: "n nominal %", data: rows.map(r => (+r.nominal_rate || 0) * 100),
+        borderColor: "#3b82f6", tension: 0.15, pointRadius: 0, borderWidth: 1.5, spanGaps: true,
+      },
+    ];
+  } else {
+    const names = {
+      fisher_p: "Fisher price", fisher_q: "Fisher quantity",
+      nominal_sqrt_fisher: "√(Fp×Fq)", nominal_fisher_product: "Fp×Fq",
+      laspeyres_p: "Laspeyres P", paasche_p: "Paasche P"
+    };
+    datasets = [mk(series, names[series] || series, "#3b82f6")];
+  }
+  const ctx = document.getElementById("chart-fisher");
+  if (!ctx || typeof Chart === "undefined") return;
+  if (fisherChart) try { fisherChart.destroy(); } catch (e) {}
+  fisherChart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { labels: { color: "#c5d0e0" } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y?.toFixed?.(2) ?? c.parsed.y}` } }
+      },
+      scales: {
+        x: { ticks: { color: "#8b9bb4", maxTicksLimit: 12 }, grid: { color: "#2d3a4f" } },
+        y: {
+          ticks: { color: "#8b9bb4" }, grid: { color: "#2d3a4f" },
+          title: { display: true, text: "Index level (base 100)", color: "#8b9bb4" }
+        }
+      }
+    }
+  });
+  const last = rows[rows.length - 1];
+  fillTable("tbl-fisher-latest", [{
+    date: (last.date||"").toString().slice(0,10),
+    ref_date: last.ref_date || ($("#fi-ref-date")?.value || ""),
+    fisher_p: +(+last.fisher_p).toFixed(2),
+    fisher_q: +(+last.fisher_q).toFixed(2),
+    nominal_fisher_product: +(+last.nominal_fisher_product).toFixed(2),
+    infl_pct: +((+last.infl_rate || 0) * 100).toFixed(3),
+    growth_pct: +((+last.growth_rate || 0) * 100).toFixed(3),
+    nominal_pct: +((+last.nominal_rate || 0) * 100).toFixed(3),
+    identity_gap: +(+last.identity_gap || 0).toExponential(2),
+    n_items: last.n_items
+  }], null);
+  // secondary charts
+  fiRenderDecompCharts(rows);
+  fillTable("tbl-fisher-tail", rows.slice(-15).map(r => ({
+    date: (r.date||"").toString().slice(0,10),
+    fisher_p: +(+r.fisher_p).toFixed(2),
+    fisher_q: +(+r.fisher_q).toFixed(2),
+    sqrt_FpFq: +(+r.nominal_sqrt_fisher).toFixed(2),
+    Fp_x_Fq: +(+r.nominal_fisher_product).toFixed(2),
+    n: r.n_items
+  })), null);
+}
+
+
+function fiRenderDecompCharts(rows) {
+  if (!rows || !rows.length || typeof Chart === "undefined") return;
+  const labels = rows.map(r => (r.date || "").toString().slice(0, 10));
+  const ctxD = document.getElementById("chart-fisher-decomp");
+  const ctxR = document.getElementById("chart-fisher-rates");
+  if (ctxD) {
+    if (fisherDecompChart) try { fisherDecompChart.destroy(); } catch (e) {}
+    fisherDecompChart = new Chart(ctxD, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          { label: "cum (1+π)", data: rows.map(r => r.cum_infl_factor ?? r.fisher_p), borderColor: "#ef4444", pointRadius: 0, borderWidth: 2, tension: 0.15 },
+          { label: "cum (1+g)", data: rows.map(r => r.cum_growth_factor ?? r.fisher_q), borderColor: "#22c55e", pointRadius: 0, borderWidth: 2, tension: 0.15 },
+          { label: "cum (1+π)(1+g)", data: rows.map(r => r.cum_nominal_factor ?? r.nominal_fisher_product), borderColor: "#3b82f6", pointRadius: 0, borderWidth: 2, tension: 0.15 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: "#c5d0e0" } } },
+        scales: { x: { ticks: { color: "#8b9bb4", maxTicksLimit: 8 } }, y: { ticks: { color: "#8b9bb4" } } } },
+    });
+  }
+  if (ctxR) {
+    if (fisherRatesChart) try { fisherRatesChart.destroy(); } catch (e) {}
+    fisherRatesChart = new Chart(ctxR, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          { label: "π %", data: rows.map(r => (+r.infl_rate || 0) * 100), borderColor: "#ef4444", pointRadius: 0, borderWidth: 1.25, tension: 0.1 },
+          { label: "g %", data: rows.map(r => (+r.growth_rate || 0) * 100), borderColor: "#22c55e", pointRadius: 0, borderWidth: 1.25, tension: 0.1 },
+          { label: "n %", data: rows.map(r => (+r.nominal_rate || 0) * 100), borderColor: "#3b82f6", pointRadius: 0, borderWidth: 1.25, tension: 0.1 },
+        ],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: "#c5d0e0" } } },
+        scales: { x: { ticks: { color: "#8b9bb4", maxTicksLimit: 8 } }, y: { ticks: { color: "#8b9bb4" } } } },
+    });
+  }
+}
+
+function fiInit() {
+  fiInitTickers();
+  const sel = $("#fi-series");
+  if (sel && ![...sel.options].some(o => o.value === "all_nominal")) {
+    const opt = document.createElement("option");
+    opt.value = "all_nominal"; opt.textContent = "P + Q + nominal";
+    sel.appendChild(opt);
+  }
+  $("#fi-load")?.addEventListener("click", fiLoadPrecomputed);
+  $("#fi-recompute")?.addEventListener("click", () => {
+    fiRecompute();
+    // after JS recompute, rebase to picker
+    if (fisherCurrent && fisherCurrent.length) {
+      const ref = $("#fi-ref-date")?.value || fiDefaultRefDate(fisherCurrent);
+      if ($("#fi-ref-date") && !$("#fi-ref-date").value) $("#fi-ref-date").value = ref;
+      fisherCurrent = fiRebaseRows(fisherCurrent, ref);
+      fiRender(fisherCurrent);
+    }
+  });
+  $("#fi-duckdb")?.addEventListener("click", () => fiComputeDuckDB());
+  $("#fi-series")?.addEventListener("change", () => fiRender(fisherCurrent));
+  $("#fi-ref-date")?.addEventListener("change", () => {
+    if (!fisherCurrent || !fisherCurrent.length) { fiLoadPrecomputed(); return; }
+    // reload raw then rebase — reload from DATA
+    fiLoadPrecomputed();
+  });
+  $("#fi-universe")?.addEventListener("change", () => {
+    if ($("#fi-ref-date")) $("#fi-ref-date").value = ""; // reset default for new universe
+    if ($("#fi-universe").value !== "custom") fiLoadPrecomputed();
+  });
+  $("#fi-backfill")?.addEventListener("click", async () => {
+    const status = $("#fi-status");
+    const base = (localStorage.getItem("PIPE_API") || "http://127.0.0.1:5056").replace(/\/$/, "");
+    if (status) status.textContent = "Backfilling Fisher indexes (2y)…";
+    try {
+      const r = await fetch(base + "/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job: "fisher_backfill",
+          args: ["--backfill-all", "--years", "2", "--save"],
+          async: false,
+        }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || j.log_tail || "backfill failed");
+      // refresh embedded data if export also run; otherwise prompt
+      if (status) status.textContent = `Backfill OK (${j.elapsed_sec || "?"}s) — run export or reload data.json`;
+      try {
+        const res = await fetch("dashboard_data/data.json?ts=" + Date.now());
+        const fresh = await res.json();
+        if (fresh.fisher_indexes) {
+          DATA.fisher_indexes = fresh.fisher_indexes;
+          DATA.fisher_indexes_duckdb = fresh.fisher_indexes_duckdb || DATA.fisher_indexes_duckdb;
+          fiLoadPrecomputed();
+          if (status) status.textContent = `Backfill OK · reloaded ${DATA.fisher_indexes.length} fisher rows`;
+        }
+      } catch (e2) { /* ignore */ }
+    } catch (e) {
+      if (status) status.textContent = "Backfill error: " + e.message + " (start pipeline_service)";
+    }
+  });
+  $("#fi-to-sql")?.addEventListener("click", () => {
+    const uni = $("#fi-universe").value === "custom" ? "portfolio" : $("#fi-universe").value;
+    const sql = "SELECT date, fisher_p, fisher_q, nominal_fisher_product, infl_rate, growth_rate, nominal_rate, identity_gap, n_items\n"
+      + "FROM fisher_indexes\nWHERE universe = '" + uni + "'\nORDER BY date;";
+    $("#sql-input").value = sql;
+    document.querySelector('[data-tab="sql"]')?.click();
+    runSQL($("#sql-input").value);
+  });
+  fiLoadPrecomputed();
+}
+
+
+function qbInit() {
+  const sel = $("#qb-table");
+  if (!sel) return;
+  const tables = qbTables();
+  sel.innerHTML = tables.map(t => `<option value="${t}">${t}</option>`).join("");
+  if (tables.includes("value_trifecta")) sel.value = "value_trifecta";
+  else if (tables.length) sel.value = tables[0];
+  sel.addEventListener("change", () => { $("#qb-filters").innerHTML = ""; qbPopulateColumns(); });
+  $("#qb-limit").addEventListener("input", qbRefreshPreview);
+  $("#qb-order-col").addEventListener("change", qbRefreshPreview);
+  $("#qb-order-dir").addEventListener("change", qbRefreshPreview);
+  $("#qb-add-filter").addEventListener("click", () => qbAddFilter());
+  $("#qb-apply").addEventListener("click", () => { $("#sql-input").value = qbBuildSQL(); });
+  $("#qb-run").addEventListener("click", () => {
+    const sql = qbBuildSQL();
+    $("#sql-input").value = sql;
+    runSQL(sql);
+  });
+  $("#qb-clear").addEventListener("click", () => {
+    $("#qb-filters").innerHTML = "";
+    document.querySelectorAll("#qb-cols input").forEach(i => i.checked = false);
+    $("#qb-order-col").value = "";
+    $("#qb-limit").value = 50;
+    qbRefreshPreview();
+  });
+  document.querySelectorAll(".qb-tpl").forEach(btn => {
+    btn.addEventListener("click", () => qbApplyTemplate(btn.dataset.tpl));
+  });
+  qbPopulateColumns();
+  qbAddFilter({col: "in_portfolio", op: "IS FALSE", val: ""});
+  qbRefreshPreview();
+}
+
+
+async function bindLiveDuckControls() {
+  // Universal live toolbars (DuckDB + data.json reload) for all registered tabs
+  mountAllLiveToolbars();
+  cleanupDuplicateLiveBars();
+
+  // Quality-specific threshold controls (not a generic live query)
+  (async () => {
+    try {
+      const r = await fetch("inclusion_rules.json");
+      if (!r.ok) return;
+      const rules = await r.json();
+      const d = rules.dual_pass || {};
+      const ex = rules.exclusions || {};
+      if (d.roe_min != null) QUALITY_BENCH.roe_min = +d.roe_min;
+      if (d.roic_min != null) QUALITY_BENCH.roic_min = +d.roic_min;
+      if (d.debt_to_equity_max != null) QUALITY_BENCH.de_max = +d.debt_to_equity_max;
+      if (d.ev_ebitda_max != null) QUALITY_BENCH.ev_max = +d.ev_ebitda_max;
+      if (d.pb_max != null) QUALITY_BENCH.pb_max = +d.pb_max;
+      if (d.mktcap_to_assets_max != null) QUALITY_BENCH.mca_max = +d.mktcap_to_assets_max;
+      if (ex.earnings_stability_min_for_core != null) QUALITY_BENCH.stab_min = +ex.earnings_stability_min_for_core;
+      if (typeof resetQualityThresholds === "function") resetQualityThresholds();
+      if (window._qualityPreferred && typeof applyQualityThresholds === "function") applyQualityThresholds();
+    } catch (e) {}
+  })();
+  $("#th-apply")?.addEventListener("click", () => applyQualityThresholds());
+  $("#th-reset")?.addEventListener("click", () => { resetQualityThresholds(); applyQualityThresholds(); });
+  ["th-roe","th-roic","th-de","th-ic","th-ev","th-pb","th-mca","th-stab"].forEach(id => {
+    $("#" + id)?.addEventListener("change", () => applyQualityThresholds());
+  });
+
+  // Wire pre-existing hand-written live buttons to the same handlers when present
+  const aliasClicks = {
+    "live-refresh-decisions": () => document.querySelector("#decisions .widget-live-bar .chip-btn")?.click(),
+    "live-refresh-holdings": () => document.querySelector("#portfolio .widget-live-bar .chip-btn")?.click(),
+    "live-refresh-value": () => document.querySelector("#value .widget-live-bar .chip-btn")?.click(),
+    "live-refresh-anomalies": () => document.querySelector("#anomalies .widget-live-bar .chip-btn")?.click(),
+    "live-refresh-index": () => document.querySelector("#indexes .widget-live-bar .chip-btn")?.click(),
+  };
+  for (const [id, fn] of Object.entries(aliasClicks)) {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.widgetBound) {
+      el.dataset.widgetBound = "1";
+      el.addEventListener("click", fn);
+    }
+  }
+  // JSON reload aliases
+  document.querySelectorAll('[id$="-json"]').forEach(el => {
+    if (el.dataset.widgetBound) return;
+    el.dataset.widgetBound = "1";
+    el.addEventListener("click", async () => {
+      try {
+        if (typeof loadAllLateTabs === "function") await loadAllLateTabs();
+        if (typeof applyQualityThresholds === "function" && window._qualityPreferred) applyQualityThresholds();
+        if (typeof sleevesApply === "function") sleevesApply();
+      } catch (e) { console.warn(e); }
+    });
+  });
+}
+
+
+(async function main() {
+  const res = await fetch(DATA_URL);
+  DATA = await res.json();
+  renderDecisions();
+  renderPortfolio();
+  renderValue();
+  renderSectors();
+  renderForecasts();
+  if (typeof bindPipelines === "function") bindPipelines();
+  renderAnomalies();
+  renderIndexes();
+  qbInit();
+  if (typeof refreshDataCatalog === "function") {
+    refreshDataCatalog().then(() => renderCsvCatalog()).catch(() => renderCsvCatalog());
+  } else {
+    renderCsvCatalog();
+  }
+
+  fiInit();
+  await initDuckDB(DATA);
+  bindLiveDuckControls();
+})();
+
+
+
+function fillSimple(id, rows, cols, limit) {
+  const el = document.querySelector(id);
+  if (!el) return;
+  if (!rows || !rows.length) {
+    if (el.querySelector("thead")) el.querySelector("thead").innerHTML = "";
+    if (el.querySelector("tbody")) el.querySelector("tbody").innerHTML =
+      "<tr><td style='color:var(--muted)'>No rows — run analytics / export</td></tr>";
+    return;
+  }
+  const keys = cols || Object.keys(rows[0]);
+  const lim = limit || 80;
+  el.querySelector("thead").innerHTML = "<tr>" + keys.map(k => "<th>" + k + "</th>").join("") + "</tr>";
+  el.querySelector("tbody").innerHTML = rows.slice(0, lim).map(r =>
+    "<tr>" + keys.map(k => "<td>" + (r[k] ?? "") + "</td>").join("") + "</tr>"
+  ).join("");
+}
+
+async function loadAllLateTabs() {
+  try {
+    const res = await fetch("dashboard_data/data.json?ts=" + Date.now());
+    const payload = await res.json();
+    const T = payload.tables || {};
+    // Buy candidates on decisions
+    const buys = (T.buy_candidates || DATA.buy_candidates || []).filter(r => ["BUY","ACCUMULATE"].includes(r.action));
+    fillSimple("#tbl-buys", buys.length ? buys : (T.buy_candidates || []).slice(0, 25),
+      ["ticker","action","buy_score","decision","momentum_score","factor_composite","sp500_sector","reasons"], 30);
+    // Quality / Dual tab — store universe then live-score with thresholds
+    window._qualityPreferred = T.preferred_metrics || [];
+    // load benchmarks from inclusion_rules if present later
+    if (typeof applyQualityThresholds === "function") applyQualityThresholds();
+    const dup = (T.dupont_analysis || []).slice().sort((a,b)=>(b.roe||0)-(a.roe||0));
+    fillSimple("#tbl-dupont", dup.map(r => {
+      const de = +r.debt_to_equity;
+      const em = Number.isFinite(de) ? +(1 + Math.max(de,0)).toFixed(3) : r.equity_multiplier;
+      const da = Number.isFinite(de) && de > -0.999 ? +(de/(1+de)).toFixed(3) : null;
+      return {...r, equity_multiplier: em, debt_to_assets: da};
+    }),
+      ["ticker","roe","roic","debt_to_equity","debt_to_assets","equity_multiplier","pm_x_at","leverage_share_of_roe","roe_quality","leverage_flag"], 60);
+    const sbt = (T.screen_backtest || []).slice().sort((a,b)=>String(b.as_of_date||"").localeCompare(String(a.as_of_date||"")));
+    fillSimple("#tbl-screen-bt", sbt,
+      ["as_of_date","n","buffett","trifecta","dual","value","quality","median_composite"]);
+    // Rolling
+    // Rolling tab
+    const rw = (T.rolling_window_metrics || []).slice().sort((a,b) =>
+      String(a.universe||"").localeCompare(String(b.universe||"")) || String(a.ticker||"").localeCompare(String(b.ticker||"")) || ((a.window||0)-(b.window||0))
+    );
+    fillSimple("#tbl-rolling", rw.map(r => ({
+      universe: r.universe,
+      ticker: r.ticker,
+      window: r.window,
+      vol: r.vol != null ? +(+r.vol).toFixed(3) : r.vol,
+      ann_ret: r.ann_ret != null ? +(+r.ann_ret).toFixed(4) : r.ann_ret,
+      sharpe: r.sharpe != null ? +(+r.sharpe).toFixed(3) : r.sharpe,
+      max_dd: r.max_dd != null ? +(+r.max_dd).toFixed(3) : r.max_dd,
+      beta: r.beta != null ? +(+r.beta).toFixed(3) : r.beta,
+      vol_stability: r.vol_stability != null ? +(+r.vol_stability).toFixed(3) : r.vol_stability,
+    })), ["universe","ticker","window","vol","ann_ret","sharpe","max_dd","beta","vol_stability"], 80);
+    const stab = (T.rolling_screen_stability || []).slice().sort((a,b) =>
+      (b.dual_rate||0) - (a.dual_rate||0) || (b.buffett_rate||0) - (a.buffett_rate||0) || (b.median_composite||0) - (a.median_composite||0)
+    );
+    fillSimple("#tbl-roll-stab", stab.map(r => ({
+      ticker: r.ticker,
+      n_dates: r.n_dates,
+      buffett_rate: r.buffett_rate != null ? +(+r.buffett_rate).toFixed(3) : r.buffett_rate,
+      trifecta_rate: r.trifecta_rate != null ? +(+r.trifecta_rate).toFixed(3) : r.trifecta_rate,
+      dual_rate: r.dual_rate != null ? +(+r.dual_rate).toFixed(3) : r.dual_rate,
+      median_composite: r.median_composite != null ? +(+r.median_composite).toFixed(4) : r.median_composite,
+      composite_std: r.composite_std != null ? +(+r.composite_std).toFixed(4) : r.composite_std,
+    })), ["ticker","n_dates","buffett_rate","trifecta_rate","dual_rate","median_composite","composite_std"], 120);
+    const rcorr = (T.rolling_corr_avg_timeseries || []).slice().reverse().slice(0, 60);
+    fillSimple("#tbl-roll-corr-tab", rcorr.map(r => ({
+      date: (r.date||"").toString().slice(0,10),
+      window: r.window,
+      avg_pairwise_corr: r.avg_pairwise_corr != null ? +(+r.avg_pairwise_corr).toFixed(4) : r.avg_pairwise_corr,
+      median_pairwise_corr: r.median_pairwise_corr != null ? +(+r.median_pairwise_corr).toFixed(4) : r.median_pairwise_corr,
+      mkt_vol: r.mkt_vol != null ? +(+r.mkt_vol).toFixed(4) : r.mkt_vol,
+    })), ["date","window","avg_pairwise_corr","median_pairwise_corr","mkt_vol"], 60);
+    // Aerospace
+    let aero = T.aerospace_supply || [];
+    if (!aero.length) {
+      try {
+        const r = await fetch("aerospace_supply.csv");
+        if (r.ok) {
+          const text = await r.text();
+          const lines = text.trim().split(/\r?\n/);
+          const hdr = lines[0].split(",");
+          aero = lines.slice(1).map(line => {
+            const parts = line.split(",");
+            const o = {};
+            hdr.forEach((h,i) => o[h.trim()] = (parts[i]||"").trim());
+            return o;
+          });
+        }
+      } catch (e) {}
+    }
+    fillSimple("#tbl-aero", aero, ["ticker","name","sector","industry","growth_sleeve","notes"]);
+    // refresh sleeve explorer if present
+    if (typeof sleevesPopulateGroups === "function") {
+      try {
+        const fromAero = aero.map(r => ({...r, growth_sleeve: r.growth_sleeve || "starlink_supply"}));
+        if (fromAero.length) {
+          const base = getMonitoredRows();
+          const tickers = new Set(base.map(r => r.ticker));
+          fromAero.forEach(r => { if (!tickers.has(r.ticker)) base.push(r); });
+          window._monitoredStocks = base;
+        }
+        sleevesPopulateGroups();
+        sleevesApply();
+        manageRenderStocks();
+      } catch (e) {}
+    }
+    // Inclusion
+    try {
+      const rr = await fetch("inclusion_rules.json");
+      if (rr.ok) {
+        const rules = await rr.json();
+        const box = document.getElementById("rules-box");
+        if (box) box.textContent = JSON.stringify(rules, null, 2);
+      }
+    } catch (e) {}
+    fillSimple("#tbl-inc", T.inclusion_candidates || []);
+    fillSimple("#tbl-exc", T.exclusion_candidates || []);
+    fillSimple("#tbl-near", T.near_dual_candidates || []);
+    fillSimple("#tbl-defexp", T.defensive_value_exploration || []);
+    fillSimple("#tbl-scorr", T.sector_correlation_matrix_latest || []);
+    fillSimple("#tbl-acorr", T.asset_correlation_matrix || [], null, 60);
+    // Stress
+    // Stress / ETFs tab
+    const stress = (T.dual_pass_stress || []).slice().sort((a,b) => (a.mode||"").localeCompare(b.mode||"") || (a.param||"").localeCompare(b.param||""));
+    fillSimple("#tbl-stress", stress,
+      ["mode","param","value","n_pass","delta_vs_base","tickers","port_vol","port_max_dd","avg_beta","avg_name_vol"], 100);
+    fillSimple("#tbl-sens", T.dual_pass_sensitivity || [],
+      ["dropped_leg","n_pass","delta","new_tickers"]);
+    fillSimple("#tbl-etf", T.defensive_value_etfs || [],
+      ["ticker","pb_ratio","ev_ebitda","roe","roic","mktcap_to_assets","market_cap_b","notes"]);
+    fillSimple("#tbl-crisis", T.crisis_correlation_summary || [],
+      ["regime","n_days","avg_pairwise_corr","median_pairwise"]);
+    // tail: put strategy first
+    const tail = (T.tail_risk_hedge_performance || []).map(r => ({
+      strategy: r.strategy, ann_ret: r.ann_ret, ann_vol: r.ann_vol, sharpe: r.sharpe,
+      max_dd: r.max_dd, cvar_5pct: r.cvar_5pct, crisis_ann_ret: r.crisis_ann_ret, crisis_vol: r.crisis_vol,
+    }));
+    fillSimple("#tbl-tail", tail);
+    // rolling corr: latest first
+    const rollc = (T.rolling_corr_avg_timeseries || []).slice().reverse();
+    fillSimple("#tbl-rollcorr", rollc, ["date","window","avg_pairwise_corr","median_pairwise_corr","mkt_vol"], 60);
+    const frot = (T.factor_rotation_performance || []).slice().sort((a,b)=>(b.sharpe||0)-(a.sharpe||0));
+    fillSimple("#tbl-frot", frot, ["strategy","ann_ret","ann_vol","sharpe","max_dd"]);
+    fillSimple("#tbl-apsum", T.allpairs_corr_summary || []);
+    // normalize sector matrix index column
+    const apsec = (T.allpairs_sector_corr_latest || []).map(r => {
+      const o = { ...r };
+      if (o["Unnamed: 0"] != null && o.sector == null) {
+        o.sector = o["Unnamed: 0"];
+        delete o["Unnamed: 0"];
+      }
+      return o;
+    });
+    fillSimple("#tbl-apsec", apsec);
+    // Regime
+    // Regime / KF tab
+    fillSimple("#tbl-regcorr", T.regime_corr_breakdown || [],
+      ["regime","n_days","n_assets","avg_pairwise_corr","median_pairwise_corr","diversification_proxy","mean_name_vol","mkt_vol"]);
+    fillSimple("#tbl-hmm-sum", T.hmm_posterior_summary || []);
+    fillSimple("#tbl-trig", T.hmm_transition_triggers || [],
+      ["date","from_regime","to_regime","mkt_ret","vol21","avg_corr","vol_chg_5d","corr_chg_5d","max_abs_ret_5d"]);
+    const kg = (T.kalman_gain_path || []).slice(-45).reverse();
+    fillSimple("#tbl-kgain", kg,
+      ["date","regime","mkt_ret","vol21","kf_level","kf_vol","gain_ret","gain_vol","innov_vol_z"], 45);
+    const vix = (T.vix_term_structure || []).slice(-30).reverse();
+    fillSimple("#tbl-vix", vix,
+      ["date","VIX9D_proxy","VIX_proxy","VIX3M_proxy","term_slope_21_63","contango"], 30);
+    // meta summaries as rows
+    const meta = [];
+    for (const row of (T.vix_term_structure_summary || [])) meta.push({source: "vix", ...row});
+    for (const row of (T.kalman_gain_summary || [])) meta.push({source: "kalman", ...row});
+    fillSimple("#tbl-regime-meta", meta);
+    const thrAll = T.threshold_logic_screen || [];
+    const thrPass = thrAll.filter(r => r.dual_pass === true || r.dual_pass === "true" || r.dual_pass === 1);
+    const thrShow = (thrPass.length ? thrPass : thrAll.slice(0, 40));
+    fillSimple("#tbl-thr", thrShow,
+      ["ticker","regime","label","dual_pass","n_failed","failed_legs","roe","roic","ev_ebitda","pb_ratio","mktcap_to_assets"], 50);
+  } catch (e) {
+    console.warn("loadAllLateTabs", e);
+  }
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadAllLateTabs);
+else loadAllLateTabs();
+
+
+
+// Ops microservice buttons → analytics_service :8767
+(function bindOpsButtons() {
+  const OPS_DEFAULT = localStorage.getItem("analyticsService") || "http://127.0.0.1:8767";
+  const apiInp = document.getElementById("ops-api");
+  const apiLab = document.getElementById("ops-api-label");
+  if (apiInp) apiInp.value = OPS_DEFAULT;
+  if (apiLab) apiLab.textContent = OPS_DEFAULT;
+  document.querySelectorAll("button.ops").forEach(btn => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", async () => {
+      const log = document.getElementById("ops-log");
+      const base = ((apiInp && apiInp.value) || OPS_DEFAULT).replace(/\/$/, "");
+      localStorage.setItem("analyticsService", base);
+      if (apiLab) apiLab.textContent = base;
+      if (log) log.textContent += "\n→ POST " + base + btn.dataset.job + " ...\n";
+      try {
+        const r = await fetch(base + btn.dataset.job, { method: "POST" });
+        const j = await r.json();
+        if (log) log.textContent += JSON.stringify(j, null, 2).slice(0, 3000) + "\n";
+      } catch (e) {
+        if (log) log.textContent += "ERROR: " + e + " (start: python analytics_service.py --port 8767)\n";
+      }
+      if (log) log.scrollTop = log.scrollHeight;
+    });
+  });
+})();
+
+const PIPE_API = localStorage.getItem("PIPE_API") || "http://127.0.0.1:5056";
+const PIPE_HIST = [];
+
+function bindPipelines() {
+  const run = $("#pipe-run");
+  if (!run || run.dataset.bound) return;
+  run.dataset.bound = "1";
+  if ($("#pipe-api")) $("#pipe-api").value = PIPE_API;
+  if ($("#pipe-url-label")) $("#pipe-url-label").textContent = PIPE_API;
+
+  // empty history placeholder
+  if (PIPE_HIST.length === 0) {
+    fillTable("tbl-pipe-hist", [], ["ts","job","ok","elapsed_sec","returncode","error","log"]);
+  }
+
+  const statusEl = () => $("#pipe-status");
+
+  async function probe() {
+    const base = ($("#pipe-api").value || PIPE_API).replace(/\/$/, "");
+    try {
+      const j = await (await fetch(base + "/health", { signal: AbortSignal.timeout(3000) })).json();
+      if (statusEl()) {
+        statusEl().textContent = j.ok
+          ? (`Service OK · running=${j.running || "idle"}`)
+          : JSON.stringify(j);
+      }
+      return true;
+    } catch (e) {
+      if (statusEl()) {
+        statusEl().textContent = "Service offline — start ./start_dashboard.sh or: python pipeline_service.py";
+      }
+      return false;
+    }
+  }
+  probe();
+
+  run.addEventListener("click", async () => {
+    const base = ($("#pipe-api").value || PIPE_API).replace(/\/$/, "");
+    localStorage.setItem("PIPE_API", base);
+    const job = $("#pipe-job")?.value || "export";
+    const useAsync = ["analytics", "all", "backfill", "forecast_reliability", "monte_carlo"].includes(job);
+    if (statusEl()) statusEl().textContent = (useAsync ? "Queued " : "Running ") + job + "…";
+    try {
+      const r = await fetch(base + "/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job, async: useAsync }),
+      });
+      const j = await r.json();
+      PIPE_HIST.unshift({ ts: new Date().toISOString(), job, ...j });
+      if (PIPE_HIST.length > 15) PIPE_HIST.pop();
+      fillTable("tbl-pipe-hist", PIPE_HIST, ["ts","job","ok","accepted","async","elapsed_sec","returncode","error","log"]);
+      if (statusEl()) {
+        if (j.async || j.accepted) {
+          statusEl().textContent = `Accepted · ${job} (async) — click Status to poll`;
+        } else if (j.ok) {
+          statusEl().textContent = `OK · ${job} · ${j.elapsed_sec ?? "?"}s`;
+        } else {
+          statusEl().textContent = `FAIL · ${j.error || j.returncode || "error"}`;
+        }
+      }
+    } catch (e) {
+      if (statusEl()) {
+        statusEl().textContent = "Error: " + e.message + " (start pipeline_service / ./start_dashboard.sh)";
+      }
+      PIPE_HIST.unshift({ ts: new Date().toISOString(), job, ok: false, error: String(e.message || e) });
+      fillTable("tbl-pipe-hist", PIPE_HIST, ["ts","job","ok","elapsed_sec","returncode","error","log"]);
+    }
+  });
+
+  $("#pipe-status-btn")?.addEventListener("click", async () => {
+    const base = ($("#pipe-api").value || PIPE_API).replace(/\/$/, "");
+    try {
+      const j = await (await fetch(base + "/status")).json();
+      if (statusEl()) {
+        statusEl().textContent = j.running
+          ? ("Running: " + j.running)
+          : ("Idle · last=" + ((j.last && (j.last.job || j.last.accepted)) || "none"));
+      }
+      if (Array.isArray(j.history) && j.history.length) {
+        // merge server history into local view
+        const rows = j.history.map(h => ({ ts: h.ts || "", ...h }));
+        fillTable("tbl-pipe-hist", rows, ["ts","job","ok","elapsed_sec","returncode","error","log"]);
+      }
+    } catch (e) {
+      if (statusEl()) statusEl().textContent = "Unreachable: " + e.message;
+    }
+  });
+
+  $("#pipe-jobs-btn")?.addEventListener("click", async () => {
+    const base = ($("#pipe-api").value || PIPE_API).replace(/\/$/, "");
+    try {
+      const j = await (await fetch(base + "/jobs")).json();
+      const names = Object.keys(j.jobs || {});
+      if (statusEl()) statusEl().textContent = "Jobs: " + names.join(", ");
+      // refresh select options if service returns catalog
+      const sel = $("#pipe-job");
+      if (sel && names.length) {
+        const current = sel.value;
+        // keep existing labels when possible
+        const have = new Set([...sel.options].map(o => o.value));
+        names.forEach(n => {
+          if (!have.has(n)) {
+            const opt = document.createElement("option");
+            opt.value = n;
+            opt.textContent = n;
+            sel.appendChild(opt);
+          }
+        });
+        if (names.includes(current)) sel.value = current;
+      }
+    } catch (e) {
+      if (statusEl()) statusEl().textContent = "Unreachable: " + e.message;
+    }
+  });
+}
+
+
+</script>
+</body>
+</html>

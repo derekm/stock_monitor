@@ -1,0 +1,21 @@
+{
+  "dual_pass": {
+    "roe_min": 0.15,
+    "roic_min": 0.15,
+    "debt_to_equity_max": 1.0,
+    "ev_ebitda_max": 9.0,
+    "pb_max": 1.5,
+    "mktcap_to_assets_max": 0.5,
+    "label": "INCLUDE_CORE"
+  },
+  "sizing": {
+    "smci_max_weight": 0.05,
+    "core_max_weight": 0.12,
+    "value_max_weight": 0.08,
+    "satellite_max_weight": 0.05
+  },
+  "exclusions": {
+    "earnings_stability_min_for_core": 0.25,
+    "block_growth_tech_from_core_without_dual": true
+  }
+}
