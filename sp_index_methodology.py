@@ -58,7 +58,8 @@ LEV_OK_IC_MIN = 1.5
 
 
 def _store() -> MarketDataStore:
-    """Register PIT fundamentals + monitored stocks (with S&P actuals)."""
+    """Register PIT fundamentals + monitored stocks (with S&P actuals), and
+    build the dated pit_snapshots series ONCE. Returns the ready store."""
     store = MarketDataStore(":memory:")
     con = store.conn()
     con.execute(
@@ -71,12 +72,14 @@ def _store() -> MarketDataStore:
         FROM read_parquet('{(DATA_DIR / 'fundamentals.parquet').as_posix()}')
         """
     )
-    # minimal daily_prices axis for build_snapshot_timeseries
+    # minimal daily_prices axis for build_snapshot_timeseries — use the REAL
+    # price history (date column) so the PIT snapshot series spans the full
+    # timeline and qualify_as_of works at any historical as_of date.
     con.execute(
         f"""
         CREATE OR REPLACE TABLE daily_prices AS
-        SELECT DISTINCT ticker, as_of_date AS trade_date, NULL AS adj_close
-        FROM read_parquet('{(DATA_DIR / 'fundamentals.parquet').as_posix()}')
+        SELECT ticker, date AS trade_date, NULL AS adj_close
+        FROM read_parquet('{(DATA_DIR / 'daily_prices.parquet').as_posix()}')
         """
     )
     con.execute(
@@ -94,6 +97,8 @@ def _store() -> MarketDataStore:
         ) f ON f.ticker = m.ticker
         """
     )
+    # Build the dated PIT series once (expensive); qualify_as_of reuses it.
+    pits.build_snapshot_timeseries(store, recompute_marketcap=False)
     return store
 
 
@@ -139,9 +144,8 @@ def evaluate(as_of: str | dt.date | None = None) -> list[dict]:
     if isinstance(as_of, str):
         as_of = dt.date.fromisoformat(as_of)
 
-    store = _store()
+    store = _store()  # builds pit_fundamentals/daily_prices/monitored + snapshots once
     con = store.conn()
-    pits.build_snapshot_timeseries(store, recompute_marketcap=False)
     pits.qualify_as_of(store, as_of)
     qp = con.execute("SELECT * FROM quality_pass").fetchall()
     cols = [d[0] for d in con.description]
