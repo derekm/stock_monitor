@@ -370,6 +370,35 @@ def main():
     ms = load("monitored_stocks")
     payload["monitored_stocks"] = df_records(ms, 500)
 
+    # S&P 500 historical inclusion/exclusion simulation (ours vs actuals, w/ removals)
+    try:
+        import sp_history_simulation as shs
+        sim_rows = shs.simulate("2024-01-01", None)
+        payload["sp_history_sim"] = [
+            {
+                "date": r["date"],
+                "n_actual": r["n_actual"],
+                "n_predicted": r["n_predicted"],
+                "true_positives": r["true_positives"],
+                "false_positives": r["false_positives"],
+                "false_negatives": r["false_negatives"],
+                "precision": r["precision"],
+                "recall": r["recall"],
+                "agreement": r["agreement"],
+            }
+            for r in sim_rows
+        ]
+    except Exception as e:
+        payload["sp_history_sim"] = []
+        print("sp_history_sim skip", e)
+    # Raw add/remove change log (real events)
+    try:
+        chg = load("sp500_changes")
+        payload["sp500_changes"] = df_records(chg, 500)
+    except Exception as e:
+        payload["sp500_changes"] = []
+        print("sp500_changes skip", e)
+
     # Compact price/qty panel for JS recompute (last ~400 days, tracked names)
     try:
         px = load("daily_prices")

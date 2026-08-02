@@ -179,13 +179,15 @@ def fetch_ticker(ticker: str, sleep: float = 0.4):
     yf_sym = ticker.replace(".", "-")
     t = yf.Ticker(yf_sym)
     tries = 4
-    bs = fin = info = hist = None
+    bs = fin = abs_bs = abs_fin = info = hist = None
     for attempt in range(tries):
         try:
             bs = t.quarterly_balance_sheet
             fin = t.quarterly_financials
+            abs_bs = t.balance_sheet          # annual — full history (max depth)
+            abs_fin = t.financials             # annual — full history (max depth)
             info = t.info
-            hist = t.history(period="5y", interval="1d", actions=False)
+            hist = t.history(period="max", interval="1d", actions=False)
             if info is None or not info:
                 raise ValueError("empty info (rate-limited)")
             break
@@ -198,6 +200,8 @@ def fetch_ticker(ticker: str, sleep: float = 0.4):
     shares = info.get("sharesOutstanding")
     if not shares and bs is not None:
         shares = _q(bs, "Share Issued") or _q(bs, "Ordinary Shares Issued")
+    if not shares and abs_bs is not None:
+        shares = _q(abs_bs, "Share Issued") or _q(abs_bs, "Ordinary Shares Issued")
     if not shares:
         try:
             shares = float(t.fast_info.get("shares"))
@@ -212,23 +216,32 @@ def fetch_ticker(ticker: str, sleep: float = 0.4):
         print(f"  [{ticker}] no shares outstanding; skipping")
         return [], []
 
-    # price lookup by date
+    # price lookup by date (max history)
     closes = {}
     if hist is not None and not hist.empty:
         closes = {d.date(): float(hist.loc[d, "Close"]) for d in hist.index}
 
     fund_rows = []
-    if bs is not None and not bs.empty:
-        for q_end_ts in bs.columns:
+    seen = set()
+    for label, bsrc, fsrc in (
+        ("annual", abs_bs, abs_fin),
+        ("quarterly", bs, fin),
+    ):
+        if bsrc is None or bsrc.empty:
+            continue
+        for q_end_ts in bsrc.columns:
             q_end = q_end_ts.date()
+            if q_end in seen:
+                continue
+            seen.add(q_end)
             price = closes.get(q_end)
-            # if no exact close on quarter-end, use the last close <= q_end
             if price is None:
                 cands = [d for d in closes if d <= q_end]
                 if cands:
                     price = closes[max(cands)]
-            row = derive_row(ticker, q_end, price, shares, bs, fin, None)
+            row = derive_row(ticker, q_end, price, shares, bsrc, fsrc, None)
             if row:
+                row["notes"] = f"{label};{row['notes']}"
                 fund_rows.append(row)
 
     price_rows = []
@@ -270,6 +283,20 @@ def _append_parquet(path: Path, rows: list[dict], cols: list[str]):
 
 def cmd_run(args):
     tickers = missing_tickers()
+    if args.deep:
+        # Re-fetch ALL current constituents to extend history to the maximum
+        # yfinance provides (annual statements + max-period prices). Writes to a
+        # FRESH staging file so cmd_merge unions the deeper snapshots in.
+        import duckdb
+        c = duckdb.connect()
+        tickers = [r[0] for r in c.execute(
+            f"SELECT ticker FROM read_parquet('{CONST.as_posix()}') "
+            f"WHERE current ORDER BY ticker"
+        ).fetchall()]
+        if FUND_STAGE.exists():
+            FUND_STAGE.unlink()
+        if PRICE_STAGE.exists():
+            PRICE_STAGE.unlink()
     if args.limit:
         tickers = tickers[: args.limit]
     prog = load_progress()
@@ -359,6 +386,8 @@ def main():
     r = sub.add_parser("run")
     r.add_argument("--limit", type=int, default=0)
     r.add_argument("--sleep", type=float, default=0.4)
+    r.add_argument("--deep", action="store_true",
+                   help="re-fetch ALL current constituents to max history (annual+max prices)")
     r.add_argument("--retry-failed", action="store_true",
                    help="retry tickers previously marked failed (transient errors)")
     r.set_defaults(func=cmd_run)

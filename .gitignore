@@ -1,34 +1,32 @@
-# --- Python / environment ---
-.venv/
-venv/
+logs/*.pid
+logs/*.log
+logs/*.err
+dashboard_data/*.log
+*.log
+backfill_progress.json
+deep_backfill.log
+granite_daily_run.log
+
+# Python
 __pycache__/
 *.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.ipynb_checkpoints/
+.venv/
+venv/
 
-# --- scratch / generated test artifacts ---
-test*.parquet
-test*.csv
-*.tmp
+# Runtime logs/pids
+dashboard_data/*.log
 *.log
+backfill_progress.json
+deep_backfill.log
+granite_daily_run.log
+logs/*.pid
+logs/*.log
+logs/*.err
 
-# --- local overrides (keep templates out of history) ---
-local_config.json
-secrets.env
-
-# --- dashboard cache (regenerated) ---
-dashboard_data/cache/
-
-# --- transient / provenance-only downloads (regenerable via parse_sp500.py) ---
-sp500_wiki.html
+# Scraped HTML (regenerable)
+sp500_main.html
 sp500_page.html
 sp500_changes_page.html
-*.bak
 
-# --- backfill staging artifacts (intermediate; progress tracked in JSON) ---
-fundamentals_yfinance.parquet
-daily_prices_yfinance.parquet
-backfill_progress.json
-
+# regenerable cache
+granite_series_cache.parquet
