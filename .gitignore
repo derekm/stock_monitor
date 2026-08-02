@@ -23,5 +23,12 @@ dashboard_data/cache/
 
 # --- transient / provenance-only downloads (regenerable via parse_sp500.py) ---
 sp500_wiki.html
+sp500_page.html
+sp500_changes_page.html
 *.bak
+
+# --- backfill staging artifacts (intermediate; progress tracked in JSON) ---
+fundamentals_yfinance.parquet
+daily_prices_yfinance.parquet
+backfill_progress.json
 

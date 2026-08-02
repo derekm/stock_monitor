@@ -40,6 +40,40 @@ python -m http.server 8080
 # → http://localhost:8080/
 ```
 
+## S&P 500 membership, tracking & real backfill
+
+The current S&P 500 universe lives in **`sp500_constituents.parquet`** (503
+names, real GICS sector/sub-industry + `date_added`, sourced from Wikipedia).
+`monitored_stocks.parquet` carries `sp500_member` reconciled against that
+authoritative list (ADRs/ETFs like BAYRY/HMC/SHEL/VNQ were corrected out).
+
+Tracking / methodology modules (read `fundamentals.parquet` dynamically, so
+coverage grows as fundamentals are filled):
+- `sp_index_methodology.py` — our independent S&P-style inclusion reimplementation
+  (size/liquidity, profitability, sector factors) + dual_strong / dual_weak tiers,
+  compared to real `sp500_member` actuals (`compare_to_actuals`).
+- `sp_universe_tracking.py` — one row per constituent with GICS vertical/basket
+  + scored tiers where fundamentals exist; `unscored` otherwise (honest, not fabricated).
+- `sp_history_simulation.py` — quarterly rebalance simulation tracking predicted
+  vs reconstructed actual membership (additions from `date_added`; removals are a
+  known gap — Wikipedia only exposes current + addition dates).
+
+### Fill real fundamentals + prices via yfinance (real, multi-snapshot)
+`backfill_constituents.py` pulls **real** quarterly financials + 5y price history
+for the ~409 constituents missing from `fundamentals.parquet`, derives the canonical
+quality metrics per quarter-end (roe, roic, debt_to_equity, interest_coverage,
+ev_ebitda, mktcap_to_assets, pb_ratio), and is resume-safe:
+
+```bash
+python backfill_constituents.py run            # backfill all missing (long, rate-limited)
+python backfill_constituents.py run --limit 20  # smoke test
+python backfill_constituents.py status          # resume progress
+python backfill_constituents.py merge           # union staging -> fundamentals.parquet + daily_prices.parquet
+```
+
+Backfilled rows are stamped `source='yfinance'`. We do NOT synthesize history
+(`fundamentals_history.py`'s noise backfill is separate and not used here).
+
 ---
 
 ## What this system covers
