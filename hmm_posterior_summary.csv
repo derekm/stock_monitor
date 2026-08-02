@@ -1,0 +1,2 @@
+mean_max_posterior,mean_entropy,n_uncertain_soft,n_high_entropy,pct_confident,mean_p_low_vol,mean_p_high_vol_stress,mean_p_normal
+0.986541386885419,0.028239554479865075,5,0,0.9791666666666666,0.46064368148437324,0.16780824858870616,0.37154806992691974

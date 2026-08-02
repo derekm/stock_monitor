@@ -1,0 +1,14 @@
+ticker,sector_name,kind
+SECT_COMMUNICATION_SERVICES,Communication Services,sector_ew_index
+SECT_CONSUMER_DISCRETIONARY,Consumer Discretionary,sector_ew_index
+SECT_CONSUMER_STAPLES,Consumer Staples,sector_ew_index
+SECT_ETF,ETF,sector_ew_index
+SECT_ENERGY,Energy,sector_ew_index
+SECT_FINANCIALS,Financials,sector_ew_index
+SECT_HEALTH_CARE,Health Care,sector_ew_index
+SECT_INDUSTRIALS,Industrials,sector_ew_index
+SECT_INFORMATION_TECHNOLOGY,Information Technology,sector_ew_index
+SECT_MATERIALS,Materials,sector_ew_index
+SECT_MULTI_SECTOR,Multi-Sector,sector_ew_index
+SECT_REAL_ESTATE,Real Estate,sector_ew_index
+SECT_UTILITIES,Utilities,sector_ew_index

@@ -1,0 +1,19 @@
+rebalance_date,regime,action,turnover_band,n_dual_core,notes
+2025-02-28,unknown,full_rebalance,1.0,1,month-end
+2025-03-31,unknown,full_rebalance,1.0,1,month-end
+2025-04-30,unknown,full_rebalance,1.0,1,month-end
+2025-05-30,unknown,full_rebalance,1.0,1,month-end
+2025-06-30,unknown,full_rebalance,1.0,1,month-end
+2025-07-31,unknown,full_rebalance,1.0,1,month-end
+2025-08-29,unknown,full_rebalance,1.0,1,month-end
+2025-09-30,unknown,full_rebalance,1.0,1,month-end
+2025-10-31,unknown,full_rebalance,1.0,1,month-end
+2025-11-28,unknown,full_rebalance,1.0,1,month-end
+2025-12-31,unknown,full_rebalance,1.0,1,month-end
+2026-01-30,unknown,full_rebalance,1.0,1,month-end
+2026-02-27,unknown,full_rebalance,1.0,1,month-end
+2026-03-31,unknown,full_rebalance,1.0,1,month-end
+2026-04-30,unknown,full_rebalance,1.0,1,month-end
+2026-05-29,Stress,reduced_rebalance,0.5,1,high_vol_stress → half turnover band
+2026-06-30,Stress,reduced_rebalance,0.5,1,high_vol_stress → half turnover band
+2026-07-30,Stress,reduced_rebalance,0.5,1,high_vol_stress → half turnover band

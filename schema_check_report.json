@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "artifacts": {
+    "daily_prices": {
+      "exists": true,
+      "path": "daily_prices.parquet",
+      "n_cols": 8,
+      "missing_required": []
+    },
+    "fundamentals": {
+      "exists": true,
+      "path": "fundamentals.parquet",
+      "n_cols": 19,
+      "missing_required": []
+    },
+    "monitored_stocks": {
+      "exists": true,
+      "path": "monitored_stocks.parquet",
+      "n_cols": 17,
+      "missing_required": []
+    },
+    "portfolio_holdings": {
+      "exists": true,
+      "path": "portfolio_holdings.parquet",
+      "n_cols": 14,
+      "missing_required": []
+    },
+    "preferred_metrics": {
+      "exists": true,
+      "path": "preferred_metrics.parquet",
+      "n_cols": 41,
+      "missing_required": []
+    }
+  }
+}

@@ -1,0 +1,44 @@
+ticker,name,sector,growth_sleeve,notes
+SMCI,Super Micro Computer,Information Technology,growth_ai,Portfolio holding
+CAT,Caterpillar Inc,Industrials,cyclical,Cyclical industrial – infrastructure/mining; buy on weakness
+MSFT,Microsoft,Information Technology,quality_growth,Quality compounder; add on valuation dips
+NVDA,NVIDIA Corp,Information Technology,growth_ai,AI leader
+AMD,Advanced Micro Devices,Information Technology,growth_ai,AI / CPU-GPU challenger
+PLTR,Palantir Technologies,Information Technology,growth_ai,AI software / data platforms
+CRWD,CrowdStrike Holdings,Information Technology,growth_ai,Cybersecurity growth
+GOOGL,Alphabet Inc Class A,Communication Services,quality_growth,Quality growth on dips
+TSLA,Tesla Inc,Consumer Discretionary,emerging_growth,EV / autonomy — very volatile
+ENPH,Enphase Energy,Information Technology,emerging_growth,Solar cyclical
+SEDG,SolarEdge Technologies,Information Technology,emerging_growth,Solar cyclical
+REGN,Regeneron Pharmaceuticals,Health Care,emerging_growth,Biotech growth
+XBI,SPDR S&P Biotech ETF,Health Care,emerging_growth,Biotech basket ETF
+BA,Boeing Co,Industrials,cyclical,Aerospace recovery — high beta
+SCHW,Charles Schwab Corp,Financials,cyclical,Levered financial / brokerage
+ARKK,ARK Innovation ETF,ETF,thematic,ARKK-style thematic — small slice
+QQQ,Invesco QQQ Trust,ETF,thematic,Growth ETF satellite
+VUG,Vanguard Growth ETF,ETF,thematic,Broad growth ETF satellite
+MCHP,Microchip Technology,Information Technology,starlink_supply,Starlink supply chain — MCU/analog
+TTMI,TTM Technologies,Information Technology,starlink_supply,Starlink supply chain — PCB/advanced circuits
+MTSI,MACOM Technology Solutions,Information Technology,starlink_supply,Starlink supply chain — RF/microwave
+STM,STMicroelectronics,Information Technology,starlink_supply,Starlink supply chain — semiconductors
+LRCX,Lam Research,Information Technology,starlink_supply,Starlink/semicap equipment
+AMAT,Applied Materials,Information Technology,starlink_supply,Starlink/semicap equipment
+INTC,Intel Corp,Information Technology,starlink_supply,Starlink supply chain / foundry
+SATS,EchoStar / DISH complex,Communication Services,starlink_supply,Screenshot ECHO→EchoStar (SATS); satellite broadband peer
+RKLB,Rocket Lab USA,Industrials,launch_services,Small-launch / Space systems
+ASTS,AST SpaceMobile,Communication Services,launch_services,Space-based cellular; launch-dependent
+BKSY,BlackSky Technology,Industrials,launch_services,Earth observation; launch access
+TDW,Tidewater Inc,Energy,maritime_launch,Offshore vessels — maritime ops adjacency
+VAL,Valaris Ltd,Energy,maritime_launch,Offshore/maritime industrial
+SPCX,SpaceX (tracking symbol SPCX),Industrials,launch_services,User-specified SPCX for SpaceX tracking; high-risk satellite
+HPQ,HP Inc,Information Technology,quality_growth,Near-dual QARP hardware
+MU,Micron Technology,Information Technology,starlink_supply,Memory cyclical; semi supply chain
+NOC,Northrop Grumman,Industrials,aerospace_defense,Aerospace/space · aerospace_defense
+GD,General Dynamics,Industrials,aerospace_defense,Aerospace/space · aerospace_defense
+HII,Huntington Ingalls,Industrials,aerospace_defense,Aerospace/space · aerospace_defense
+CW,Curtiss-Wright,Industrials,aerospace_defense,Aerospace/space · aerospace_defense
+HEI,HEICO,Industrials,aerospace_defense,Aerospace/space · aerospace_defense
+TDG,TransDigm,Industrials,aerospace_defense,Aerospace/space · aerospace_defense
+SPR,Spirit AeroSystems,Industrials,aerospace_defense,Aerospace/space · aerospace_defense
+IRDM,Iridium Communications,Communication Services,starlink_supply,Aerospace/space · starlink_supply
+GSAT,Globalstar,Communication Services,starlink_supply,Aerospace/space · starlink_supply

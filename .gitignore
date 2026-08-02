@@ -1,0 +1,29 @@
+# --- Python / environment ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- scratch / generated test artifacts ---
+test*.parquet
+test*.csv
+*.tmp
+*.log
+
+# --- local overrides (keep templates out of history) ---
+local_config.json
+secrets.env
+
+# --- dashboard cache (regenerated) ---
+dashboard_data/cache/
+
+# NOTE: real data files (*.parquet, *.csv) ARE committed intentionally.
+# Total dataset is ~46 MB parquet + ~50 MB csv — small enough for plain git.
+# Revisit only if a single file exceeds ~100 MB; then switch to git-lfs:
+#   git lfs install
+#   git lfs track "*.parquet"
+# Long-term, historical/versioned data belongs in a DuckLake (see README.md).

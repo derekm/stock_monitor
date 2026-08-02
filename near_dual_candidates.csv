@@ -1,0 +1,2 @@
+ticker,sector,industry,value_sleeve,defensive_value_index,growth_tech_index,dual_pass_member,roe,roic,debt_to_equity,ev_ebitda,pb_ratio,mktcap_to_assets,earnings_stability,buffett_pass,trifecta_pass,dual_pass,failed_legs,n_failed_legs,candidacy,decision,exclude_reasons
+DVN,Energy,Oil & Gas E&P,,True,False,False,0.18,0.12,0.5,4.5,1.5,0.9,0.5,False,False,False,"roic,mca",2,WATCH,NEAR_DUAL,

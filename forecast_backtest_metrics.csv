@@ -1,0 +1,8 @@
+ticker,horizon,n_origins,mae,rmse,mape_pct,directional_accuracy,backend,model
+BAYRY,5,1,0.608,1.0216,4.331,0.8,fallback,statistical_fallback
+CAG,5,1,0.8903,1.3611,5.434,0.4,fallback,statistical_fallback
+HMC,5,1,0.8723,1.0274,3.143,0.4,fallback,statistical_fallback
+KHC,5,1,0.5352,0.598,1.922,0.4,fallback,statistical_fallback
+PFE,5,1,0.742,0.7907,2.826,0.6,fallback,statistical_fallback
+SMCI,5,1,1.0036,1.0241,3.517,0.4,fallback,statistical_fallback
+T,5,1,1.2666,1.732,5.616,0.4,fallback,statistical_fallback

@@ -1,0 +1,16 @@
+ticker,name,sector,industry,growth_sleeve,notes
+RKLB,Rocket Lab,Industrials,Aerospace & Defense,launch_services,Small-launch; dual-use space access
+SPCE,Virgin Galactic,Industrials,Aerospace & Defense,launch_services,Suborbital tourism; high risk
+BA,Boeing,Industrials,Aerospace & Defense,aerospace,OEM + defense; recovery / quality-on-dip
+LMT,Lockheed Martin,Industrials,Aerospace & Defense,aerospace,Prime contractor; steady government demand
+RTX,RTX,Industrials,Aerospace & Defense,aerospace,Engines + avionics + defense
+NOC,Northrop Grumman,Industrials,Aerospace & Defense,aerospace,Space systems + defense
+GD,General Dynamics,Industrials,Aerospace & Defense,aerospace,Gulfstream + defense
+TDG,TransDigm,Industrials,Aerospace & Defense,aerospace,Aftermarket aerospace parts
+HEI,HEICO,Industrials,Aerospace & Defense,starlink_supply,PMA parts; satellite supply adjacency
+KTOS,Kratos,Industrials,Aerospace & Defense,starlink_supply,Satcom / drones / space
+IRDM,Iridium,Communication Services,Telecom Services,starlink_supply,LEO constellation peer
+GSAT,Globalstar,Communication Services,Telecom Services,starlink_supply,LEO / Apple partnership adjacency
+ASTS,AST SpaceMobile,Communication Services,Telecom Services,starlink_supply,Direct-to-cell satellite
+PL,Planet Labs,Industrials,Aerospace & Defense,starlink_supply,Earth observation constellation
+MAXR,Maxar (hist),Industrials,Aerospace & Defense,starlink_supply,Imagery / space infrastructure (ticker may change)

@@ -1,0 +1,139 @@
+regime,avg_sector_corr,median_sector_corr,sector_a,sector_b,corr
+high_vol_stress,0.6507803125457382,0.6463051390956907,,,
+high_vol_stress,,,Communication Services,Consumer Discretionary,0.7514098291586006
+high_vol_stress,,,Communication Services,Consumer Staples,0.6233075178230335
+high_vol_stress,,,Communication Services,Energy,0.6176382474945051
+high_vol_stress,,,Communication Services,Financials,0.6772062064850345
+high_vol_stress,,,Communication Services,Health Care,0.7185239576089548
+high_vol_stress,,,Communication Services,Industrials,0.6627549086086034
+high_vol_stress,,,Communication Services,Information Technology,0.6355824460658481
+high_vol_stress,,,Communication Services,Materials,0.5998535263086677
+high_vol_stress,,,Communication Services,Utilities,0.5975648659903416
+high_vol_stress,,,Consumer Discretionary,Consumer Staples,0.6913266876147657
+high_vol_stress,,,Consumer Discretionary,Energy,0.6163602499866013
+high_vol_stress,,,Consumer Discretionary,Financials,0.7356299668497399
+high_vol_stress,,,Consumer Discretionary,Health Care,0.5476886513611877
+high_vol_stress,,,Consumer Discretionary,Industrials,0.6883788369976507
+high_vol_stress,,,Consumer Discretionary,Information Technology,0.6761577660151066
+high_vol_stress,,,Consumer Discretionary,Materials,0.7007784936055247
+high_vol_stress,,,Consumer Discretionary,Utilities,0.6078426349401853
+high_vol_stress,,,Consumer Staples,Energy,0.7177880067150861
+high_vol_stress,,,Consumer Staples,Financials,0.81540600238896
+high_vol_stress,,,Consumer Staples,Health Care,0.6304355312886595
+high_vol_stress,,,Consumer Staples,Industrials,0.743460814629724
+high_vol_stress,,,Consumer Staples,Information Technology,0.7664213300421404
+high_vol_stress,,,Consumer Staples,Materials,0.6386558040866105
+high_vol_stress,,,Consumer Staples,Utilities,0.5325498946340161
+high_vol_stress,,,Energy,Financials,0.7083504567323403
+high_vol_stress,,,Energy,Health Care,0.6463051390956907
+high_vol_stress,,,Energy,Industrials,0.669525628510999
+high_vol_stress,,,Energy,Information Technology,0.642002648710495
+high_vol_stress,,,Energy,Materials,0.5499463491944281
+high_vol_stress,,,Energy,Utilities,0.40615821517601314
+high_vol_stress,,,Financials,Health Care,0.6959388051360146
+high_vol_stress,,,Financials,Industrials,0.8010782057160165
+high_vol_stress,,,Financials,Information Technology,0.8127014684276902
+high_vol_stress,,,Financials,Materials,0.7414767632825066
+high_vol_stress,,,Financials,Utilities,0.7205673932632487
+high_vol_stress,,,Health Care,Industrials,0.6104417785141529
+high_vol_stress,,,Health Care,Information Technology,0.5811966090474925
+high_vol_stress,,,Health Care,Materials,0.5631209512014556
+high_vol_stress,,,Health Care,Utilities,0.530602243654588
+high_vol_stress,,,Industrials,Information Technology,0.7292631124247656
+high_vol_stress,,,Industrials,Materials,0.6619330881165775
+high_vol_stress,,,Industrials,Utilities,0.5643663128468405
+high_vol_stress,,,Information Technology,Materials,0.5792029506152649
+high_vol_stress,,,Information Technology,Utilities,0.6376521872324409
+high_vol_stress,,,Materials,Utilities,0.4405615809596542
+low_vol,0.2984569964023509,0.3141348694687479,,,
+low_vol,,,Communication Services,Consumer Discretionary,0.11529050483049312
+low_vol,,,Communication Services,Consumer Staples,0.16767217110203633
+low_vol,,,Communication Services,Energy,0.17889650350400557
+low_vol,,,Communication Services,Financials,0.12058691993504242
+low_vol,,,Communication Services,Health Care,0.1545825090474473
+low_vol,,,Communication Services,Industrials,0.14741979944724884
+low_vol,,,Communication Services,Information Technology,0.2938325370628382
+low_vol,,,Communication Services,Materials,0.23702037337116716
+low_vol,,,Communication Services,Utilities,0.174431007964928
+low_vol,,,Consumer Discretionary,Consumer Staples,0.31686911023607184
+low_vol,,,Consumer Discretionary,Energy,0.31741609141320587
+low_vol,,,Consumer Discretionary,Financials,0.3644851079159525
+low_vol,,,Consumer Discretionary,Health Care,0.15639605204148466
+low_vol,,,Consumer Discretionary,Industrials,0.31715398060667954
+low_vol,,,Consumer Discretionary,Information Technology,0.28846918046703984
+low_vol,,,Consumer Discretionary,Materials,0.34259556387169054
+low_vol,,,Consumer Discretionary,Utilities,0.22188429005847563
+low_vol,,,Consumer Staples,Energy,0.410841997288824
+low_vol,,,Consumer Staples,Financials,0.44081607435641934
+low_vol,,,Consumer Staples,Health Care,0.3277175818472436
+low_vol,,,Consumer Staples,Industrials,0.44090149174728666
+low_vol,,,Consumer Staples,Information Technology,0.3631244132803444
+low_vol,,,Consumer Staples,Materials,0.3494008124525732
+low_vol,,,Consumer Staples,Utilities,0.3096660195732013
+low_vol,,,Energy,Financials,0.35063333572987626
+low_vol,,,Energy,Health Care,0.11517152851139723
+low_vol,,,Energy,Industrials,0.2960652208062496
+low_vol,,,Energy,Information Technology,0.41683352457684786
+low_vol,,,Energy,Materials,0.26149152900368583
+low_vol,,,Energy,Utilities,0.302926376143157
+low_vol,,,Financials,Health Care,0.3353771966123174
+low_vol,,,Financials,Industrials,0.46779951723509744
+low_vol,,,Financials,Information Technology,0.42328012486616806
+low_vol,,,Financials,Materials,0.5021812899656591
+low_vol,,,Financials,Utilities,0.3875529659227559
+low_vol,,,Health Care,Industrials,0.15165422914750823
+low_vol,,,Health Care,Information Technology,0.2780196092786391
+low_vol,,,Health Care,Materials,0.2646277303114883
+low_vol,,,Health Care,Utilities,0.23550767743647955
+low_vol,,,Industrials,Information Technology,0.4594497063142315
+low_vol,,,Industrials,Materials,0.3199052258181147
+low_vol,,,Industrials,Utilities,0.3141348694687479
+low_vol,,,Information Technology,Materials,0.343683289832865
+low_vol,,,Information Technology,Utilities,0.2727324392060754
+low_vol,,,Materials,Utilities,0.3740673584967274
+normal,0.376679264217196,0.3716029377517809,,,
+normal,,,Communication Services,Consumer Discretionary,0.40147847279359694
+normal,,,Communication Services,Consumer Staples,0.3716029377517809
+normal,,,Communication Services,Energy,0.11508150778708855
+normal,,,Communication Services,Financials,0.34476316816849356
+normal,,,Communication Services,Health Care,0.11476417942660133
+normal,,,Communication Services,Industrials,0.1906668965083658
+normal,,,Communication Services,Information Technology,0.17346113499007756
+normal,,,Communication Services,Materials,0.2875226622554581
+normal,,,Communication Services,Utilities,0.16340309996550734
+normal,,,Consumer Discretionary,Consumer Staples,0.41312135946747586
+normal,,,Consumer Discretionary,Energy,0.3292754745083485
+normal,,,Consumer Discretionary,Financials,0.43282253228429757
+normal,,,Consumer Discretionary,Health Care,0.22788556905359542
+normal,,,Consumer Discretionary,Industrials,0.23887058196215663
+normal,,,Consumer Discretionary,Information Technology,0.2636915858234485
+normal,,,Consumer Discretionary,Materials,0.4110628121317525
+normal,,,Consumer Discretionary,Utilities,0.3108106416650957
+normal,,,Consumer Staples,Energy,0.46422215484030344
+normal,,,Consumer Staples,Financials,0.5357626092518395
+normal,,,Consumer Staples,Health Care,0.3280579612161329
+normal,,,Consumer Staples,Industrials,0.36955860695505416
+normal,,,Consumer Staples,Information Technology,0.3439739503499316
+normal,,,Consumer Staples,Materials,0.4446638260012593
+normal,,,Consumer Staples,Utilities,0.35503168218338477
+normal,,,Energy,Financials,0.5005229131825515
+normal,,,Energy,Health Care,0.3168132147950004
+normal,,,Energy,Industrials,0.3556101588643449
+normal,,,Energy,Information Technology,0.44723759692244963
+normal,,,Energy,Materials,0.5338279756834695
+normal,,,Energy,Utilities,0.41036024801638776
+normal,,,Financials,Health Care,0.5201838503927855
+normal,,,Financials,Industrials,0.6314622145713917
+normal,,,Financials,Information Technology,0.5913789212607027
+normal,,,Financials,Materials,0.6182106089443211
+normal,,,Financials,Utilities,0.3912002928766048
+normal,,,Health Care,Industrials,0.46350918639498895
+normal,,,Health Care,Information Technology,0.26998553061717717
+normal,,,Health Care,Materials,0.47016902465610383
+normal,,,Health Care,Utilities,0.2463194597346071
+normal,,,Industrials,Information Technology,0.4794855551547732
+normal,,,Industrials,Materials,0.5805092920084813
+normal,,,Industrials,Utilities,0.31184025518817027
+normal,,,Information Technology,Materials,0.4403030264852592
+normal,,,Information Technology,Utilities,0.31452546514928303
+normal,,,Materials,Utilities,0.4255566915339189

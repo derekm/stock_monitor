@@ -1,0 +1,4 @@
+regime,label,n_pass,tickers,roe_min,roic_min,de_max,ev_max,pb_max,mca_max,is_current,note
+low_vol,quality_at_fair_price,6,"FITB,RF,IVZ,BEN,HBAN,HPQ",0.15,0.15,1.0,12.0,2.0,0.8,False,Calm regime: pay up to fair multiples for full quality; still no junk.
+normal,base_dual_pass,5,"FITB,RF,IVZ,BEN,HBAN",0.15,0.15,1.0,9.0,1.5,0.5,True,Default dual-pass policy.
+high_vol_stress,defensive_dual_tight,5,"FITB,RF,IVZ,BEN,HBAN",0.15,0.15,0.8,8.0,1.3,0.45,False,Stress: tighter leverage and value; do not loosen quality.

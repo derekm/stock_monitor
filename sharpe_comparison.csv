@@ -1,0 +1,5 @@
+index,sharpe,ann_return_pct,ann_vol_pct,max_dd_pct,sharpe_rank,vs_best_sharpe
+GrowthTech,0.423,32.94,68.39,-21.1,1,0.0
+Fertilizer,0.378,14.67,28.24,-14.75,2,-0.045
+Defensive,0.083,8.98,60.14,-18.68,3,-0.34
+Personal,-0.169,-3.06,41.67,-17.75,4,-0.592

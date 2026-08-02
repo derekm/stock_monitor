@@ -1,0 +1,88 @@
+ticker,name,sector,sp500_sector,sp500_member,defensive_value_index,growth_tech_index,in_portfolio
+CF,CF Industries Holdings,Materials,Materials,True,False,False,False
+MOS,The Mosaic Company,Materials,Materials,True,False,False,True
+KHC,Kraft Heinz Co,Consumer Staples,Consumer Staples,True,True,False,True
+CAG,Conagra Brands Inc,Consumer Staples,Consumer Staples,True,True,False,True
+BAYRY,Bayer AG ADR,Health Care,Health Care,True,True,False,True
+PFE,Pfizer Inc,Health Care,Health Care,True,True,False,True
+SMCI,Super Micro Computer,Information Technology,Information Technology,True,False,True,True
+HMC,Honda Motor Co ADR,Consumer Discretionary,Consumer Discretionary,True,True,False,True
+T,AT&T Inc,Communication Services,Communication Services,True,True,False,True
+PG,Procter & Gamble,Consumer Staples,Consumer Staples,True,True,False,False
+JNJ,Johnson & Johnson,Health Care,Health Care,True,True,False,False
+KO,Coca-Cola Co,Consumer Staples,Consumer Staples,True,True,False,False
+VZ,Verizon Communications,Communication Services,Communication Services,True,True,False,False
+PEP,PepsiCo Inc,Consumer Staples,Consumer Staples,True,True,False,False
+MMM,3M Company,Industrials,Industrials,True,True,False,False
+KMB,Kimberly-Clark,Consumer Staples,Consumer Staples,True,True,False,False
+BMY,Bristol-Myers Squibb,Health Care,Health Care,True,True,False,False
+MRK,Merck & Co,Health Care,Health Care,True,True,False,False
+DUK,Duke Energy,Utilities,Utilities,True,True,False,False
+SO,Southern Company,Utilities,Utilities,True,True,False,False
+GIS,General Mills,Consumer Staples,Consumer Staples,True,True,False,False
+CPB,Campbell Soup,Consumer Staples,Consumer Staples,True,True,False,False
+MKC,McCormick & Co,Consumer Staples,Consumer Staples,True,True,False,False
+CL,Colgate-Palmolive,Consumer Staples,Consumer Staples,True,True,False,False
+ABBV,AbbVie Inc,Health Care,Health Care,True,True,False,False
+NEE,NextEra Energy,Utilities,Utilities,True,True,False,False
+HON,Honeywell International,Industrials,Industrials,True,True,False,False
+DE,Deere & Co,Industrials,Industrials,True,True,False,False
+CAT,Caterpillar Inc,Industrials,Industrials,True,True,True,False
+WM,Waste Management,Industrials,Industrials,True,True,False,False
+UNH,UnitedHealth Group,Health Care,Health Care,True,True,False,False
+LLY,Eli Lilly,Health Care,Health Care,True,True,False,False
+D,Dominion Energy,Utilities,Utilities,True,True,False,False
+AEP,American Electric Power,Utilities,Utilities,True,True,False,False
+TRV,Travelers Companies,Financials,Financials,True,True,False,False
+ALL,Allstate Corp,Financials,Financials,True,True,False,False
+MCD,McDonald's,Consumer Discretionary,Consumer Discretionary,True,True,False,False
+SBUX,Starbucks,Consumer Discretionary,Consumer Discretionary,True,False,False,False
+NKE,Nike,Consumer Discretionary,Consumer Discretionary,True,False,False,False
+TGT,Target,Consumer Discretionary,Consumer Discretionary,True,False,False,False
+COST,Costco,Consumer Discretionary,Consumer Staples,True,True,False,False
+JPM,JPMorgan Chase,Financials,Financials,True,True,False,False
+BAC,Bank of America,Financials,Financials,True,True,False,False
+C,Citigroup,Financials,Financials,True,True,False,False
+CB,Chubb Ltd,Financials,Financials,True,True,False,False
+BLK,BlackRock,Financials,Financials,True,False,False,False
+XOM,Exxon Mobil,Energy,Energy,True,True,False,False
+CVX,Chevron,Energy,Energy,True,True,False,False
+SHEL,Shell PLC,Energy,Energy,True,True,False,False
+PLD,Prologis,Real Estate,Real Estate,True,True,False,False
+O,Realty Income,Real Estate,Real Estate,True,True,False,False
+VNQ,Vanguard Real Estate ETF,Real Estate,Real Estate,True,False,False,False
+DOW,Dow Inc,Materials,Materials,True,True,False,False
+DD,DuPont de Nemours,Materials,Materials,True,True,False,False
+IBM,IBM,Information Technology,Information Technology,True,True,False,False
+CSCO,Cisco Systems,Information Technology,Information Technology,True,True,False,False
+ORCL,Oracle,Information Technology,Information Technology,True,True,False,False
+MSFT,Microsoft,Information Technology,Information Technology,True,False,True,False
+MO,Altria Group,Consumer Staples,Consumer Staples,True,True,False,False
+PM,Philip Morris International,Consumer Staples,Consumer Staples,True,True,False,False
+LMT,Lockheed Martin,Industrials,Industrials,True,True,False,False
+RTX,RTX Corp,Industrials,Industrials,True,True,False,False
+NVDA,NVIDIA Corp,Information Technology,Information Technology,True,False,True,False
+AMD,Advanced Micro Devices,Information Technology,Information Technology,True,False,True,False
+PLTR,Palantir Technologies,Information Technology,Information Technology,True,False,True,False
+CRWD,CrowdStrike Holdings,Information Technology,Information Technology,True,False,True,False
+GOOGL,Alphabet Inc Class A,Communication Services,Communication Services,True,False,True,False
+TSLA,Tesla Inc,Consumer Discretionary,Consumer Discretionary,True,False,True,False
+REGN,Regeneron Pharmaceuticals,Health Care,Health Care,True,False,True,False
+BA,Boeing Co,Industrials,Industrials,True,False,True,False
+SCHW,Charles Schwab Corp,Financials,Financials,True,False,True,False
+AMAT,Applied Materials,Information Technology,Information Technology,True,False,True,False
+INTC,Intel Corp,Information Technology,Information Technology,True,False,True,False
+VLO,Valero Energy,Energy,Energy,True,True,False,False
+PSX,Phillips 66,Energy,Energy,True,True,False,False
+MPC,Marathon Petroleum,Energy,Energy,True,True,False,False
+MU,Micron Technology,Information Technology,Information Technology,True,False,True,False
+NUE,Nucor Corp,Materials,Materials,True,True,False,False
+FANG,Diamondback Energy,Energy,Energy,True,True,False,False
+DVN,Devon Energy,Energy,Energy,True,True,False,False
+AFL,Aflac Inc,Financials,Financials,True,True,False,False
+NOC,Northrop Grumman,Industrials,Industrials,True,False,True,False
+GD,General Dynamics,Industrials,Industrials,True,False,True,False
+RF,Regions Financial,Financials,Financials,True,True,False,False
+FITB,Fifth Third Bancorp,Financials,Financials,True,True,False,False
+HBAN,Huntington Bancshares,Financials,Financials,True,True,False,False
+CFG,Citizens Financial,Financials,Financials,True,True,False,False

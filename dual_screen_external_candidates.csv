@@ -1,0 +1,21 @@
+ticker,name,status,roe,roic,debt_to_equity,pb_ratio,ev_ebitda,mktcap_to_assets,buffett_pass_approx,trifecta_pass_approx,near_dual_approx,note
+MU,Micron,not_monitored,0.16,0.12,0.3,1.8,6.5,0.9,False,False,True,Memory cyclical — ROE swings; sometimes cheap on EV
+HPQ,HP Inc,not_monitored,0.2,0.15,0.8,1.4,7.0,0.6,True,False,True,PC hardware — occasionally QARP-like
+TPR,Tapestry,not_monitored,0.22,0.14,0.7,2.0,8.0,0.8,False,False,True,Consumer brand — check leverage
+AFL,Aflac,not_monitored,0.16,0.12,0.4,1.5,8.5,0.15,False,True,True,Insurance — book value relevant
+MET,MetLife,not_monitored,0.12,0.09,0.5,1.0,7.0,0.08,False,True,False,Near dual on book; ROE borderline
+PRU,Prudential,not_monitored,0.11,0.08,0.5,0.9,6.5,0.07,False,True,False,Similar to MET
+VLO,Valero,not_monitored,0.2,0.12,0.4,1.5,5.0,0.7,False,False,True,Refiner cyclical — high ROE in upcycle + low EV
+PSX,Phillips 66,not_monitored,0.18,0.11,0.5,1.6,6.0,0.75,False,False,True,Refiner QARP in parts of cycle
+MPC,Marathon Petroleum,not_monitored,0.22,0.14,0.5,1.7,5.5,0.8,False,False,True,Refiner
+CNC,Centene,not_monitored,0.12,0.08,0.7,1.2,7.5,0.5,False,True,False,Managed care value
+CI,Cigna,not_monitored,0.14,0.1,0.6,1.8,8.0,0.7,False,False,True,Near quality/value border
+KR,Kroger,not_monitored,0.22,0.1,1.5,2.5,7.0,0.4,False,False,False,ROE ok; leverage elevated
+SYF,Synchrony,not_monitored,0.18,0.12,1.2,1.1,5.0,0.15,False,True,True,Consumer finance — ROE + low P/B
+CFG,Citizens Financial,not_monitored,0.1,0.08,0.5,0.8,7.0,0.1,False,True,False,Regional bank book-value value
+KEY,KeyCorp,not_monitored,0.09,0.07,0.5,0.9,8.0,0.1,False,True,False,Regional bank
+NUE,Nucor,not_monitored,0.18,0.14,0.3,1.6,6.0,1.0,False,False,False,Steel — ROIC solid in mid-cycle
+STLD,Steel Dynamics,not_monitored,0.2,0.15,0.3,1.8,5.5,1.1,True,False,False,Steel
+DVN,Devon Energy,not_monitored,0.18,0.12,0.5,1.5,4.5,0.9,False,False,True,E&P mid-cycle
+FANG,Diamondback,not_monitored,0.16,0.12,0.4,1.4,5.0,0.9,False,False,True,E&P
+CEIX,Consol Energy,not_monitored,0.25,0.18,0.3,1.5,4.0,1.0,True,False,False,Coal/thermal — high ROE when prices firm

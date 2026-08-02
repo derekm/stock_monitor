@@ -1,0 +1,102 @@
+ticker,sector,industry,value_sleeve,defensive_value_index,growth_tech_index,dual_pass_member,roe,roic,debt_to_equity,ev_ebitda,pb_ratio,mktcap_to_assets,earnings_stability,buffett_pass,trifecta_pass,dual_pass,failed_legs,n_failed_legs,candidacy,decision,exclude_reasons,defensive_score
+RF,Financials,Banks,financial_value,True,False,True,0.15,0.15,0.2,7.5,1.1,0.12,0.72,True,True,True,,0,INCLUDE,INCLUDE_CORE,,0.81465
+AFL,Financials,Insurance—Life,,True,False,False,0.16,0.12,0.4,8.5,1.5,0.15,0.85,False,True,False,roic,1,INCLUDE,INCLUDE_VALUE,,0.801725
+JPM,Financials,Banks,,True,False,False,0.15,0.12,1.2,10.0,1.8,0.15,0.8,False,False,False,"roic,de,ev,pb",4,WATCH,WATCH,,0.7255666666666668
+XLF,Financials,ETF,defensive_etf,True,False,False,0.12,0.1,0.8,10.0,1.5,0.15,0.8,False,False,False,"roe,roic,ev",3,WATCH,WATCH,,0.7215666666666667
+NUE,Materials,Steel,,True,False,False,0.18,0.14,0.3,6.0,1.6,1.0,0.55,False,False,False,"roic,pb,mca",3,WATCH,WATCH,,0.7159
+DVN,Energy,Oil & Gas E&P,,True,False,False,0.18,0.12,0.5,4.5,1.5,0.9,0.5,False,False,False,"roic,mca",2,WATCH,NEAR_DUAL,,0.712125
+PFE,Health Care,Pharmaceuticals,,True,False,False,0.12,0.1,0.6,9.0,1.6,0.665,0.75,False,False,False,"roe,roic,pb,mca",4,WATCH,WATCH,,0.703325
+BAC,Financials,Banks,,True,False,False,0.1,0.08,1.1,9.0,1.2,0.103,0.75,False,True,False,"roe,roic,de",3,INCLUDE,INCLUDE_VALUE,,0.6876
+CAG,Consumer Staples,Packaged Foods,,True,False,False,0.1,0.07,0.9,8.5,1.1,0.352,0.65,False,True,False,"roe,roic",2,INCLUDE,INCLUDE_VALUE,,0.6799000000000001
+XLE,Energy,ETF,defensive_etf,True,False,False,0.14,0.1,0.5,7.0,1.8,0.9,0.65,False,False,False,"roe,roic,pb,mca",4,WATCH,WATCH,,0.6603000000000001
+XOM,Energy,Oil Gas & Consumable Fuels,,True,False,False,0.16,0.12,0.25,6.5,2.0,1.211,0.7,False,False,False,"roic,pb,mca",3,WATCH,WATCH,,0.6375575
+UAN,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.2,0.12,0.5,6.0,2.5,1.127,0.5,False,False,False,"roic,pb,mca",3,WATCH,WATCH,,0.626665
+MO,Consumer Staples,Tobacco,,True,False,False,0.9,0.25,1.5,,-36.05,3.305,0.85,False,False,False,"de,ev,mca",3,WATCH,WATCH,,0.61075
+CPB,Consumer Staples,Packaged Foods,,True,False,False,0.2,0.09,1.5,10.0,2.5,0.9,0.72,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.6079916666666667
+MRK,Health Care,Pharmaceuticals,,True,False,False,0.3,0.18,0.7,12.0,6.5,2.636,0.84,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.594025
+BLK,Financials,Capital Markets,,False,False,False,0.22,0.18,0.2,16.0,3.5,1.077,0.85,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.5851816666666667
+ICL,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.12,0.08,0.7,7.0,1.4,1.809,0.55,False,False,False,"roe,roic,mca",3,WATCH,WATCH,,0.5680000000000001
+DD,Materials,Chemicals,,True,False,False,0.06,0.05,0.5,10.0,1.8,0.778,0.62,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.5663516666666667
+IPI,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.05,0.04,0.3,9.0,1.2,0.836,0.45,False,False,False,"roe,roic,mca",3,WATCH,WATCH,,0.56607
+ABBV,Health Care,Biotechnology,,True,False,False,0.8,0.2,3.5,,-67.09,3.308,0.78,False,False,False,"de,ev,mca",3,WATCH,WATCH,,0.54585
+SHEL,Energy,Oil Gas & Consumable Fuels,,True,False,False,0.12,0.1,0.35,,1.48,0.631,0.75,False,False,False,"roe,roic,ev,mca",4,WATCH,WATCH,,0.5457575
+LXU,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.15,0.1,0.8,,1.44,0.558,0.5,False,False,False,"roic,ev,mca",3,WATCH,WATCH,,0.54281
+GIS,Consumer Staples,Packaged Foods,,True,False,False,0.28,0.12,1.3,12.0,3.8,1.125,0.8,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.5422750000000001
+PYPL,Financials,Transaction & Payment Processing,,False,False,False,0.18,0.12,0.4,,2.47,0.606,0.6,False,False,False,"roic,ev,pb,mca",4,WATCH,WATCH,,0.53922
+VZ,Communication Services,Diversified Telecom,,True,False,False,0.2,0.08,1.8,,1.85,0.509,0.82,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.53888
+CAT,Industrials,Machinery,,True,True,False,0.4,0.18,1.5,13.0,8.0,2.0,0.7,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.5361416666666666
+CB,Financials,Insurance,,True,False,False,0.13,0.1,0.3,,1.8,0.68,0.84,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.536125
+HII,Industrials,Aerospace & Defense,,False,True,False,0.12,0.08,0.8,12.0,2.5,1.0,0.8,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.5295000000000001
+CL,Consumer Staples,Household Products,,True,False,False,0.35,0.18,1.2,16.0,80.0,4.875,0.87,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.5225416666666667
+TRV,Financials,Property & Casualty Insurance,,True,False,False,0.14,0.1,0.3,,2.38,0.605,0.82,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.520875
+MKC,Consumer Staples,Packaged Foods,,True,False,False,0.22,0.12,0.9,,1.96,1.054,0.82,False,False,False,"roic,ev,pb,mca",4,WATCH,WATCH,,0.517505
+GOOGL,Communication Services,Internet Content,,False,True,False,0.25,0.22,0.1,,6.89,,0.85,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.5104
+XLU,Utilities,ETF,defensive_etf,True,False,False,0.1,0.05,1.4,12.0,2.0,1.0,0.92,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.5061500000000001
+DOW,Materials,Chemicals,,True,False,False,0.1,0.07,0.7,,1.37,0.362,0.6,False,False,False,"roe,roic,ev",3,WATCH,WATCH,,0.5040250000000001
+ASIX,Materials,Chemicals,,False,False,False,0.1,0.07,0.6,,0.68,0.336,0.55,False,False,False,"roe,roic,ev",3,WATCH,WATCH,,0.5040250000000001
+T,Communication Services,Diversified Telecom,,True,False,False,0.1,0.06,1.2,,1.45,0.399,0.8,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.4922
+MOS,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.08,0.06,0.4,,0.6,0.321,0.55,False,False,False,"roe,roic,ev",3,WATCH,WATCH,,0.489175
+ALL,Financials,Property & Casualty Insurance,,True,False,False,0.12,0.09,0.35,,2.31,0.65,0.78,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.4885125
+REGN,Health Care,Biotechnology,,False,True,False,0.18,0.16,0.1,,2.4,,0.7,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.478925
+KHC,Consumer Staples,Packaged Foods,,True,False,False,0.06,0.05,0.5,,0.74,0.35,0.7,False,False,False,"roe,roic,ev",3,WATCH,WATCH,,0.474325
+CW,Industrials,Aerospace & Defense,,False,True,False,0.14,0.1,0.5,14.0,3.0,1.8,0.82,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.4726583333333333
+LLY,Health Care,Pharmaceuticals,,True,False,False,0.55,0.3,1.5,35.0,45.0,10.571,0.8,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.471625
+XLP,Consumer Staples,ETF,defensive_etf,True,False,False,0.18,0.12,0.8,14.0,4.5,2.0,0.9,False,False,False,"roic,ev,pb,mca",4,WATCH,WATCH,,0.4680833333333334
+UNH,Health Care,Managed Health Care,,True,False,False,0.25,0.18,0.7,,3.64,1.27,0.85,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.46145
+PG,Consumer Staples,Household Products,,True,False,False,0.18,0.16,0.55,18.0,7.5,3.25,0.92,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.45751250000000004
+ANDE,Consumer Staples,Food Distributors,,False,False,False,0.08,0.06,0.5,,1.88,0.574,0.55,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.44893000000000005
+HON,Industrials,Industrial Conglomerates,,True,False,False,0.28,0.16,0.8,,5.63,1.178,0.85,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.448285
+C,Financials,Banks,,True,False,False,0.07,0.05,1.3,,1.16,0.093,0.65,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.4449
+DUK,Utilities,Electric Utilities,,True,False,False,0.09,0.05,1.5,,1.83,0.544,0.88,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.44330500000000006
+XLV,Health Care,ETF,defensive_etf,True,False,False,0.16,0.12,0.7,15.0,4.0,2.2,0.88,False,False,False,"roic,ev,pb,mca",4,WATCH,WATCH,,0.441825
+NTR,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.07,0.05,0.6,,1.33,0.642,0.55,False,False,False,"roe,roic,ev,mca",4,WATCH,WATCH,,0.43996499999999994
+LMT,Industrials,Aerospace & Defense,,True,False,False,0.55,0.2,1.5,,15.05,2.407,0.88,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.439725
+CF,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.25,0.15,0.5,,3.6,1.424,0.6,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.42837499999999995
+CVX,Energy,Oil Gas & Consumable Fuels,,True,False,False,0.14,0.11,0.2,,2.09,1.487,0.72,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.42575
+JNJ,Health Care,Pharmaceuticals,,True,False,False,0.22,0.15,0.45,,7.26,3.339,0.91,True,False,False,"ev,pb,mca",3,INCLUDE,INCLUDE_QUALITY,,0.4239125000000001
+PM,Consumer Staples,Tobacco,,True,False,False,0.7,0.2,2.0,,,4.603,0.85,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.41662499999999997
+BAYRY,Health Care,Pharmaceuticals,,True,False,False,0.05,0.04,0.9,,1.66,0.453,0.5,False,False,False,"roe,roic,ev,pb",4,WATCH,WATCH,,0.41632500000000006
+FMC,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.05,0.04,1.2,,0.83,0.119,0.5,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.41355000000000003
+KO,Consumer Staples,Beverages,,True,False,False,0.38,0.15,1.4,,10.42,3.843,0.9,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.40700000000000003
+AEP,Utilities,Electric Utilities,,True,False,False,0.1,0.05,1.5,,2.19,0.698,0.86,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.400035
+SMG,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.12,0.08,1.5,,-13.52,1.019,0.55,False,False,False,"roe,roic,de,ev,mca",5,EXCLUDE,AVOID,,0.39658000000000004
+PEP,Consumer Staples,Beverages,,True,False,False,0.5,0.14,1.6,,8.59,1.898,0.88,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.3894000000000001
+KMB,Consumer Staples,Household Products,,True,False,False,0.55,0.16,2.0,,20.27,2.141,0.85,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.38582500000000003
+WM,Industrials,Environmental Services,,True,False,False,0.25,0.12,1.5,,9.15,2.584,0.9,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.37977500000000003
+MMM,Industrials,Industrial Conglomerates,,True,False,False,0.25,0.12,1.2,,30.64,2.261,0.72,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.3773000000000001
+DE,Industrials,Machinery,,True,False,False,0.35,0.15,1.8,,5.86,1.606,0.68,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.37235
+HEI,Industrials,Aerospace & Defense,,False,True,False,0.16,0.12,0.6,28.0,7.0,4.0,0.85,False,False,False,"roic,ev,pb,mca",4,WATCH,WATCH,,0.343475
+BMY,Health Care,Pharmaceuticals,,True,False,False,0.18,0.12,1.1,,6.54,1.381,0.7,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.325875
+CTVA,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.08,0.06,0.4,,2.2,1.275,0.65,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.320425
+SCHW,Financials,Capital Markets,,False,True,False,0.14,0.1,0.5,,3.64,,0.75,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.31515
+SO,Utilities,Electric Utilities,,True,False,False,0.11,0.05,1.6,,,0.779,0.88,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.29707999999999996
+NEE,Utilities,Electric Utilities,,True,False,False,0.12,0.06,1.4,,,0.961,0.85,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.28549500000000005
+RTX,Industrials,Aerospace & Defense,,True,False,False,0.12,0.08,0.7,,4.34,1.692,0.8,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.273625
+IVZ,Financials,Asset Management,financial_value,True,False,True,,,,,1.05,0.327,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
+CFG,Financials,Banks,,True,False,False,,,,,1.26,0.169,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
+BEN,Financials,Asset Management,financial_value,True,False,True,,,,,1.44,0.35,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
+HBAN,Financials,Banks,financial_value,True,False,True,,,,,1.16,0.191,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
+FITB,Financials,Banks,financial_value,True,False,True,,,,,1.59,0.284,,False,False,False,"roe,roic,de,ev,pb",5,EXCLUDE,AVOID,,0.2646
+SYF,Financials,Consumer Finance,,True,False,False,,,,,1.68,0.19,,False,False,False,"roe,roic,de,ev,pb",5,EXCLUDE,AVOID,,0.25920000000000004
+SPR,Industrials,Aerospace & Defense,,False,True,False,-0.1,-0.05,2.0,15.0,1.2,0.8,0.4,False,False,False,"roe,roic,de,ev,mca",5,EXCLUDE,AVOID,,0.2335
+D,Utilities,Electric Utilities,,True,False,False,,,,,2.17,0.556,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.21972
+TDG,Industrials,Aerospace & Defense,,False,True,False,0.0,0.15,5.0,20.0,50.0,3.0,0.75,False,False,False,"roe,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.2107083333333334
+FANG,Energy,Oil & Gas E&P,,True,False,False,,,,,1.55,1.026,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.17232
+VAL,Energy,Oil & Gas Drilling,,False,True,False,,,,,1.69,1.193,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.13386
+TDW,Energy,Oil & Gas Equipment,,False,True,False,,,,,2.71,0.926,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.12072
+PSX,Energy,Oil & Gas Refining,,True,False,False,,,,,2.95,1.122,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.07103999999999998
+BA,Industrials,Aerospace & Defense,,False,True,False,0.0,0.02,5.0,,27.43,,0.4,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0484
+SATS,Communication Services,Telecom/Satellite,,False,True,False,,,,,5.34,1.506,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+XBI,Health Care,ETF—Biotech,,False,True,False,,,,,,,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+NOC,Industrials,Aerospace & Defense,,False,True,False,,,,,4.43,1.685,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+ASTS,Communication Services,Telecom Services,,False,True,False,,,,,8.33,9.011,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+RKLB,Industrials,Aerospace & Defense,,False,True,False,,,,,16.35,16.076,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+GSAT,Communication Services,Telecom Services,,False,True,False,,,,,31.13,7.126,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+GD,Industrials,Aerospace & Defense,,False,True,False,,,,,3.82,1.864,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+MPC,Energy,Oil & Gas Refining,,True,False,False,,,,,5.48,1.407,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+STLD,Materials,Steel,,True,False,False,,,,,3.87,2.016,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+VLO,Energy,Oil & Gas Refining,,True,False,False,,,,,3.85,1.414,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+BKSY,Industrials,Aerospace & Defense,,False,True,False,,,,,10.41,1.338,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+BX,Financials,Capital Markets,,False,False,False,,,,,11.43,4.009,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+IRDM,Communication Services,Telecom Services,,False,True,False,,,,,10.48,1.65,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+SPCX,Industrials,Aerospace & Defense,,False,True,False,,,,,18.38,36.053,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0

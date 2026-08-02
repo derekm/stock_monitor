@@ -1,0 +1,21 @@
+{
+  "jumps": {
+    "n_rows": 1252906,
+    "pct_abs_ret_gt_10": 0.006204775138757417,
+    "pct_abs_ret_gt_25": 0.0004940514292373091,
+    "pct_abs_ret_gt_35": 0.00011174022632184698,
+    "n_suspected_splits": 7
+  },
+  "coverage": {
+    "sets": {
+      "monitored": 142,
+      "preferred": 142,
+      "prices": 142
+    },
+    "intersections": {
+      "monitored_with_prices": 142,
+      "monitored_missing_prices": [],
+      "preferred_with_prices": 142
+    }
+  }
+}

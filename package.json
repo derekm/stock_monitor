@@ -1,0 +1,12 @@
+{
+  "name": "stock-monitor-dashboard",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:api": "playwright test --grep 'Granite forecast API'",
+    "dashboard": "bash start_dashboard.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

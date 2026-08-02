@@ -1,0 +1,211 @@
+ticker,sector,is_home_sector,corr,n
+BAYRY,Communication Services,False,0.216,5725
+BAYRY,Consumer Discretionary,False,0.7339,5725
+BAYRY,Consumer Staples,False,0.6625,5725
+BAYRY,ETF,False,0.7458,5725
+BAYRY,Energy,False,0.7448,5725
+BAYRY,Financials,False,0.7566,5725
+BAYRY,Health Care,True,0.7711,5725
+BAYRY,Industrials,False,0.7473,5725
+BAYRY,Information Technology,False,0.7507,5725
+BAYRY,Materials,False,-0.0764,5725
+BAYRY,Multi-Sector,False,0.7603,5725
+BAYRY,Real Estate,False,0.7477,5725
+BAYRY,Utilities,False,0.7373,5725
+BAYRY,MARKET_EW,False,0.7823,5725
+CAG,Communication Services,False,0.0059,5725
+CAG,Consumer Discretionary,False,-0.8459,5725
+CAG,Consumer Staples,True,-0.4654,5725
+CAG,ETF,False,-0.907,5725
+CAG,Energy,False,-0.8137,5725
+CAG,Financials,False,-0.7991,5725
+CAG,Health Care,False,-0.892,5725
+CAG,Industrials,False,-0.9089,5725
+CAG,Information Technology,False,-0.839,5725
+CAG,Materials,False,0.5161,5725
+CAG,Multi-Sector,False,-0.6917,5725
+CAG,Real Estate,False,-0.8072,5725
+CAG,Utilities,False,-0.8258,5725
+CAG,MARKET_EW,False,-0.8526,5725
+CF,Communication Services,False,0.2319,5283
+CF,Consumer Discretionary,False,-0.1281,5283
+CF,Consumer Staples,False,0.0967,5283
+CF,ETF,False,-0.1806,5283
+CF,Energy,False,-0.0069,5283
+CF,Financials,False,-0.0544,5283
+CF,Health Care,False,-0.1798,5283
+CF,Industrials,False,-0.1824,5283
+CF,Information Technology,False,-0.1301,5283
+CF,Materials,True,0.744,5283
+CF,Multi-Sector,False,0.0501,5283
+CF,Real Estate,False,-0.0922,5283
+CF,Utilities,False,-0.1346,5283
+CF,MARKET_EW,False,-0.081,5283
+CTVA,Communication Services,False,0.0596,1814
+CTVA,Consumer Discretionary,False,0.8719,1814
+CTVA,Consumer Staples,False,0.8611,1814
+CTVA,ETF,False,0.8187,1814
+CTVA,Energy,False,0.8228,1814
+CTVA,Financials,False,0.8763,1814
+CTVA,Health Care,False,0.8433,1814
+CTVA,Industrials,False,0.8413,1814
+CTVA,Information Technology,False,0.7187,1814
+CTVA,Materials,True,-0.2807,1814
+CTVA,Multi-Sector,False,0.8971,1814
+CTVA,Real Estate,False,0.8258,1814
+CTVA,Utilities,False,0.8332,1814
+CTVA,MARKET_EW,False,0.8564,1814
+HMC,Communication Services,False,0.135,5725
+HMC,Consumer Discretionary,True,-0.4156,5725
+HMC,Consumer Staples,False,-0.1547,5725
+HMC,ETF,False,-0.5031,5725
+HMC,Energy,False,-0.4172,5725
+HMC,Financials,False,-0.3551,5725
+HMC,Health Care,False,-0.5146,5725
+HMC,Industrials,False,-0.5337,5725
+HMC,Information Technology,False,-0.4269,5725
+HMC,Materials,False,0.5533,5725
+HMC,Multi-Sector,False,-0.2519,5725
+HMC,Real Estate,False,-0.4112,5725
+HMC,Utilities,False,-0.4794,5725
+HMC,MARKET_EW,False,-0.4336,5725
+ICL,Communication Services,False,0.0281,5382
+ICL,Consumer Discretionary,False,-0.9298,5382
+ICL,Consumer Staples,False,-0.6623,5382
+ICL,ETF,False,-0.9511,5382
+ICL,Energy,False,-0.8549,5382
+ICL,Financials,False,-0.8733,5382
+ICL,Health Care,False,-0.9599,5382
+ICL,Industrials,False,-0.9658,5382
+ICL,Information Technology,False,-0.8433,5382
+ICL,Materials,True,0.542,5382
+ICL,Multi-Sector,False,-0.7956,5382
+ICL,Real Estate,False,-0.8659,5382
+ICL,Utilities,False,-0.8996,5382
+ICL,MARKET_EW,False,-0.9152,5382
+IPI,Communication Services,False,0.3001,4606
+IPI,Consumer Discretionary,False,-0.5435,4606
+IPI,Consumer Staples,False,-0.3551,4606
+IPI,ETF,False,-0.5212,4606
+IPI,Energy,False,-0.3356,4606
+IPI,Financials,False,-0.451,4606
+IPI,Health Care,False,-0.5512,4606
+IPI,Industrials,False,-0.536,4606
+IPI,Information Technology,False,-0.3529,4606
+IPI,Materials,True,0.7737,4606
+IPI,Multi-Sector,False,-0.3712,4606
+IPI,Real Estate,False,-0.4262,4606
+IPI,Utilities,False,-0.4687,4606
+IPI,MARKET_EW,False,-0.4463,4606
+KHC,Communication Services,False,0.0666,2793
+KHC,Consumer Discretionary,False,-0.8333,2793
+KHC,Consumer Staples,True,-0.5143,2793
+KHC,ETF,False,-0.8545,2793
+KHC,Energy,False,-0.7812,2793
+KHC,Financials,False,-0.8107,2793
+KHC,Health Care,False,-0.8539,2793
+KHC,Industrials,False,-0.8659,2793
+KHC,Information Technology,False,-0.7798,2793
+KHC,Materials,False,0.6311,2793
+KHC,Multi-Sector,False,-0.7232,2793
+KHC,Real Estate,False,-0.8123,2793
+KHC,Utilities,False,-0.7918,2793
+KHC,MARKET_EW,False,-0.8227,2793
+MOS,Communication Services,False,0.2777,5725
+MOS,Consumer Discretionary,False,-0.1327,5725
+MOS,Consumer Staples,False,0.072,5725
+MOS,ETF,False,-0.1697,5725
+MOS,Energy,False,0.0165,5725
+MOS,Financials,False,-0.052,5725
+MOS,Health Care,False,-0.1921,5725
+MOS,Industrials,False,-0.1825,5725
+MOS,Information Technology,False,-0.0829,5725
+MOS,Materials,True,0.7978,5725
+MOS,Multi-Sector,False,0.0498,5725
+MOS,Real Estate,False,-0.0803,5725
+MOS,Utilities,False,-0.1368,5725
+MOS,MARKET_EW,False,-0.0704,5725
+NTR,Communication Services,False,0.2398,2164
+NTR,Consumer Discretionary,False,0.7796,2164
+NTR,Consumer Staples,False,0.7033,2164
+NTR,ETF,False,0.7818,2164
+NTR,Energy,False,0.8447,2164
+NTR,Financials,False,0.8013,2164
+NTR,Health Care,False,0.7893,2164
+NTR,Industrials,False,0.7954,2164
+NTR,Information Technology,False,0.7765,2164
+NTR,Materials,True,-0.1155,2164
+NTR,Multi-Sector,False,0.8165,2164
+NTR,Real Estate,False,0.7994,2164
+NTR,Utilities,False,0.7985,2164
+NTR,MARKET_EW,False,0.8252,2164
+PFE,Communication Services,False,0.1164,5725
+PFE,Consumer Discretionary,False,-0.6939,5725
+PFE,Consumer Staples,False,-0.3305,5725
+PFE,ETF,False,-0.7574,5725
+PFE,Energy,False,-0.6486,5725
+PFE,Financials,False,-0.6227,5725
+PFE,Health Care,True,-0.7249,5725
+PFE,Industrials,False,-0.7674,5725
+PFE,Information Technology,False,-0.6778,5725
+PFE,Materials,False,0.5725,5725
+PFE,Multi-Sector,False,-0.4893,5725
+PFE,Real Estate,False,-0.6404,5725
+PFE,Utilities,False,-0.667,5725
+PFE,MARKET_EW,False,-0.6806,5725
+SMCI,Communication Services,False,0.2122,4874
+SMCI,Consumer Discretionary,False,0.5056,4874
+SMCI,Consumer Staples,False,0.3993,4874
+SMCI,ETF,False,0.5137,4874
+SMCI,Energy,False,0.492,4874
+SMCI,Financials,False,0.5197,4874
+SMCI,Health Care,False,0.4801,4874
+SMCI,Industrials,False,0.4841,4874
+SMCI,Information Technology,True,0.5884,4874
+SMCI,Materials,False,-0.0117,4874
+SMCI,Multi-Sector,False,0.5264,4874
+SMCI,Real Estate,False,0.5065,4874
+SMCI,Utilities,False,0.4505,4874
+SMCI,MARKET_EW,False,0.5283,4874
+SMG,Communication Services,False,0.2628,5725
+SMG,Consumer Discretionary,False,0.6047,5725
+SMG,Consumer Staples,False,0.623,5725
+SMG,ETF,False,0.5754,5725
+SMG,Energy,False,0.5743,5725
+SMG,Financials,False,0.6241,5725
+SMG,Health Care,False,0.5713,5725
+SMG,Industrials,False,0.5685,5725
+SMG,Information Technology,False,0.5779,5725
+SMG,Materials,True,0.1275,5725
+SMG,Multi-Sector,False,0.6709,5725
+SMG,Real Estate,False,0.6082,5725
+SMG,Utilities,False,0.5802,5725
+SMG,MARKET_EW,False,0.6289,5725
+T,Communication Services,True,0.2419,5725
+T,Consumer Discretionary,False,0.1614,5725
+T,Consumer Staples,False,0.462,5725
+T,ETF,False,0.0361,5725
+T,Energy,False,0.1181,5725
+T,Financials,False,0.1909,5725
+T,Health Care,False,0.0757,5725
+T,Industrials,False,0.0585,5725
+T,Information Technology,False,-0.029,5725
+T,Materials,False,0.3209,5725
+T,Multi-Sector,False,0.3257,5725
+T,Real Estate,False,0.1182,5725
+T,Utilities,False,0.1479,5725
+T,MARKET_EW,False,0.1381,5725
+UAN,Communication Services,False,0.1479,3858
+UAN,Consumer Discretionary,False,0.826,3858
+UAN,Consumer Staples,False,0.6939,3858
+UAN,ETF,False,0.8237,3858
+UAN,Energy,False,0.8482,3858
+UAN,Financials,False,0.8353,3858
+UAN,Health Care,False,0.8283,3858
+UAN,Industrials,False,0.8365,3858
+UAN,Information Technology,False,0.7796,3858
+UAN,Materials,True,-0.1862,3858
+UAN,Multi-Sector,False,0.8208,3858
+UAN,Real Estate,False,0.8269,3858
+UAN,Utilities,False,0.8081,3858
+UAN,MARKET_EW,False,0.8508,3858

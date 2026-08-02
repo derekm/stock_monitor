@@ -1,0 +1,13 @@
+pair,sector_a,sector_b,mean,std,range,iqr,frac_pos,abs_mean,cv,stability,n_windows
+ConsDisc x InfoTech,Consumer Discretionary,Information Technology,-0.1416,0.3611,1.5333,0.5098,0.3469,0.3149,2.5503,0.6389,245
+ConsStpl x HlthCare,Consumer Staples,Health Care,-0.0022,0.3604,1.6256,0.5091,0.5102,0.2948,,0.6396,245
+HlthCare x Utilities,Health Care,Utilities,0.0147,0.358,1.5182,0.5821,0.4653,0.3066,,0.642,245
+Fins x REITs,Financials,Real Estate,0.0746,0.3468,1.5021,0.4559,0.6286,0.2917,4.6463,0.6532,245
+Energy x Utilities,Energy,Utilities,-0.0089,0.3388,1.5067,0.5181,0.4816,0.2834,,0.6612,245
+Industrials x Utilities,Industrials,Utilities,0.0473,0.329,1.558,0.478,0.5592,0.2747,,0.671,245
+Materials x ConsStpl,Materials,Consumer Staples,0.0114,0.3191,1.3652,0.4589,0.5429,0.2636,,0.6809,245
+Materials x HlthCare,Materials,Health Care,0.0162,0.3114,1.5219,0.4286,0.5143,0.2498,,0.6886,245
+InfoTech x REITs,Information Technology,Real Estate,0.1339,0.3107,1.4983,0.3391,0.6939,0.2611,2.3207,0.6893,245
+Materials x Energy,Materials,Energy,-0.0526,0.2971,1.3331,0.4128,0.449,0.2382,5.6461,0.7029,245
+Materials x Fins,Materials,Financials,0.0539,0.2878,1.2335,0.3704,0.5551,0.2361,5.3358,0.7122,245
+ConsStpl x Utilities,Consumer Staples,Utilities,-0.0569,0.267,1.192,0.4283,0.4449,0.2248,4.6936,0.733,245
