@@ -85,7 +85,9 @@ def _store() -> MarketDataStore:
     con.execute(
         f"""
         CREATE OR REPLACE TABLE monitored_stocks AS
-        SELECT m.ticker, m.sector, m.growth_tech_index,
+        SELECT
+               COALESCE(m.ticker, s.ticker) AS ticker,
+               m.sector, m.growth_tech_index,
                COALESCE(s.current, FALSE) AS sp500_member, s.gics_sector AS sp500_sector,
                s.date_added AS sp500_date_added, f.market_cap
         FROM read_parquet('{(DATA_DIR / 'monitored_stocks.parquet').as_posix()}') m
@@ -94,7 +96,7 @@ def _store() -> MarketDataStore:
         LEFT JOIN (
             SELECT ticker, market_cap FROM read_parquet('{(DATA_DIR / 'fundamentals.parquet').as_posix()}')
             QUALIFY row_number() OVER (PARTITION BY ticker ORDER BY as_of_date DESC) = 1
-        ) f ON f.ticker = m.ticker
+        ) f ON f.ticker = COALESCE(m.ticker, s.ticker)
         """
     )
     # Build the dated PIT series once (expensive); qualify_as_of reuses it.

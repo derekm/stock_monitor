@@ -168,25 +168,42 @@ def derive_row(ticker: str, q_end: date, price: float | None,
 
 
 def fetch_ticker(ticker: str, sleep: float = 0.4):
-    """Return (fund_rows, price_rows) or ([], []) on failure."""
-    t = yf.Ticker(ticker)
-    tries = 3
+    """Return (fund_rows, price_rows) or ([], []) on failure.
+
+    Robustness:
+      - Yahoo uses hyphens, not dots (BRK-B not BRK.B) -> normalize.
+      - shares outstanding may be missing from a rate-limited `info` call even
+        when the data exists -> fall back to balance-sheet 'Share Issued',
+        fast_info, or marketCap/currentPrice. Only give up if truly absent.
+    """
+    yf_sym = ticker.replace(".", "-")
+    t = yf.Ticker(yf_sym)
+    tries = 4
+    bs = fin = info = hist = None
     for attempt in range(tries):
         try:
             bs = t.quarterly_balance_sheet
             fin = t.quarterly_financials
             info = t.info
             hist = t.history(period="5y", interval="1d", actions=False)
+            if info is None or not info:
+                raise ValueError("empty info (rate-limited)")
             break
-        except Exception as e:  # network/rate limit
+        except Exception as e:  # network/rate limit / empty info
             if attempt == tries - 1:
                 print(f"  [{ticker}] fetch failed: {e}")
                 return [], []
-            time.sleep(1.5 * (attempt + 1))
+            time.sleep(2.0 * (attempt + 1))
 
     shares = info.get("sharesOutstanding")
+    if not shares and bs is not None:
+        shares = _q(bs, "Share Issued") or _q(bs, "Ordinary Shares Issued")
     if not shares:
-        # fall back: derive from marketCap / currentPrice
+        try:
+            shares = float(t.fast_info.get("shares"))
+        except Exception:
+            shares = None
+    if not shares:
         mc = info.get("marketCap")
         cp = info.get("currentPrice")
         if mc and cp:
@@ -258,6 +275,10 @@ def cmd_run(args):
     prog = load_progress()
     done = set(prog.get("done", []))
     failed = set(prog.get("failed", []))
+    if args.retry_failed:
+        # move previously-failed back into the todo pool (clear the failed set)
+        prog["failed"] = []
+        failed = set()
     todo = [t for t in tickers if t not in done and t not in failed]
     print(f"missing={len(tickers)} already_done={len(done)} failed={len(failed)} to_fetch={len(todo)}")
 
@@ -269,9 +290,11 @@ def cmd_run(args):
         if fr or pr:
             fund_buf.extend(fr)
             price_buf.extend(pr)
-            prog.setdefault("done", []).append(tk)
+            if tk not in prog.get("done", []):
+                prog.setdefault("done", []).append(tk)
         else:
-            prog.setdefault("failed", []).append(tk)
+            if tk not in prog.get("failed", []):
+                prog.setdefault("failed", []).append(tk)
         if i % FLUSH == 0:
             _append_parquet(FUND_STAGE, fund_buf, FUND_COLS)
             _append_parquet(PRICE_STAGE, price_buf, PRICE_COLS)
@@ -336,6 +359,8 @@ def main():
     r = sub.add_parser("run")
     r.add_argument("--limit", type=int, default=0)
     r.add_argument("--sleep", type=float, default=0.4)
+    r.add_argument("--retry-failed", action="store_true",
+                   help="retry tickers previously marked failed (transient errors)")
     r.set_defaults(func=cmd_run)
     m = sub.add_parser("merge")
     m.set_defaults(func=cmd_merge)
