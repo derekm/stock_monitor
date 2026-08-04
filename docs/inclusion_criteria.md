@@ -26,7 +26,7 @@ Must clear **all** six legs:
 
 ## Hard policy overlays
 
-- **SMCI ≤ 5%** of total portfolio (vol-target), even if quality looks strong  
+- Per-name weight caps (vol-target); even strong-quality names stay within the cap  
 - Very low `earnings_stability` blocks CORE promotion  
 - Growth-tech names are not auto-promoted to CORE without dual pass  
 

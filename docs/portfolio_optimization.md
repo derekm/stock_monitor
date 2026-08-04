@@ -30,7 +30,7 @@ $$
 |---------|------------|
 | Unconstrained | Closed form $w \propto \Sigma^{-1}\mathbf{1}$ (shorts allowed) |
 | Long-only | $w \ge 0$ via SLSQP |
-| Long + SMCI cap | $0 \le w_{\text{SMCI}} \le 5\%$, other caps optional |
+| Long + name cap | $0 \le w_i \le 5\%$, other caps optional |
 
 GMV minimizes volatility; it does **not** equalize risk contributions (low-vol names get larger RC).
 
@@ -38,7 +38,7 @@ GMV minimizes volatility; it does **not** equalize risk contributions (low-vol n
 
 ```bash
 python portfolio_optimization.py
-python portfolio_optimization.py --universe portfolio --window 126 --smci-cap 0.05
+python portfolio_optimization.py --universe portfolio --window 126 --name-cap 0.05
 python portfolio_optimization.py --universe growth_ai --w-floor 0.05
 python maintain_analytics.py optimize
 ```
@@ -46,14 +46,14 @@ python maintain_analytics.py optimize
 ## Outputs
 
 - `erc_gmv_strategies.csv` — weight & RC by strategy × ticker  
-- `erc_gmv_summary.csv` — portfolio vol, return, RC dispersion, SMCI weight  
+- `erc_gmv_summary.csv` — portfolio vol, return, RC dispersion, max name weight  |
 
 ## How this differs from vol targeting
 
 | Method | Objective |
 |--------|-----------|
-| **Vol targeting** | Cap / scale **one** name (SMCI) to a σ budget |
+| **Vol targeting** | Cap / scale **one** name to a σ budget |
 | **Inv-vol / ERC** | Balance risk **across** the book |
 | **GMV** | Lowest achievable portfolio σ |
 
-Practical stack: **GMV or ERC for core**, **vol-target cap on SMCI** as a risk governor.
+Practical stack: **GMV or ERC for core**, **vol-target cap on individual names** as a risk governor.

@@ -12,7 +12,7 @@ A **modular, offline-capable investment operating system** around a real Robinho
 |-------|------|
 | **Data** | `trades`, `daily_prices`, `fundamentals` (dated), `monitored_stocks`, index levels |
 | **Screens** | Value trifecta, Buffett quality, dual-pass INCLUDE_CORE, near-dual, inclusion/exclusion |
-| **Risk** | Vol targeting (SMCI ≤5%), ERC / inverse-vol / GMV, robust covariance, Kelly helpers |
+| **Risk** | Vol targeting (per-name caps), ERC / inverse-vol / GMV, robust covariance, Kelly helpers |
 | **Regimes** | Rolling corr, ALLPAIRS, crisis corr breakdown, HMM/Kalman/VAR (earlier threads) |
 | **Forecast** | Granite TTM-style path, exogenous features, anomaly scans, microservice |
 | **Indexes** | Fertilizer, defensive value, personal, growth/tech (+ Starlink/launch/aerospace) |
@@ -43,7 +43,7 @@ It is designed so **screens, risk budgets, and regime signals** can change weigh
 All six legs. Empirically rare: quality is expensive; cheap names often have weak ROIC. Stress tests show the gate is stable (tight → 0 names; base → ~5 regional bank/AM names; relaxed → teens).
 
 ### Risk & sizing
-- **Volatility targeting** and hard **SMCI ≤ 5%** (gap/AI risk ≠ short-window σ)  
+- **Volatility targeting** and per-name **weight caps** (gap/AI risk ≠ short-window σ)  
 - **ERC** equalizes risk contribution; **GMV** minimizes vol; **inv-vol** is a simple diagonal ERC  
 - Robust covariance (Ledoit–Wolf) stabilizes optimizers  
 - Rolling vol, beta, max DD, CVaR on screens and stress tables  
@@ -62,7 +62,7 @@ Cash 10–20%, low-vol tilt, defensive ETF blend, put-proxy, **tail_combo**.
 Cash and combo cut vol and max DD most cleanly in sample.
 
 ### Growth satellite
-Growth/tech + Starlink supply + launch (RKLB, SPCX, …) is a **capped satellite**, not the core. ERC/GMV inside the sleeve; portfolio-level SMCI/vol caps still bind.
+Growth/tech + Starlink supply + launch (RKLB, SPCX, …) is a **capped satellite**, not the core. ERC/GMV inside the sleeve; portfolio-level per-name/vol caps still bind.
 
 ---
 
@@ -99,7 +99,7 @@ S&P 500 is a **large-cap, momentum-tolerant, quality-growth-heavy** benchmark. B
 
 3. **Growth satellite (5–15%) — Hard-capped**  
    - Growth/tech + aerospace/Starlink chain  
-   - **SMCI ≤ 5% of total fund**; sleeve vol budget  
+   - Per-name weight caps; sleeve vol budget  
    - Only add on drawdowns or improving quality metrics  
 
 4. **Hedge / liquidity (5–15%)**  
@@ -109,7 +109,7 @@ S&P 500 is a **large-cap, momentum-tolerant, quality-growth-heavy** benchmark. B
 ### Process (quarterly + monthly)
 - Monthly: vol regime, rolling corr, factor weights, alerts  
 - Quarterly: fundamentals history, dual/near-dual, inclusion tables, DuPont  
-- Continuous: price/fundamental alerts, SMCI/vol caps  
+- Continuous: price/fundamental alerts, per-name/vol caps  
 
 ### Why this can work vs SPX (not a promise)
 - **Avoid the left tail** of single-name and high-corr crises  
