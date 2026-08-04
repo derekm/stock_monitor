@@ -120,7 +120,7 @@ Detailed usage for each module:
 - [docs/growth_tech_analytics.md](docs/growth_tech_analytics.md) — growth/tech full analysis suite
 - [docs/portfolio_report.md](docs/portfolio_report.md) — holdings & P&L
 - [docs/kelly.md](docs/kelly.md) — fractional Kelly sizing
-- [docs/vol_target.md](docs/vol_target.md) — **SMCI / growth_ai volatility targeting**
+- [docs/vol_target.md](docs/vol_target.md) — **per-name volatility targeting** (growth_ai sleeve)
 - [docs/risk_parity_analytics.md](docs/risk_parity_analytics.md) — vol target vs risk parity CSVs
 - [docs/portfolio_optimization.md](docs/portfolio_optimization.md) — **ERC risk parity + GMV**
 - [docs/robust_covariance.md](docs/robust_covariance.md) — robust covariance (Ledoit-Wolf, OAS, EWMA)
