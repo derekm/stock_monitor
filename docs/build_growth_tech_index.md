@@ -45,5 +45,5 @@ Use `python vol_target.py --ticker SMCI --save` to enforce a **5% max weight** a
 | Sleeve | Tickers |
 |--------|---------|
 | starlink_supply | MCHP, TTMI, MTSI, STM, LRCX, AMAT, INTC, SATS (EchoStar) |
-| launch_services | RKLB, ASTS, BKSY |
+| launch_services | RKLB, ASTS, BKSY, SPCX |
 | maritime_launch | TDW, VAL (offshore/maritime proxies) |
