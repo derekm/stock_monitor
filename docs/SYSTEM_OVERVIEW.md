@@ -15,13 +15,36 @@ A **modular, offline-capable investment operating system** around a real Robinho
 | **Risk** | Vol targeting (per-name caps), ERC / inverse-vol / GMV, robust covariance, Kelly helpers |
 | **Regimes** | Rolling corr, ALLPAIRS, crisis corr breakdown, HMM/Kalman/VAR (earlier threads) |
 | **Forecast** | Granite TTM-style path, exogenous features, anomaly scans, microservice |
-| **Indexes** | Fertilizer, defensive value, personal, growth/tech (+ Starlink/launch/aerospace) |
+| **Indexes** | Fertilizer, defensive value, personal, growth/tech |
 | **Allocation** | Factor rotation (quality/value/dual/low-vol/dividend), tail hedges, Black–Litterman |
 | **Ops** | Alerts (price + fundamentals), daily automation, DuckDB-Wasm dashboard, analytics API |
 
 It is designed so **screens, risk budgets, and regime signals** can change weights over time—not a static “buy the trifecta and forget.”
 
 ### How the layers actually connect (the feedback loops)
+
+```mermaid
+flowchart LR
+  SPINE[("Data spine (single source of truth)")] -.feeds.-> QGB
+  SPINE -.feeds.-> HMM
+  SPINE -.feeds.-> CORR
+  SPINE -.feeds.-> FISH
+  SPINE -.feeds.-> FC
+
+  QGB["quality_gate_bridge (canonical dual-screen gate)"] --> PM[preferred_metrics] --> IC[inclusion_criteria bands] --> PO[portfolio_optimization / risk_parity weights]
+
+  HMM["hmm_regime_detection + kalman_state_estimates (+ vix_term_structure)"] --> RAC[regime_aware_constraints]
+  HMM --> FRD[factor_rotation_defense]
+  HMM --> RC[rebalance_calendar]
+  HMM --> MC[monte_carlo / mcmc_regimes]
+
+  CORR["correlations (rolling / allpairs / crisis / regime)"] --> TRH[tail_risk_hedging]
+
+  FISH["fisher_index / run_fisher_duckdb (quantity-weighted)"] --> LIB["live_index_backtest / research_hygiene (accountability)"]
+
+  FC["forecast_granite"] --> AGF[analyze_granite_forecasts] --> GSV[granite_service]
+  REL[forecast_reliability / research_hygiene] --> GSV
+```
 
 The stack is not a linear pipeline; it is a set of loops that re-condition each other:
 
@@ -74,7 +97,7 @@ Cash 10–20%, low-vol tilt, defensive ETF blend, put-proxy, **tail_combo**.
 Cash and combo cut vol and max DD most cleanly in sample.
 
 ### Growth satellite
-Growth/tech + Starlink supply + launch (RKLB, ASTS, BKSY, SPCX, …) is a **capped satellite**, not the core. ERC/GMV inside the sleeve; portfolio-level per-name/vol caps still bind.
+The growth/tech sleeve is a **capped satellite**, not the core — aerospace/space names and other high-vol growth sit here. ERC/GMV inside the sleeve; portfolio-level per-name/vol caps still bind.
 
 ---
 
@@ -152,8 +175,17 @@ Edge is **process + discipline**, not a single factor.
 - Paper-trade ledger with slippage vs SPX/SPY  
 
 ### Data integrity
-- Price pipeline health checks (the independent-synthetic corr ≈ 0 failure mode)  
+- Price pipeline health checks (the independent-synthetic corr ≈ 0 failure mode)  \
 - Factor-structured or vendor data as default for regime research  
+
+### Architecture gaps (known, not yet built)
+
+These are concrete holes in the current architecture, distinct from the research wish-list above:
+
+- **Per-ticker live-data joins are not wired.** Several analytics were originally written to join against a single stand-in ticker and were later generalized to apply uniformly, but the *proper* join of each analytic back to every ticker's live data (prices, fundamentals, forecasts, screens) does not yet exist. Today each program re-reads the spine tables directly; there is no shared "join analytics to all tickers' current state" layer. This is the next integration step before a single decision engine.
+- **No single decision engine.** Screens, risk, and regime each emit their own outputs; nothing yet reads inclusion + risk + regime together and emits one target-weight set. `portfolio_optimization` / `risk_parity_analytics` consume the bands manually.
+- **DuckLake not yet adopted.** `fundamentals_history.py` keeps dated snapshots and `backfill_*` captures history, but the large time-series tables are still committed as full parquet snapshots (per the data-versioning decision record). The planned DuckLake catalog for versioned PIT history is not implemented.
+- **Forecast → screen feedback is one-directional.** `forecast_granite` → `analyze_granite_forecasts` scores configs, but forecast signal does not yet re-weight the screen bands or the risk budgets; it is a dashboard overlay only.
 
 ---
 
