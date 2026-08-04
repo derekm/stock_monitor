@@ -11,4 +11,4 @@ python regime_aware_constraints.py --save
 ```
 
 Outputs: `regime_constraint_binding.csv`, `hmm_transition_triggers.csv`,
-`regime_aware_dual_pass.csv`, `regime_aware_thresholds.json`
+`regime_aware_dual_pass.csv`, `regime_aware_thresholds.json`, `regime_aware_summary.csv`

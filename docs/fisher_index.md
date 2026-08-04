@@ -12,4 +12,6 @@ python fisher_index.py --sector Materials --save
 python fisher_index.py --tickers MOS,CF,SHEL --freq W --save
 ```
 
+Outputs: `fisher_indexes.csv` / `fisher_indexes.parquet`, plus `fisher_rate_decomposition.csv` (price/quantity rate split).
+
 Prefer **[run_fisher_duckdb.md](run_fisher_duckdb.md)** for the DuckDB implementation used as system of record.

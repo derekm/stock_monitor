@@ -7,8 +7,10 @@ HTTP microservice so the dashboard can trigger daily jobs.
 Manual (only if launching in isolation):
 
 ```bash
-python analytics_service.py --port 8767
+python analytics_service.py --port 8765
 ```
+
+> `start_dashboard.sh` launches it on port **8767** (override); 8765 is the script default.
 
 | Method | Path | Purpose |
 |--------|------|---------|

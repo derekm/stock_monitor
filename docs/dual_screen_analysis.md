@@ -13,6 +13,8 @@ High-quality compounders are **priced for quality**. Cheap trifecta names are of
 
 See `dual_screen_external_candidates.csv` — e.g. HPQ, VLO/PSX/MPC (cycle-dependent), SYF, NUE/STLD, FANG/DVN. **Verify live fundamentals** before acting.
 
+Outputs: `dual_screen_gap.csv` (quality-vs-value gap table), `dual_screen_external_candidates.csv` (external near-dual names).
+
 ```bash
 python dual_screen_analysis.py
 ```
