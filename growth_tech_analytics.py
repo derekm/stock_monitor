@@ -256,16 +256,16 @@ def cmd_risk_models(rets: pd.DataFrame, m: pd.DataFrame, window: int) -> pd.Data
     w_erc, _ = erc_slsqp(cov, w_floor=0.02)
     w_iv = inv_vol_weights(cov)
     w_gmv, _ = gmv_long_only(cov)
-    caps = {t: (0.05 if t == "SMCI" else 0.15) for t in tickers}
+    caps = {t: 0.15 for t in tickers}
     w_gmv_c, _ = gmv_long_capped(cov, tickers, caps)
-    w_vt = vol_target_renorm(cov, tickers, target=0.25, smci_cap=0.05, other_cap=0.12)
+    w_vt = vol_target_renorm(cov, tickers, target=0.25, name_cap=0.15)
 
     strategies = {
         "EW": np.ones(len(tickers)) / len(tickers),
         "ERC_SLSQP": w_erc,
         "InvVol": w_iv,
         "GMV": w_gmv,
-        "GMV_SMCI5": w_gmv_c,
+        "GMV_capped": w_gmv_c,
         "VolTarget_renorm": w_vt,
     }
     rows = []
@@ -273,8 +273,7 @@ def cmd_risk_models(rets: pd.DataFrame, m: pd.DataFrame, window: int) -> pd.Data
     for name, w in strategies.items():
         st = po_stats(w, cov, mu)
         print(f"  {name:18s} σ={st['vol']*100:5.2f}%  ret≈{st['ret']*100:6.2f}%  "
-              f"RC_disp={st['rc_dispersion']*100:.2f}%  SMCI={100*w[tickers.index('SMCI')]:.1f}%"
-              if "SMCI" in tickers else f"  {name}: σ={st['vol']*100:.2f}%")
+              f"RC_disp={st['rc_dispersion']*100:.2f}%")
         for i, t in enumerate(tickers):
             rows.append({
                 "strategy": name, "ticker": t, "weight": float(w[i]),

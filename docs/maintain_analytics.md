@@ -1,43 +1,41 @@
 # maintain_analytics.py
 
-CLI hub to regenerate analytics CSVs: correlations, rolling/stability, HMM regimes, Kalman tracking, VAR/Granger, index backtests, cross-asset suite.
+Regenerate all analysis CSV files from the parquet sources in one pass.
+
+## Why it exists (rationale)
+
+After a data refresh (`update_prices`, `update_fundamentals`, `backfill_*`),
+every downstream CSV is stale. This is the "rebuild everything" orchestrator: it
+re-runs the correlation, regime, risk, screen, index, and forecast analytics and
+rewrites their CSVs. `run_daily_automation` and the dashboard's refresh both call
+it (or its sub-commands).
 
 ## Usage
+
 ```bash
 python maintain_analytics.py all
 python maintain_analytics.py correlations
-python maintain_analytics.py rolling
-python maintain_analytics.py stability
-python maintain_analytics.py hmm
-python maintain_analytics.py kalman
-python maintain_analytics.py var
-python maintain_analytics.py backtest
-python maintain_analytics.py cross-asset
-python maintain_analytics.py growth-tech
 python maintain_analytics.py optimize
-python maintain_analytics.py vol-rp
-python maintain_analytics.py list
+python maintain_analytics.py screens
 ```
 
-## Outputs (examples)
-- `sector_correlation_matrix.csv`
-- `fertilizer_correlation_matrix.csv`
-- `rolling_sector_correlations.csv`
-- `correlation_stability_metrics.csv`
-- `hmm_2state_regimes.csv` / `hmm_2state_regime_correlations.csv`
-- `kalman_correlations.csv`
-- `granger_causality_sectors.csv`
-- `index_backtest_stats.csv`
+Sub-commands (from its `main`): `all`, `correlations`, `regimes`, `risk`,
+`screens`, `indexes`, `optimize`, `forecasts`, and more. Reads
+`daily_prices.parquet`, `monitored_stocks.parquet`, `portfolio_holdings.parquet`,
+`index_levels_1y.parquet`.
 
-Dashboard **CSV Catalog** runs SQL that reproduces these tables from embedded data.
+## Outputs (selected)
+
+- `sector_correlation_matrix.csv`, `fertilizer_correlation_matrix.csv`,
+  `rolling_sector_correlations.csv`, `correlation_stability_metrics.csv`
+- `hmm_2state_regimes.csv`, `hmm_2state_regime_correlations.csv`,
+  `kalman_correlations.csv`
+- …and the per-analytic CSVs of the scripts it invokes (see their docs)
+
+(Schema family: depends on sub-command — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/allpairs_correlations.md](allpairs_correlations.md)
-- [docs/cross_asset_analysis.md](cross_asset_analysis.md)
-- [docs/crisis_correlation.md](crisis_correlation.md)
-- [docs/hmm_regime_detection.md](hmm_regime_detection.md)
-- [docs/kalman_state_estimates.md](kalman_state_estimates.md)
-- [docs/factor_rotation_defense.md](factor_rotation_defense.md)
-- [docs/portfolio_optimization.md](portfolio_optimization.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [run_daily_automation.md](run_daily_automation.md) — calls this
+- Every analytics script it wraps (correlations, regimes, risk, screens, indexes)
+- [export_dashboard_data.md](export_dashboard_data.md) — ships the result

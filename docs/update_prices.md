@@ -1,29 +1,35 @@
 # update_prices.py
 
-Append daily OHLCV rows to `daily_prices.parquet`.
+Append daily open/close (and OHLC) to `daily_prices.parquet`.
 
-## Purpose
-Keep monitored tickers current for indexes, Fisher quantities (volume), TTM panels, and forecasts.
+## Why it exists (rationale)
+
+`daily_prices.parquet` is the spine every analytic reads. This is the primary
+way to extend it: fetch the last few days via yfinance (when network is
+available), or enter/import manually (CSV / `manual`). It merges on
+(date, ticker), keeping the newest source on conflict — the incremental
+counterpart to `backfill_historical`.
 
 ## Usage
+
 ```bash
-python update_prices.py --fetch --days 5          # yfinance when network available
-python update_prices.py --manual TICK open close [--date YYYY-MM-DD]
-python update_prices.py --from-csv prices.csv
+python update_prices.py fetch --days 5          # yfinance (needs network)
+python update_prices.py manual --ticker CF --date 2026-07-28 --close 130.5
+python update_prices.py import --csv new_prices.csv
 ```
 
-## Notes
-- Merges on `(date, ticker)`; last write wins.
-- Prefer full OHLCV. **`volume` is quantity (q)** for Laspeyres/Paasche/Fisher indexes.
-- After updates: `python fisher_index.py --universe portfolio --save` and/or `python run_fisher_duckdb.py --universe portfolio --save`.
-- TTM panels benefit from consistent business-day history (`ttm_features.py`).
+Sub-commands: `fetch`, `manual`, `import`. `fetch` flags: `--days` (default 5),
+`--tickers`. Reads/writes `daily_prices.parquet`, `monitored_stocks.parquet`.
+
+## Outputs
+
+- `daily_prices.parquet` — appended/updated rows
+
+(Schema family: base_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/backfill_historical.md](backfill_historical.md)
-- [docs/fisher_index.md](fisher_index.md)
-- [docs/run_fisher_duckdb.md](run_fisher_duckdb.md)
-- [docs/ttm_features.md](ttm_features.md)
-- [docs/granite_daily.md](granite_daily.md)
-- [docs/forecast_granite.md](forecast_granite.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [backfill_historical.md](backfill_historical.md) — bulk history
+- [run_daily_automation.md](run_daily_automation.md) — refresh step
+- [data_integrity.md](data_integrity.md) — post-update checks
+- [ttm_features.md](ttm_features.md) / [fisher_index.md](fisher_index.md)

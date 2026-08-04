@@ -1,28 +1,33 @@
 # parse_sp500.py
 
-Parse the S&P 500 constituents table from the downloaded Wikipedia HTML.
+Parse the S&P 500 constituents table from the downloaded Wikipedia HTML into
+`sp500_constituents.parquet` — the authoritative constituent list.
 
 ## Why it exists (rationale)
 
-Parses the S&P 500 constituents table from Wikipedia HTML into `sp500_constituents.parquet` — upstream of all S&P-tracking analytics.
+The S&P-tracking subsystem needs a clean, current constituent list. Wikipedia's
+table has an inconsistent layout (some rows carry an extra "Headquarters"
+column), so this parser locates the first wikitable, matches known header texts,
+and maps each data row by **position** against that header (skipping unknown
+columns). It is the input to `backfill_constituents` and `sp_universe_tracking`.
 
 ## Usage
 
 ```bash
-python parse_sp500.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python parse_sp500.py          # reads the local Wikipedia HTML, writes parquet
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: none. Output is written via DuckDB `COPY ... PARQUET`.
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
+- `sp500_constituents.parquet` — ticker + metadata, ordered by ticker
 
+(Schema family: aux_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/parse_sp500_changes.md](parse_sp500_changes.md)
-- [docs/sp_universe_tracking.md](sp_universe_tracking.md)
-- [docs/reconcile_sp500.md](reconcile_sp500.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [parse_sp500_changes.md](parse_sp500_changes.md) — ADD/REMOVE event log
+- [backfill_constituents.md](backfill_constituents.md) — fills fundamentals for these
+- [sp_universe_tracking.md](sp_universe_tracking.md) / [sp_index_methodology.md](sp_index_methodology.md)
+- [run_fisher_duckdb.md](run_fisher_duckdb.md)

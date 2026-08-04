@@ -1,30 +1,36 @@
 # mcmc_regimes.py
 
-mcmc_regimes.py — Lightweight MCMC for regime-conditional return means.
+Lightweight MCMC for regime-conditional return means.
 
 ## Why it exists (rationale)
 
-Lightweight MCMC over regime-conditional return means — a Bayesian cross-check on `hmm_regime_detection` / `monte_carlo` regime assumptions.
+The stack already has point-estimate HMM labels + transitions. The first-order
+driver of Monte-Carlo terminal-wealth dispersion (beyond path noise) is
+parameter uncertainty in *within-regime means*. This runs a Gibbs/independent-MH
+per-regime sampler to quantify that uncertainty, feeding the richer Monte-Carlo
+in `monte_carlo.py`.
 
 ## Usage
 
 ```bash
-python mcmc_regimes.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python mcmc_regimes.py --index portfolio --save
+python mcmc_regimes.py --ticker AEP,NVR --n-draw 2000 --burn 500 --seed 0
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--index` (repeatable), `--ticker`, `--n-draw` (default 2000),
+`--burn` (default 500), `--seed` (default 0), `--save`. Reads
+`hmm_regime_states.csv`.
 
 ## Outputs
 
-- **Regime / state table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `mcmc_regime_means.csv`
-  - `mcmc_regime_summary.csv`
-  - `mcmc_transition_draws.csv`
+- `mcmc_regime_means.csv` — posterior mean draws per regime/asset
+- `mcmc_transition_draws.csv` — transition posterior draws
+- `mcmc_regime_summary.csv` — posterior summaries
 
+(Schema family: regime_state — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/hmm_regime_detection.md](hmm_regime_detection.md)
-- [docs/monte_carlo.md](monte_carlo.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [hmm_regime_detection.md](hmm_regime_detection.md) — regime labels input
+- [monte_carlo.md](monte_carlo.md) — consumes the uncertainty
+- [kalman_state_estimates.md](kalman_state_estimates.md)

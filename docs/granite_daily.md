@@ -1,33 +1,41 @@
 # granite_daily.py
 
-granite_daily.py — Daily 512-day -> 96-day Granite TTM forecast + CONTINUAL RETRAINING on prior-day actuals.
+The "own the forecasts" daily pipeline: refresh → continual retrain → forecast →
+score, for the Granite TTM.
 
 ## Why it exists (rationale)
 
-Production daily forecaster: 512→96-day Granite TTM run with continual retraining on prior-day actuals — the live engine behind `granite_service` and `forecast_granite`.
+Zero-shot Granite forecasts don't compound. This is the production daily loop:
+append prior-day actuals to a persistent per-ticker cache, take a few gradient
+steps warm-started from yesterday's checkpoint (so learning compounds), save a
+dated checkpoint, forecast the next 96 trading days for every covered ticker
+(writing `forecasts_granite.parquet`), and score today's forecast against
+actuals since. It is what makes the forecast tab live.
 
 ## Usage
 
 ```bash
-python granite_daily.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python granite_daily.py run --retrain            # full refresh+retrain+forecast+score
+python granite_daily.py run --tickers AEP,NVR --limit 2 --steps 50
+python granite_daily.py status                   # cache/checkpoint state
+python granite_daily.py score                    # re-score stored forecasts
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Subcommands: `run`, `status`, `score`. Flags: `--tickers`, `--retrain`,
+`--limit`, `--steps` (default `STEPS_PER_DAY`), `--batch`.
 
 ## Outputs
 
-- **Forecast / anomaly** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `forecasts_granite.parquet`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `granite_series_cache.parquet`
+- `granite_series_cache.parquet` — persistent per-ticker realized series
+- `forecasts_granite.parquet` — daily forecasts (overwrites each run)
+- `granite_ckpts/` — dated checkpoints (per-ticker / bucket)
+- `granite_accuracy.json` — rolling forecast accuracy
 
+(Schema families: forecast_anomaly / aux_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/forecast_granite.md](forecast_granite.md)
-- [docs/granite_backfill.md](granite_backfill.md)
-- [docs/ttm_backfill.md](ttm_backfill.md)
-- [docs/granite_service.md](granite_service.md)
-- [docs/train_adjusted_full.md](train_adjusted_full.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [granite_backfill.md](granite_backfill.md) / [ttm_backfill.md](ttm_backfill.md) — pretraining
+- [forecast_granite.md](forecast_granite.md) — one-shot forecast/backtest
+- [granite_service.md](granite_service.md) — serves the latest forecast
+- [sp500_constituents.md](sp500_constituents.md) — coverage list

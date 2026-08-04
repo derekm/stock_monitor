@@ -1,17 +1,34 @@
 # tspulse_anomaly.py
 
-Anomaly detection with TSPulse model hook + robust statistical backend (return z, residual z, volume z, market dispersion shocks).
+Anomaly detection for stock series (TSPulse-ready).
+
+## Why it exists (rationale)
+
+Bad prints, halts, and structural breaks corrupt signals. This runs
+anomaly detection over each stock's series (IBM Granite TSPulse targets TS
+anomaly detection/classification) to flag suspicious windows — feeding
+data-quality review and the dashboard's anomaly view. Also consumes the exogenous
+panel for context.
+
+## Usage
 
 ```bash
-python tspulse_anomaly.py status
-python tspulse_anomaly.py scan --index portfolio --z 2.5 --save
+python tspulse_anomaly.py --save
+python tspulse_anomaly.py --universe portfolio
 ```
 
-Output: `anomalies_tspulse.csv` (dashboard Anomalies tab + CSV Catalog).
+Flags (via `cli_common` + own): `--universe/--index`, `--ticker`, `--save`. Reads
+`daily_prices.parquet`, `monitored_stocks.parquet`, `exogenous_panel.parquet`.
+
+## Outputs
+
+- `tspulse_anomalies.csv` — flagged anomaly windows per ticker
+  (plus related anomaly tables written alongside)
+
+(Schema family: forecast_anomaly — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/analyze_granite_forecasts.md](analyze_granite_forecasts.md)
-- [docs/forecast_granite.md](forecast_granite.md)
-- [docs/update_prices.md](update_prices.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [data_integrity.md](data_integrity.md) / [data_integrity_deep.md](data_integrity_deep.md)
+- [ttm_exogenous.md](ttm_exogenous.md) — exogenous panel source
+- [forecast_granite.md](forecast_granite.md)

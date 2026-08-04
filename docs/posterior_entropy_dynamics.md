@@ -1,31 +1,33 @@
 # posterior_entropy_dynamics.py
 
-posterior_entropy_dynamics.py — Dynamics of HMM posterior entropy.
+Dynamics of HMM posterior entropy — how regime uncertainty evolves and leads/lags
+vol & correlation.
 
 ## Why it exists (rationale)
 
-Tracks HMM posterior entropy dynamics as a regime-uncertainty signal for `regime_aware_constraints` and the dashboard.
+`hmm_posterior_analysis` measures uncertainty at each date; this tracks its
+*dynamics*: normalized entropy over time, persistence of uncertain spells, and
+lead/lag vs realized vol and correlation. Uncertainty that precedes vol spikes is
+an early-warning signal; this quantifies that relationship.
 
 ## Usage
 
 ```bash
-python posterior_entropy_dynamics.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python posterior_entropy_dynamics.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save`. Reads `hmm_posterior_analysis.csv` (falls back to
+`hmm_regime_states.csv`).
 
 ## Outputs
 
-- **Regime / state table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `hmm_posterior_analysis.csv`
-  - `hmm_regime_states.csv`
-  - `posterior_entropy_dynamics.csv`
-  - `posterior_entropy_summary.csv`
+- `posterior_entropy_dynamics.csv` — entropy series + lead/lag stats
+- `posterior_entropy_summary.csv` — summary
 
+(Schema family: regime_state — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/hmm_posterior_analysis.md](hmm_posterior_analysis.md)
-- [docs/regime_aware_constraints.md](regime_aware_constraints.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [hmm_posterior_analysis.md](hmm_posterior_analysis.md) — entropy source
+- [hmm_regime_detection.md](hmm_regime_detection.md)
+- [kalman_state_estimates.md](kalman_state_estimates.md)

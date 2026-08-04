@@ -1,34 +1,35 @@
 # data_integrity_deep.py
 
-data_integrity_deep.py — deeper price/fundamental integrity.
+Deeper price / fundamental integrity scan than `data_integrity.py`.
 
 ## Why it exists (rationale)
 
-Deeper integrity pass (Polars-first) for large tables; complements `data_integrity.py` on fundamentals history and preferred-metrics consistency.
+A second, more aggressive pass: multi-threshold jump scan, suspected split
+factors (integer-ish price ratios), stale-quote / flat-line detection,
+cross-sectional same-day outlier scores, a fundamental missingness report, and
+alignment coverage across price ∩ membership ∩ preferred screens. Catches the
+subtler corruption the first pass misses.
 
 ## Usage
 
 ```bash
-python data_integrity_deep.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python data_integrity_deep.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save` (write the report CSVs/JSON).
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-  - `daily_prices_clean.parquet`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `fundamentals.parquet`
-  - `monitored_stocks.parquet`
-- **Summary / metrics** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `preferred_metrics.csv`
+- `data_integrity_deep_summary.json` — summary counts
+- `suspected_splits.csv` — price-ratio split candidates
+- `price_flatlines.csv` — stale / flat-line series
+- `fundamental_missingness.csv` — per-ticker fundamental gaps
+- `alignment_coverage.csv` — price ∩ membership ∩ preferred overlap
 
+(Schema families: aux_table / summary_metrics — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/data_integrity.md](data_integrity.md)
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [data_integrity.md](data_integrity.md) — first-line gate
+- [preferred_metrics.md](preferred_metrics.md) — one of the alignment inputs
+- [manage_stocks.md](manage_stocks.md) — membership source

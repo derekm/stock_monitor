@@ -1,25 +1,33 @@
 # robust_covariance.py
 
-Robust covariance estimators for ERC / GMV / Black-Litterman inputs.
+Robust covariance estimators for portfolio optimization.
 
-| Estimator | Role |
-|-----------|------|
-| **sample** | Classical sample covariance |
-| **ledoit_wolf** | Shrinkage toward scaled identity — stabilizes condition number |
-| **oas** | Oracle Approximating Shrinkage |
-| **ewma** | RiskMetrics-style λ=0.94 recursive cov |
-| **winsorized** | Clip returns at ±2.5σ then sample cov |
+## Why it exists (rationale)
+
+Sample covariance is noisy and unstable for optimization. This offers
+alternatives (sample, Ledoit-Wolf shrinkage, exponentially-weighted, possibly
+OAS) and compares them, so `portfolio_optimization` / `risk_parity_analytics`
+can use a steadier Σ. It is the covariance-quality layer under the optimizers.
+
+## Usage
 
 ```bash
-python robust_covariance.py --universe portfolio --save
-python robust_covariance.py --universe growth --window 126 --save
+python robust_covariance.py --save
+python robust_covariance.py --universe portfolio
 ```
 
-Outputs: `robust_covariance_summary.csv`, `cov_ledoit_wolf_{universe}.csv`
+Flags (via `cli_common`): `--universe/--index`, `--ticker`, `--save`. Reads
+`daily_prices.parquet`, `portfolio_holdings.parquet`, `monitored_stocks.parquet`.
+
+## Outputs
+
+- `robust_covariance_summary.csv` — estimator comparison (condition number,
+  eigenvalue spread, etc.)
+
+(Schema family: weights_performance — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/portfolio_optimization.md](portfolio_optimization.md)
-- [docs/black_litterman.md](black_litterman.md)
-- [docs/risk_parity_analytics.md](risk_parity_analytics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [portfolio_optimization.md](portfolio_optimization.md)
+- [risk_parity_analytics.md](risk_parity_analytics.md)
+- [black_litterman.md](black_litterman.md)

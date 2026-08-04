@@ -1,27 +1,36 @@
 # fundamentals_history.py
 
-Time-series fundamentals for **backtesting inclusion / selection theses**.
+Time-series fundamentals & preferred-metric snapshots for screen backtests.
 
-## Design
+## Why it exists (rationale)
 
-- `fundamentals.parquet` is **append-only** by `as_of_date` (not latest-only).
-- `backfill` creates synthetic prior quarter-ends from the latest snapshot (for pipeline tests).
-- `snapshot` scores every dated row → `preferred_metrics_history.parquet`
-- `backtest-screens` counts Buffett / trifecta / dual passes through time → `screen_backtest.csv`
+Inclusion screens need *history*, not only the latest row. `fundamentals.parquet`
+already stores dated (`as_of_date`) rows; this script backfills synthetic history
+for robust thesis backtests, snapshots `preferred_metrics` scores through time,
+and evaluates screen pass/fail on each `as_of_date` so the dual-pass can be
+backtested.
+
+## Usage
 
 ```bash
 python fundamentals_history.py backfill --quarters 8
-python fundamentals_history.py snapshot
-python fundamentals_history.py backtest-screens
-python fundamentals_history.py show --ticker MOS
+python fundamentals_history.py snapshot --save
+python fundamentals_history.py screen-backtest --save
 ```
 
-Replace backfilled rows with real quarterly fundamentals when available; keep the same schema so screens and sizing stay backtestable.
+Subcommands: `backfill`, `snapshot`, `screen-backtest`. Flags: `--quarters`
+(default 8), `--save`.
+
+## Outputs
+
+- `preferred_metrics_history.parquet` / `.csv` — score snapshots through time
+- `screen_backtest.csv` — pass/fail per ticker per `as_of_date`
+
+(Schema families: base_table / screen_decision — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/update_fundamentals.md](update_fundamentals.md)
-- [docs/inclusion_criteria.md](inclusion_criteria.md)
-- [docs/research_hygiene.md](research_hygiene.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [preferred_metrics.md](preferred_metrics.md) — scores it snapshots
+- [inclusion_criteria.md](inclusion_criteria.md) — gate it backtests
+- [dual_screen_analysis.md](dual_screen_analysis.md)
+- [backfill_constituents.md](backfill_constituents.md) — real PIT fundamentals

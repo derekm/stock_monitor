@@ -1,28 +1,33 @@
 # train_adjusted_full.py
 
-train_adjusted_full.py — full historical pre-training on ADJUSTED closes.
+**Thin config wrapper** over the factored library `ttm_backfill` — full historical
+pre-training on **adjusted** closes.
 
 ## Why it exists (rationale)
 
-Full historical pre-training on ADJUSTED closes — produces the adjusted global checkpoint that `granite_backfill`/`ttm_backfill` warm-start from.
+`granite_daily.py` (and the production forecast path) need a well-trained
+*adjusted* checkpoint to warm-start from. This builds
+`ttm_backfill.adjusted_backfill_config()` (mirroring the historical default:
+steps=150, chunk=90) and runs `ttm_backfill.run_backfill`, writing the adjusted
+global checkpoint that `pass4` / `granite_daily` / `forecast_granite` consume.
 
 ## Usage
 
 ```bash
-python train_adjusted_full.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python train_adjusted_full.py --steps 150 --chunk 90
+python train_adjusted_full.py --tickers AEP,NVR --batch 4
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--steps` (default 150), `--chunk` (default 90), `--batch`, `--tickers`.
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
-
+None written directly (training writes dated checkpoints under `checkpoints/` via
+`ttm_backfill`). See [ttm_backfill.md](ttm_backfill.md).
 
 ## Related programs
 
-- [docs/granite_backfill.md](granite_backfill.md)
-- [docs/ttm_backfill.md](ttm_backfill.md)
-- [docs/granite_daily.md](granite_daily.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [ttm_backfill.md](ttm_backfill.md) — the real implementation
+- [pass4.md](pass4.md) — warm-starts from this checkpoint
+- [granite_daily.md](granite_daily.md) / [forecast_granite.md](forecast_granite.md)
+- [backfill_historical.md](backfill_historical.md) — adjusted history source

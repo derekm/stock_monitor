@@ -1,27 +1,33 @@
 # parse_tickerleague_changes.py
 
-Extract the FULL S&P 500 additions & removals history from tickerleague.com (the data is embedded as a JS-stringified JSON array in a <script> tag; the site paginates client-side over 31 pages back to the 1950s).
+Extract the FULL S&P 500 additions & removals history from tickerleague.com —
+the primary data source behind `parse_sp500_changes`.
 
 ## Why it exists (rationale)
 
-Extracts the full S&P 500 additions/removals history from tickerleague.com into an event log used by `sp_index_methodology`.
+tickerleague.com embeds the complete ADD/REMOVE dataset (back to the 1950s,
+31 client-paginated pages) as a JS-stringified JSON array in a `<script>` tag;
+the visible HTML table only shows 50 rows. A strict `json.loads` fails on a few
+rows with inner quoted phrases, so this uses a tolerant field scanner to recover
+the whole history. `parse_sp500_changes` calls the equivalent logic and falls
+back to Wikipedia; this script is the standalone scraper.
 
 ## Usage
 
 ```bash
-python parse_tickerleague_changes.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python parse_tickerleague_changes.py
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: none. Network fetch from tickerleague.com.
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
+- `sp500_changes_tickerleague.parquet` — full event history
 
+(Schema family: aux_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/parse_sp500_changes.md](parse_sp500_changes.md)
-- [docs/sp_index_methodology.md](sp_index_methodology.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [parse_sp500_changes.md](parse_sp500_changes.md) — wraps this (with Wikipedia fallback)
+- [parse_sp500.md](parse_sp500.md)
+- [sp_universe_tracking.md](sp_universe_tracking.md)

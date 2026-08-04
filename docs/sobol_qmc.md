@@ -1,26 +1,27 @@
 # sobol_qmc.py
 
-sobol_qmc.py — Sobol' quasi-Monte Carlo sequences for Gaussian shocks.
+Sobol' quasi-Monte Carlo sequences for Gaussian shocks.
 
 ## Why it exists (rationale)
 
-Sobol' quasi-Monte Carlo sequences for Gaussian shocks — variance reduction used by `monte_carlo`.
+Monte-Carlo convergence is faster with low-discrepancy sequences than i.i.d.
+uniform draws. This maps Sobol' points (even fill of [0,1]^d) through Φ⁻¹ to
+quasi-Gaussian samples for MC integration — the `quasi` variance-reduction path
+used by `monte_carlo.py`. Not a pipeline script; a numerical utility.
 
 ## Usage
 
 ```bash
-python sobol_qmc.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python sobol_qmc.py        # demo / self-test of the sequence + inverse-CDF mapping
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: minimal (see source). Primarily an importable helper.
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
-
+None written to disk (demo prints to stdout). Used by `monte_carlo.py`.
 
 ## Related programs
 
-- [docs/monte_carlo.md](monte_carlo.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [monte_carlo.md](monte_carlo.md) — consumes the quasi-Gaussian draws
+- [mcmc_regimes.md](mcmc_regimes.md)

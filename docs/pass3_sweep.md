@@ -1,27 +1,32 @@
 # pass3_sweep.py
 
-pass3_sweep.py - Granite TTM parameter sweep (Pass 3).
+**Research/diagnostic** — Granite TTM parameter sweep (Pass 3).
 
 ## Why it exists (rationale)
 
-Granite TTM parameter sweep (Pass 3) — experiments feeding `granite_backfill` / `ttm_backfill` config choices.
+A controlled experiment to find good TTM hyper-parameters. It holds windowing
+constant (fixed 200 windows, effective stride ~3, matching the production
+backfill) and varies one axis at a time: `context` (256/512/1024), `horizon`
+(32/96/240), `patch_length` (8/16/32), `use_decoder` (True/False), `objective`
+(price/returns), `multivariate` (True/False), on cleaned adjusted-history data.
+Sample tickers: AEP (low-vol), NVR (high-vol), FICO (mid). Not part of the
+production pipeline.
 
 ## Usage
 
 ```bash
-python pass3_sweep.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python pass3_sweep.py        # runs the full grid, prints + writes /tmp/pass3.json
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: none (constants at top: `STEPS = 6000`, `TICKERS`, `GRID`, `DEFAULTS`).
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
-
+- `/tmp/pass3.json` — per-cell results (MAPE, dir-acc, MAE, config). Scratch only;
+  not a repo artifact. Prints a summary to stdout.
 
 ## Related programs
 
-- [docs/granite_backfill.md](granite_backfill.md)
-- [docs/ttm_backfill.md](ttm_backfill.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [pass4.md](pass4.md) — Pass-4 (adjusted closes) follow-up
+- [granite_backfill.md](granite_backfill.md) / [ttm_backfill.md](ttm_backfill.md) — production training
+- [_p3_debug.md](_p3_debug.md) / [_p3_iso.md](_p3_iso.md) / [_p3_smoke.md](_p3_smoke.md) (scratch)

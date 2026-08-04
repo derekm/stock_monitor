@@ -1,17 +1,34 @@
 # factor_rotation_defense.py
 
-Defensive factor sleeves (quality, value, dual, low_vol, dividend ETFs) with monthly risk-on/off rotation.
+Defensive factor-rotation strategies across quality / value / low-vol /
+dividend / dual-pass sleeves, rotated by a risk-on/off signal.
+
+## Why it exists (rationale)
+
+Rather than a static book, rotate factor sleeves with the regime: overweight
+quality/dual in risk-on, low-vol + dividend ETFs in risk-off (high vol or crisis
+flag). It is a defensive overlay on top of the screens — a way to de-risk
+without leaving the strategy.
+
+## Usage
 
 ```bash
 python factor_rotation_defense.py --save
 ```
 
-Outputs: `factor_rotation_weights.csv`, `factor_rotation_performance.csv`, `factor_sleeve_returns.csv`
+Flags: `--save`. Reads `daily_prices.parquet`, `monitored_stocks.parquet`,
+`fundamentals.parquet`, `preferred_metrics.csv`.
+
+## Outputs
+
+- `factor_rotation_weights.csv` — target sleeve weights
+- `factor_rotation_performance.csv` — backtest performance per sleeve
+- `factor_sleeve_returns.csv` — sleeve return series
+
+(Schema families: weights_performance / base_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/portfolio_optimization.md](portfolio_optimization.md)
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/tail_risk_hedging.md](tail_risk_hedging.md)
-- [docs/maintain_analytics.md](maintain_analytics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [factor_panel.md](factor_panel.md) — factor scores
+- [hmm_regime_detection.md](hmm_regime_detection.md) / [crisis_correlation.md](crisis_correlation.md) — risk-on/off signal
+- [preferred_metrics.md](preferred_metrics.md)

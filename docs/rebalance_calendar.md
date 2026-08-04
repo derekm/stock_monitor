@@ -1,34 +1,31 @@
 # rebalance_calendar.py
 
-rebalance_calendar.py — Regime- and dual-pass-aware rebalance schedule.
+Regime- and dual-pass-aware rebalance schedule.
 
 ## Why it exists (rationale)
 
-Regime- and dual-pass-aware rebalance schedule generator — turns screen/stress output into actionable rebalance dates.
+Rebalancing shouldn't be blind monthly. This builds a calendar of rebalance
+dates (default: last trading day of month from the `daily_prices` calendar) and
+can skip/reduce a rebalance when the current regime is high_vol_stress
+(optional half-band), so the book isn't churned into a volatility spike.
 
 ## Usage
 
 ```bash
-python rebalance_calendar.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python rebalance_calendar.py --months 18 --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--months` (default 18), `--save`. Reads `daily_prices.parquet`,
+`hmm_regime_states.csv`.
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-- **Regime / state table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `hmm_regimes.csv`
-- **Summary / metrics** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `preferred_metrics.csv`
-  - `rebalance_calendar.csv`
+- `rebalance_calendar.csv` — scheduled rebalance dates + regime context
 
+(Schema family: aux_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/inclusion_criteria.md](inclusion_criteria.md)
-- [docs/stress_dual_pass.md](stress_dual_pass.md)
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [hmm_regime_detection.md](hmm_regime_detection.md) — regime input
+- [regime_aware_constraints.md](regime_aware_constraints.md)
+- [portfolio_optimization.md](portfolio_optimization.md) / [vol_target.md](vol_target.md)

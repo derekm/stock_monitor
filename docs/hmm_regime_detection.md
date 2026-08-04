@@ -1,35 +1,34 @@
 # hmm_regime_detection.py
 
-hmm_regime_detection.py — Gaussian HMM regimes on market returns + vol.
+Gaussian HMM regime detection on market returns + realized vol + a correlation
+proxy.
 
 ## Why it exists (rationale)
 
-Fits a Gaussian HMM to market returns + vol, emitting regime states/transitions that `regime_aware_constraints`, `regime_correlation_breakdown`, and `monte_carlo` consume.
+Regime is the master switch for risk posture (stress → tighter caps, fewer buys).
+This fits a Gaussian HMM to daily market features and labels states post-hoc by
+mean return / vol ordering (low_vol, normal, high_vol_stress) — the probabilistic
+regime signal the rest of the stack consumes.
 
 ## Usage
 
 ```bash
-python hmm_regime_detection.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python hmm_regime_detection.py --n-states 3 --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--n-states` (default 3), `--save`. Reads `daily_prices.parquet`.
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-- **Regime / state table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `hmm_regime_states.csv`
-  - `hmm_regime_summary.csv`
-- **Correlation matrix** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `hmm_transition_matrix.csv`
+- `hmm_regime_states.csv` — per-date regime label + posterior
+- `hmm_regime_summary.csv` — per-state mean return / vol
+- `hmm_transition_matrix.csv` — Markov transition matrix
 
+(Schema family: regime_state — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/regime_correlation_breakdown.md](regime_correlation_breakdown.md)
-- [docs/regime_aware_constraints.md](regime_aware_constraints.md)
-- [docs/monte_carlo.md](monte_carlo.md)
-- [docs/kalman_state_estimates.md](kalman_state_estimates.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [hmm_posterior_analysis.md](hmm_posterior_analysis.md) — posterior exploration
+- [regime_aware_constraints.md](regime_aware_constraints.md)
+- [crisis_correlation.md](crisis_correlation.md) — alternative stress definition
+- [kalman_regime.md](kalman_regime.md) (if present) / [vix_term_structure.md](vix_term_structure.md)

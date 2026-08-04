@@ -1,33 +1,32 @@
 # vix_term_structure.py
 
-VIX / vol term-structure exploration (offline realized-vol proxy).
+VIX / volatility term-structure exploration using an offline realized-vol proxy.
 
 ## Why it exists (rationale)
 
-VIX / vol term-structure exploration using an offline realized-vol proxy — a regime/vol signal for `regime_correlation_breakdown` and the dashboard.
+The VIX term structure (contango vs backwardation) is a sentiment/risk signal,
+but a live VIX feed isn't always available. This approximates the term structure
+from realized vol at different horizons (from `daily_prices`) so the dashboard's
+vol tab and the regime logic still get a slope signal offline.
 
 ## Usage
 
 ```bash
-python vix_term_structure.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python vix_term_structure.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save`. Reads `daily_prices.parquet`.
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-- **Auxiliary table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `vix_term_structure.csv`
-  - `vix_term_structure_live.csv`
-- **Summary / metrics** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `vix_term_structure_summary.csv`
+- `vix_term_structure.csv` — vol curve by horizon
+- `vix_term_structure_summary.csv` — slope / contango summary
 
+(Schema family: regime_state — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/regime_correlation_breakdown.md](regime_correlation_breakdown.md)
-- [docs/hmm_regime_detection.md](hmm_regime_detection.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [kalman_state_estimates.md](kalman_state_estimates.md)
+- [hmm_regime_detection.md](hmm_regime_detection.md)
+- [regime_aware_constraints.md](regime_aware_constraints.md)
+- [crisis_correlation.md](crisis_correlation.md)

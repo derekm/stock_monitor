@@ -2,22 +2,35 @@
 
 Build TTM-ready multivariate panels from `daily_prices.parquet`.
 
-## Channels
-close, volume, log returns, 20d vol, RSI-14, MA ratio, HL range, volume z-score
+## Why it exists (rationale)
+
+Granite TTM needs consistent business-day panels with multiple channels (price,
+volume, returns, volatility, simple indicators). This builds those panels per
+ticker/index (`close_only` or `full` channel mode) as parquet that `ttm_backfill`
+trains on and `forecast_granite` / `granite_daily` read at forecast time.
 
 ## Usage
+
 ```bash
-python ttm_features.py --index portfolio --mode close_only --save
-python ttm_features.py --ticker MOS --save
+python ttm_features.py --index portfolio --save
+python ttm_features.py --index portfolio --mode full --save
+python ttm_features.py --tickers AEP,NVR --mode close_only
 ```
 
-Panels land under `ttm_panels/` for Granite multivariate forecasting.
+Flags (via `cli_common` + own): `--index/--universe`, `--ticker`, `--mode`
+(`close_only` default / `full`), `--save`. Reads `daily_prices.parquet`,
+`monitored_stocks.parquet`.
+
+## Outputs
+
+- `ttm_panels/<index>.parquet` (or per-ticker panels) — multivariate TTM panels
+  (path set around line 190)
+
+(Schema family: base_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/backfill_historical.md](backfill_historical.md)
-- [docs/update_prices.md](update_prices.md)
-- [docs/ttm_exogenous.md](ttm_exogenous.md)
-- [docs/forecast_granite.md](forecast_granite.md)
-- [docs/granite_daily.md](granite_daily.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [ttm_backfill.md](ttm_backfill.md) — trains on these panels
+- [ttm_exogenous.md](ttm_exogenous.md) — exogenous channels
+- [forecast_granite.md](forecast_granite.md) / [granite_daily.md](granite_daily.md)
+- [backfill_historical.md](backfill_historical.md) — history source

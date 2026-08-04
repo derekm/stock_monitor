@@ -22,15 +22,15 @@ $$
 
 ```bash
 # Example name with default caps
-python vol_target.py --ticker SMCI --save
+python vol_target.py --ticker NVDA --save
 
 # Tighter target vol
-python vol_target.py --ticker SMCI --target-vol 0.20 --w-max 0.05
+python vol_target.py --ticker NVDA --target-vol 0.20 --w-max 0.05
 
 # Spend 15% of a 12% portfolio-vol budget on one name
-python vol_target.py --ticker SMCI --portfolio-vol 0.12 --risk-budget 0.15
+python vol_target.py --ticker NVDA --portfolio-vol 0.12 --risk-budget 0.15
 
-# All growth_ai names (SMCI, NVDA, AMD, PLTR, CRWD)
+# All growth_ai names (NVDA, AMD, PLTR, CRWD)
 python vol_target.py --growth-sleeve --save
 ```
 

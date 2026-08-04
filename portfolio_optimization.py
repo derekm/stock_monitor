@@ -10,7 +10,7 @@ Implements:
   3. Global Minimum Variance
      - Analytical unconstrained (Σ^{-1} 1)
      - Long-only SLSQP
-     - Long-only with per-name caps (e.g. SMCI ≤ 5%)
+     - Long-only with per-name caps (uniform cap, default 5%)
 
 Outputs:
   erc_gmv_strategies.csv       — weights + risk contributions by strategy
@@ -18,7 +18,7 @@ Outputs:
 
 Usage:
   python portfolio_optimization.py
-  python portfolio_optimization.py --window 126 --smci-cap 0.05
+  python portfolio_optimization.py --window 126 --name-cap 0.05
   python portfolio_optimization.py --universe growth_ai
   python maintain_analytics.py optimize
 """
@@ -208,11 +208,11 @@ def gmv_long_capped(cov: np.ndarray, tickers: list[str], caps: dict[str, float])
 
 
 def vol_target_renorm(cov: np.ndarray, tickers: list[str], target: float = 0.25,
-                      smci_cap: float = 0.05, other_cap: float = 0.25) -> np.ndarray:
+                      name_cap: float = 0.05) -> np.ndarray:
     vols = np.sqrt(np.maximum(np.diag(cov), 1e-18))
     raw = []
     for i, t in enumerate(tickers):
-        cap = smci_cap if t == "SMCI" else other_cap
+        cap = name_cap
         raw.append(float(np.clip(target / vols[i], 0.0, cap)))
     w = np.array(raw)
     return w / w.sum()
@@ -252,7 +252,7 @@ def current_weights(tickers: list[str]) -> np.ndarray:
     return w / w.sum()
 
 
-def run(universe: str = "portfolio", window: int = 126, smci_cap: float = 0.05,
+def run(universe: str = "portfolio", window: int = 126, name_cap: float = 0.05,
         w_floor: float = 0.02) -> None:
     tickers = resolve_universe(universe)
     rets = load_returns(tickers, window=window)
@@ -266,9 +266,9 @@ def run(universe: str = "portfolio", window: int = 126, smci_cap: float = 0.05,
     w_iv = inv_vol_weights(cov)
     w_gmv_u = gmv_unconstrained(cov)
     w_gmv_l, ok_g = gmv_long_only(cov)
-    caps = {t: (smci_cap if t == "SMCI" else 0.45) for t in tickers}
+    caps = {t: name_cap for t in tickers}
     w_gmv_c, ok_c = gmv_long_capped(cov, tickers, caps)
-    w_vt = vol_target_renorm(cov, tickers, smci_cap=smci_cap)
+    w_vt = vol_target_renorm(cov, tickers, name_cap=name_cap)
 
     strategies = {
         "Current": w_cur,
@@ -277,7 +277,7 @@ def run(universe: str = "portfolio", window: int = 126, smci_cap: float = 0.05,
         "InvVol_RP": w_iv,
         "GMV_unconstrained": w_gmv_u,
         "GMV_long_only": w_gmv_l,
-        "GMV_long_SMCI_cap": w_gmv_c,
+        "GMV_long_capped": w_gmv_c,
         "VolTarget_renorm": w_vt,
     }
 
@@ -313,7 +313,6 @@ def run(universe: str = "portfolio", window: int = 126, smci_cap: float = 0.05,
             "rc_dispersion": st["rc_dispersion"],
             "n_names": int((w > 1e-4).sum()),
             "max_weight": float(w.max()),
-            "smci_weight": float(w[tickers.index("SMCI")]) if "SMCI" in tickers else None,
         })
 
     dfw = pd.DataFrame(rows_w)
@@ -321,7 +320,7 @@ def run(universe: str = "portfolio", window: int = 126, smci_cap: float = 0.05,
     print(dfw[cols].to_string(index=False))
 
     print("\n=== Risk contribution % of portfolio variance ===")
-    for name in ["Current", "ERC_SLSQP_floor", "InvVol_RP", "GMV_long_only", "GMV_long_SMCI_cap"]:
+    for name in ["Current", "ERC_SLSQP_floor", "InvVol_RP", "GMV_long_only", "GMV_long_capped"]:
         st = stats(strategies[name], cov)
         rc = {t: round(100.0 * float(st["rc_pct"][i]), 1) for i, t in enumerate(tickers)}
         print(f"  {name:22s} σ={st['vol']*100:5.2f}%  RC={rc}")
@@ -336,12 +335,12 @@ def main():
     ap = argparse.ArgumentParser(description="ERC risk parity & minimum variance")
     add_index_args(ap, default="portfolio")
     ap.add_argument("--window", type=int, default=126)
-    ap.add_argument("--smci-cap", type=float, default=0.05)
+    ap.add_argument("--name-cap", type=float, default=0.05)
     ap.add_argument("--w-floor", type=float, default=0.02, help="ERC SLSQP minimum weight")
     args = ap.parse_args()
     idxs = resolve_index_names_from_args(args, default_index='portfolio')
     uni = ','.join(idxs) if idxs else 'portfolio'
-    run(universe=uni, window=args.window, smci_cap=args.smci_cap, w_floor=args.w_floor)
+    run(universe=uni, window=args.window, name_cap=args.name_cap, w_floor=args.w_floor)
 
 
 if __name__ == "__main__":

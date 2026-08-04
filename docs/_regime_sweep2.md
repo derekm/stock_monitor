@@ -1,3 +1,10 @@
 # _regime_sweep2.py
 
-**Developer scratch / debug script** — not part of the production pipeline. Throwaway experiment, probe, or benchmark (e.g. ``). Do not rely on it for analytics; see the program docs index for supported entry points.
+**Developer scratch** — not part of the production pipeline.
+
+Second regime-conditioned backfill sweep (variant of `_regime_sweep.py`). It
+loads prices + checkpoint and re-runs windows with a different cleaning path
+(`_clean_price_frame`) to compare regime/cleaning interactions on forecast
+quality.
+
+Uses `granite_backfill`. No persistent outputs; prints to stdout.

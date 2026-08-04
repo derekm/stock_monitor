@@ -1,3 +1,9 @@
 # _stride_test3.py
 
-**Developer scratch / debug script** — not part of the production pipeline. Throwaway experiment, probe, or benchmark (e.g. ``). Do not rely on it for analytics; see the program docs index for supported entry points.
+**Developer scratch** — not part of the production pipeline.
+
+Third stride / cleaning probe. It dedupes by ticker+date, sorts, then keeps only
+the last `RECENT = 2520` rows per ticker before scoring — a tighter version of
+the tail-trim experiment in `_stride_test2.py`.
+
+Uses `granite_backfill.score_windows`. No persistent outputs; prints to stdout.

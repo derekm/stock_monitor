@@ -1,33 +1,35 @@
 # threshold_logic.py
 
-threshold_logic.py — Reusable dual-pass / regime-aware threshold logic.
+Reusable dual-pass / regime-aware threshold logic — the single source of truth
+for screen thresholds.
 
 ## Why it exists (rationale)
 
-Reusable dual-pass / regime-aware threshold logic (the rule engine) — single source for the gates `inclusion_criteria` applies.
+Multiple scripts (inclusion, preferred, stress, regime-constrained) need the same
+dual-pass legs and regime-aware relaxations. Centralizing them here means one
+authoritative threshold set (BASE legs + regime overrides) instead of drifted
+copies. `threshold_logic_screen.csv` is the evaluated output; the module is also
+imported by the screen layer.
 
 ## Usage
 
 ```bash
-python threshold_logic.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python threshold_logic.py --save
+python threshold_logic.py --regime high_vol_stress --from-hmm
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--regime` (override regime), `--from-hmm` (read regime from
+`hmm_regime_states.csv`), `--save`. Reads `fundamentals.parquet`.
 
 ## Outputs
 
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `fundamentals.parquet`
-- **Regime / state table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `hmm_regime_states.csv`
-- **Screen / decision** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `threshold_logic_screen.csv`
+- `threshold_logic_screen.csv` — per-ticker leg evaluation under the chosen regime
 
+(Schema family: screen_decision — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/inclusion_criteria.md](inclusion_criteria.md)
-- [docs/quality_gate_bridge.md](quality_gate_bridge.md)
-- [docs/stress_dual_pass.md](stress_dual_pass.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [inclusion_criteria.md](inclusion_criteria.md) / [preferred_metrics.md](preferred_metrics.md)
+- [regime_aware_constraints.md](regime_aware_constraints.md)
+- [hmm_regime_detection.md](hmm_regime_detection.md)
+- [stress_dual_pass.md](stress_dual_pass.md)

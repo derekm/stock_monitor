@@ -1,14 +1,33 @@
 # build_index.py
 
-Build the **fertilizer / agrochemical equal-weight index** levels and membership artifacts.
+Construct a simple equal-weight Fertilizer / Ag-Inputs index from the active
+`index_member` stocks and latest prices.
 
-## Purpose
-Track the fertilizer sleeve (MOS, CF, NTR, …) used in backtests and sector-rotation analysis.
+## Why it exists (rationale)
+
+The core thematic index: tracks a basket of fertilizer / ag-input names the
+personal book is built around. It is the benchmark the portfolio is measured
+against and feeds index backtests.
+
+## Usage
+
+```bash
+python build_index.py
+```
+
+Flags: none (reads `monitored_stocks.parquet` where `index_member=True`). Writes
+`fertilizer_index.parquet` and prints the current snapshot and prior-day
+performance.
 
 ## Outputs
-- `fertilizer_index.parquet` — daily index level + component returns
-- Membership consistent with `monitored_stocks.index_member`
 
-## Related
-- `build_defensive_index.py` for the defensive value sleeve
-- `maintain_analytics.py backtest` for performance vs personal portfolio
+- `fertilizer_index.parquet` — daily equal-weight index level + component returns
+
+(Schema family: index_levels — see [SCHEMAS.md](SCHEMAS.md).)
+
+## Related programs
+
+- [build_defensive_index.md](build_defensive_index.md) / [build_growth_tech_index.md](build_growth_tech_index.md)
+- [live_index_backtest.md](live_index_backtest.md) — backtests the index
+- [fisher_index.md](fisher_index.md) / [run_fisher_duckdb.md](run_fisher_duckdb.md)
+- [manage_stocks.md](manage_stocks.md) — sets `index_member`

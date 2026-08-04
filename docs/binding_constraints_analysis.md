@@ -1,34 +1,37 @@
 # binding_constraints_analysis.py
 
-binding_constraints_analysis.py — Impact of dual-pass binding constraints.
+Quantifies the impact of the dual-pass binding constraints — which legs bind,
+how many names each leg excludes, and the risk of the resulting baskets.
 
 ## Why it exists (rationale)
 
-Quantifies how the dual-pass binding constraints actually bind — which baskets carry the most risk and which near-miss names are closest to passing — feeding `inclusion_criteria` tuning.
+`inclusion_criteria.py` applies a six-leg gate. This script explains *why* the
+gate shapes the book the way it does: per leg it counts failures (alone and
+jointly), measures the "shadow dual" set if that leg were removed, computes risk
+metrics of the base dual vs leave-one-out baskets, and reports distance-to-
+threshold for near-miss names on the binding legs (ROIC, MktCap/Assets, …). It
+informs tuning of the inclusion thresholds.
 
 ## Usage
 
 ```bash
-python binding_constraints_analysis.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python binding_constraints_analysis.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save` (write the CSVs; without it, prints only).
 
 ## Outputs
 
-- **Screen / decision** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `binding_basket_risk.csv`
-  - `binding_constraints_impact.csv`
-  - `binding_near_miss_detail.csv`
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `fundamentals.parquet`
+- `binding_constraints_impact.csv` — per-leg failure counts (alone/joint) and
+  shadow-dual sizes
+- `binding_near_miss_detail.csv` — near-miss names with distance-to-threshold on
+  binding legs
+- `binding_basket_risk.csv` — risk metrics of base dual vs leave-one-out baskets
 
+(Schema families: screen_decision / summary_metrics — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/inclusion_criteria.md](inclusion_criteria.md)
-- [docs/regime_aware_constraints.md](regime_aware_constraints.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [inclusion_criteria.md](inclusion_criteria.md) — the six-leg gate
+- [stress_dual_pass.md](stress_dual_pass.md) — scenario stress of the same gate
+- [regime_aware_constraints.md](regime_aware_constraints.md)

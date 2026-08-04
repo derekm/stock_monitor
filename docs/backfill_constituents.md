@@ -1,34 +1,44 @@
 # backfill_constituents.py
 
-backfill_constituents.py — fill REAL multi-snapshot fundamentals + price history for S&P 500 constituents that are missing from our store, using yfinance.
+Fill **real, point-in-time** multi-snapshot fundamentals + price history for S&P
+500 constituents missing from our store, using yfinance. This is the "fill in
+real actuals" step for the S&P-tracking subsystem.
 
 ## Why it exists (rationale)
 
-Fills multi-snapshot price + fundamentals history for S&P 500 constituents absent from our store, so S&P-tracking analytics (`sp_universe_tracking`, `sp_index_methodology`) have real data instead of seeds.
+`sp_universe_tracking.py` / `sp_index_methodology.py` need genuine fundamentals
+history for all 503 constituents, but our `fundamentals.parquet` only has the
+personal book. This script fetches real quarterly financials + 5y daily prices
+per missing constituent, derives the canonical quality metrics per quarter-end,
+and writes them in the **same schema** as `fundamentals.parquet` /
+`daily_prices.parquet` (so the rest of the stack can use them unchanged).
 
 ## Usage
 
 ```bash
-python backfill_constituents.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python backfill_constituents.py run            # backfill all missing constituents
+python backfill_constituents.py run --limit 20 # smoke test on 20 tickers
+python backfill_constituents.py merge          # union staging into the real files
+python backfill_constituents.py status          # show progress
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--limit N` (smoke test), `--sleep F` (rate-limit pause, default 0.4s).
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-  - `daily_prices_yfinance.parquet`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `fundamentals.parquet`
-  - `fundamentals_yfinance.parquet`
-  - `sp500_constituents.parquet`
+- `fundamentals_yfinance.parquet` — staging fundamentals (derived roe, roic,
+  debt_to_equity, interest_coverage, ev_ebitda, mktcap_to_assets, pb_ratio per
+  quarter-end; `source='yfinance'`)
+- `daily_prices_yfinance.parquet` — staging 5y daily price/volume
+- `backfill_progress.json` — resume marker (run is resume-safe)
+- `sp500_constituents.parquet` — the authoritative constituent list it reads from
+- After `merge`: appends into `fundamentals.parquet` and `daily_prices.parquet`
 
+(Schema families: base_table / summary_metrics — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/parse_sp500.md](parse_sp500.md)
-- [docs/sp_universe_tracking.md](sp_universe_tracking.md)
-- [docs/update_fundamentals.md](update_fundamentals.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [parse_sp500.md](parse_sp500.md) — builds `sp500_constituents.parquet`
+- [sp_universe_tracking.md](sp_universe_tracking.md)
+- [sp_index_methodology.md](sp_index_methodology.md)
+- [update_fundamentals.md](update_fundamentals.md) / [update_prices.md](update_prices.md) — same schema targets

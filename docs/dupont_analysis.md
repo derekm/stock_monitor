@@ -1,24 +1,31 @@
 # dupont_analysis.py
 
-DuPont decomposition of ROE:
+DuPont decomposition of ROE into profitability, efficiency, and leverage.
 
+## Why it exists (rationale)
 
-$$
-\mathrm{ROE} \approx \underbrace{\mathrm{PM} \times \mathrm{Asset\ Turnover}}_{\text{pm x at}} \times \underbrace{(1 + D/E)}_{\text{equity multiplier}}
-$$
+ROE alone is ambiguous: a high ROE can come from leverage, not quality. The
+classic 3-step DuPont (Profit Margin × Asset Turnover × Equity Multiplier)
+separates them so the Buffett lens — prefer margin/turnover-driven ROE, not
+leverage — can be applied. It feeds the quality scoring in `preferred_metrics`.
 
-
-**Buffett preference:** high ROE from **operations** (`high_ops`: EM ≤ 1.5), not from leverage (`leverage_driven`).
+## Usage
 
 ```bash
-python dupont_analysis.py --save
+python dupont_analysis.py
+python dupont_analysis.py --min-roe 0.15 --save
 ```
 
-Output: `dupont_analysis.csv`
+Flags: `--min-roe` (filter, default 0.0), `--save`.
+
+## Outputs
+
+- `dupont_analysis.csv` — per-ticker ROE decomposition (margin, turnover, EM)
+
+(Schema family: summary_metrics — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/update_fundamentals.md](update_fundamentals.md)
-- [docs/inclusion_criteria.md](inclusion_criteria.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [preferred_metrics.md](preferred_metrics.md) — consumes quality inputs
+- [dual_screen_analysis.md](dual_screen_analysis.md)
+- [update_fundamentals.md](update_fundamentals.md) — fundamental source
