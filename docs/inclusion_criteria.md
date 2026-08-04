@@ -42,3 +42,13 @@ python inclusion_criteria.py --explore-defensive --save
 ```
 
 Rules are loaded into the dashboard **Inclusion Rules** tab.
+
+## Related programs
+
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/stress_dual_pass.md](stress_dual_pass.md)
+- [docs/regime_aware_constraints.md](regime_aware_constraints.md)
+- [docs/dual_screen_analysis.md](dual_screen_analysis.md)
+- [docs/build_defensive_index.md](build_defensive_index.md)
+- [docs/manage_stocks.md](manage_stocks.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

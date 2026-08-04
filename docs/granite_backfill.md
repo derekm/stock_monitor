@@ -134,3 +134,11 @@ Older scripts that `import granite_backfill` keep working unchanged — the shim
 constants. New code that needs **arbitrary regimes** (global + per-ticker) should import
 `ttm_backfill` directly and build a `BackfillConfig` (see
 [ttm_backfill.md](ttm_backfill.md)).
+
+## Related programs
+
+- [docs/ttm_backfill.md](ttm_backfill.md)
+- [docs/granite_daily.md](granite_daily.md)
+- [docs/forecast_granite.md](forecast_granite.md)
+- [docs/train_adjusted_full.md](train_adjusted_full.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

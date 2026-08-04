@@ -43,3 +43,14 @@ python check_alerts.py --dry-run   # VALUE_TRIFECTA + BUFFETT_QUALITY rules
 
 Outputs: `preferred_metrics.csv`, `preferred_screen_hits.csv`  
 Quality fields are seeded as **approx** until live fundamentals replace them (`quality_source=seed_approx_buffett`).
+
+## Related programs
+
+- [docs/inclusion_criteria.md](inclusion_criteria.md)
+- [docs/update_fundamentals.md](update_fundamentals.md)
+- [docs/fundamentals_history.md](fundamentals_history.md)
+- [docs/dupont_analysis.md](dupont_analysis.md)
+- [docs/vol_target.md](vol_target.md)
+- [docs/kelly.md](kelly.md)
+- [docs/risk_metrics_ext.md](risk_metrics_ext.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

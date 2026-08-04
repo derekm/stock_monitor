@@ -12,6 +12,11 @@ Built iteratively from Robinhood trade extracts through sector-rotation research
 
 Read **[docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)** for a holistic summary of the stack, screens, risk budgets, regime tools, and a 10-year dynamic-fund design vs the S&P 500, plus future quant and integration work.
 
+**Docs map:**
+- **[docs/SYSTEM_ORCHESTRATION.md](docs/SYSTEM_ORCHESTRATION.md)** — how the programs chain (data spine → analytics → services), what `start_dashboard.sh` launches, and what an agent should know before running analytics.
+- **[docs/SCHEMAS.md](docs/SCHEMAS.md)** — the single catalog of every output file → producing script → schema family.
+- **Per-program docs:** `docs/<script>.md` for all 120+ scripts (description, rationale, outputs, cross-links).
+
 ## Quick start
 
 ```bash
@@ -38,6 +43,37 @@ python forecast_granite.py forecast --index portfolio --from-first-trade --horiz
 # Dashboard (granite_service + pipeline_service + analytics_service + static site)
 ./start_dashboard.sh
 # → http://127.0.0.1:8765/index.html  (Ctrl+C to stop; ports overridable via env)
+
+## How to update / re-run (kick things off)
+
+**Full daily refresh (recommended):** run the master orchestrator, or trigger it from the dashboard
+```bash
+python run_daily_automation.py                 # preferred → inclusion → stress → rolling → allpairs → fundamentals → dupont → growth-tech → export
+# or from the dashboard Ops tab: analytics_service POST /run/all-daily
+```
+Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `preferred, inclusion, stress, rolling, rolling_corr, tail_hedge, allpairs, screen_bt, dupont, growth, export`).
+
+**Refresh just the data:**
+```bash
+python update_prices.py --fetch --days 5        # append latest OHLCV
+python update_fundamentals.py                   # refresh valuation fields
+```
+
+**Refresh the dashboard tables only:**
+```bash
+python export_dashboard_data.py                 # rewrites dashboard_data/data.json
+```
+
+**Re-run forecasts (needs pretrained checkpoints under checkpoints/):**
+```bash
+python granite_backfill.py         # one-time / when history grows (warm-starts adjusted ckpt)
+python granite_daily.py            # daily 512→96 forecast + continual retrain
+python forecast_granite.py forecast --index portfolio --from-first-trade --horizon 10
+```
+
+**Restart the dashboard:** stop the running `./start_dashboard.sh` (Ctrl+C) and start it again.
+
+See **[docs/SYSTEM_ORCHESTRATION.md](docs/SYSTEM_ORCHESTRATION.md)** for the full data-flow and service map.
 
 
 ## S&P 500 membership, tracking & real backfill

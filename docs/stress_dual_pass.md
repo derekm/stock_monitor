@@ -14,3 +14,10 @@ python stress_dual_pass.py --save
 ```
 
 Output: `dual_pass_stress.csv`
+
+## Related programs
+
+- [docs/inclusion_criteria.md](inclusion_criteria.md)
+- [docs/regime_aware_constraints.md](regime_aware_constraints.md)
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

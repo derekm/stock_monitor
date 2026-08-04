@@ -16,3 +16,11 @@ python black_litterman.py --universe portfolio \
 ```
 
 Output: `black_litterman_weights.csv`
+
+## Related programs
+
+- [docs/portfolio_optimization.md](portfolio_optimization.md)
+- [docs/robust_covariance.md](robust_covariance.md)
+- [docs/black_litterman_views.md](black_litterman_views.md)
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

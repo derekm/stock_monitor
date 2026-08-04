@@ -20,3 +20,11 @@ python cross_asset_analysis.py save-sector-prices
 
 ## Decision relevance
 Materials vs Staples/Health Care correlations inform whether fertilizer/value sleeves diversify the portfolio.
+
+## Related programs
+
+- [docs/allpairs_correlations.md](allpairs_correlations.md)
+- [docs/crisis_correlation.md](crisis_correlation.md)
+- [docs/ttm_exogenous.md](ttm_exogenous.md)
+- [docs/maintain_analytics.md](maintain_analytics.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

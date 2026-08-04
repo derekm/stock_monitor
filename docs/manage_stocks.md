@@ -11,3 +11,12 @@ Single registry of tickers for fertilizer index, defensive value index, portfoli
 - List by status (`active` / `monitored`)
 
 Used by almost every downstream script via ticker resolution.
+
+## Related programs
+
+- [docs/inclusion_criteria.md](inclusion_criteria.md)
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/build_index.md](build_index.md)
+- [docs/build_growth_tech_index.md](build_growth_tech_index.md)
+- [docs/run_daily_automation.md](run_daily_automation.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

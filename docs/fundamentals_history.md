@@ -17,3 +17,11 @@ python fundamentals_history.py show --ticker MOS
 ```
 
 Replace backfilled rows with real quarterly fundamentals when available; keep the same schema so screens and sizing stay backtestable.
+
+## Related programs
+
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/update_fundamentals.md](update_fundamentals.md)
+- [docs/inclusion_criteria.md](inclusion_criteria.md)
+- [docs/research_hygiene.md](research_hygiene.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

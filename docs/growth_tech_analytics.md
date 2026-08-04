@@ -32,3 +32,11 @@ python growth_tech_analytics.py
 python growth_tech_analytics.py --window 126
 python maintain_analytics.py growth-tech
 ```
+
+## Related programs
+
+- [docs/build_growth_tech_index.md](build_growth_tech_index.md)
+- [docs/index_registry.md](index_registry.md)
+- [docs/allpairs_correlations.md](allpairs_correlations.md)
+- [docs/cross_asset_analysis.md](cross_asset_analysis.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
