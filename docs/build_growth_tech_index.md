@@ -48,4 +48,4 @@ Use `python vol_target.py --ticker SMCI --save` to enforce a **5% max weight** a
 | launch_services | RKLB, ASTS, BKSY, **SPCX** (SpaceX tracker) |
 | maritime_launch | TDW, VAL (offshore/maritime proxies) |
 
-**SpaceX** is publicly listed (NYSE: SpaceX) — include it directly in the launch_services sleeve rather than only as strategic context.
+SpaceX is tracked via **SPCX** (a SpaceX tracker) as strategic context for the launch-services sleeve.
