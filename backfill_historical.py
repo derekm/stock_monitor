@@ -31,6 +31,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -44,21 +45,50 @@ def load_prices() -> pd.DataFrame:
     if PRICES_FILE.exists():
         df = pd.read_parquet(PRICES_FILE)
         df["date"] = pd.to_datetime(df["date"])
+        if "adj_close" not in df.columns:
+            # backfill for pre-adj_close schema: assume close was raw
+            df["adj_close"] = df["close"]
         return df
     return pd.DataFrame(
-        columns=["date", "ticker", "open", "high", "low", "close", "volume", "source"]
+        columns=["date", "ticker", "open", "high", "low", "close", "adj_close", "volume", "source"]
     )
 
 
 def save_prices(df: pd.DataFrame) -> None:
     df = df.copy()
     df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values(["date", "ticker"]).drop_duplicates(
-        subset=["date", "ticker"], keep="last"
+    if "adj_close" not in df.columns:
+        df["adj_close"] = df["close"]
+    # Explicit conflict reporting: a (date,ticker) with >1 distinct adj_close
+    # means two divergent pulls collided (the old bug). Surface it instead of
+    # silently keep="last".
+    pre = len(df)
+    coll = (
+        df.groupby(["date", "ticker"])["adj_close"].nunique()
+        .gt(1).sum()
     )
+    if coll:
+        print(f"  ⚠ {int(coll)} (date,ticker) pairs have CONFLICTING adj_close — "
+              f"keeping mean to reconcile.")
+        df = (
+            df.groupby(["date", "ticker"], as_index=False)
+            .agg({
+                "adj_close": "mean",
+                "close": "mean",
+                "open": "mean",
+                "high": "mean",
+                "low": "mean",
+                "volume": "mean",
+                "source": "first",
+            })
+        )
+    else:
+        df = df.drop_duplicates(subset=["date", "ticker"], keep="last")
+    df = df.sort_values(["date", "ticker"])
     table = pa.Table.from_pandas(df, preserve_index=False)
     pq.write_table(table, PRICES_FILE)
-    print(f"✓ Saved {len(df)} total rows → {PRICES_FILE}")
+    print(f"✓ Saved {len(df)} total rows → {PRICES_FILE} (from {pre} pre-dedup, "
+          f"{int(coll)} conflicting pairs reconciled)")
 
 
 def get_tickers(explicit: str | None = None, status_filter: list | None = None) -> list[str]:
@@ -82,6 +112,11 @@ def fetch_yfinance(tickers: list[str], start: str | None, end: str | None, perio
         sys.exit(1)
 
     print(f"Fetching {len(tickers)} tickers via yfinance …")
+    # auto_adjust=True makes yfinance return ADJUSTED Close (splits/divs
+    # applied) and DROPS the raw Adj Close column; to keep both the adjusted
+    # series (for training) and the raw close (for reference) we fetch with
+    # auto_adjust=False and compute adj_close ourselves from the 'Adj Close'
+    # column.
     kwargs = {"group_by": "ticker", "auto_adjust": False, "progress": True, "threads": True}
     if period:
         kwargs["period"] = period
@@ -105,6 +140,7 @@ def fetch_yfinance(tickers: list[str], start: str | None, end: str | None, perio
                     "high": float(row["High"]),
                     "low": float(row["Low"]),
                     "close": float(row["Close"]),
+                    "adj_close": float(row["Adj Close"]) if pd.notna(row.get("Adj Close")) else float(row["Close"]),
                     "volume": int(row["Volume"]) if pd.notna(row.get("Volume")) else 0,
                     "source": "yfinance",
                 }
@@ -125,6 +161,7 @@ def fetch_yfinance(tickers: list[str], start: str | None, end: str | None, perio
                         "high": float(row["High"]),
                         "low": float(row["Low"]),
                         "close": float(row["Close"]),
+                        "adj_close": float(row["Adj Close"]) if pd.notna(row.get("Adj Close")) else float(row["Close"]),
                         "volume": int(row["Volume"]) if pd.notna(row.get("Volume")) else 0,
                         "source": "yfinance",
                     }
@@ -205,7 +242,45 @@ def import_csv(path: str) -> pd.DataFrame:
     return df
 
 
-def merge_and_save(new_df: pd.DataFrame, overwrite: bool = False) -> None:
+def detect_adjclose_rescales(existing: pd.DataFrame, new_df: pd.DataFrame,
+                              tol: float = 0.01) -> dict:
+    """Flag tickers whose adj_close CHANGED on already-stored dates.
+
+    yfinance re-resolves adj_close retroactively after a corporate action
+    (split/dividend/special), so a ticker's ENTIRE history can shift on a
+    given day. Any stored (date,ticker) whose new adj_close differs from the
+    old by > `tol` (1% by default) means the historical series moved ->
+    models trained on the old values are stale and need a FULL retrain.
+
+    Returns {ticker: max_rel_shift} for every rescaled ticker.
+    """
+    if "adj_close" not in new_df.columns or existing.empty:
+        return {}
+    have = existing.dropna(subset=["adj_close"])
+    if have.empty:
+        return {}
+    new = new_df.dropna(subset=["adj_close"])
+    merged = new.merge(
+        have[["date", "ticker", "adj_close"]].rename(columns={"adj_close": "adj_old"}),
+        on=["date", "ticker"], how="inner",
+    )
+    if merged.empty:
+        return {}
+    old = merged["adj_old"].to_numpy(dtype=float)
+    nw = merged["adj_close"].to_numpy(dtype=float)
+    # guard against near-zero prices
+    denom = np.where(np.abs(old) < 1e-6, np.abs(nw) + 1e-6, np.abs(old))
+    rel = np.abs(nw - old) / denom
+    merged = merged.assign(_rel=rel)
+    rescaled = (
+        merged.groupby("ticker")["_rel"].max()
+        .loc[lambda s: s > tol]
+    )
+    return {tk: round(float(v), 4) for tk, v in rescaled.items()}
+
+
+def merge_and_save(new_df: pd.DataFrame, overwrite: bool = False,
+                   rescale_manifest: str = "rescaled_tickers.json") -> None:
     if new_df.empty:
         return
     existing = load_prices()
@@ -216,6 +291,23 @@ def merge_and_save(new_df: pd.DataFrame, overwrite: bool = False) -> None:
         existing_keys = existing[["date", "ticker"]].apply(tuple, axis=1)
         existing = existing[~existing_keys.isin(keys)]
         print(f"  Overwrite mode: removed {len(keys)} overlapping rows from existing data")
+
+    # Detect corporate-action rescales BEFORE combining
+    rescaled = detect_adjclose_rescales(existing, new_df)
+    if rescaled:
+        import json
+        from pathlib import Path
+        manifest = Path(__file__).parent / rescale_manifest
+        try:
+            prior = json.loads(manifest.read_text()) if manifest.exists() else {}
+        except Exception:
+            prior = {}
+        prior.update({tk: {"max_rel_shift": v, "seen": str(pd.Timestamp.now().date())}
+                      for tk, v in rescaled.items()})
+        manifest.write_text(json.dumps(prior, indent=2))
+        print(f"  ⚠ {len(rescaled)} ticker(s) had adj_close RESCALED (corporate action) -> "
+              f"FULL retrain needed: {', '.join(sorted(rescaled))[:200]}")
+        print(f"  Manifest written: {manifest}")
 
     combined = pd.concat([existing, new_df], ignore_index=True)
     save_prices(combined)

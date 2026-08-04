@@ -36,10 +36,40 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import window_padding as wp
+
 DATA_DIR = Path(__file__).resolve().parent
 CACHE = DATA_DIR / "granite_series_cache.parquet"
 FORECAST_FILE = DATA_DIR / "forecasts_granite.parquet"
 CKPT_DIR = DATA_DIR / "granite_ckpts"
+GLOBAL_DIR = CKPT_DIR / "global"        # aggregated model trained on full-context tickers
+PADDED_DIR = CKPT_DIR / "padded"        # aggregated model trained on proxy-padded shorts
+PER_TICKER_DIR = CKPT_DIR / "per_ticker"  # one tuned model per ticker (highest precedence)
+for _d in (GLOBAL_DIR, PADDED_DIR, PER_TICKER_DIR):
+    _d.mkdir(parents=True, exist_ok=True)
+
+# cache the constituents frame (GICS sector lookup for window padding)
+_CONSTITS_DF = None
+
+
+def _constituents_df():
+    global _CONSTITS_DF
+    if _CONSTITS_DF is None:
+        p = DATA_DIR / "sp500_constituents.parquet"
+        _CONSTITS_DF = pd.read_parquet(p) if p.exists() else pd.DataFrame()
+    return _CONSTITS_DF
+
+
+def _sector_for(ticker: str):
+    df = _constituents_df()
+    if df.empty or "gics_sector" not in df.columns:
+        return None
+    m = df.loc[df["ticker"] == ticker, "gics_sector"]
+    return m.iloc[0] if len(m.dropna()) else None
+
+
+# alias so the pad call above reads clearly
+pad_to_context = wp.pad_to_context
 ACC_FILE = DATA_DIR / "granite_accuracy.json"
 DEFAULT_MODEL = "ibm-granite/granite-timeseries-ttm-r2"
 
@@ -126,11 +156,38 @@ def build_windows(cache: pd.DataFrame, tickers: list[str] | None = None):
 # --------------------------------------------------------------------------
 # Train
 # --------------------------------------------------------------------------
-def latest_ckpt() -> Path | None:
-    if not CKPT_DIR.exists():
+def latest_ckpt_in(d: Path) -> Path | None:
+    if not d.exists():
         return None
-    ckpts = sorted(CKPT_DIR.glob("granite_ttm_tuned_*.pt"), reverse=True)
+    ckpts = sorted(d.glob("*_tuned_*.pt"), reverse=True)
     return ckpts[0] if ckpts else None
+
+
+def latest_ckpt() -> Path | None:
+    """Legacy: most recent ckpt anywhere under CKPT_DIR (kept for callers)."""
+    return latest_ckpt_in(CKPT_DIR)
+
+
+def resolve_model_ckpt(ticker: str | None = None) -> tuple[Path | None, str]:
+    """Precedence for forecasting/retraining:
+       1. per_ticker/<TICKER>_tuned_*.pt   (best, ticker-specific)
+       2. global/granite_ttm_tuned_*.pt    (full-context aggregate)
+       3. padded/granite_ttm_tuned_*.pt    (proxy-padded aggregate, for shorts)
+       4. None                              (pretrained zero-shot)
+    When `ticker` is None we only look at the global aggregate (default for the
+    general pipeline). Short tickers (< CONTEXT closes) should resolve to the
+    padded aggregate until they graduate to a full per-ticker model."""
+    if ticker:
+        pt = latest_ckpt_in(PER_TICKER_DIR / ticker)
+        if pt is not None:
+            return pt, "granite_tuned_per_ticker"
+    g = latest_ckpt_in(GLOBAL_DIR)
+    if g is not None:
+        return g, "granite_tuned_global"
+    p = latest_ckpt_in(PADDED_DIR)
+    if p is not None:
+        return p, "granite_tuned_padded"
+    return None, "pretrained"
 
 
 def _device():
@@ -201,24 +258,35 @@ def forecast_all(cache: pd.DataFrame, tickers: list[str] | None = None, use_tune
     from forecast_granite import forecast_ttm_univariate
 
     model, kind = load_granite_model(DEFAULT_MODEL)
-    ckpt = latest_ckpt()
-    if use_tuned and ckpt is not None:
-        try:
-            model.load_state_dict(torch.load(ckpt, map_location="cpu"))
-            kind = "granite_tuned"
-        except Exception as e:
-            print(f"tuned ckpt load failed ({e}); using pretrained zero-shot")
-    elif use_tuned:
-        print("no tuned ckpt yet; using pretrained zero-shot")
-    model.eval()
-
+    loaded_ckpt = None  # track which state_dict is currently in `model`
+    # resolver precedence: per-ticker -> global -> padded -> pretrained
     tk_list = tickers or cache["ticker"].unique().tolist()
     rows = []
     for tk in tk_list:
         s = cache[cache["ticker"] == tk].sort_values("date")["close"].values.astype(float)
+        sector = _sector_for(tk)
         if len(s) < CONTEXT:
-            continue
-        y_in = s[-CONTEXT:]
+            # new addition / short history: pad the context head with a real
+            # sector/market proxy (rescaled to the ticker's level) so the
+            # fixed-context model still produces a forecast.
+            y_in = pad_to_context(tk, s.astype(np.float32), sector=sector,
+                                 px=cache, cons=_constituents_df()).astype(float)
+        else:
+            y_in = s[-CONTEXT:]
+        # pick the best checkpoint for this ticker (per-ticker wins, then bucket)
+        ckpt, kind = resolve_model_ckpt(tk if use_tuned else None)
+        if use_tuned and ckpt is not None and ckpt != loaded_ckpt:
+            try:
+                model.load_state_dict(torch.load(ckpt, map_location="cpu"))
+                loaded_ckpt = ckpt
+            except Exception as e:
+                print(f"  ckpt {ckpt.name} load failed ({e}); using pretrained")
+                kind = "pretrained"
+        elif not use_tuned:
+            if loaded_ckpt is not None:
+                pass  # keep pretrained base
+            kind = "pretrained"
+        model.eval()
         pred = forecast_ttm_univariate(model, kind, y_in, HORIZON, context=CONTEXT)
         last = float(y_in[-1])
         last_date = cache[cache["ticker"] == tk]["date"].max()
@@ -227,19 +295,19 @@ def forecast_all(cache: pd.DataFrame, tickers: list[str] | None = None, use_tune
             rows.append({
                 "ticker": tk,
                 "horizon": h,
-                "forecast_date": dt.strftime("%Y-%m-%d"),
+                "forecast_date": dt.date(),
                 "forecast_close": round(float(pv), 4),
                 "last_close": round(last, 4),
                 "pct_change": round((float(pv) / last - 1) * 100, 3),
                 "backend": kind,
-                "as_of": last_date.strftime("%Y-%m-%d"),
-                "model_date": (latest_ckpt().name if (use_tuned and latest_ckpt()) else "pretrained"),
+                "as_of": last_date.date() if hasattr(last_date, "date") else pd.to_datetime(last_date).date(),
+                "model_date": (ckpt.name if (use_tuned and ckpt) else "pretrained"),
                 "history_n": len(s),
             })
     df = pd.DataFrame(rows)
     if not df.empty:
         df.to_parquet(FORECAST_FILE, index=False)
-    print(f"forecast {len(df)} rows for {df['ticker'].nunique() if not df.empty else 0} tickers -> {FORECAST_FILE.name} (backend={kind})")
+    print(f"forecast {len(df)} rows for {df['ticker'].nunique() if not df.empty else 0} tickers -> {FORECAST_FILE.name}")
     return df
 
 

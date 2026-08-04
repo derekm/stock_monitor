@@ -30,3 +30,12 @@ sp500_changes_page.html
 
 # regenerable cache
 granite_series_cache.parquet
+
+# trained model checkpoints (regenerable; large) -- do NOT commit
+granite_ckpts/
+
+# large data artifacts (regenerable from upstream pulls)
+daily_prices.parquet
+forecasts_granite.parquet
+sp500_changes.parquet
+vol_targets.parquet

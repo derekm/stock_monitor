@@ -167,7 +167,7 @@ def size_position(
 
     return {
         "ticker": ticker.upper(),
-        "as_of": close.index[-1].strftime("%Y-%m-%d"),
+        "as_of": close.index[-1].date(),
         "last_close": round(px, 4),
         "window": window,
         "realized_vol_ann": round(sigma, 4),
