@@ -35,10 +35,10 @@ python run_fisher_duckdb.py --sector Materials --save
 # Forecasts (offline fallback if Granite weights missing)
 python forecast_granite.py forecast --index portfolio --from-first-trade --horizon 10
 
-# Dashboard
-python -m http.server 8080
-# → http://localhost:8080/
-```
+# Dashboard (granite_service + pipeline_service + analytics_service + static site)
+./start_dashboard.sh
+# → http://127.0.0.1:8765/index.html  (Ctrl+C to stop; ports overridable via env)
+
 
 ## S&P 500 membership, tracking & real backfill
 
@@ -244,11 +244,12 @@ python -m ttm_backfill cmp-adj-unadj --tickers AEP,NVR,FICO --steps 150
 ## Dashboard
 
 ```bash
-# terminal 1 — forecast API
-python granite_service.py --port 5055
-# terminal 2 — static dashboard
-python -m http.server 8080
+# starts granite_service (5055) + pipeline_service (5056) + analytics_service (8767)
+# + static dashboard (8765); Ctrl+C stops all. Override ports via env vars.
+./start_dashboard.sh
+# → http://127.0.0.1:8765/index.html
 ```
+
 
 - **Decisions** — inclusion memos + trifecta  
 - **SQL Lab** — query builder + templates  

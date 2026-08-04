@@ -153,5 +153,6 @@ python run_daily_automation.py
 python run_daily_automation.py --only inclusion,stress,rolling_corr,tail_hedge,export
 ```
 
-Dashboard: `index.html` + `dashboard_data/data.json`  
-Services: `analytics_service.py`, `granite_service.py`
+Dashboard: `index.html` + `dashboard_data/data.json`
+Services: `analytics_service.py`, `granite_service.py`, `pipeline_service.py`
+Start everything: `./start_dashboard.sh` → http://127.0.0.1:8765/index.html (Ctrl+C stops all)

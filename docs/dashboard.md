@@ -4,8 +4,9 @@ Single-page app: embedded analysis tables, **DuckDB-Wasm SQL Lab**, Chart.js, Fi
 
 ## Serve
 ```bash
-cd stock_monitor && python -m http.server 8080
-# open http://localhost:8080/
+# from the stock_monitor repo root — starts all backend services + static site
+./start_dashboard.sh
+# open http://127.0.0.1:8765/index.html
 ```
 
 ## Tabs
