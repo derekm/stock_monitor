@@ -4,6 +4,10 @@ HTTP microservice for **Granite TTM / statistical fallback** forecasts consumed 
 
 ## Run
 
+**Standard launch:** run `./start_dashboard.sh` — it starts this service (port 5055) along with `pipeline_service`, `analytics_service`, and the static dashboard.
+
+Manual (only if launching in isolation):
+
 ```bash
 python granite_service.py --host 127.0.0.1 --port 5055
 ```
