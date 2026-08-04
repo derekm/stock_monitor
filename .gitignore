@@ -39,3 +39,9 @@ daily_prices.parquet
 forecasts_granite.parquet
 sp500_changes.parquet
 vol_targets.parquet
+
+# all data parquets (too large for GitHub; keep local)
+*.parquet
+
+# stray test virtualenv
+venv_cuda_test/
