@@ -5,45 +5,93 @@ This document is the **single source of truth for output file schemas** produced
 
 ## Schema families
 
-### Correlation matrix  (`correlation_matrix`)
-
-- Shape: `index` (row label, often `ticker` or `sector`), then one column per entity (ticker/sector) holding the pairwise correlation coefficient in [-1, 1]. Square (N×N) or long-form `a,b,corr`.
-
-### Regime / state table  (`regime_state`)
-
-- Shape: `date` (or `as_of`), `regime`/`state` (label e.g. Calm/Stress), and state probabilities or latent estimates (`p_calm`,`p_stress`, `mkt`, `log_vol`, `kalman_state`, `entropy`). One row per trading day.
-
-### Weights / performance  (`weights_performance`)
-
-- Shape: Strategy/name-level tables: `ticker` (or `strategy`), `weight` (fraction), plus risk/return stats (`ret`, `vol`, `sharpe`, `max_dd`) and per-name `rc` (risk contribution) where relevant. One row per name or per (date, name).
-
-### Forecast / anomaly  (`forecast_anomaly`)
-
-- Shape: Forecast rows: `ticker`, `as_of`/`forecast_date`, `horizon`, `pct_change` (and `close`/`history` for charts); anomaly rows: `ticker`, `date`, `z_*` scores, `flag`.
-
-### Screen / decision  (`screen_decision`)
-
-- Shape: Decision tables keyed by `ticker`: boolean/label columns for each gate leg (`roe`,`roic`,`debt_to_equity`,`ev_ebitda`,`pb_ratio`,`mktcap_to_assets`), a `decision`/`action` label, and `fail_legs`. May include `earnings_stability`, `composite_score`, `w_max`.
-
-### Index level series  (`index_levels`)
-
-- Shape: Time series: `date`, `level` (index value, base 100), and component `return` columns. Stored as Parquet (and sometimes CSV). One row per trading day.
+Each output belongs to exactly one **family** (a shape + a *job* in the stack). The
+families are ordered by how they compose: **base tables → screens → regime →
+risk/weights → forecasts → indexes → correlation structure → summaries**, with
+auxiliary tables feeding several stages.
 
 ### Base parquet table  (`base_table`)
 
-- Shape: Canonical parquet inputs: `daily_prices` (date,ticker,open,high,low,close,volume,adj_close), `fundamentals` (ticker,as_of_date,market_cap_b,...,pb_ratio,ev_ebitda,mktcap_to_assets,...), `monitored_stocks` (ticker,sector,index_member,...), `portfolio_holdings`, `trades`.
+- The canonical, slowly-changing inputs everything else reads. Shape varies
+  (`daily_prices`: date,ticker,OHLCV,adj_close; `fundamentals`: ticker,as_of_date,
+  valuation ratios; `monitored_stocks`: ticker,sector,index membership;
+  `portfolio_holdings`/`trades`: the real book; `exogenous_panel`: per-date
+  market/sector/dispersion channels; S&P tables: `sp500_constituents`,
+  `sp500_changes`). **Never hand-edit these** — use the dedicated writers
+  (`update_prices`, `update_fundamentals`, `manage_stocks`, `manage_alerts`,
+  `parse_sp500*`, `backfill_*`). They are the single source of truth.
+
+### Screen / decision  (`screen_decision`)
+
+- Decision tables keyed by `ticker`: boolean/label columns for each gate leg
+  (`roe`,`roic`,`debt_to_equity`,`ev_ebitda`,`pb_ratio`,`mktcap_to_assets`), a
+  `decision`/`action` label (INCLUDE_CORE / VALUE / QUALITY / SATELLITE / WATCH /
+  AVOID), and `fail_legs`. This is the **policy layer** — the canonical dual-screen
+  gate lives in `quality_gate_bridge` (mirroring the `stockmagic` library) and is
+  consumed by `inclusion_criteria`, `preferred_metrics`, `threshold_logic`. Outputs
+  here are *policy decisions*, not measurements.
+
+### Regime / state table  (`regime_state`)
+
+- `date`, a `regime`/`state` label (Calm/Stress/High-vol), and state probabilities
+  or latent estimates (`p_calm`,`p_stress`, `mkt`, `log_vol`, `kalman_state`,
+  `entropy`). **This is the master risk switch**: regime state drives
+  `regime_aware_constraints` (which caps relax), `factor_rotation_defense` (which
+  sleeve is overweight), `rebalance_calendar`, and feeds `monte_carlo` /
+  `mcmc_regimes`. Three estimators triangulate it — HMM (`hmm_regime_detection`),
+  Kalman (`kalman_state_estimates`), and VAR — plus `vix_term_structure` as an
+  offline vol-slope proxy.
+
+### Weights / performance  (`weights_performance`)
+
+- Strategy/name-level: `ticker`/`strategy`, `weight` (fraction), risk/return stats
+  (`ret`,`vol`,`sharpe`,`max_dd`) and per-name `rc` (risk contribution). The
+  **allocation layer** — takes screen + regime + risk inputs and produces target
+  weights (ERC/GMV/inv-vol in `portfolio_optimization`, `risk_parity_analytics`;
+  factor sleeves in `factor_rotation_defense`; hedges in `tail_risk_hedging`).
+
+### Forecast / anomaly  (`forecast_anomaly`)
+
+- Forecast rows: `ticker`, `as_of`/`forecast_date`, `horizon`, `pct_change` (+ `close`/
+  `history` for charts); anomaly rows: `ticker`, `date`, `z_*` scores, `flag`. The
+  **Granite TTM subsystem**: `ttm_features`+`ttm_exogenous` build panels →
+  `ttm_backfill`/`train_adjusted_full` pretrain (adj-close) → `granite_daily`
+  continual-retrains → `forecast_granite` emits these → `analyze_granite_forecasts`
+  scores them → `granite_service` serves them. `tspulse_anomaly` flags bad prints.
+
+### Index level series  (`index_levels`)
+
+- Time series: `date`, `level` (index value, base 100), component `return` columns.
+  **Quantity-weighted truth** vs the cap-weighted S&P: `fisher_index` /
+  `run_fisher_duckdb` (DuckDB is system-of-record) chain Laspeyres·Paasche·Fisher
+  from close (price) × volume (quantity); `build_index` / `build_defensive_index` /
+  `build_growth_tech_index` assemble the sleeves; `live_index_backtest` Sharpe-tests
+  them.
+
+### Correlation matrix  (`correlation_matrix`)
+
+- `index` (row label, ticker or sector) × one column per entity, pairwise
+  coefficient in [-1,1]. Square or long-form `a,b,corr`. **Encodes the
+  diversification-fails-in-crisis fact**: calm pairwise ~0.15, crisis ~0.45+, sector
+  crisis higher — which is *why* regime switching, hedges, and cash buffers exist.
+  Produced at many horizons (rolling 21/63/126, ALLPAIRS history, crisis vs calm,
+  regime-conditioned) and by `hmm_regime_detection` (transition matrix).
 
 ### Summary / metrics  (`summary_metrics`)
 
-- Shape: One-row or few-row aggregates: `_summary`/`_stats`/`_metrics` with scalars (counts, vol, sharpe, avg corr, pass counts, reliability ranks). Long-form `name,value` also common.
+- One-row/few-row aggregates: `_summary`/`_stats`/`_metrics` with scalars (counts,
+  vol, sharpe, avg corr, pass counts, reliability ranks), or long-form `name,value`.
+  The dashboards and `research_hygiene` / `forecast_reliability` consume these.
 
 ### Auxiliary table  (`aux_table`)
 
-- Shape: Supporting tables: `sector_tickers` (ticker,sector,SECT_* slug), `vix_term_structure` (tenor, iv), membership/catalog listings.
+- Supporting tables: `sector_tickers` (ticker,sector,SECT_* slug), `vix_term_structure`
+  (tenor, iv), membership/catalog listings. Feed the screen layer and the
+  forecasting exogenous channels.
 
 ### Other  (`other`)
 
-- Shape: See producing script.
+- See producing script (mixed-shape outputs that don't fit a family cleanly).
 
 
 ## Full output catalog
@@ -164,51 +212,6 @@ This document is the **single source of truth for output file schemas** produced
 | `rolling_screen_stability.csv` | `rolling_window_analysis.py` | Screen / decision |
 | `screen_backtest.csv` | `fundamentals_history.py` | Screen / decision |
 | `threshold_logic_screen.csv` | `threshold_logic.py` | Screen / decision |
-| `daily_prices.parquet` | `allpairs_correlations.py` | Index level series |
-| `daily_prices.parquet` | `analyze_granite_forecasts.py` | Index level series |
-| `daily_prices.parquet` | `backfill_constituents.py` | Index level series |
-| `daily_prices.parquet` | `backfill_historical.py` | Index level series |
-| `daily_prices.parquet` | `binding_constraints_analysis.py` | Index level series |
-| `daily_prices.parquet` | `build_defensive_index.py` | Index level series |
-| `daily_prices.parquet` | `build_growth_tech_index.py` | Index level series |
-| `daily_prices.parquet` | `build_index.py` | Index level series |
-| `daily_prices.parquet` | `check_alerts.py` | Index level series |
-| `daily_prices.parquet` | `crisis_correlation.py` | Index level series |
-| `daily_prices.parquet` | `cross_asset_analysis.py` | Index level series |
-| `daily_prices.parquet` | `data_access.py` | Index level series |
-| `daily_prices.parquet` | `data_integrity.py` | Index level series |
-| `daily_prices.parquet` | `data_integrity_deep.py` | Index level series |
-| `daily_prices.parquet` | `factor_rotation_defense.py` | Index level series |
-| `daily_prices.parquet` | `fisher_index.py` | Index level series |
-| `daily_prices.parquet` | `forecast_granite.py` | Index level series |
-| `daily_prices.parquet` | `growth_tech_analytics.py` | Index level series |
-| `daily_prices.parquet` | `hmm_regime_detection.py` | Index level series |
-| `daily_prices.parquet` | `inclusion_criteria.py` | Index level series |
-| `daily_prices.parquet` | `kalman_gain_analysis.py` | Index level series |
-| `daily_prices.parquet` | `kalman_state_estimates.py` | Index level series |
-| `daily_prices.parquet` | `maintain_analytics.py` | Index level series |
-| `daily_prices.parquet` | `monte_carlo.py` | Index level series |
-| `daily_prices.parquet` | `portfolio_optimization.py` | Index level series |
-| `daily_prices.parquet` | `portfolio_report.py` | Index level series |
-| `daily_prices.parquet` | `rebalance_calendar.py` | Index level series |
-| `daily_prices.parquet` | `regime_aware_constraints.py` | Index level series |
-| `daily_prices.parquet` | `regime_correlation_breakdown.py` | Index level series |
-| `daily_prices.parquet` | `risk_metrics_ext.py` | Index level series |
-| `daily_prices.parquet` | `risk_parity_analytics.py` | Index level series |
-| `daily_prices.parquet` | `robust_covariance.py` | Index level series |
-| `daily_prices.parquet` | `rolling_correlation_windows.py` | Index level series |
-| `daily_prices.parquet` | `rolling_window_analysis.py` | Index level series |
-| `daily_prices.parquet` | `run_fisher_duckdb.py` | Index level series |
-| `daily_prices.parquet` | `tail_risk_hedging.py` | Index level series |
-| `daily_prices.parquet` | `tspulse_anomaly.py` | Index level series |
-| `daily_prices.parquet` | `ttm_exogenous.py` | Index level series |
-| `daily_prices.parquet` | `ttm_features.py` | Index level series |
-| `daily_prices.parquet` | `update_prices.py` | Index level series |
-| `daily_prices.parquet` | `vix_term_structure.py` | Index level series |
-| `daily_prices.parquet` | `vol_target.py` | Index level series |
-| `daily_prices_clean.parquet` | `data_integrity.py` | Index level series |
-| `daily_prices_clean.parquet` | `data_integrity_deep.py` | Index level series |
-| `daily_prices_yfinance.parquet` | `backfill_constituents.py` | Index level series |
 | `defensive_value_index.parquet` | `build_defensive_index.py` | Index level series |
 | `fertilizer_index.parquet` | `build_index.py` | Index level series |
 | `fisher_indexes.parquet` | `fisher_index.py` | Index level series |
@@ -221,11 +224,6 @@ This document is the **single source of truth for output file schemas** produced
 | `index_levels_1y.csv` | `live_index_backtest.py` | Index level series |
 | `index_levels_1y.parquet` | `live_index_backtest.py` | Index level series |
 | `index_levels_1y.parquet` | `maintain_analytics.py` | Index level series |
-| `sector_prices.parquet` | `cross_asset_analysis.py` | Index level series |
-| `sector_prices.parquet` | `data_access.py` | Index level series |
-| `sector_prices.parquet` | `forecast_granite.py` | Index level series |
-| `sector_prices.parquet` | `index_registry.py` | Index level series |
-| `alerts_config.parquet` | `alerts_config.parquet.py` | Base parquet table |
 | `alerts_config.parquet` | `check_alerts.py` | Base parquet table |
 | `alerts_config.parquet` | `manage_alerts.py` | Base parquet table |
 | `fundamentals.parquet` | `backfill_constituents.py` | Base parquet table |
@@ -301,6 +299,14 @@ This document is the **single source of truth for output file schemas** produced
 | `portfolio_holdings.parquet` | `rolling_window_analysis.py` | Base parquet table |
 | `portfolio_holdings.parquet` | `vol_target.py` | Base parquet table |
 | `sp500_constituents.parquet` | `backfill_constituents.py` | Base parquet table |
+| `sp500_constituents.parquet` | `parse_sp500.py` | Base parquet table |
+| `sp500_changes.parquet` | `parse_sp500_changes.py` | Base parquet table |
+| `sp500_changes.parquet` | `parse_tickerleague_changes.py` | Base parquet table |
+| `sp500_changes_tickerleague.parquet` | `parse_tickerleague_changes.py` | Base parquet table |
+| `sp500_universe_tracking.parquet` | `sp_universe_tracking.py` | Base parquet table |
+| `exogenous_panel.parquet` | `tspulse_anomaly.py` | Base parquet table |
+| `exogenous_panel.parquet` | `ttm_exogenous.py` | Base parquet table |
+| `granite_series_cache.parquet` | `granite_daily.py` | Base parquet table |
 | `trades.parquet` | `data_access.py` | Base parquet table |
 | `trades.parquet` | `index_registry.py` | Base parquet table |
 | `cross_asset_stability.csv` | `cross_asset_analysis.py` | Summary / metrics |
@@ -339,8 +345,6 @@ This document is the **single source of truth for output file schemas** produced
 | `black_litterman_views.csv` | `black_litterman_views.py` | Other |
 | `dupont_analysis.csv` | `dupont_analysis.py` | Other |
 | `erc_gmv_strategies.csv` | `portfolio_optimization.py` | Other |
-| `exogenous_panel.parquet` | `tspulse_anomaly.py` | Other |
-| `exogenous_panel.parquet` | `ttm_exogenous.py` | Other |
 | `fisher_indexes.csv` | `fisher_index.py` | Other |
 | `fisher_indexes_duckdb.csv` | `run_fisher_duckdb.py` | Other |
 | `fisher_rate_decomposition.csv` | `fisher_index.py` | Other |
@@ -350,7 +354,6 @@ This document is the **single source of truth for output file schemas** produced
 | `kelly_parameters.parquet` | `kelly.py` | Other |
 | `kelly_parameters.parquet` | `preferred_metrics.py` | Other |
 | `monte_carlo_terminal_wealth.csv` | `monte_carlo.py` | Other |
-| `sp500_universe_tracking.parquet` | `sp_universe_tracking.py` | Other |
 | `tail_risk_hedge_crisis.csv` | `tail_risk_hedging.py` | Other |
 | `vol_target_vs_risk_parity.csv` | `risk_parity_analytics.py` | Other |
 | `vol_targets.csv` | `preferred_metrics.py` | Other |

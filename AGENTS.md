@@ -26,12 +26,12 @@ This repo is a **personal portfolio intelligence stack** (Python + DuckDB + a st
 ## Key facts an agent must not get wrong
 
 - `analytics_service.py` script default port is **8765**; `start_dashboard.sh` overrides it to **8767** (so the static server keeps 8765). Don't tell a user the service is on 8765 when launched via the script.
-- `portfolio_optimization.py` has a real `--smci-cap` flag (it special-cases SMCI at 5%); other growth names use 8%. The code special-cases SMCI — describe it as such; don't pretend SMCI is treated identically.
-- `vol_target.py` defaults: SMCI target cap 5%, other growth names 8%; standalone target vol 25%.
+- `portfolio_optimization.py` takes a uniform `--name-cap` (default 5%) applied to **all** names; there is no per-ticker special-casing. Use that flag rather than any removed ticker-specific cap.
 - `fisher_index.py` writes `fisher_indexes.csv`, `fisher_indexes.parquet`, **and** `fisher_rate_decomposition.csv`. `run_fisher_duckdb.py` is the DuckDB system-of-record variant (`fisher_indexes_duckdb.csv/.parquet`).
 - `stress_dual_pass.py` pass-counts are **data-dependent** (recomputed against current fundamentals) — never quote a fixed count as if it were a constant.
 - Checkpoints under `checkpoints/` are large and Git-ignored — never delete them mid-run; never commit them.
 - `daily_prices.parquet` is stored in **Git LFS** (exceeds GitHub's 100 MB limit). Use `git lfs` for any push involving it.
+- **No ticker is special-cased.** All symbols (e.g. SPCX or any other) are ordinary rows in the data tables; caps, screens, and forecasts apply uniformly across tickers. Treat them as plain tickers, never as bespoke cases.
 
 ## Documentation layout
 

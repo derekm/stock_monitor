@@ -15,7 +15,17 @@ Read **[docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)** for a holistic summa
 **Docs map:**
 - **[docs/SYSTEM_ORCHESTRATION.md](docs/SYSTEM_ORCHESTRATION.md)** — how the programs chain (data spine → analytics → services), what `start_dashboard.sh` launches, and what an agent should know before running analytics.
 - **[docs/SCHEMAS.md](docs/SCHEMAS.md)** — the single catalog of every output file → producing script → schema family.
-- **Per-program docs:** `docs/<script>.md` for all 120+ scripts (description, rationale, outputs, cross-links).
+- **Per-program docs:** `docs/<script>.md` for all 124 scripts (description, rationale, outputs, cross-links).
+
+**Documentation architecture (read in this order):**
+
+1. **SYSTEM_OVERVIEW.md** — *why*: investment thesis, the screen/risk/regime theory, and how the layers form feedback loops.
+2. **SYSTEM_ORCHESTRATION.md** — *how*: the exact data spine → analytics → four-services chaining, plus what an agent must know before running anything.
+3. **SCHEMAS.md** — *what*: the single catalog of every output file → producing script → schema family (the families encode the module theory).
+4. **docs/`<script>.md`** — one doc per script (description, rationale, outputs, related programs).
+5. **AGENTS.md** — operating rules for agents touching this repo.
+
+The **data spine** (`daily_prices`, `fundamentals`, `monitored_stocks`, `portfolio_holdings`, `trades`, `exogenous_panel`, and the S&P tables) is the only shared input; everything else is a derived output catalogued in SCHEMAS.md.
 
 ## Quick start
 
@@ -134,7 +144,7 @@ Documented in the dashboard **Decisions** tab and analysis history:
 3. **FMC** deep book value — check EBITDA quality before size  
 4. **Value trifecta** filter: EV/EBITDA ≤ 9, P/B ≤ 1.5, MktCap/Assets ≤ 0.5  
 5. **Materials** as diversifier vs Staples/Health Care (rolling corr can spike)  
-6. Portfolio already value-tilted; **SMCI** is the growth outlier  
+6. Portfolio already value-tilted; the growth/tech sleeve is the intentional high-vol outlier  |
 7. Sector EW (`SECT_*`) forecasts for rotation without single-name noise  
 
 ---

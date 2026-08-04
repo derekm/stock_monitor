@@ -21,6 +21,18 @@ A **modular, offline-capable investment operating system** around a real Robinho
 
 It is designed so **screens, risk budgets, and regime signals** can change weights over time—not a static “buy the trifecta and forget.”
 
+### How the layers actually connect (the feedback loops)
+
+The stack is not a linear pipeline; it is a set of loops that re-condition each other:
+
+- **Screen → Policy → Weights.** `quality_gate_bridge` (the canonical dual-screen gate, mirrored from the `stockmagic` library) is the single source of truth for the Buffett-quality + value-trifecta legs. `preferred_metrics` → `inclusion_criteria` turn it into INCLUDE_CORE / VALUE / QUALITY / SATELLITE / WATCH / AVOID bands; `portfolio_optimization` / `risk_parity_analytics` turn those bands into target weights. Change a threshold in `threshold_logic` and the weights move.
+- **Regime is the master switch.** `hmm_regime_detection` + `kalman_state_estimates` (triangulated with `vix_term_structure`) emit a regime label that drives **three** downstream consumers: `regime_aware_constraints` (which caps relax in stress), `factor_rotation_defense` (which sleeve is overweight), and `rebalance_calendar` (when to act). The same label feeds `monte_carlo` / `mcmc_regimes` so tail sims use regime-conditioned means.
+- **Correlation structures the hedges.** Rolling / ALLPAIRS / crisis / regime-conditioned correlations all encode one fact: diversification fails in crises (calm pairwise ~0.15, crisis ~0.45+). That single observation is *why* `tail_risk_hedging`, `factor_rotation_defense`, and the cash buffer exist.
+- **Index levels are the accountability layer.** `fisher_index` / `run_fisher_duckdb` (DuckDB is system-of-record) build quantity-weighted indexes from the same prices the screens use; `live_index_backtest` and `research_hygiene` then ask whether the screens actually beat a passive benchmark. The S&P tracking subsystem (`parse_sp500*` → `sp_index_methodology` → `sp_history_simulation`) is an independent reimplementation scored against S&P actuals — the same discipline applied to the index committee.
+- **Forecasts are a stateful overlay.** `ttm_features`+`ttm_exogenous` → `ttm_backfill` (pretrain) → `granite_daily` (continual) → `forecast_granite` → `analyze_granite_forecasts` (score) → `granite_service`. The scoring loop (`forecast_reliability`, `research_hygiene`) closes the loop: bad configs get dropped before they reach the dashboard.
+
+The **data spine** (`daily_prices`, `fundamentals`, `monitored_stocks`, `portfolio_holdings`, `trades`, `exogenous_panel`, the S&P tables) is the only thing every loop reads; the **four services** (`granite_service` :5055, `pipeline_service` :5056, `analytics_service` :8767, static :8765 via `start_dashboard.sh`) are just the runtime that exposes these loops to the browser. See [SYSTEM_ORCHESTRATION.md](SYSTEM_ORCHESTRATION.md) for the exact chaining and [SCHEMAS.md](SCHEMAS.md) for every output.
+
 ---
 
 ## 2. What we are analyzing (and why)

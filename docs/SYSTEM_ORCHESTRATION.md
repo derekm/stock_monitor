@@ -14,8 +14,11 @@ Almost every program reads from a small set of canonical parquet/CSV tables in `
 | `portfolio_holdings.parquet` | external/Robinhood export | portfolio_report, risk, optimization |
 | `trades.parquet` | external (Robinhood fills) | portfolio_report, perf vs benchmarks |
 | `sector_prices.parquet` | `cross_asset_analysis.py save-sector-prices` | exogenous features, forecasting |
+| `exogenous_panel.parquet` | `ttm_exogenous.py` | Granite TTM forecast channels (market/sector returns, dispersion) |
+| `granite_series_cache.parquet` | `granite_daily.py` | cached series for the daily forecast loop |
 | `sp500_constituents.parquet` | `parse_sp500.py` | S&P tracking (`sp_universe_tracking`, `sp_index_methodology`) |
-| `alerts_config.parquet` | `alerts_config.parquet` seed / `manage_alerts.py` | `check_alerts.py` |
+| `sp500_changes.parquet` | `parse_sp500_changes.py` / `parse_tickerleague_changes.py` | S&P add/remove event log (`sp_index_methodology`, `sp_history_simulation`) |
+| `alerts_config.parquet` | seed / `manage_alerts.py` | `check_alerts.py` |
 
 > Schema details for every output above (and the ~120 others) live in [SCHEMAS.md](SCHEMAS.md).
 
@@ -68,9 +71,11 @@ After launch:
 
 Forecasts are the most stateful part. Order matters:
 
-1. **Pre-train** history once (or when data grows): `granite_backfill.py` / `ttm_backfill.py` drive `train_adjusted_full.py` to produce global adjusted checkpoints.
-2. **Daily**: `granite_daily.py` runs the 512→96-day model with continual retraining on prior-day actuals; `forecast_granite.py` produces `forecasts_granite.csv/.parquet` used by `granite_service.py` and `analyze_granite_forecasts.py`.
-3. **Anomalies**: `tspulse_anomaly.py` scans for outliers.
+1. **Build panels**: `ttm_features.py` (multivariate panels from `daily_prices`) + `ttm_exogenous.py` (market/sector/dispersion channels → `exogenous_panel.parquet`).
+2. **Pre-train** history once (or when data grows): `ttm_backfill.py` / `granite_backfill.py` (thin shim) / `train_adjusted_full.py` (adj-close config) produce global adjusted checkpoints under `checkpoints/`. `window_padding.py` pads sub-512-day tickers with a rescaled market proxy so the fixed 512-token TTM context is valid.
+3. **Daily**: `granite_daily.py` runs the 512→96-day model with continual retraining on prior-day actuals (caching series in `granite_series_cache.parquet`); `forecast_granite.py` produces `forecasts_granite.csv/.parquet` used by `granite_service.py`.
+4. **Score**: `analyze_granite_forecasts.py` backtests the forecasts (writes `forecast_backtest_metrics.csv/.parquet`); `forecast_reliability.py` ranks setups on the actual holdings; `research_hygiene.py` reports reliability.
+5. **Anomalies**: `tspulse_anomaly.py` scans for outliers.
 
 Checkpoints live under `checkpoints/` (Git-ignored / large). Never delete them mid-run.
 
