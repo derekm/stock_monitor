@@ -17,7 +17,7 @@ python granite_service.py --host 127.0.0.1 --port 5055
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Liveness |
-| GET | `/tickers` | Monitored tickers |
+| GET | `/indexes` | Available indexes |
 | GET | `/forecast?tickers=MOS,CF&horizon=10` | Forecast selected names |
 | GET | `/forecast/portfolio?horizon=10&from_first_trade=1` | Portfolio (first-trade aware) |
 | GET | `/forecast/index?name=fertilizer&horizon=10` | Fertilizer or defensive index |

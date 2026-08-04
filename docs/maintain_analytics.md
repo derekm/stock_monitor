@@ -13,11 +13,15 @@ python maintain_analytics.py kalman
 python maintain_analytics.py var
 python maintain_analytics.py backtest
 python maintain_analytics.py cross-asset
+python maintain_analytics.py growth-tech
+python maintain_analytics.py optimize
+python maintain_analytics.py vol-rp
 python maintain_analytics.py list
 ```
 
 ## Outputs (examples)
 - `sector_correlation_matrix.csv`
+- `fertilizer_correlation_matrix.csv`
 - `rolling_sector_correlations.csv`
 - `correlation_stability_metrics.csv`
 - `hmm_2state_regimes.csv` / `hmm_2state_regime_correlations.csv`

@@ -6,7 +6,7 @@ Build the **fertilizer / agrochemical equal-weight index** levels and membership
 Track the fertilizer sleeve (MOS, CF, NTR, …) used in backtests and sector-rotation analysis.
 
 ## Outputs
-- Index levels (often into `index_levels_1y.parquet` / related tables)
+- `fertilizer_index.parquet` — daily index level + component returns
 - Membership consistent with `monitored_stocks.index_member`
 
 ## Related
