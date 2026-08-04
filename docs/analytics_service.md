@@ -2,9 +2,12 @@
 
 HTTP microservice so the dashboard can trigger daily jobs.
 
+**Standard launch:** run `./start_dashboard.sh` — it starts this service (port 8767) along with `granite_service`, `pipeline_service`, and the static dashboard.
+
+Manual (only if launching in isolation):
+
 ```bash
-python analytics_service.py --port 8765
-python granite_service.py   # forecasts (existing)
+python analytics_service.py --port 8767
 ```
 
 | Method | Path | Purpose |
