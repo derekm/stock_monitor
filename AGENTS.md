@@ -31,7 +31,6 @@ This repo is a **personal portfolio intelligence stack** (Python + DuckDB + a st
 - `stress_dual_pass.py` pass-counts are **data-dependent** (recomputed against current fundamentals) — never quote a fixed count as if it were a constant.
 - Checkpoints under `checkpoints/` are large and Git-ignored — never delete them mid-run; never commit them.
 - `daily_prices.parquet` is stored in **Git LFS** (exceeds GitHub's 100 MB limit). Use `git lfs` for any push involving it.
-- **No ticker is special-cased.** All symbols (e.g. SPCX or any other) are ordinary rows in the data tables; caps, screens, and forecasts apply uniformly across tickers. Treat them as plain tickers, never as bespoke cases.
 
 ## Documentation layout
 
