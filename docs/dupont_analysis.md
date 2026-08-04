@@ -4,7 +4,7 @@ DuPont decomposition of ROE:
 
 
 $$
-\mathrm{ROE} \approx \underbrace{\mathrm{PM} \times \mathrm{Asset\ Turnover}}_{pm\_x\_at} \times \underbrace{(1 + D/E)}_{\text{equity multiplier}}
+\mathrm{ROE} \approx \underbrace{\mathrm{PM} \times \mathrm{Asset\ Turnover}}_{\text{pm x at}} \times \underbrace{(1 + D/E)}_{\text{equity multiplier}}
 $$
 
 
