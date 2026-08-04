@@ -10,7 +10,7 @@ Steps:
 
 Usage:
   python black_litterman.py --universe portfolio
-  python black_litterman.py --universe portfolio --view SMCI:0.05 --view PFE:0.08
+  python black_litterman.py --universe portfolio --view NVDA:0.05 --view PFE:0.08
   python black_litterman.py --universe growth --tau 0.05 --delta 2.5 --save
 
 Views format: TICKER:excess_return  (absolute view on single asset)
@@ -141,12 +141,10 @@ def run(universe: str, views: list[str], tau: float, delta: float, window: int, 
             mu_bl, _ = black_litterman(Sigma, w_eq, P, Q, tau=tau, delta=delta)
             print(f"Views applied: {list(zip([tickers[j] for j in P.argmax(1)], Q))}")
     else:
-        # default illustrative views: mild overweight defensives / underweight SMCI
+        # default illustrative views: mild overweight selected names
         defaults = []
         if "PFE" in tickers:
             defaults.append("PFE:0.08")
-        if "SMCI" in tickers:
-            defaults.append("SMCI:-0.02")
         if "MOS" in tickers:
             defaults.append("MOS:0.10")
         if defaults:
@@ -191,7 +189,7 @@ def run(universe: str, views: list[str], tau: float, delta: float, window: int, 
 def main():
     ap = argparse.ArgumentParser()
     add_index_args(ap, default="portfolio")
-    ap.add_argument("--view", action="append", default=[], help="TICKER:return e.g. SMCI:-0.02")
+    ap.add_argument("--view", action="append", default=[], help="TICKER:return e.g. NVDA:-0.02")
     ap.add_argument("--tau", type=float, default=0.05)
     ap.add_argument("--delta", type=float, default=2.5)
     ap.add_argument("--window", type=int, default=126)

@@ -30,7 +30,7 @@ $$
 |---------|------------|
 | Unconstrained | Closed form $w \propto \Sigma^{-1}\mathbf{1}$ (shorts allowed) |
 | Long-only | $w \ge 0$ via SLSQP |
-| Long + SMCI cap | $0 \le w_{\text{SMCI}} \le 5\%$, other caps optional |
+| Long + per-name cap | $0 \le w_i \le c$, uniform cap $c$ (default 5%), all names |
 
 GMV minimizes volatility; it does **not** equalize risk contributions (low-vol names get larger RC).
 
@@ -38,7 +38,7 @@ GMV minimizes volatility; it does **not** equalize risk contributions (low-vol n
 
 ```bash
 python portfolio_optimization.py
-python portfolio_optimization.py --universe portfolio --window 126 --smci-cap 0.05
+python portfolio_optimization.py --universe portfolio --window 126 --name-cap 0.05
 python portfolio_optimization.py --universe growth_ai --w-floor 0.05
 python maintain_analytics.py optimize
 ```

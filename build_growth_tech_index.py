@@ -3,7 +3,7 @@
 build_growth_tech_index.py — Equal-weight higher-risk Growth / Tech index.
 
 Sleeves (growth_sleeve on monitored_stocks):
-  growth_ai       — SMCI, NVDA, AMD, PLTR, CRWD
+  growth_ai       — NVDA, AMD, PLTR, CRWD
   quality_growth  — MSFT, GOOGL
   emerging_growth — TSLA, ENPH, SEDG, REGN, XBI
   cyclical        — BA, CAT, SCHW

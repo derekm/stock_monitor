@@ -1,28 +1,30 @@
 # window_padding.py
 
-window_padding.py — fill a sub-512 context for short-history tickers.
+Fill a sub-512 context for short-history tickers (Granite TTM has a fixed
+512-token context).
 
 ## Why it exists (rationale)
 
-Fills a sub-512 context window for short-history tickers so TTM models have enough lookback — supports `ttm_features` / `granite_daily`.
+New S&P additions (spinoffs, recent IPOs) often have < 512 trading days, but the
+TTM-r2 context can't be shrunk. To give them a real (non-fabricated) 512-window,
+this pads the **head** with a genuine market/sector proxy rescaled to the
+ticker's own price level: `[proxy_rescaled (first 512−n), ticker_actual (last n)]`.
+A library used by the backfill/forecast path so short-history names still get a
+valid window.
 
-## Usage
+## Key functions
 
-```bash
-python window_padding.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
-```
-
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+- `pad_to_context(ticker, close, sector=None)` → 512-length padded context
+- `needs_backfill(ticker, px=None)` → (bool, days_short) — whether padding is needed
+- `_sector_proxy(...)` — picks the rescaled proxy series
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
-
+None written (library; returns padded arrays). Used by `ttm_backfill` /
+`granite_backfill` / `forecast_granite`.
 
 ## Related programs
 
-- [docs/ttm_features.md](ttm_features.md)
-- [docs/granite_daily.md](granite_daily.md)
-- [docs/backfill_historical.md](backfill_historical.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [ttm_backfill.md](ttm_backfill.md) / [granite_backfill.md](granite_backfill.md)
+- [forecast_granite.md](forecast_granite.md)
+- [sp_universe_tracking.md](sp_universe_tracking.md) — recent additions

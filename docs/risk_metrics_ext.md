@@ -1,35 +1,32 @@
 # risk_metrics_ext.py
 
-risk_metrics_ext.py — Liquidity, concentration, factor-style risk (Polars + pandas).
+Liquidity, concentration, and factor-style risk metrics (Polars + pandas).
 
 ## Why it exists (rationale)
 
-Liquidity, concentration, factor-style risk metrics (Polars + pandas) extending the risk picture beyond `portfolio_optimization`.
+Beyond vol/beta, the book needs liquidity and concentration risk visible. This
+computes per-ticker liquidity + simple factor scores (`risk_metrics_ext.csv`)
+and a portfolio-level concentration / liquidity / beta summary
+(`portfolio_risk_summary.csv`) — the risk picture that informs caps and sleeve
+sizing.
 
 ## Usage
 
 ```bash
-python risk_metrics_ext.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python risk_metrics_ext.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save`. Reads `daily_prices.parquet`, `portfolio_holdings.parquet`.
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `portfolio_holdings.parquet`
-- **Screen / decision** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `portfolio_risk_summary.csv`
-  - `risk_metrics_ext.csv`
-- **Summary / metrics** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `preferred_metrics.csv`
+- `risk_metrics_ext.csv` — per-ticker liquidity + factor scores
+- `portfolio_risk_summary.csv` — concentration / liquidity / beta summary
 
+(Schema families: summary_metrics / weights_performance — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/risk_enrich.md](risk_enrich.md)
-- [docs/portfolio_optimization.md](portfolio_optimization.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [risk_enrich.md](risk_enrich.md) — vol/beta/DD enrichment
+- [vol_target.md](vol_target.md) / [risk_parity_analytics.md](risk_parity_analytics.md)
+- [preferred_metrics.md](preferred_metrics.md)

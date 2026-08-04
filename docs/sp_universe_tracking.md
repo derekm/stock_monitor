@@ -1,29 +1,35 @@
 # sp_universe_tracking.py
 
-sp_universe_tracking.py — track ALL S&P 500 constituents (503) by index, basket, and vertical, with our scored inclusion tiers where fundamentals exist.
+Track ALL S&P 500 constituents (503) by index, basket, and vertical, with our
+scored inclusion tiers where fundamentals exist.
 
 ## Why it exists (rationale)
 
-Tracks all 503 S&P 500 constituents by index/basket/vertical with scored inclusion tiers where fundamentals exist.
+Fulfills "track all indexes and their baskets": every current constituent is
+represented with its GICS sector / sub-industry (the basket/vertical) and, for
+the ~28 names we carry fundamentals for, a scored inclusion tier. It is the
+breadth view of the S&P-tracking subsystem — coverage, not just the personal
+book.
 
 ## Usage
 
 ```bash
-python sp_universe_tracking.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python sp_universe_tracking.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save`. Reads `sp500_constituents.parquet`, `sp500_changes.parquet`,
+`monitored_stocks.parquet`, `fundamentals.parquet`, `daily_prices.parquet`.
 
 ## Outputs
 
-- **Other** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `sp500_universe_tracking.parquet`
+- `sp500_universe_tracking.parquet` — per-constituent tracking (sector,
+  sub-industry, scored tier where available)
 
+(Schema family: aux_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/sp_index_methodology.md](sp_index_methodology.md)
-- [docs/parse_sp500.md](parse_sp500.md)
-- [docs/reconcile_sp500.md](reconcile_sp500.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [sp_index_methodology.md](sp_index_methodology.md)
+- [sp_history_simulation.md](sp_history_simulation.md)
+- [parse_sp500.md](parse_sp500.md) / [backfill_constituents.md](backfill_constituents.md)
+- [reconcile_sp500.md](reconcile_sp500.md)

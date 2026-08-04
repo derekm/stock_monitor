@@ -1,33 +1,33 @@
 # kalman_state_estimates.py
 
-kalman_state_estimates.py — Kalman filter latent state for market risk.
+Kalman filter latent-state estimates for market risk: a smooth latent return
+level + stochastic-vol proxy, plus a smoothed latent correlation factor.
 
 ## Why it exists (rationale)
 
-Kalman-filter latent market-risk state used by `regime_correlation_breakdown`, `maintain_analytics` (kalman_correlations), and the dashboard.
+Regime labels are noisy day-to-day; a Kalman filter gives a smooth,
+probabilistically-weighted latent state for market return and vol (and average
+pairwise correlation). That smoothed state is a cleaner risk signal than raw
+daily prints and feeds the dashboard's regime tab.
 
 ## Usage
 
 ```bash
-python kalman_state_estimates.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python kalman_state_estimates.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save`. Reads `daily_prices.parquet`, `hmm_regime_states.csv`.
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-- **Regime / state table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `hmm_regime_states.csv`
-  - `kalman_state_estimates.csv`
-  - `kalman_state_summary.csv`
+- `kalman_state_estimates.csv` — latent return / vol / corr over time
+- `kalman_state_summary.csv` — per-state summary
 
+(Schema family: regime_state — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/kalman_gain_analysis.md](kalman_gain_analysis.md)
-- [docs/regime_correlation_breakdown.md](regime_correlation_breakdown.md)
-- [docs/maintain_analytics.md](maintain_analytics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [kalman_gain_analysis.md](kalman_gain_analysis.md) — gain diagnostics
+- [hmm_regime_detection.md](hmm_regime_detection.md)
+- [vix_term_structure.md](vix_term_structure.md)
+- [regime_aware_constraints.md](regime_aware_constraints.md)

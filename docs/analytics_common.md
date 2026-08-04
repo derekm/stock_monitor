@@ -1,27 +1,34 @@
 # analytics_common.py
 
-analytics_common.py — shared Polars/pandas loaders and return helpers.
+Shared Polars/pandas loaders and return helpers used across the analytics
+programs. This is a **library**, not a runnable script (no `argparse`, no
+`main()`).
 
 ## Why it exists (rationale)
 
-Shared Polars/pandas loaders and return helpers used by analytics programs.
+Avoids every analytics script re-implementing the same parquet reads and return
+math. It also centralizes the "prefer the clean prices copy" decision
+(`daily_prices_clean.parquet` when present, else `daily_prices.parquet`).
 
-## Usage
+## Public functions
 
-```bash
-python analytics_common.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
-```
-
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+- `prices_path(prefer_clean=True)` → `Path` to the clean-or-raw prices parquet.
+- `load_prices_pandas(prefer_clean=True, tickers=None)` → long `pd.DataFrame`
+  with columns `date, ticker, close` (optionally filtered to `tickers`).
+- `wide_closes(prices)` → date-indexed wide frame of closes (ticker columns).
+- `simple_returns(wide)` → log/simple returns from a wide close frame.
+- `clip_returns(rets, clip=0.35)` → returns clipped at ±`clip` (drops impossible moves).
+- `load_membership()` → `monitored_stocks` frame.
+- `load_preferred()` → `preferred_metrics` frame.
+- `ann_stats(rets, rf=0.04)` → annualized stats dict (vol, ret, sharpe, …).
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
-
+None (library). Reads `daily_prices*.parquet`, `monitored_stocks.parquet`,
+`preferred_metrics.csv/.parquet`.
 
 ## Related programs
 
-- [docs/data_access.md](data_access.md)
-- [docs/maintain_analytics.md](maintain_analytics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- Used by most analytics programs (e.g. [allpairs_correlations.md](allpairs_correlations.md),
+  [crisis_correlation.md](crisis_correlation.md), [cross_asset_analysis.md](cross_asset_analysis.md)).
+- Companion loader: [data_access.md](data_access.md).

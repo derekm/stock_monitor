@@ -20,7 +20,7 @@ Other decision bands (from preferred_metrics):
   AVOID           — else
 
 Hard exclusions (policy):
-  - SMCI weight cap 5% of total portfolio regardless of scores
+  - Per-name hard cap (default 5% of total portfolio) regardless of scores
   - Negative earnings_stability < 0.25 → prefer AVOID/WATCH for core book
   - growth_tech names never auto-promoted to INCLUDE_CORE without dual pass
 
@@ -69,7 +69,7 @@ RULES = {
         "label": "INCLUDE_CORE",
     },
     "sizing": {
-        "smci_max_weight": 0.05,
+        "per_name_max_weight": 0.05,
         "core_max_weight": 0.12,
         "value_max_weight": 0.08,
         "satellite_max_weight": 0.05,

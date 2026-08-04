@@ -1,32 +1,33 @@
 # fisher_sector_baskets.py
 
-fisher_sector_baskets.py — Fisher-style price indexes for sector baskets inside an index sleeve.
+Fisher-style price indexes for sector baskets inside an index sleeve.
 
 ## Why it exists (rationale)
 
-Computes Fisher price indexes for sector baskets inside an index sleeve — finer-grained quantity/price decomposition than the whole-index `fisher_index` / `run_fisher_duckdb`.
+Extends `fisher_index.py` to sector baskets: builds equal-weight sector price
+levels (by GICS sector for our sleeves, by `sp500_sector` for the S&P 500) and
+exports a long panel for the dashboard's Fisher tab — so you can see
+quantity-weighted sector drift, not just the headline index.
 
 ## Usage
 
 ```bash
-python fisher_sector_baskets.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python fisher_sector_baskets.py --index sp500 --save
+python fisher_sector_baskets.py --index all --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--index` (sp500 / defensive / growth / fertilizer / portfolio / all),
+`--lookback` (default 756 trading days), `--save`.
 
 ## Outputs
 
-- **Auxiliary table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `fisher_sector_baskets.csv`
-  - `fisher_sector_baskets_latest.csv`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `monitored_stocks.parquet`
+- `fisher_sector_baskets.csv` — basket levels over time
+- `fisher_sector_baskets_latest.csv` — latest levels per basket
 
+(Schema family: index_levels — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/fisher_index.md](fisher_index.md)
-- [docs/run_fisher_duckdb.md](run_fisher_duckdb.md)
-- [docs/build_index.md](build_index.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [fisher_index.md](fisher_index.md) — base Fisher indexes
+- [run_fisher_duckdb.md](run_fisher_duckdb.md)
+- [sp_universe_tracking.md](sp_universe_tracking.md) / [parse_sp500.md](parse_sp500.md)

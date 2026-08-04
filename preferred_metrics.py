@@ -10,7 +10,7 @@ Value trifecta (from prior threads):
   EV/EBITDA <= 9, P/B <= 1.5, MktCap/Assets <= 0.5
 
 Sizing preferences:
-  - Vol targeting / hard caps (SMCI <= 5%)
+  - Vol targeting / per-name hard caps (default suggested max weight floor 5%)
   - Fractional Kelly when parameters exist
   - Prefer high composite score for inclusion / add size
 
@@ -49,7 +49,7 @@ DE_IDEAL = 0.5
 EV_EBITDA_MAX = 9.0
 PB_MAX = 1.5
 MCA_MAX = 0.5         # mktcap_to_assets
-SMCI_W_MAX = 0.05
+BASE_W_MAX = 0.05     # default suggested max weight floor before composite scaling
 
 # Illustrative quality seeds (approx; replace with live filings/API)
 # Format: ticker -> (roe, roic, debt_to_equity, interest_coverage, earnings_stability 0-1)
@@ -288,9 +288,7 @@ def apply_leverage_flag_to_scores(composite: float, lev: dict, q: dict, v: dict)
 
 def sizing_hint(ticker: str, composite: float, vol_target_w: float | None) -> dict:
     """Map composite score to a suggested max weight band."""
-    if ticker == "SMCI":
-        base_cap = SMCI_W_MAX
-    elif composite >= 0.75:
+    if composite >= 0.75:
         base_cap = 0.12
     elif composite >= 0.60:
         base_cap = 0.08
@@ -304,7 +302,7 @@ def sizing_hint(ticker: str, composite: float, vol_target_w: float | None) -> di
     else:
         cap = base_cap
 
-    if composite >= 0.70 and (ticker != "SMCI" or cap >= 0.03):
+    if composite >= 0.70:
         action = "prefer_add" if composite >= 0.75 else "hold_or_add"
     elif composite >= 0.50:
         action = "hold"

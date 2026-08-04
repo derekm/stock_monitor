@@ -1,34 +1,35 @@
 # data_access.py
 
-data_access.py — Shared loaders for parquet/CSV tables used across programs.
+Shared loaders for the parquet/CSV tables used across stock_monitor programs.
+This is a **library**, not a runnable script (no argparse, no main).
 
 ## Why it exists (rationale)
 
-Central parquet/CSV loaders used by nearly every program — the single place that knows the on-disk layout of `daily_prices`, `fundamentals`, `monitored_stocks`, `portfolio_holdings`, `sector_prices`, `trades`.
+Every analytics program reads the same base tables (`monitored_stocks`,
+`daily_prices`, `portfolio_holdings`, `trades`, `fundamentals`,
+`sector_prices`). Centralizing the loaders avoids N copy-paste read paths, keeps
+column types consistent (dates parsed, fundamentals reduced to latest snapshot),
+and gives a single place to handle fallback locations (e.g. `trades.parquet`
+also checked in the parent dir).
 
-## Usage
+## Key functions
 
-```bash
-python data_access.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
-```
-
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+| Function | Returns | Notes |
+|----------|---------|-------|
+| `load_stocks()` | `monitored_stocks.parquet` | empty frame if missing |
+| `load_prices(tickers=None, columns=None)` | `daily_prices.parquet` | dates parsed; optional ticker/column filter |
+| `load_holdings()` | `portfolio_holdings.parquet` | |
+| `load_trades()` | `trades.parquet` | also checks parent dir; parses `filled_datetime` |
+| `load_fundamentals(latest=True)` | `fundamentals.parquet` | `latest=True` → one row per ticker (latest `as_of_date`) |
+| `price_matrix(tickers=None, field="close")` | wide date×ticker DataFrame | pivot + forward-fill |
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-  - `sector_prices.parquet`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `fundamentals.parquet`
-  - `monitored_stocks.parquet`
-  - `portfolio_holdings.parquet`
-  - `trades.parquet`
-
+None (library).
 
 ## Related programs
 
-- [docs/cli_common.md](cli_common.md)
-- all stock_monitor programs (via `data_access`/`cli_common`)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [cli_common.md](cli_common.md) — flag parsing / ticker resolution
+- [data_integrity.md](data_integrity.md) / [data_integrity_deep.md](data_integrity_deep.md)
+  — validation that uses these loaders
+- Any program doc that lists `daily_prices.parquet` / `fundamentals.parquet` as input

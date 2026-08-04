@@ -1,31 +1,33 @@
 # forecast_reliability.py
 
-forecast_reliability.py — Rank forecast setups on holdings after first trade.
+Rank Granite forecast setups on the actual holdings (from first trade) so you can
+pick more reliable configurations.
 
 ## Why it exists (rationale)
 
-Ranks forecast setups by post-first-trade reliability so `forecast_granite` effort is spent where it actually adds signal; feeds `research_hygiene`.
+A single forecast config may look good by chance. This script runs several
+`forecast_granite.py backtest` configurations with `--from-first-trade` semantics
+over the real holdings and ranks them by reliability — turning "which horizon /
+window works" into a comparison table instead of guesswork.
 
 ## Usage
 
 ```bash
-python forecast_reliability.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python forecast_reliability.py --index portfolio --save
+python forecast_reliability.py --ticker MOS,PFE --horizons 5,10,20 --windows 40,60 --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--index` (default portfolio), `--ticker`, `--horizons` (default
+`5,10,20`), `--windows` (default `40,60`), `--save`.
 
 ## Outputs
 
-- **Forecast / anomaly** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `forecast_backtest_metrics.csv`
-  - `forecast_reliability_detail.csv`
-  - `forecast_reliability_rank.csv`
+- `forecast_reliability_rank.csv` — ranked setups (reads
+  `forecast_backtest_metrics.csv`)
 
+(Schema family: forecast_anomaly — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/forecast_granite.md](forecast_granite.md)
-- [docs/research_hygiene.md](research_hygiene.md)
-- [docs/granite_daily.md](granite_daily.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [forecast_granite.md](forecast_granite.md) — the backtests it orchestrates
+- [granite_backfill.md](granite_backfill.md) / [ttm_features.md](ttm_features.md)

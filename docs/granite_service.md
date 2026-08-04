@@ -1,55 +1,42 @@
 # granite_service.py
 
-HTTP microservice for **Granite TTM / statistical fallback** forecasts consumed by the dashboard Chart.js views.
+Live Granite / fallback forecast microservice for the dashboard (port **5055**).
 
-## Run
+## Why it exists (rationale)
 
-**Standard launch:** run `./start_dashboard.sh` — it starts this service (port 5055) along with `pipeline_service`, `analytics_service`, and the static dashboard.
-
-Manual (only if launching in isolation):
-
-```bash
-python granite_service.py --host 127.0.0.1 --port 5055
-```
+The static dashboard needs forecasts on demand. Unlike `export_dashboard_data`
+(which ships a static `data.json`), this service **always computes** forecasts at
+request time (never serves a stale parquet). It supports multivariate channels,
+index peers, correlated/uncorrelated peer sets, days-ago history windows, and
+multi-index membership via `index_registry`. One of the three services launched
+by `start_dashboard.sh`.
 
 ## Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Liveness |
-| GET | `/indexes` | Available indexes |
-| GET | `/forecast?tickers=MOS,CF&horizon=10` | Forecast selected names |
-| GET | `/forecast/portfolio?horizon=10&from_first_trade=1` | Portfolio (first-trade aware) |
-| GET | `/forecast/index?name=fertilizer&horizon=10` | Fertilizer or defensive index |
-| GET | `/forecast/sectors?horizon=5` | Sector EW (`SECT_*`) indexes |
-| POST | `/forecast` | JSON body `{"tickers":["MOS"],"horizon":10}` |
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/health` | liveness |
+| GET | `/forecast?ticker=AEP&horizon=20&...` | compute a fresh forecast |
+| GET | `/forecast_multi` | multi-ticker batch |
+| GET | `/index?name=portfolio` | index-level forecast |
+| GET | `/coverage` | ticker coverage |
 
-Response includes:
+## Usage
 
-- `forecasts` — flat rows (horizon, pct_change, …)
-- `charts` — per ticker `{ history: [{date, close}], forecast: [{date, close, horizon, pct_change}] }` for line charts
+```bash
+python granite_service.py --port 5055
+```
 
-CORS: `Access-Control-Allow-Origin: *` for local dashboard use.
+> Default port **5055**. `start_dashboard.sh` launches it there.
 
-## Dashboard
+## Outputs
 
-**Forecasts** tab → set API base URL → **Fetch forecasts**. Plots:
-
-1. History + dashed forecast path (Chart.js line)
-2. Horizon % change bar chart
-
-## Notes
-
-- Uses `forecast_granite.load_granite_model` / `forecast_ttm_univariate` (real TTM when installed; else fallback).
-- Reads `daily_prices.parquet` (and sector prices when needed).
-- Stdlib only for the HTTP layer (`ThreadingHTTPServer`).
+None written to disk (computes in-memory, returns JSON). Consumes the latest
+Granite checkpoint under `checkpoints/`.
 
 ## Related programs
 
-- [docs/forecast_granite.md](forecast_granite.md)
-- [docs/granite_daily.md](granite_daily.md)
-- [docs/analytics_service.md](analytics_service.md)
-- [docs/pipeline_service.md](pipeline_service.md)
-- [docs/analyze_granite_forecasts.md](analyze_granite_forecasts.md)
+- [forecast_granite.md](forecast_granite.md) — the forecast kernel it calls
+- [granite_daily.md](granite_daily.md) / [ttm_backfill.md](ttm_backfill.md) — checkpoint source
+- [analytics_service.md](analytics_service.md) / [pipeline_service.md](pipeline_service.md)
 - `start_dashboard.sh`
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

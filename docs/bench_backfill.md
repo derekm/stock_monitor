@@ -1,27 +1,32 @@
 # bench_backfill.py
 
-Device-throughput benchmark: CPU vs MX550 for tiny-model (TTM-class, ~1M param) rolling-window time-series training. Isolates whether the MX550 gives a speedup for our small-batch backfill workload. Uses a generic small model so it doesn't 
+Device-throughput benchmark: CPU vs MX550 for tiny-model (TTM-class, ~1M param)
+rolling-window time-series training. Isolates whether the MX550 gives a speedup
+for the small-batch backfill workload, using a generic small model so it does
+not depend on `tsfm_public` / the Granite checkpoint.
 
 ## Why it exists (rationale)
 
-Device-throughput benchmark (CPU vs MX550) for tiny TTM-class rolling-window training — validates the backfill hardware strategy.
+Answers a hardware question for the backfill design: is the MX550 worth using,
+or is CPU fine? It times a small TCN-ish model over 512→96 windows for a sample
+of 20 large-cap tickers on each device.
 
 ## Usage
 
 ```bash
-python bench_backfill.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python bench_backfill.py
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: none (hard-coded sample + context/horizon 512/96). Prints per-device
+timing to stdout.
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
-
+None written to disk. Prints timing comparisons to stdout.
 
 ## Related programs
 
-- [docs/backfill_historical.md](backfill_historical.md)
-- [docs/ttm_backfill.md](ttm_backfill.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- `_cuda_bench.py` / `_par_bench.py` / `_feed_test.py` — related backfill
+  throughput probes (developer scratch)
+- [ttm_backfill.md](ttm_backfill.md) / [granite_backfill.md](granite_backfill.md)
+  — the backfill it benchmarks

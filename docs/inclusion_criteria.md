@@ -1,54 +1,48 @@
 # inclusion_criteria.py
 
-Automated **inclusion / exclusion** policy for the portfolio system.
+Documented, automated inclusion/exclusion rules — the gate that turns
+`preferred_metrics` scores into INCLUDE_CORE / VALUE / QUALITY / SATELLITE /
+WATCH / AVOID bands.
 
-## Dual-pass (INCLUDE_CORE)
+## Why it exists (rationale)
 
-Must clear **all** six legs:
+Screens need a single authoritative rule set, not ad-hoc thresholds scattered
+across scripts. This encodes the dual-pass (Buffett quality AND value trifecta)
+plus the softer bands, emits the candidate lists, and writes the rule set to
+JSON so the rest of the stack (and the dashboard) reference one source of truth.
 
-| Leg | Threshold |
-|-----|-----------|
-| ROE | ≥ 15% |
-| ROIC | ≥ 15% |
-| Debt/Equity | ≤ 1.0 |
-| EV/EBITDA | ≤ 9 |
-| P/B | ≤ 1.5 |
-| MktCap/Assets | ≤ 0.5 |
+## Dual-pass (INCLUDE_CORE) — must satisfy ALL
 
-## Other bands
+- Quality: ROE ≥ 0.15, ROIC ≥ 0.15, Debt/Equity ≤ 1.0
+- Value: EV/EBITDA ≤ 9.0, P/B ≤ 1.5, MktCap/Assets ≤ 0.5
 
-| Decision | Rule |
-|----------|------|
-| INCLUDE_VALUE | Trifecta only |
-| INCLUDE_QUALITY | Buffett only |
-| NEAR_DUAL | Fail 1–2 legs |
-| WATCH / AVOID | Weaker composites |
+Bands (from `preferred_metrics` composite): INCLUDE_VALUE (trifecta),
+INCLUDE_QUALITY (Buffett), SATELLITE (≥0.50), WATCH (≥0.35), AVOID (else).
+Per-name hard cap (default 5%) applies regardless of score.
 
-## Hard policy overlays
+## Usage
 
-- Per-name weight caps (vol-target); even strong-quality names stay within the cap  
-- Very low `earnings_stability` blocks CORE promotion  
-- Growth-tech names are not auto-promoted to CORE without dual pass  
+```bash
+python inclusion_criteria.py --save
+```
+
+Flags: `--save`. Reads `fundamentals.parquet`, `monitored_stocks.parquet`,
+`daily_prices.parquet`, `portfolio_holdings.parquet`, `preferred_metrics.csv`.
 
 ## Outputs
 
-- `inclusion_candidates.csv` / `exclusion_candidates.csv` / `near_dual_candidates.csv`
-- `defensive_value_exploration.csv`
-- `inclusion_rules.json`
-- `asset_correlation_matrix.csv` / `sector_correlation_matrix_latest.csv`
+- `inclusion_candidates.csv` — names passing INCLUDE_CORE
+- `exclusion_candidates.csv` — names failing
+- `near_dual_candidates.csv` — near-misses (one leg short)
+- `defensive_value_exploration.csv` — defensive-value exploration
+- `inclusion_rules.json` — the rule set (source of truth)
 
-```bash
-python inclusion_criteria.py --explore-defensive --save
-```
-
-Rules are loaded into the dashboard **Inclusion Rules** tab.
+(Schema families: screen_decision / aux_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/stress_dual_pass.md](stress_dual_pass.md)
-- [docs/regime_aware_constraints.md](regime_aware_constraints.md)
-- [docs/dual_screen_analysis.md](dual_screen_analysis.md)
-- [docs/build_defensive_index.md](build_defensive_index.md)
-- [docs/manage_stocks.md](manage_stocks.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [preferred_metrics.md](preferred_metrics.md) — scores it bands
+- [binding_constraints_analysis.md](binding_constraints_analysis.md) — leg impact
+- [stress_dual_pass.md](stress_dual_pass.md) — scenario stress
+- [dual_screen_analysis.md](dual_screen_analysis.md)
+- [regime_aware_constraints.md](regime_aware_constraints.md)

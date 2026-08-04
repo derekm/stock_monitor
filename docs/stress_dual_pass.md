@@ -1,23 +1,33 @@
 # stress_dual_pass.py
 
-Stress-tests the six-leg dual-pass gate (one-at-a-time, scenarios, leave-one-leg-out).
+Stress-test the dual-pass inclusion criteria.
 
-Base universe (5 names): BEN, IVZ, RF, FITB, HBAN. Scenarios swept: `tight`, `base`,
-`relaxed_quality`, `relaxed_value`, `relaxed_both`, `buffett_fair` (each relaxes the six
-legs differently — e.g. `tight` raises thresholds, `buffett_fair` widens EV/EBITDA≤15,
-P/B≤3.0, MktCap/Assets≤1.5). The number of passing names is **data-dependent** (it
-recomputes against the current fundamentals snapshot), so do not treat printed counts as
-fixed.
+## Why it exists (rationale)
+
+The dual-pass thresholds are judgment calls. This varies the ROE / ROIC / D/E /
+EV/EBITDA / P/B / MktCap/Assets thresholds and reports how many names pass, plus
+one-leg relaxation sensitivity — so you can see how fragile the INCLUDE_CORE set
+is to each leg and set thresholds with eyes open (pairs with
+`binding_constraints_analysis`).
+
+## Usage
 
 ```bash
 python stress_dual_pass.py --save
 ```
 
-Output: `dual_pass_stress.csv`
+Flags: `--save`. Reads `fundamentals.parquet`, `daily_prices.parquet`,
+`monitored_stocks.parquet`, `preferred_metrics.csv`.
+
+## Outputs
+
+- `dual_pass_stress.csv` — pass counts across threshold grid + one-leg relaxations
+
+(Schema family: screen_decision — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/inclusion_criteria.md](inclusion_criteria.md)
-- [docs/regime_aware_constraints.md](regime_aware_constraints.md)
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [inclusion_criteria.md](inclusion_criteria.md) — the gate it stresses
+- [binding_constraints_analysis.md](binding_constraints_analysis.md)
+- [regime_aware_constraints.md](regime_aware_constraints.md)
+- [preferred_metrics.md](preferred_metrics.md)

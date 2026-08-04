@@ -1,29 +1,43 @@
 # export_dashboard_data.py
 
-Export key analytics tables to dashboard_data/data.json for DuckDB-Wasm / static UI.
+Export the key analytics tables into `dashboard_data/data.json` for the
+DuckDB-Wasm / static dashboard, then regenerate the data catalog.
 
 ## Why it exists (rationale)
 
-Exports key analytics tables into `dashboard_data/data.json` for the static/DuckDB-Wasm UI; the last step of `start_dashboard.sh`.
+The static dashboard can't run Python; it reads a single JSON payload of all
+analytics tables via DuckDB-Wasm. This script gathers the latest CSV/parquet
+analytics artifacts (regimes, risk, screens, forecasts, indexes, fundamentals),
+serializes them into `data.json`, and finally calls `build_data_catalog.py` so
+the catalog reflects what was just exported. It is one of the four services
+launched by `start_dashboard.sh`.
+
+## What it bundles
+
+- Regime outputs (`hmm_*`, `kalman_*`, `vix_term_structure*`, `posterior_entropy*`)
+- Risk (`risk_metrics`, `tail_risk_hedge*`, `rolling_corr*`, `regime_corr_breakdown`)
+- Screens / decisions (`threshold_logic_screen`, `preferred_metrics`, decision notes)
+- Indexes / fundamentals (`fertilizer_index`, latest fundamentals, value-trifecta)
+- Forecasts / anomalies if present
+
+Each table is capped (`df_records` cap 500 rows) and serialized to records.
 
 ## Usage
 
 ```bash
-python export_dashboard_data.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python export_dashboard_data.py
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: none. Writes `dashboard_data/data.json` and runs `build_data_catalog.py`.
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
-
+- `dashboard_data/data.json` — consolidated dashboard payload
+- (indirect) `dashboard_data/data_catalog.json` via `build_data_catalog.py`
 
 ## Related programs
 
-- [docs/build_data_catalog.md](build_data_catalog.md)
-- [docs/pipeline_service.md](pipeline_service.md)
-- `start_dashboard.sh`
-- [docs/granite_service.md](granite_service.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [build_data_catalog.md](build_data_catalog.md) — catalog it triggers
+- [analytics_service.md](analytics_service.md) — `POST /run/export-dashboard` calls this
+- `start_dashboard.sh` — launches it at boot
+- [pipeline_service.md](pipeline_service.md)

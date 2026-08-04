@@ -1,22 +1,34 @@
 # regime_aware_constraints.py
 
-Joins HMM regimes with dual-pass policy:
+Regime-specific constraint binding — how the dual / near-miss baskets behave
+inside each HMM regime.
 
-1. **Regime-specific binding** — risk of base dual / near-miss baskets inside each regime  
-2. **Transition triggers** — vol/corr/return moves around regime switches  
-3. **Regime-aware thresholds** — tighter value in stress, fair-price quality in calm  
+## Why it exists (rationale)
+
+Caps and gates that look fine in calm markets can blow up in stress. This shows,
+per HMM regime, how the dual-pass and near-miss baskets behave: vol, drawdown,
+and hit-rate of each leg treated as a risk filter — the evidence for tightening
+constraints in high_vol_stress. Pairs with `regime_correlation_breakdown`.
+
+## Usage
 
 ```bash
 python regime_aware_constraints.py --save
 ```
 
-Outputs: `regime_constraint_binding.csv`, `hmm_transition_triggers.csv`,
-`regime_aware_dual_pass.csv`, `regime_aware_thresholds.json`, `regime_aware_summary.csv`
+Flags: `--save`. Reads `daily_prices.parquet`, `fundamentals.parquet`,
+`monitored_stocks.parquet`, `hmm_regime_states.csv`, `preferred_metrics.csv`.
+
+## Outputs
+
+- `regime_constraint_binding.csv` — per-regime binding metrics (and related tables
+  written around line 277)
+
+(Schema family: regime_state — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/inclusion_criteria.md](inclusion_criteria.md)
-- [docs/stress_dual_pass.md](stress_dual_pass.md)
-- [docs/hmm_regime_detection.md](hmm_regime_detection.md)
-- [docs/portfolio_optimization.md](portfolio_optimization.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [regime_correlation_breakdown.md](regime_correlation_breakdown.md)
+- [hmm_regime_detection.md](hmm_regime_detection.md) / [hmm_posterior_analysis.md](hmm_posterior_analysis.md)
+- [inclusion_criteria.md](inclusion_criteria.md) / [binding_constraints_analysis.md](binding_constraints_analysis.md)
+- [rebalance_calendar.md](rebalance_calendar.md)

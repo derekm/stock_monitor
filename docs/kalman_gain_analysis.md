@@ -1,32 +1,31 @@
 # kalman_gain_analysis.py
 
-Kalman gain path analysis for (mkt_ret, log_vol) filter.
+Kalman gain path analysis for the (market return, log-vol) filter.
 
 ## Why it exists (rationale)
 
-Diagnoses the Kalman filter gain path for the (market-return, log-vol) latent state — supports `kalman_state_estimates`.
+The Kalman filter's gain sequence shows *how much* new observations are trusted
+vs the prior state over time — a diagnostic for the regime/state estimates. This
+script runs the filter (local level + stochastic vol proxy) and traces the gain
+path so you can see when the filter is anchored vs reactive.
 
 ## Usage
 
 ```bash
-python kalman_gain_analysis.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python kalman_gain_analysis.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save`. Reads `daily_prices.parquet`, `hmm_regime_states.csv`.
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-- **Regime / state table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `hmm_regime_states.csv`
-  - `kalman_gain_path.csv`
-  - `kalman_gain_summary.csv`
+- `kalman_gain_path.csv` — gain path over time
+- `kalman_gain_summary.csv` — summary stats
 
+(Schema family: regime_state — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/kalman_state_estimates.md](kalman_state_estimates.md)
-- [docs/regime_correlation_breakdown.md](regime_correlation_breakdown.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [kalman_state_estimates.md](kalman_state_estimates.md) — the filter it runs
+- [hmm_regime_detection.md](hmm_regime_detection.md) — regime input
+- [vix_term_structure.md](vix_term_structure.md)

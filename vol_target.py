@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-vol_target.py — Volatility targeting for position sizing (SMCI-focused, generalizable).
+vol_target.py — Volatility targeting for position sizing (generalized to all tickers).
 
 Idea: scale weight so the position's *standalone* vol contribution matches a target:
 
@@ -10,14 +10,15 @@ Optional portfolio-vol targeting (marginal, diagonal approx):
 
     w* = σ_port_target * (risk_budget) / σ_asset
 
-SMCI defaults to a tight cap because it sits in the higher-risk growth sleeve.
+High-beta growth names default to a tighter cap because they sit in the higher-risk
+growth sleeve.
 
 Usage:
-  python vol_target.py --ticker SMCI
-  python vol_target.py --ticker SMCI --target-vol 0.20 --window 20
-  python vol_target.py --ticker SMCI --portfolio-vol 0.12 --risk-budget 0.15
-  python vol_target.py --growth-sleeve          # all growth_ai names with SMCI-style caps
-  python vol_target.py --ticker SMCI --save
+  python vol_target.py --ticker NVDA
+  python vol_target.py --ticker NVDA --target-vol 0.20 --window 20
+  python vol_target.py --ticker NVDA --portfolio-vol 0.12 --risk-budget 0.15
+  python vol_target.py --growth-sleeve          # all growth_ai names with tighter caps
+  python vol_target.py --ticker NVDA --save
 """
 
 from __future__ import annotations
@@ -42,9 +43,9 @@ STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT = DATA_DIR / "vol_targets.parquet"
 OUT_CSV = DATA_DIR / "vol_targets.csv"
 
-# Defaults tuned for SMCI / high-beta growth
+# Defaults tuned for high-beta growth names
 DEFAULT_TARGET_VOL = 0.25      # 25% annualized standalone vol target for the *position*
-DEFAULT_W_MAX_SMCI = 0.05      # hard cap 5% of portfolio
+DEFAULT_W_MAX = 0.05           # hard cap 5% of portfolio (tight for high-beta names)
 DEFAULT_W_MAX_GROWTH = 0.08    # other growth_ai names
 DEFAULT_W_MIN = 0.0
 DEFAULT_WINDOW = 21            # ~1 month trading days
@@ -84,7 +85,7 @@ def target_weight(
     asset_vol: float,
     target_vol: float = DEFAULT_TARGET_VOL,
     w_min: float = DEFAULT_W_MIN,
-    w_max: float = DEFAULT_W_MAX_SMCI,
+    w_max: float = DEFAULT_W_MAX,
 ) -> float:
     """Inverse-vol weight capped to [w_min, w_max]."""
     if not np.isfinite(asset_vol) or asset_vol <= 1e-8:
@@ -138,7 +139,7 @@ def size_position(
     sigma_p75 = float(vol_path.quantile(0.75)) if len(vol_path) else sigma
 
     if w_max is None:
-        w_max = DEFAULT_W_MAX_SMCI if ticker.upper() == "SMCI" else DEFAULT_W_MAX_GROWTH
+        w_max = DEFAULT_W_MAX_GROWTH
 
     # Primary: standalone vol targeting
     if portfolio_vol is not None:
@@ -197,18 +198,18 @@ def size_position(
 
 def growth_ai_tickers() -> list[str]:
     if not STOCKS.exists():
-        return ["SMCI"]
+        return ["NVDA"]
     s = pd.read_parquet(STOCKS)
     if "growth_sleeve" in s.columns:
         return s.loc[s["growth_sleeve"] == "growth_ai", "ticker"].tolist()
     if "growth_tech_index" in s.columns:
         return s.loc[s["growth_tech_index"] == True, "ticker"].tolist()[:5]
-    return ["SMCI"]
+    return ["NVDA"]
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Volatility targeting (SMCI / growth)")
-    ap.add_argument("--ticker", default="SMCI")
+    ap = argparse.ArgumentParser(description="Volatility targeting (growth names)")
+    ap.add_argument("--ticker", default="NVDA")
     ap.add_argument("--target-vol", type=float, default=DEFAULT_TARGET_VOL,
                     help="Target annualized vol for the position (standalone mode)")
     ap.add_argument("--window", type=int, default=DEFAULT_WINDOW)
@@ -227,9 +228,7 @@ def main():
     rows = []
     for t in tickers:
         w_max = args.w_max
-        if w_max is None and t == "SMCI":
-            w_max = DEFAULT_W_MAX_SMCI
-        elif w_max is None:
+        if w_max is None:
             w_max = DEFAULT_W_MAX_GROWTH
         r = size_position(
             t,

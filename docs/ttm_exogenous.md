@@ -1,17 +1,35 @@
 # ttm_exogenous.py
 
-Exogenous channels for Granite TTM: market EW return, 20d vol, cross-sectional dispersion, sector EW returns; optional external CSV.
+Build exogenous feature channels for Granite TTM forecasts.
+
+## Why it exists (rationale)
+
+Granite TTM multivariate forecasts are stronger with market/sector context. This
+builds the exogenous panel from local parquet (no network): equal-weight market
+return of all monitored names, sector equal-weight returns, cross-sectional
+dispersion, and optional external CSV — written as `exogenous_panel.parquet` that
+`forecast_granite` / `ttm_features` consume as extra channels.
+
+## Usage
 
 ```bash
 python ttm_exogenous.py --save
-python ttm_exogenous.py --from-csv macro.csv --save
+python ttm_exogenous.py --from-csv extra.csv --save
 ```
 
-Output: `exogenous_panel.parquet`. Use with `forecast_granite.py --exog`.
+Flags: `--from-csv` (optional external CSV with a date column), `--save`. Reads
+`daily_prices.parquet`, `monitored_stocks.parquet`.
+
+## Outputs
+
+- `exogenous_panel.parquet` — per-date exogenous channels
+  (market return, sector returns, cross-sec dispersion)
+
+(Schema family: base_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/ttm_features.md](ttm_features.md)
-- [docs/forecast_granite.md](forecast_granite.md)
-- [docs/granite_daily.md](granite_daily.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [ttm_features.md](ttm_features.md) — combines with price panel
+- [forecast_granite.md](forecast_granite.md) — uses the channels
+- [cross_asset_analysis.md](cross_asset_analysis.md) — sector EW prices source
+- [tspulse_anomaly.md](tspulse_anomaly.md) — also reads the panel

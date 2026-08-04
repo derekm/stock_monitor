@@ -1,3 +1,9 @@
 # _observe_sweep.py
 
-**Developer scratch / debug script** — not part of the production pipeline. Throwaway experiment, probe, or benchmark (e.g. ``). Do not rely on it for analytics; see the program docs index for supported entry points.
+**Developer scratch** — not part of the production pipeline.
+
+Live process/GPU observer for a parameter sweep run. Hard-codes PID 15960 and
+polls per-core CPU (`psutil`) and GPU utilization (`nvidia-smi`) on an interval
+while a sweep runs in the background.
+
+Hard-codes the PID. No persistent outputs; prints to stdout.

@@ -34,8 +34,7 @@ OUT_PORT = DATA_DIR / "vol_target_vs_risk_parity.csv"
 OUT_GROWTH = DATA_DIR / "growth_ai_vol_vs_risk_parity.csv"
 
 DEFAULT_VT_TARGET = 0.25
-DEFAULT_SMCI_CAP = 0.05
-DEFAULT_OTHER_CAP = 0.25
+DEFAULT_NAME_CAP = 0.05
 DEFAULT_GROWTH_CAP = 0.08
 
 
@@ -109,8 +108,7 @@ def build_portfolio_table(
     window_vol: int,
     window_cov: int,
     vt_target: float,
-    smci_cap: float,
-    other_cap: float,
+    name_cap: float,
 ) -> tuple[pd.DataFrame, dict]:
     port = holdings["ticker"].tolist()
     vols = {}
@@ -135,7 +133,7 @@ def build_portfolio_table(
     rp_erc = risk_parity_erc(cov)
 
     vt = {
-        t: vol_target_weight(v, vt_target, w_max=(smci_cap if t == "SMCI" else other_cap))
+        t: vol_target_weight(v, vt_target, w_max=name_cap)
         for t, v in vols.items()
     }
     vt_sum = sum(vt.values()) or 1.0
@@ -156,7 +154,7 @@ def build_portfolio_table(
                 "window_vol": window_vol,
                 "window_cov": window_cov,
                 "vt_target": vt_target,
-                "w_max": smci_cap if t == "SMCI" else other_cap,
+                "w_max": name_cap,
             }
         )
     df = pd.DataFrame(rows)
@@ -178,7 +176,7 @@ def build_growth_table(
     window_vol: int,
     window_cov: int,
     vt_target: float,
-    smci_cap: float,
+    name_cap: float,
     growth_cap: float,
 ) -> pd.DataFrame:
     if "growth_sleeve" in stocks.columns:
@@ -186,7 +184,7 @@ def build_growth_table(
     elif "growth_tech_index" in stocks.columns:
         gai = stocks.loc[stocks["growth_tech_index"] == True, "ticker"].tolist()[:5]
     else:
-        gai = ["SMCI", "NVDA", "AMD", "PLTR", "CRWD"]
+        gai = ["NVDA", "AMD", "PLTR", "CRWD"]
 
     vols = {}
     for t in gai:
@@ -207,7 +205,7 @@ def build_growth_table(
     rp_erc = risk_parity_erc(cov)
 
     vt = {
-        t: vol_target_weight(v, vt_target, w_max=(smci_cap if t == "SMCI" else growth_cap))
+        t: vol_target_weight(v, vt_target, w_max=name_cap)
         for t, v in vols.items()
     }
     vt_sum = sum(vt.values()) or 1.0
@@ -227,7 +225,7 @@ def build_growth_table(
                 "window_vol": window_vol,
                 "window_cov": window_cov,
                 "vt_target": vt_target,
-                "w_max": smci_cap if t == "SMCI" else growth_cap,
+                "w_max": name_cap,
             }
         )
     return pd.DataFrame(rows)
@@ -237,8 +235,7 @@ def run(
     window_vol: int = 21,
     window_cov: int = 63,
     vt_target: float = DEFAULT_VT_TARGET,
-    smci_cap: float = DEFAULT_SMCI_CAP,
-    other_cap: float = DEFAULT_OTHER_CAP,
+    name_cap: float = DEFAULT_NAME_CAP,
     growth_cap: float = DEFAULT_GROWTH_CAP,
     portfolio_only: bool = False,
 ) -> None:
@@ -251,7 +248,7 @@ def run(
         raise SystemExit("portfolio_holdings.parquet required")
 
     port_df, summary = build_portfolio_table(
-        prices, holdings, window_vol, window_cov, vt_target, smci_cap, other_cap
+        prices, holdings, window_vol, window_cov, vt_target, name_cap
     )
     port_df.to_csv(OUT_PORT, index=False)
     print(f"Wrote {OUT_PORT} ({len(port_df)} rows)")
@@ -261,18 +258,10 @@ def run(
         f"RP_inv={summary['sigma_RP_inv_vol']*100:.2f}%  "
         f"RP_ERC={summary['sigma_RP_ERC']*100:.2f}%"
     )
-    smci = port_df.loc[port_df["ticker"] == "SMCI"]
-    if len(smci):
-        r = smci.iloc[0]
-        print(
-            f"  SMCI: σ={r['sigma']*100:.1f}%  current={r['w_current']*100:.2f}%  "
-            f"VT_cap={r['w_VT_capped']*100:.2f}%  RP_inv={r['w_RP_inv_vol']*100:.2f}%  "
-            f"RP_ERC={r['w_RP_ERC']*100:.2f}%"
-        )
 
     if not portfolio_only:
         gdf = build_growth_table(
-            prices, stocks, window_vol, window_cov, vt_target, smci_cap, growth_cap
+            prices, stocks, window_vol, window_cov, vt_target, name_cap, growth_cap
         )
         if len(gdf):
             gdf.to_csv(OUT_GROWTH, index=False)
@@ -285,8 +274,7 @@ def main():
     ap.add_argument("--window-vol", type=int, default=21)
     ap.add_argument("--window-cov", type=int, default=63)
     ap.add_argument("--target-vol", type=float, default=DEFAULT_VT_TARGET)
-    ap.add_argument("--smci-cap", type=float, default=DEFAULT_SMCI_CAP)
-    ap.add_argument("--other-cap", type=float, default=DEFAULT_OTHER_CAP)
+    ap.add_argument("--name-cap", type=float, default=DEFAULT_NAME_CAP)
     ap.add_argument("--growth-cap", type=float, default=DEFAULT_GROWTH_CAP)
     ap.add_argument("--portfolio-only", action="store_true")
     args = ap.parse_args()
@@ -294,8 +282,7 @@ def main():
         window_vol=args.window_vol,
         window_cov=args.window_cov,
         vt_target=args.target_vol,
-        smci_cap=args.smci_cap,
-        other_cap=args.other_cap,
+        name_cap=args.name_cap,
         growth_cap=args.growth_cap,
         portfolio_only=args.portfolio_only,
     )

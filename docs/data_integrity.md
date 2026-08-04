@@ -1,36 +1,39 @@
 # data_integrity.py
 
-data_integrity.py — Price/fundamental integrity utilities (Polars-first).
+Price / fundamental integrity utilities (Polars-first). Audits and repairs the
+base tables before they feed analytics.
 
 ## Why it exists (rationale)
 
-Validates and repairs price/fundamental tables (jump audits, clean copies) — guards against the independent-vs-synthetic correlation failure mode and bad corporate-action handling.
+Bad ticks, unadjusted splits, and schema drift quietly corrupt every downstream
+metric. This script is the first-line data-quality gate: detect/clip bad price
+jumps, optionally split-adjust via jump detection, build point-in-time
+fundamental joins, enforce volume hygiene for Fisher weights, and schema-check
+critical artifacts.
 
 ## Usage
 
 ```bash
-python data_integrity.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python data_integrity.py audit
+python data_integrity.py clean-prices --save --clip 0.35
+python data_integrity.py pit-fundamentals --save
+python data_integrity.py schema-check
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Subcommands: `audit`, `clean-prices`, `pit-fundamentals`, `schema-check`.
+Flags: `--clip` (jump threshold, default 0.35), `--save`.
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-  - `daily_prices_clean.parquet`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `fundamentals.parquet`
-  - `fundamentals_history.parquet`
-  - `fundamentals_pit.parquet`
-- **Summary / metrics** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `price_jump_audit.csv`
+- `daily_prices_clean.parquet` — clipped/split-adjusted prices
+- `fundamentals_pit.parquet` — point-in-time fundamental joins
+- `price_jump_audit.csv` — detected jumps
+- `schema_check_report.json` — schema conformance report
 
+(Schema families: base_table / aux_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/data_integrity_deep.md](data_integrity_deep.md)
-- [docs/update_prices.md](update_prices.md)
-- [docs/backfill_historical.md](backfill_historical.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [data_integrity_deep.md](data_integrity_deep.md) — deeper scan
+- [backfill_historical.md](backfill_historical.md) / [update_prices.md](update_prices.md) — sources
+- [fundamentals_history.md](fundamentals_history.md)

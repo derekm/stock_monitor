@@ -1,18 +1,38 @@
 # kelly.py
 
-Estimate Kelly criterion position fractions from stored μ/σ ranges (`kelly_parameters.parquet`).
+Kelly criterion estimators for position sizing.
 
-## Purpose
-Map defensive names (PG, JNJ, KO, …) and active ideas to fractional Kelly (½ / ¼) sizing suggestions.
+## Why it exists (rationale)
 
-## Formula (continuous)
-`f* = (μ − r) / σ²` then apply fractional Kelly and portfolio caps.
+Sizing should be grounded in edge, not vibes. This computes full-Kelly (and
+fractional) position sizes from either a continuous GBM form (stocks:
+$f^* = (\mu - r)/\sigma^2$) or a binary edge form ($f^* = (bp - q)/b$), so the
+sizing rules in `preferred_metrics` / `vol_target` can be cross-checked against a
+Kelly-optimal stake.
 
-Combine with valuation screens; Kelly is a sizing aid, not a buy signal alone.
+## Usage
+
+```bash
+# Continuous (stocks)
+python kelly.py --mu 0.13 --sigma 0.35 --r 0.04 --fraction 0.5
+# Binary (edge)
+python kelly.py --p 0.55 --b 1.0
+# From stored params for a ticker
+python kelly.py --ticker AEP --fraction 0.25
+```
+
+Flags: `--mu`, `--sigma`, `--r` (default 0.04), `--ticker`, `--fraction`,
+`--p` (required for binary), `--b`, `--q`.
+
+## Outputs
+
+- `kelly_parameters.parquet` — stored per-ticker Kelly params (when `--ticker`
+  with stored params)
+
+(Schema family: summary_metrics — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/vol_target.md](vol_target.md)
-- [docs/portfolio_optimization.md](portfolio_optimization.md)
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [preferred_metrics.md](preferred_metrics.md) — sizing rules
+- [vol_target.md](vol_target.md) — vol-target sizing
+- [portfolio_optimization.md](portfolio_optimization.md)

@@ -1,29 +1,36 @@
 # run_fisher_duckdb.py
 
-Chained Fisher indexes computed **in DuckDB** (same logic as dashboard DuckDB-Wasm).
+Chained Fisher / Laspeyres / Paasche price & quantity indexes computed **in
+DuckDB** — a reimplementation/check of `fisher_index.py`.
 
-## SQL pipeline
-1. Ffill quantity by ticker  
-2. Adjacent date pairs (`lag`)  
-3. Basket sums → Laspeyres/Paasche links → Fisher √(L·P)  
-4. Chain with `100 * exp(sum(ln(link)) OVER (ORDER BY date …))`
+## Why it exists (rationale)
+
+`fisher_index.py` (Pandas) is the reference. This recomputes the same chained
+Fisher indexes directly in DuckDB (price = close, quantity = volume, ffill'd;
+chained levels base = 100) so the S&P-tracking reconciliation and any
+large-history runs get a fast, SQL-native path — and a cross-check that the two
+implementations agree.
+
+## Usage
 
 ```bash
 python run_fisher_duckdb.py --universe portfolio --save
-python run_fisher_duckdb.py --universe fertilizer --save
-python run_fisher_duckdb.py --sector Materials --save
-python run_fisher_duckdb.py --universe defensive --freq W --save
+python run_fisher_duckdb.py --universe all --years 5
 ```
 
-Outputs: `fisher_indexes_duckdb.csv` / `.parquet`  
-SQL source: `fisher_index_duckdb.sql` (also `CORE_SQL` in the runner).
+Flags (via `cli_common` + own): `--universe/--index`, `--ticker`, `--years`,
+`--save`. Reads `daily_prices.parquet`, `monitored_stocks.parquet`.
 
-Dashboard **Fisher Indexes** tab can recompute the same SQL via DuckDB-Wasm or load these files.
+## Outputs
+
+- `fisher_indexes_duckdb.parquet` — DuckDB-computed Fisher levels
+- (and related CSV/parquet levels; see source)
+
+(Schema family: index_levels — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/fisher_index.md](fisher_index.md)
-- [docs/update_prices.md](update_prices.md)
-- [docs/build_index.md](build_index.md)
-- [docs/fisher_sector_baskets.md](fisher_sector_baskets.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [fisher_index.md](fisher_index.md) — the Pandas reference implementation
+- [fisher_sector_baskets.md](fisher_sector_baskets.md)
+- [sp_index_methodology.md](sp_index_methodology.md) / [sp_universe_tracking.md](sp_universe_tracking.md)
+- [backfill_historical.md](backfill_historical.md)

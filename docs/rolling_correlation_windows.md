@@ -1,35 +1,31 @@
 # rolling_correlation_windows.py
 
-rolling_correlation_windows.py — Rolling pairwise & sector correlation windows.
+Rolling pairwise & sector correlation windows.
 
 ## Why it exists (rationale)
 
-Rolling pairwise + sector correlation windows — finer time resolution than `allpairs_correlations`; feeds `maintain_analytics`.
+Correlation is not static. This builds rolling pairwise and sector correlation
+series so the dashboard can show correlation creeping up (a diversification
+warning) and feed `regime_correlation_breakdown` / `crisis_correlation`. It
+complements `allpairs_correlations` (which gives full-history + latest matrices).
 
 ## Usage
 
 ```bash
-python rolling_correlation_windows.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python rolling_correlation_windows.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save`. Reads `daily_prices.parquet`, `monitored_stocks.parquet`.
 
 ## Outputs
 
-- **Index level series** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `daily_prices.parquet`
-- **Base parquet table** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `monitored_stocks.parquet`
-- **Correlation matrix** (see [docs/SCHEMAS.md](SCHEMAS.md)):
-  - `rolling_corr_avg_timeseries.csv`
-  - `rolling_corr_stability_by_asset.csv`
-  - `rolling_sector_corr_windows.csv`
+- `rolling_corr_avg_timeseries.csv` — avg/median pairwise corr over time
+- `rolling_corr_sector.csv` — sector correlation over time
 
+(Schema family: correlation_matrix — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/allpairs_correlations.md](allpairs_correlations.md)
-- [docs/cross_asset_analysis.md](cross_asset_analysis.md)
-- [docs/maintain_analytics.md](maintain_analytics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [allpairs_correlations.md](allpairs_correlations.md)
+- [crisis_correlation.md](crisis_correlation.md)
+- [regime_correlation_breakdown.md](regime_correlation_breakdown.md)

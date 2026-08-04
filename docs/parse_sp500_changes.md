@@ -1,28 +1,33 @@
 # parse_sp500_changes.py
 
-parse_sp500_changes.py — build the authoritative S&P 500 ADD/REMOVE event log.
+Build the authoritative S&P 500 ADD/REMOVE event log: `sp500_changes.parquet`.
 
 ## Why it exists (rationale)
 
-Builds the authoritative S&P 500 ADD/REMOVE event log from change pages — the event source for `sp_index_methodology` and `reconcile_sp500`.
+Index-replication and event studies need the *history* of constituents, not just
+the current list. This pulls the official S&P announcements from
+tickerleague.com (a JSON array embedded in the page, client-paginated back to
+1957 — 1,500+ real events) and falls back to the Wikipedia "List of S&P 500
+companies" changes table (1976–2026) only if tickerleague is unreachable. It is
+the event source for `sp_universe_tracking` / `sp_index_methodology`.
 
 ## Usage
 
 ```bash
-python parse_sp500_changes.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python parse_sp500_changes.py
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: none. Output is the parquet of (ticker, event_date, action, …).
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
+- `sp500_changes.parquet` — ADD/REMOVE events, ~1957→present
 
+(Schema family: aux_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/parse_sp500.md](parse_sp500.md)
-- [docs/sp_index_methodology.md](sp_index_methodology.md)
-- `parse_tickerleague_changes.py`
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [parse_sp500.md](parse_sp500.md) — current constituents
+- [parse_tickerleague_changes.md](parse_tickerleague_changes.md) — the primary source scraper
+- [sp_universe_tracking.md](sp_universe_tracking.md) / [sp_index_methodology.md](sp_index_methodology.md)
+- [run_fisher_duckdb.md](run_fisher_duckdb.md)

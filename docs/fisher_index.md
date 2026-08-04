@@ -1,24 +1,42 @@
 # fisher_index.py
 
-Chained **Laspeyres / Paasche / Fisher** price & quantity indexes in pure Python.
+Chained Laspeyres / Paasche / Fisher price & quantity indexes from daily
+close (price) and volume (quantity).
 
-- **p** = close, **q** = volume (ffilled when sparse)
-- Nominal: `fisher_p * fisher_q` and `sqrt(fisher_p * fisher_q)`
-- Base level 100 on first date; levels = cumulative product of links
+## Why it exists (rationale)
+
+The Fisher index is the gold-standard chain index: it squares the bias of
+pure Laspeyres (overstates) and Paasche (understates) by geometric-averaging
+them. Used to track a real quantity-weighted basket level for the fertilizer /
+ag-input universe (and any ticker set), with proper rebasing.
+
+## Formulas (link t-1 → t)
+
+$$L_P = \frac{\sum p_t q_{t-1}}{\sum p_{t-1} q_{t-1}},\quad
+P_P = \frac{\sum p_t q_t}{\sum p_{t-1} q_t},\quad
+F_P = \sqrt{L_P P_P}$$
+
+(analogous for quantity $L_Q, P_Q, F_Q$).
+
+## Usage
 
 ```bash
 python fisher_index.py --universe portfolio --save
-python fisher_index.py --sector Materials --save
-python fisher_index.py --tickers MOS,CF,SHEL --freq W --save
+python fisher_index.py --universe all --ref-date 2020-01-01 --years 5
 ```
 
-Outputs: `fisher_indexes.csv` / `fisher_indexes.parquet`, plus `fisher_rate_decomposition.csv` (price/quantity rate split).
+Flags (via `cli_common` + own): `--universe/--index`, `--ticker`, `--freq`
+(D/W/M), `--save`, `--ref-date` (rebase to 100), `--years` (tail window).
 
-Prefer **[run_fisher_duckdb.md](run_fisher_duckdb.md)** for the DuckDB implementation used as system of record.
+## Outputs
+
+- `fisher_indexes.csv` — index levels (Laspeyres / Paasche / Fisher, price & quantity)
+- `fisher_indexes.parquet` — same, parquet
+
+(Schema family: index_levels — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/run_fisher_duckdb.md](run_fisher_duckdb.md)
-- [docs/update_prices.md](update_prices.md)
-- [docs/build_index.md](build_index.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [run_fisher_duckdb.md](run_fisher_duckdb.md) — DuckDB reimplementation / S&P reconciliation
+- [fisher_sector_baskets.md](fisher_sector_baskets.md) — sector baskets
+- [build_index.md](build_index.md) / [backfill_historical.md](backfill_historical.md)

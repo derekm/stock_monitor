@@ -1,27 +1,33 @@
 # risk_enrich.py
 
-Add realized vol, beta, max DD to preferred_metrics and fundamentals analytics.
+Enrich `preferred_metrics` and fundamentals analytics with realized vol, beta,
+and max drawdown.
 
 ## Why it exists (rationale)
 
-Adds realized vol, beta, max-DD to preferred_metrics / fundamentals analytics — risk features for `risk_metrics_ext` and sizing.
+The quality/value screen lacks risk context. This adds realized volatility,
+beta (vs the market), and max drawdown to `preferred_metrics.csv` (and a
+`risk_metrics.csv`), so sizing and the buy decision can see risk alongside
+quality — feeding `vol_target` and `risk_parity_analytics`.
 
 ## Usage
 
 ```bash
-python risk_enrich.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python risk_enrich.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save` (writes the enriched `preferred_metrics.csv` + `risk_metrics.csv`).
+Reads `daily_prices.parquet`, `monitored_stocks.parquet`, `preferred_metrics.csv`.
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
+- `preferred_metrics.csv` — enriched in place (vol/beta/DD columns)
+- `risk_metrics.csv` — standalone risk metrics table
 
+(Schema families: screen_decision / summary_metrics — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/risk_metrics_ext.md](risk_metrics_ext.md)
-- [docs/preferred_metrics.md](preferred_metrics.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [preferred_metrics.md](preferred_metrics.md) — the table it enriches
+- [vol_target.md](vol_target.md) / [risk_parity_analytics.md](risk_parity_analytics.md)
+- [risk_metrics_ext.md](risk_metrics_ext.md)

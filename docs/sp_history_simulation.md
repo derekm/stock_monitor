@@ -1,27 +1,36 @@
 # sp_history_simulation.py
 
-sp_history_simulation.py — reproduce S&P 500 inclusion/exclusion decisions in our independent simulation, and track our reimplementation vs the actuals.
+Reproduce S&P 500 inclusion/exclusion decisions in our independent simulation,
+and track our reimplementation vs the actuals.
 
 ## Why it exists (rationale)
 
-Reproduces S&P 500 inclusion/exclusion decisions in our independent simulation and tracks reimplementation vs actuals.
+The S&P-tracking subsystem isn't just descriptive — it should *predict* index
+events. This simulates inclusion/exclusion decisions with our own scored rules
+(from `sp_index_methodology`) over history, then compares our calls to the real
+ADD/REMOVE events in `sp500_changes.parquet` so we can measure how well the
+reimplementation tracks S&P. This is the historical backtest half of the
+stockmagic ↔ stock_monitor integration.
 
 ## Usage
 
 ```bash
-python sp_history_simulation.py [--index/--ticker/--sector/--save/--window ...]  # shared flags via cli_common
+python sp_history_simulation.py --save
 ```
 
-> Most programs accept the standard `cli_common` flags ([docs/cli_common.md](cli_common.md)): `--index`, `--ticker`, `--sector`, `--save`, `--window`, `--freq`. Check the script's `--help` for script-specific flags.
-
+Flags: `--save`. Reads `sp500_changes.parquet`, `sp500_constituents.parquet`,
+`fundamentals.parquet`, `daily_prices.parquet`.
 
 ## Outputs
 
-- No persistent output files (in-memory / prints to stdout, or writes to a base parquet table listed in [docs/SCHEMAS.md](SCHEMAS.md)).
+- `sp_history_simulation.csv` — our simulated decisions vs S&P actuals
+  (per-event hit/miss)
 
+(Schema family: screen_decision — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
 
-- [docs/sp_index_methodology.md](sp_index_methodology.md)
-- [docs/sp_universe_tracking.md](sp_universe_tracking.md)
-- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
+- [sp_index_methodology.md](sp_index_methodology.md) — the rules it simulates
+- [sp_universe_tracking.md](sp_universe_tracking.md)
+- [parse_sp500_changes.md](parse_sp500_changes.md) — the actuals
+- [reconcile_sp500.md](reconcile_sp500.md)

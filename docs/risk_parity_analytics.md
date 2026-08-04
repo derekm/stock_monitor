@@ -14,7 +14,7 @@ Analytics program that regenerates **vol targeting vs risk parity** comparison C
 ```bash
 python risk_parity_analytics.py
 python risk_parity_analytics.py --window-vol 21 --window-cov 63
-python risk_parity_analytics.py --smci-cap 0.05 --target-vol 0.25
+python risk_parity_analytics.py --name-cap 0.05 --target-vol 0.25
 python risk_parity_analytics.py --portfolio-only
 
 # via analytics hub
