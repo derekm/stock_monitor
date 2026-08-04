@@ -26,7 +26,7 @@ python maintain_analytics.py all   # includes vol-rp
 
 - `sigma` — 21d annualized realized vol  
 - `w_current` — holdings weight (normalized)  
-- `w_VT_capped` — vol-target with SMCI 5% / other caps  
+- `w_VT_capped` — vol-target with per-name 5% / other caps  
 - `w_VT_renorm` — capped VT renormalized to 100%  
 - `w_RP_inv_vol` — diagonal risk parity $w \propto 1/\sigma$  
 - `w_RP_ERC` — equal risk contribution using covariance  

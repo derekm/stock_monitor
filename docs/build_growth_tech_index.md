@@ -6,7 +6,7 @@ Fourth index sleeve: **higher-risk growth / technology** equal-weight basket.
 
 | Sleeve | Names | Role |
 |--------|-------|------|
-| **growth_ai** | SMCI, NVDA, AMD, PLTR, CRWD | AI hardware/software — high vol; **cap SMCI** |
+| **growth_ai** | SMCI, NVDA, AMD, PLTR, CRWD | AI hardware/software — high vol |
 | **quality_growth** | MSFT, GOOGL | Quality growth on dips |
 | **emerging_growth** | TSLA, ENPH, SEDG, REGN, XBI | EV, solar cyclical, biotech |
 | **cyclical** | BA, CAT, SCHW | Recovery / levered cyclicals |
@@ -35,7 +35,7 @@ curl "http://127.0.0.1:5055/forecast/index?name=growth&horizon=10"
 - `growth_tech_index_levels.parquet` — EW index path (base 100)
 - Flag: `monitored_stocks.growth_tech_index`
 
-## Volatility targeting (SMCI)
+## Volatility targeting (example)
 
 Use `python vol_target.py --ticker SMCI --save` to enforce a **5% max weight** and inverse-vol sizing. See [vol_target.md](vol_target.md).
 
@@ -45,7 +45,7 @@ Use `python vol_target.py --ticker SMCI --save` to enforce a **5% max weight** a
 | Sleeve | Tickers |
 |--------|---------|
 | starlink_supply | MCHP, TTMI, MTSI, STM, LRCX, AMAT, INTC, SATS (EchoStar) |
-| launch_services | RKLB, ASTS, BKSY, **SPCX** (SpaceX tracking) |
+| launch_services | RKLB, ASTS, BKSY, **SPCX** (SpaceX tracker) |
 | maritime_launch | TDW, VAL (offshore/maritime proxies) |
 
-**SpaceX** remains private — no public common equity to index; track as strategic context only, not a portfolio line.
+**SpaceX** is publicly listed (NYSE: SpaceX) — include it directly in the launch_services sleeve rather than only as strategic context.

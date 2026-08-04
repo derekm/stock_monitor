@@ -22,7 +22,7 @@ Automated **preferred metrics** for screening, sizing, and inclusion decisions.
 
 ### Sizing overlays
 - Composite score → suggested max weight bands (3–12%)
-- **SMCI hard cap 5%** (vol-target aware when `vol_targets.csv` present)
+- Per-name weight caps (vol-target aware when `vol_targets.csv` present)
 - Actions: `prefer_add` / `hold_or_add` / `hold` / `reduce_or_avoid`
 
 ## Decision labels
