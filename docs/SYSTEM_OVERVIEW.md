@@ -62,7 +62,7 @@ Cash 10–20%, low-vol tilt, defensive ETF blend, put-proxy, **tail_combo**.
 Cash and combo cut vol and max DD most cleanly in sample.
 
 ### Growth satellite
-Growth/tech + Starlink supply + launch (RKLB, SPCX, …) is a **capped satellite**, not the core. ERC/GMV inside the sleeve; portfolio-level per-name/vol caps still bind.
+Growth/tech + Starlink supply + launch (RKLB, ASTS, BKSY, …) is a **capped satellite**, not the core. ERC/GMV inside the sleeve; portfolio-level per-name/vol caps still bind.
 
 ---
 

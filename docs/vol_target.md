@@ -4,12 +4,9 @@
 
 ## Rule
 
-
 $$
-w^* = \mathrm{clip}\!\left(\frac{\sigma_{\text{target}}}{\sigma_{\text{asset}}},\; w_{\min},\; w_{\max}
-ight)
+w^* = \mathrm{clip}\!\left(\frac{\sigma_{\text{target}}}{\sigma_{\text{asset}}},\; w_{\min},\; w_{\max}\right)
 $$
-
 
 - $\sigma_{\text{asset}}$: annualized realized vol from log returns (default 21-day window)
 - $\sigma_{\text{target}}$: desired *standalone* position vol (default 25%)
@@ -17,12 +14,9 @@ $$
 
 Optional portfolio-budget mode:
 
-
 $$
-w^* = \mathrm{clip}\!\left(\frac{\sigma_{\text{port}}\cdot \text{risk budget}}{\sigma_{\text{asset}}},\; w_{\min},\; w_{\max}
-ight)
+w^* = \mathrm{clip}\!\left(\frac{\sigma_{\text{port}}\cdot \text{risk budget}}{\sigma_{\text{asset}}},\; w_{\min},\; w_{\max}\right)
 $$
-
 
 ## Usage
 
