@@ -19,7 +19,7 @@ Optional portfolio-budget mode:
 
 
 $$
-w^* = \mathrm{clip}\!\left(\frac{\sigma_{\text{port}}\cdot \text{risk\_budget}}{\sigma_{\text{asset}}},\; w_{\min},\; w_{\max}\right)
+w^* = \mathrm{clip}\!\left(\frac{\sigma_{\text{port}}\cdot \text{risk budget}}{\sigma_{\text{asset}}},\; w_{\min},\; w_{\max}\right)
 $$
 
 
