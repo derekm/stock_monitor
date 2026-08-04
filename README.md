@@ -184,15 +184,13 @@ Analytics CSVs (`sector_correlation_matrix.csv`, `index_backtest_stats.csv`, HMM
 
 ## Fisher indexes (summary)
 
-
 $$
 L_P = \frac{\sum p_t q_{t-1}}{\sum p_{t-1} q_{t-1}}, \quad
 P_P = \frac{\sum p_t q_t}{\sum p_{t-1} q_t}, \quad
 F_P = \sqrt{L_P \cdot P_P}
 $$
 
-
-Quantity indexes swap price/quantity roles. Chained levels use  
+Quantity indexes swap price/quantity roles. Chained levels use
 `100 * exp(sum(ln(link)))` over time. Nominal paths: $F_P \cdot F_Q$ and $\sqrt{F_P \cdot F_Q}$.
 
 ```bash
@@ -217,64 +215,29 @@ Without model weights, scripts use a statistical drift/seasonal **fallback** so 
 
 ---
 
-## Granite TTM historical backfill (config / callback-driven)
+## Granite TTM historical backfill
 
-`granite_backfill.py` now delegates to **`ttm_backfill.py`** — a factored
-library that trains Granite TinyTimeMixer (TTM-r2) over the full daily-price
-history so the daily `granite_daily.py` runs start from well-trained models.
-
-The library is **config + callback driven** (mirroring how `fisher_index.py`
-generalizes index construction), so arbitrary model regimes can be composed at
-the global and per-ticker level without editing the training loop:
-
-- `DataConfig` — price source (adjusted/unadjusted), cleaning, tickers,
-  context/horizon, window sampling, short-ticker padding, exclusions.
-- `TrainConfig` — steps, batch, lr, optimizer, grad-clip, dtype.
-- `RegimeConfig` — a named regime: which tickers (`full`/`short`/`all`),
-  warm-start source, output dir, and optional per-regime `data` (window
-  override) and `model_config` (TTM architecture override) so **context
-  length, horizon, and learning rate** become first-class sweep dimensions.
-- `Callbacks` — `on_window_build`, `on_train_step`, `on_train_end`,
-  `on_ticker`, `on_regime`, `on_compare`, `on_log`.
-- `BackfillConfig` + `run_backfill()` — the orchestrator.
+`granite_backfill.py` pre-trains **Granite TinyTimeMixer (TTM-r2)** over the full daily-price
+history so the daily `granite_daily.py` runs start from well-trained models. It is now a
+thin backward-compatible shim over the factored, **config + callback driven** library
+`ttm_backfill.py` — arbitrary model regimes (global / padded / per-ticker) compose from
+config without editing the training loop.
 
 ```bash
 # default (unadjusted) backfill — reproduces the historical run
 python -m granite_backfill run --steps 150 --batch 16
 
 # adjusted backfill — IDENTICAL recipe, only feeds adj_close and auto-excludes
-# the 95 no-adj tickers; produces granite_ckpts/adjusted_* for controlled
-# adj-vs-unadj comparison
+# the no-adj tickers; produces granite_ckpts/adjusted_* for controlled comparison
 python train_adjusted_full.py --steps 150 --batch 16
 
 # direct adj-vs-unadj comparison (same ticker, same windows, only source differs)
 python -m ttm_backfill cmp-adj-unadj --tickers AEP,NVR,FICO --steps 150
 ```
 
-### Regime sweeps (config-driven)
-
-`sweep_regimes()` runs an arbitrary set of per-ticker regimes warm-started
-from a base, each to its own dir — no copy-pasted grid loops:
-
-```python
-import ttm_backfill as t
-from ttm_backfill import TrainConfig, DataConfig
-t.sweep_regimes(
-    tickers=["AEP"], base_regime="per_ticker",
-    base_ckpt_dir=t.CKPT_DIR/"adjusted_per_ticker",
-    regimes=[
-        ("baseline", TrainConfig(steps=6000), None, None),
-        ("hor32",    TrainConfig(steps=6000), DataConfig(horizon=32),
-                     {"context_length":512,"prediction_length":32,
-                      "patch_length":16,"use_decoder":True}),
-        ("lr3e-4",   TrainConfig(steps=6000, lr=3e-4), None, None),
-    ], use_adj=True)
-```
-
-Note: `prediction_length`/`context_length` are **model-architecture**
-hyperparameters in TTM (the head shape depends on horizon), so a horizon sweep
-builds a fresh model via `TinyTimeMixerConfig` rather than only reshaping
-windows.
+**Detailed docs:**
+- [docs/granite_backfill.md](docs/granite_backfill.md) — shim, day-to-day usage, adjusted workflow, outputs, migration note.
+- [docs/ttm_backfill.md](docs/ttm_backfill.md) — full library reference: `DataConfig` / `TrainConfig` / `RegimeConfig` / `Callbacks` / `run_backfill`, the adjusted-vs-unadjusted comparison, and `sweep_regimes()` for config-driven parameter sweeps (context length, horizon, learning rate as first-class dimensions).
 
 ---
 
