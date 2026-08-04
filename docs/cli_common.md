@@ -23,3 +23,10 @@
 - `index_registry.py` — discover indexes from data files
 - `cli_common.py` — argparse helpers + `resolve_tickers_from_args`
 - `data_access.py` — shared parquet loaders
+
+## Related programs
+
+- [docs/index_registry.md](index_registry.md)
+- [docs/data_access.md](data_access.md)
+- [docs/all scripts using --index/--ticker/--sector.md](all scripts using --index/--ticker/--sector.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

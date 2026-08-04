@@ -19,3 +19,11 @@ Outputs: `fisher_indexes_duckdb.csv` / `.parquet`
 SQL source: `fisher_index_duckdb.sql` (also `CORE_SQL` in the runner).
 
 Dashboard **Fisher Indexes** tab can recompute the same SQL via DuckDB-Wasm or load these files.
+
+## Related programs
+
+- [docs/fisher_index.md](fisher_index.md)
+- [docs/update_prices.md](update_prices.md)
+- [docs/build_index.md](build_index.md)
+- [docs/fisher_sector_baskets.md](fisher_sector_baskets.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

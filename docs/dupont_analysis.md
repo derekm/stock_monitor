@@ -15,3 +15,10 @@ python dupont_analysis.py --save
 ```
 
 Output: `dupont_analysis.csv`
+
+## Related programs
+
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/update_fundamentals.md](update_fundamentals.md)
+- [docs/inclusion_criteria.md](inclusion_criteria.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

@@ -47,3 +47,11 @@ Use `python vol_target.py --ticker SMCI --save` to enforce a **5% max weight** a
 | starlink_supply | MCHP, TTMI, MTSI, STM, LRCX, AMAT, INTC, SATS (EchoStar) |
 | launch_services | RKLB, ASTS, BKSY, SPCX |
 | maritime_launch | TDW, VAL (offshore/maritime proxies) |
+
+## Related programs
+
+- [docs/growth_tech_analytics.md](growth_tech_analytics.md)
+- [docs/inclusion_criteria.md](inclusion_criteria.md)
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/manage_stocks.md](manage_stocks.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

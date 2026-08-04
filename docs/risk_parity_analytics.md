@@ -32,3 +32,11 @@ python maintain_analytics.py all   # includes vol-rp
 - `w_RP_ERC` — equal risk contribution using covariance  
 
 See also [vol_target.md](vol_target.md).
+
+## Related programs
+
+- [docs/vol_target.md](vol_target.md)
+- [docs/portfolio_optimization.md](portfolio_optimization.md)
+- [docs/robust_covariance.md](robust_covariance.md)
+- [docs/maintain_analytics.md](maintain_analytics.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

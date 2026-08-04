@@ -274,3 +274,11 @@ cfg.regimes.append(RegimeConfig(
     warm_from="per_ticker", train=TrainConfig(steps=150, lr=3e-4)))
 t.run_backfill(cfg)
 ```
+
+## Related programs
+
+- [docs/granite_backfill.md](granite_backfill.md)
+- [docs/granite_daily.md](granite_daily.md)
+- [docs/forecast_granite.md](forecast_granite.md)
+- [docs/train_adjusted_full.md](train_adjusted_full.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

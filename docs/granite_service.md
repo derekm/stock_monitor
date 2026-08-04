@@ -43,3 +43,13 @@ CORS: `Access-Control-Allow-Origin: *` for local dashboard use.
 - Uses `forecast_granite.load_granite_model` / `forecast_ttm_univariate` (real TTM when installed; else fallback).
 - Reads `daily_prices.parquet` (and sector prices when needed).
 - Stdlib only for the HTTP layer (`ThreadingHTTPServer`).
+
+## Related programs
+
+- [docs/forecast_granite.md](forecast_granite.md)
+- [docs/granite_daily.md](granite_daily.md)
+- [docs/analytics_service.md](analytics_service.md)
+- [docs/pipeline_service.md](pipeline_service.md)
+- [docs/analyze_granite_forecasts.md](analyze_granite_forecasts.md)
+- `start_dashboard.sh`
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

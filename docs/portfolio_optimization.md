@@ -57,3 +57,14 @@ python maintain_analytics.py optimize
 | **GMV** | Lowest achievable portfolio σ |
 
 Practical stack: **GMV or ERC for core**, **vol-target cap on individual names** as a risk governor.
+
+## Related programs
+
+- [docs/vol_target.md](vol_target.md)
+- [docs/risk_parity_analytics.md](risk_parity_analytics.md)
+- [docs/robust_covariance.md](robust_covariance.md)
+- [docs/kelly.md](kelly.md)
+- [docs/black_litterman.md](black_litterman.md)
+- [docs/regime_aware_constraints.md](regime_aware_constraints.md)
+- [docs/maintain_analytics.md](maintain_analytics.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

@@ -36,3 +36,14 @@ python analyze_granite_forecasts.py --index portfolio,defensive
 ```
 
 Outputs include `index_name` (comma-joined when a ticker belongs to multiple requested indexes).
+
+## Related programs
+
+- [docs/granite_daily.md](granite_daily.md)
+- [docs/granite_backfill.md](granite_backfill.md)
+- [docs/ttm_backfill.md](ttm_backfill.md)
+- [docs/ttm_features.md](ttm_features.md)
+- [docs/ttm_exogenous.md](ttm_exogenous.md)
+- [docs/granite_service.md](granite_service.md)
+- [docs/forecast_reliability.md](forecast_reliability.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

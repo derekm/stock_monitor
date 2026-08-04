@@ -44,3 +44,11 @@ python vol_target.py --growth-sleeve --save
 Vol targeting enforces a **small risk budget** per name regardless of what inverse-vol sizing alone would imply when $\sigma$ is moderate in-sample — the **weight cap** is the binding control.
 
 Combine with fractional Kelly (`kelly.py`) and growth-index EW weights; vol targeting is the position-level risk governor.
+
+## Related programs
+
+- [docs/portfolio_optimization.md](portfolio_optimization.md)
+- [docs/risk_parity_analytics.md](risk_parity_analytics.md)
+- [docs/kelly.md](kelly.md)
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

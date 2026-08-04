@@ -27,3 +27,13 @@ python analytics_service.py --port 8765
 | POST | `/run/all-daily` | preferred + rolling + snapshot + export |
 
 Dashboard **Ops** tab posts to these endpoints.
+
+## Related programs
+
+- [docs/maintain_analytics.md](maintain_analytics.md)
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/export_dashboard_data.md](export_dashboard_data.md)
+- [docs/pipeline_service.md](pipeline_service.md)
+- [docs/granite_service.md](granite_service.md)
+- `start_dashboard.sh`
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

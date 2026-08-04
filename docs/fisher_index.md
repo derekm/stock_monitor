@@ -15,3 +15,10 @@ python fisher_index.py --tickers MOS,CF,SHEL --freq W --save
 Outputs: `fisher_indexes.csv` / `fisher_indexes.parquet`, plus `fisher_rate_decomposition.csv` (price/quantity rate split).
 
 Prefer **[run_fisher_duckdb.md](run_fisher_duckdb.md)** for the DuckDB implementation used as system of record.
+
+## Related programs
+
+- [docs/run_fisher_duckdb.md](run_fisher_duckdb.md)
+- [docs/update_prices.md](update_prices.md)
+- [docs/build_index.md](build_index.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

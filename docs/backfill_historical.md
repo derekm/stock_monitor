@@ -18,3 +18,12 @@ python backfill_historical.py --from-csv historical.csv
 - Prefer real yfinance volume for Fisher quantity weights.
 - Synthetic paths are for sandbox continuity, not decision-making.
 - Rebuild sector EW prices after large backfills: `python cross_asset_analysis.py save-sector-prices`.
+
+## Related programs
+
+- [docs/update_prices.md](update_prices.md)
+- [docs/ttm_features.md](ttm_features.md)
+- [docs/cross_asset_analysis.md](cross_asset_analysis.md)
+- [docs/granite_backfill.md](granite_backfill.md)
+- [docs/ttm_backfill.md](ttm_backfill.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

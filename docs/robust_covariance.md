@@ -16,3 +16,10 @@ python robust_covariance.py --universe growth --window 126 --save
 ```
 
 Outputs: `robust_covariance_summary.csv`, `cov_ledoit_wolf_{universe}.csv`
+
+## Related programs
+
+- [docs/portfolio_optimization.md](portfolio_optimization.md)
+- [docs/black_litterman.md](black_litterman.md)
+- [docs/risk_parity_analytics.md](risk_parity_analytics.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

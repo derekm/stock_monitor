@@ -18,3 +18,11 @@ Outputs: `dual_screen_gap.csv` (quality-vs-value gap table), `dual_screen_extern
 ```bash
 python dual_screen_analysis.py
 ```
+
+## Related programs
+
+- [docs/preferred_metrics.md](preferred_metrics.md)
+- [docs/inclusion_criteria.md](inclusion_criteria.md)
+- [docs/factor_panel.md](factor_panel.md)
+- [docs/buy_candidates.md](buy_candidates.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

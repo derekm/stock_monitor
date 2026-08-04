@@ -8,3 +8,10 @@ python tspulse_anomaly.py scan --index portfolio --z 2.5 --save
 ```
 
 Output: `anomalies_tspulse.csv` (dashboard Anomalies tab + CSV Catalog).
+
+## Related programs
+
+- [docs/analyze_granite_forecasts.md](analyze_granite_forecasts.md)
+- [docs/forecast_granite.md](forecast_granite.md)
+- [docs/update_prices.md](update_prices.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)

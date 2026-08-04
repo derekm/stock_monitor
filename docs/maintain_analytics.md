@@ -30,3 +30,14 @@ python maintain_analytics.py list
 - `index_backtest_stats.csv`
 
 Dashboard **CSV Catalog** runs SQL that reproduces these tables from embedded data.
+
+## Related programs
+
+- [docs/allpairs_correlations.md](allpairs_correlations.md)
+- [docs/cross_asset_analysis.md](cross_asset_analysis.md)
+- [docs/crisis_correlation.md](crisis_correlation.md)
+- [docs/hmm_regime_detection.md](hmm_regime_detection.md)
+- [docs/kalman_state_estimates.md](kalman_state_estimates.md)
+- [docs/factor_rotation_defense.md](factor_rotation_defense.md)
+- [docs/portfolio_optimization.md](portfolio_optimization.md)
+- [docs/SCHEMAS.md](SCHEMAS.md) (output schemas)
