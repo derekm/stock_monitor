@@ -6,27 +6,31 @@
 
 Each name contributes the same share of portfolio **variance**:
 
-\[
+
+$$
 RC_i = w_i\,(\Sigma w)_i = \frac{\sigma_p^2}{N}
-\]
+$$
+
 
 | Solver | Notes |
 |--------|--------|
 | **Multiplicative** | Fast; can drive some weights to 0 when correlations are awkward |
 | **SLSQP + weight floor** | Preferred long-only ERC — equalizes RC with `w_i ≥ floor` (default 2%) |
-| **Inverse-vol** | Diagonal approximation \(w \propto 1/\sigma\); ignores correlations |
+| **Inverse-vol** | Diagonal approximation $w \propto 1/\sigma$; ignores correlations |
 
 ## Global Minimum Variance (GMV)
 
-\[
+
+$$
 \min_w \; w^\top \Sigma w \quad \text{s.t.} \quad \mathbf{1}^\top w = 1
-\]
+$$
+
 
 | Variant | Constraint |
 |---------|------------|
-| Unconstrained | Closed form \(w \propto \Sigma^{-1}\mathbf{1}\) (shorts allowed) |
-| Long-only | \(w \ge 0\) via SLSQP |
-| Long + SMCI cap | \(0 \le w_{\text{SMCI}} \le 5\%\), other caps optional |
+| Unconstrained | Closed form $w \propto \Sigma^{-1}\mathbf{1}$ (shorts allowed) |
+| Long-only | $w \ge 0$ via SLSQP |
+| Long + SMCI cap | $0 \le w_{\text{SMCI}} \le 5\%$, other caps optional |
 
 GMV minimizes volatility; it does **not** equalize risk contributions (low-vol names get larger RC).
 
