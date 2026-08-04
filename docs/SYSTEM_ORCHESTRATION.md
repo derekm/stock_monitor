@@ -2,6 +2,61 @@
 
 How the stock_monitor programs chain together: data in → analytics → dashboard. Read this before running anything in production, and before asking an agent to "run the analytics."
 
+## 0. System architecture
+
+```mermaid
+flowchart TB
+  subgraph SPINE["Data spine (DATA_DIR — single source of truth)"]
+    DP[daily_prices.parquet]
+    FUND[fundamentals.parquet]
+    MS[monitored_stocks.parquet]
+    HOLD[portfolio_holdings / trades]
+    EXO[exogenous_panel.parquet]
+    SP[sp500_constituents / sp500_changes]
+    ALERT[alerts_config.parquet]
+  end
+
+  subgraph INGEST["Ingest (dedicated writer scripts)"]
+    UP[update_prices / backfill_historical]
+    UF[update_fundamentals / fundamentals_history]
+    MG[manage_stocks / manage_alerts]
+    PS[parse_sp500*]
+  end
+
+  subgraph LOOPS["Analytics loops (read spine → write outputs)"]
+    SCR["Screen: preferred_metrics → inclusion_criteria → stress_dual_pass"]
+    REG["Regime: hmm_regime_detection + kalman_state_estimates → regime_aware_constraints / factor_rotation_defense / rebalance_calendar"]
+    CORR["Corr: allpairs / crisis / rolling / cross_asset"]
+    RISK["Risk: portfolio_optimization / risk_parity / robust_cov / vol_target / kelly"]
+    IDX["Indexes: build_* → fisher_index / run_fisher_duckdb"]
+    FC["Forecast: ttm_features+ttm_exogenous → ttm_backfill → granite_daily → forecast_granite → analyze_granite_forecasts"]
+  end
+
+  subgraph SVC["Services (start_dashboard.sh)"]
+    GS["granite_service :5055"]
+    PSVC["pipeline_service :5056"]
+    AS["analytics_service :8767"]
+    WEB["static :8765"]
+  end
+
+  BROWSER["Dashboard / browser"]
+
+  INGEST --> SPINE
+  SPINE --> LOOPS
+  LOOPS --> GS
+  LOOPS --> AS
+  AS --> PSVC
+  PSVC -.subprocess.-> LOOPS
+  GS --> WEB
+  AS --> WEB
+  WEB --> BROWSER
+  RUN["run_daily_automation.py (master orchestrator)"] --> LOOPS
+```
+
+> Two equivalent entry points drive the analytics loops: `run_daily_automation.py`
+> (CLI) and `analytics_service.py`'s `POST /run/all-daily` (dashboard). Both run
+> the same ordered jobs; choose whichever fits the context.
+
 ## 1. The data spine (shared inputs)
 
 Almost every program reads from a small set of canonical parquet/CSV tables in `DATA_DIR` (loaded via `data_access.py`). Change these and everything downstream moves:
@@ -56,7 +111,7 @@ Almost every program reads from a small set of canonical parquet/CSV tables in `
 | `export_dashboard_data.py` (+ `build_data_catalog.py`) | — | writes `dashboard_data/data.json` + `data_catalog.json` at startup | [export_dashboard_data.md](export_dashboard_data.md) |
 | `granite_service.py` | 5055 (`PORT_API`) | live Granite/fallback forecasts (HTTP) | [granite_service.md](granite_service.md) |
 | `pipeline_service.py` | 5056 (`PORT_PIPE`) | job runner: rerun prices/backfill/analytics/export/forecast_bt/monte_carlo/all as subprocesses | [pipeline_service.md](pipeline_service.md) |
-| `analytics_service.py` | 8767 (`PORT_ANALYTICS`; script default 8765) | dashboard ops hub: trigger daily jobs, read tables | [analytics_service.md](analytics_service.md) |
+| `analytics_service.py` | 8767 (`PORT_ANALYTICS`; script default 8765) | dashboard ops hub: trigger daily jobs (`POST /run/all-daily`, `/run/update-prices`, `/run/preferred-metrics`, `/run/rolling`, `/run/export-dashboard`, …), read tables, data-integrity | [analytics_service.md](analytics_service.md) |
 | `python -m http.server` | 8765 (`PORT_WEB`) | static dashboard (`index.html`) | — |
 
 > The script default for `analytics_service` is **8765**; `start_dashboard.sh` overrides it to **8767** so the static server can keep 8765. If you launch `analytics_service.py` by hand, it listens on 8765 unless you pass `--port`.
