@@ -34,14 +34,5 @@ granite_series_cache.parquet
 # trained model checkpoints (regenerable; large) -- do NOT commit
 granite_ckpts/
 
-# large data artifacts (regenerable from upstream pulls)
-daily_prices.parquet
-forecasts_granite.parquet
-sp500_changes.parquet
-vol_targets.parquet
-
-# all data parquets (too large for GitHub; keep local)
-*.parquet
-
 # stray test virtualenv
 venv_cuda_test/
