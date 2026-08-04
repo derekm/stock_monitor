@@ -2,10 +2,10 @@
 
 Black-Litterman posterior expected returns and long-only weights.
 
-1. Equilibrium \(\pi = \delta \Sigma w_{mkt}\) (reverse optimization)
-2. Views \(P\mu = Q + \varepsilon\), \(\Omega\) from He–Litterman
-3. Posterior \(\mu_{BL}\) blends prior and views
-4. Mean-variance weights with \(\mu_{BL}\) (long-only)
+1. Equilibrium $\pi = \delta \Sigma w_{mkt}$ (reverse optimization)
+2. Views $P\mu = Q + \varepsilon$, $\Omega$ from He–Litterman
+3. Posterior $\mu_{BL}$ blends prior and views
+4. Mean-variance weights with $\mu_{BL}$ (long-only)
 
 Uses **Ledoit-Wolf** covariance by default.
 

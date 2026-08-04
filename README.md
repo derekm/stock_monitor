@@ -184,14 +184,16 @@ Analytics CSVs (`sector_correlation_matrix.csv`, `index_backtest_stats.csv`, HMM
 
 ## Fisher indexes (summary)
 
-\[
+
+$$
 L_P = \frac{\sum p_t q_{t-1}}{\sum p_{t-1} q_{t-1}}, \quad
 P_P = \frac{\sum p_t q_t}{\sum p_{t-1} q_t}, \quad
 F_P = \sqrt{L_P \cdot P_P}
-\]
+$$
+
 
 Quantity indexes swap price/quantity roles. Chained levels use  
-`100 * exp(sum(ln(link)))` over time. Nominal paths: \(F_P \cdot F_Q\) and \(\sqrt{F_P \cdot F_Q}\).
+`100 * exp(sum(ln(link)))` over time. Nominal paths: $F_P \cdot F_Q$ and $\sqrt{F_P \cdot F_Q}$.
 
 ```bash
 python run_fisher_duckdb.py --universe portfolio --save
