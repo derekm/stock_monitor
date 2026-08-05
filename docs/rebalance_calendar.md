@@ -29,8 +29,8 @@ flowchart TB
 > `dual_core_tickers()` is read but today only populates the `n_dual_core` column.
 > Regime input: [hmm_regime_detection.md](hmm_regime_detection.md). Downstream
 > consumers of the decision: [regime_aware_constraints.md](regime_aware_constraints.md)
-> (cap relax) and [portfolio_optimization.md](portfolio_optimization.md) /
-> [vol_target.md](vol_target.md).
+> (cap relax), [portfolio_optimization.md](portfolio_optimization.md) and
+> [vol_target.md](vol_target.md) — both now read `turnover_band` to cap weight drift.
 
 ### Feeder pipeline (analytics that feed the calendar)
 
@@ -38,10 +38,10 @@ flowchart TB
 flowchart LR
   HMM[hmm_regime_detection.py] -->|hmm_regime_states.csv| CAL
   PREF[preferred_metrics.py] -->|preferred_metrics.csv<br/>INCLUDE_CORE| CAL
-  CAL[rebalance_calendar.py] -->|rebalance_calendar.csv| ORPHAN[(standalone report<br/>— not read by any consumer)]
+  CAL[rebalance_calendar.py] -->|rebalance_calendar.csv| PO[portfolio_optimization.py] & VT[vol_target.py]
   HMM -. regime label .-> RAC[regime_aware_constraints.py]
-  HMM -. regime label .-> PO[portfolio_optimization.py]
-  HMM -. regime label .-> VT[vol_target.py]
+  HMM -. regime label .-> PO
+  HMM -. regime label .-> VT
 ```
 
 **Notes (verified against source):**
@@ -49,14 +49,11 @@ flowchart LR
 1. **Regime input file.** `rebalance_calendar.py` reads `hmm_regime_states.csv`
    (written by `hmm_regime_detection.py`); the same file is read by
    `regime_aware_constraints.py`, `monte_carlo.py`, `kalman_state_estimates.py`, etc.
-2. **The calendar output is orphaned (known issue).** No downstream script reads
-   `rebalance_calendar.csv`. The consumers that act on regime —
-   [regime_aware_constraints.py](regime_aware_constraints.md),
-   [portfolio_optimization.py](portfolio_optimization.md),
-   [vol_target.py](vol_target.md) — read the **regime label** (from
-   `hmm_regime_states.csv`) or prices/holdings directly, not the calendar. So the
-   calendar is a reporting artifact, not an input to rebalancing. Tracked in
-   [../KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
+2. **Calendar output is consumed.** `portfolio_optimization.py` and `vol_target.py`
+   read `rebalance_calendar.csv` and apply `turnover_band` (0.5 in `high_vol_stress`,
+   1.0 otherwise) to cap weight drift vs current weights. The regime label also
+   flows directly to `regime_aware_constraints.py`, `portfolio_optimization.py`,
+   and `vol_target.py`.
 3. **Not wired into the daily loop.** `run_daily_automation.py` does **not** list
    `rebalance_calendar.py` (or `hmm_regime_detection.py`) in its `JOBS`. Run the
    calendar explicitly after the regime + preferred feeds exist.
