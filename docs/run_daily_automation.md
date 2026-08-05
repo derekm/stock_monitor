@@ -48,8 +48,9 @@ Ends by exporting `dashboard_data/data.json`.
 `rebalance_calendar.py` are **not** in `JOBS`. The regime→calendar pipeline is a
 standalone step — run `python hmm_regime_detection.py --save` then
 `python rebalance_calendar.py --months 18 --save` after the daily stack, if you
-want the calendar artifact (note: it is currently an orphan output — see
-[rebalance_calendar.md](rebalance_calendar.md) correctness notes).
+want the calendar artifact. (The `hmm_regimes.csv`→`hmm_regime_states.csv` filename
+bug is fixed; the calendar output itself remains an orphan — no consumer reads
+`rebalance_calendar.csv`; see [rebalance_calendar.md](rebalance_calendar.md).)
 
 ## Related programs
 
