@@ -56,7 +56,7 @@ flowchart LR
    [vol_target.py](vol_target.md) — read the **regime label** (from
    `hmm_regime_states.csv`) or prices/holdings directly, not the calendar. So the
    calendar is a reporting artifact, not an input to rebalancing. Tracked in
-   [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+   [../KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 3. **Not wired into the daily loop.** `run_daily_automation.py` does **not** list
    `rebalance_calendar.py` (or `hmm_regime_detection.py`) in its `JOBS`. Run the
    calendar explicitly after the regime + preferred feeds exist.
