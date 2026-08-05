@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +49,7 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
+CALENDAR = DATA_DIR / "rebalance_calendar.csv"
 OUT_W = DATA_DIR / "erc_gmv_strategies.csv"
 OUT_S = DATA_DIR / "erc_gmv_summary.csv"
 
@@ -252,6 +254,32 @@ def current_weights(tickers: list[str]) -> np.ndarray:
     return w / w.sum()
 
 
+def turnover_band() -> float:
+    """Return the latest turnover_band from rebalance_calendar.csv, or 1.0 if unavailable."""
+    if not CALENDAR.exists():
+        return 1.0
+    cal = pd.read_csv(CALENDAR)
+    if cal.empty:
+        return 1.0
+    cal["date"] = pd.to_datetime(cal["date"]).dt.date
+    today = date.today()
+    row = cal[cal["date"] <= today].tail(1)
+    if row.empty:
+        return 1.0
+    return float(row.iloc[-1]["turnover_band"])
+
+
+def apply_turnover_cap(w: np.ndarray, w_cur: np.ndarray, band: float) -> np.ndarray:
+    """Cap weight drift to +/- band * w_cur per ticker, then renormalize."""
+    if band >= 1.0:
+        return w
+    lower = np.maximum(w_cur - band * w_cur, 0.0)
+    upper = w_cur + band * w_cur
+    w_capped = np.clip(w, lower, upper)
+    s = w_capped.sum()
+    return w_capped / s if s > 0 else w
+
+
 def run(universe: str = "portfolio", window: int = 126, name_cap: float = 0.05,
         w_floor: float = 0.02) -> None:
     tickers = resolve_universe(universe)
@@ -261,14 +289,22 @@ def run(universe: str = "portfolio", window: int = 126, name_cap: float = 0.05,
     mu = rets.mean().values * 252.0
 
     w_cur = current_weights(tickers)
+    band = turnover_band()
     w_erc_m, iters = erc_multiplicative(cov)
+    w_erc_m = apply_turnover_cap(w_erc_m, w_cur, band)
     w_erc_s, ok_erc = erc_slsqp(cov, w_floor=w_floor)
+    w_erc_s = apply_turnover_cap(w_erc_s, w_cur, band)
     w_iv = inv_vol_weights(cov)
+    w_iv = apply_turnover_cap(w_iv, w_cur, band)
     w_gmv_u = gmv_unconstrained(cov)
+    w_gmv_u = apply_turnover_cap(w_gmv_u, w_cur, band)
     w_gmv_l, ok_g = gmv_long_only(cov)
+    w_gmv_l = apply_turnover_cap(w_gmv_l, w_cur, band)
     caps = {t: name_cap for t in tickers}
     w_gmv_c, ok_c = gmv_long_capped(cov, tickers, caps)
+    w_gmv_c = apply_turnover_cap(w_gmv_c, w_cur, band)
     w_vt = vol_target_renorm(cov, tickers, name_cap=name_cap)
+    w_vt = apply_turnover_cap(w_vt, w_cur, band)
 
     strategies = {
         "Current": w_cur,

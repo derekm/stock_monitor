@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from datetime import date
 from cli_common import (
     add_index_args, add_ticker_args, add_sector_arg, add_save_arg,
     add_window_arg, resolve_tickers_from_args, resolve_index_names_from_args,
@@ -40,6 +41,7 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
+CALENDAR = DATA_DIR / "rebalance_calendar.csv"
 OUT = DATA_DIR / "vol_targets.parquet"
 OUT_CSV = DATA_DIR / "vol_targets.csv"
 
@@ -92,6 +94,30 @@ def target_weight(
         return w_min
     w = target_vol / asset_vol
     return float(np.clip(w, w_min, w_max))
+
+
+def turnover_band() -> float:
+    """Return the latest turnover_band from rebalance_calendar.csv, or 1.0 if unavailable."""
+    if not CALENDAR.exists():
+        return 1.0
+    cal = pd.read_csv(CALENDAR)
+    if cal.empty:
+        return 1.0
+    cal["date"] = pd.to_datetime(cal["date"]).dt.date
+    today = date.today()
+    row = cal[cal["date"] <= today].tail(1)
+    if row.empty:
+        return 1.0
+    return float(row.iloc[-1]["turnover_band"])
+
+
+def apply_turnover_cap(w: float, w_cur: float, band: float) -> float:
+    """Cap weight drift to +/- band * w_cur, then return capped weight."""
+    if band >= 1.0:
+        return w
+    lower = max(w_cur - band * w_cur, 0.0)
+    upper = w_cur + band * w_cur
+    return float(np.clip(w, lower, upper))
 
 
 def portfolio_context(ticker: str) -> dict:
@@ -154,6 +180,10 @@ def size_position(
         method = "standalone_vol_target"
         effective_target = target_vol
 
+    # Apply turnover cap from calendar (reduces weight drift in stress regime)
+    band = turnover_band()
+    w_star = apply_turnover_cap(w_star, 0.0, band)  # current weight handled below
+
     ctx = portfolio_context(ticker)
     px = ctx["last_close"] if np.isfinite(ctx["last_close"]) else float(close.iloc[-1])
     pv = ctx["portfolio_value"] or 0.0
@@ -194,6 +224,15 @@ def size_position(
         if sigma and sigma > 0
         else False,
     }
+
+
+def apply_turnover_cap(w: float, w_cur: float, band: float) -> float:
+    """Cap weight drift to +/- band * w_cur, then return capped weight."""
+    if band >= 1.0:
+        return w
+    lower = max(w_cur - band * w_cur, 0.0)
+    upper = w_cur + band * w_cur
+    return float(np.clip(w, lower, upper))
 
 
 def growth_ai_tickers() -> list[str]:
