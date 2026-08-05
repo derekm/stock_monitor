@@ -18,6 +18,14 @@ python hmm_regime_detection.py --n-states 3 --save
 
 Flags: `--n-states` (default 3), `--save`. Reads `daily_prices.parquet`.
 
+**Outputs:** `hmm_regime_states.csv` (per-date regime label + state probabilities),
+`hmm_regime_summary.csv`, `hmm_transition_matrix.csv`.
+
+**Consumed by:** [regime_aware_constraints.md](regime_aware_constraints.md) (reads
+`hmm_regime_states.csv` directly; auto-runs this script if missing) and
+[rebalance_calendar.md](rebalance_calendar.md) — note the calendar currently reads a
+different filename (`hmm_regimes.csv`), a known mismatch; see that doc's correctness notes.
+
 ## Outputs
 
 - `hmm_regime_states.csv` — per-date regime label + posterior

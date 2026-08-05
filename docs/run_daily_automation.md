@@ -44,6 +44,13 @@ Flags: `--skip-growth`, `--skip-allpairs`, `--only <comma list of job names>`.
 None directly (each subprocess writes its own artifacts; see their docs).
 Ends by exporting `dashboard_data/data.json`.
 
+**Not in the job list (run manually):** `hmm_regime_detection.py` and
+`rebalance_calendar.py` are **not** in `JOBS`. The regime→calendar pipeline is a
+standalone step — run `python hmm_regime_detection.py --save` then
+`python rebalance_calendar.py --months 18 --save` after the daily stack, if you
+want the calendar artifact (note: it is currently an orphan output — see
+[rebalance_calendar.md](rebalance_calendar.md) correctness notes).
+
 ## Related programs
 
 - [maintain_analytics.md](maintain_analytics.md) — alternative "rebuild all" path

@@ -35,6 +35,10 @@ Automated **preferred metrics** for screening, sizing, and inclusion decisions.
 | **SATELLITE** | Solid composite, not both screens |
 | **WATCH** / **AVOID** | Weak composite |
 
+The `INCLUDE_CORE` set is also read by [rebalance_calendar.md](rebalance_calendar.md)
+as the dual-core count (`n_dual_core` column) and by
+[regime_aware_constraints.md](regime_aware_constraints.md) as the base dual-pass basket.
+
 ```bash
 python preferred_metrics.py --seed-quality --save
 python preferred_metrics.py --decision INCLUDE_VALUE
