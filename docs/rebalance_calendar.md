@@ -68,8 +68,7 @@ python rebalance_calendar.py --months 18 --save
 ```
 
 Flags: `--months` (default 18), `--save`. Reads `daily_prices.parquet`,
-`hmm_regime_states.csv` (note: code currently points at `hmm_regimes.csv` — see
-the feeder-pipeline gap above).
+`hmm_regime_states.csv`, `preferred_metrics.csv`.
 
 ## Outputs
 
