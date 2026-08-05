@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
@@ -219,7 +220,10 @@ def main():
 
     if args.save:
         if OUT_CSV.exists():
-            old = pd.read_csv(OUT_CSV, parse_dates=["date"])
+            old = pd.read_csv(OUT_CSV)
+            # date column is a DATE; read as string then ingest as datetime.date
+            old["date"] = old["date"].apply(
+                lambda s: datetime.strptime(str(s)[:10], "%Y-%m-%d").date())
             old = old[~((old["universe"] == label) & (old["freq"] == args.freq.upper()))]
             out = pd.concat([old, df], ignore_index=True)
         else:
