@@ -27,6 +27,16 @@ Read **[docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)** for a holistic summa
 
 The **data spine** (`daily_prices`, `fundamentals`, `monitored_stocks`, `portfolio_holdings`, `trades`, `exogenous_panel`, and the S&P tables) is the only shared input; everything else is a derived output catalogued in SCHEMAS.md.
 
+```mermaid
+flowchart LR
+  SPINE[(Data spine:<br/>prices · fundamentals · holdings)] --> LOOP[Analytics loops:<br/>screen · regime · corr · risk · indexes · forecast]
+  LOOP --> SVC[Services:<br/>granite :5055 · pipeline :5056 · analytics :8767]
+  SVC --> WEB[(Dashboard :8765)]
+  RUN[run_daily_automation.py] --> LOOP
+```
+
+> Full data-flow + service map (with the per-loop script list): **[docs/SYSTEM_ORCHESTRATION.md](docs/SYSTEM_ORCHESTRATION.md)**. Stack theory & 10-yr design: **[docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)**. Output catalog: **[docs/SCHEMAS.md](docs/SCHEMAS.md)**.
+
 ## Quick start
 
 ```bash
@@ -225,6 +235,28 @@ Detailed usage for each module:
 | `dashboard_data/data.json` | Embedded dashboard tables |
 
 Analytics CSVs (`sector_correlation_matrix.csv`, `index_backtest_stats.csv`, HMM/Kalman/Granger, etc.) are regenerated via `maintain_analytics.py` and mirrored in the dashboard **CSV Catalog**.
+
+---
+
+## Key formulas
+
+The three math primitives this stack is built on:
+
+**Fisher index (quantity-weighted price index)** — see [docs/run_fisher_duckdb.md](docs/run_fisher_duckdb.md):
+
+$$ L_P = \frac{\sum p_t q_{t-1}}{\sum p_{t-1} q_{t-1}},\quad
+   P_P = \frac{\sum p_t q_t}{\sum p_{t-1} q_t},\quad
+   F_P = \sqrt{L_P \cdot P_P} $$
+
+**Value trifecta (inclusion screen)** — see [docs/preferred_metrics.md](docs/preferred_metrics.md) / [docs/alerts_fundamentals.md](docs/alerts_fundamentals.md):
+
+pass if  EV/EBITDA ≤ 9  and  P/B ≤ 1.5  and  MktCap/Assets ≤ 0.5
+
+$$ included \iff (EV/EBITDA \le 9) \wedge (P/B \le 1.5) \wedge (MktCap/Assets \le 0.5) $$
+
+**Chained level (rolling-base re-anchor)** — see [docs/granite_backfill.md](docs/granite_backfill.md) for the forecast side:
+
+$$ level_t = 100 \cdot \exp\!\Big(\sum_{\tau \le t} \ln link_\tau\Big) $$
 
 ---
 
