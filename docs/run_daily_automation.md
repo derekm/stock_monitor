@@ -49,7 +49,7 @@ Ends by exporting `dashboard_data/data.json`.
 `python hmm_regime_detection.py --save` then
 `python rebalance_calendar.py --months 18 --save` after the daily stack if you want
 the calendar artifact. `rebalance_calendar.csv` is not read by any other script (see
-[KNOWN_ISSUES.md](KNOWN_ISSUES.md)).
+[../KNOWN_ISSUES.md](../KNOWN_ISSUES.md).
 
 ## Related programs
 
