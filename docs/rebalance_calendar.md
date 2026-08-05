@@ -46,15 +46,15 @@ flowchart LR
 
 **Correctness notes (verified against source):**
 
-1. **Filename mismatch (regime never fires).** `rebalance_calendar.py` reads
+1. **Filename mismatch (fixed).** `rebalance_calendar.py` previously read
    `hmm_regimes.csv`, but `hmm_regime_detection.py` writes **`hmm_regime_states.csv`**
    (and `regime_aware_constraints.py`, `monte_carlo.py`, `kalman_state_estimates.py`,
-   etc. correctly read that name). Nothing in the repo ever writes `hmm_regimes.csv`,
-   so `latest_regime_on()` returns `"unknown"` for every date, the calendar emits
-   `full_rebalance` always, and the `high_vol_stress` half-band **never triggers**.
-   The same stale-name bug also affects `black_litterman_views.py` and
-   `buy_candidates.py`. Fix: point `HMM` in `rebalance_calendar.py` at
-   `hmm_regime_states.csv`.
+   etc. correctly read that name). Nothing in the repo ever wrote `hmm_regimes.csv`, so
+   `latest_regime_on()` returned `"unknown"` for every date, the calendar emitted
+   `full_rebalance` always, and the `high_vol_stress` half-band never triggered. The
+   same stale-name bug also affected `black_litterman_views.py` and `buy_candidates.py`.
+   **Fixed:** all three now read `hmm_regime_states.csv`; the calendar now resolves
+   `high_vol_stress` → `reduced_rebalance` (half turnover band) as designed.
 2. **The calendar output is orphaned.** No downstream script reads
    `rebalance_calendar.csv`. The consumers that *should* act on regime —
    [regime_aware_constraints.py](regime_aware_constraints.md),

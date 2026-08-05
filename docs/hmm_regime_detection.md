@@ -23,8 +23,8 @@ Flags: `--n-states` (default 3), `--save`. Reads `daily_prices.parquet`.
 
 **Consumed by:** [regime_aware_constraints.md](regime_aware_constraints.md) (reads
 `hmm_regime_states.csv` directly; auto-runs this script if missing) and
-[rebalance_calendar.md](rebalance_calendar.md) — note the calendar currently reads a
-different filename (`hmm_regimes.csv`), a known mismatch; see that doc's correctness notes.
+[rebalance_calendar.md](rebalance_calendar.md) (now correctly reads
+`hmm_regime_states.csv` after the earlier `hmm_regimes.csv` mismatch was fixed).
 
 ## Outputs
 
