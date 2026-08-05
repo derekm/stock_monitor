@@ -29,6 +29,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -51,7 +52,7 @@ OUT_PQ = DATA_DIR / "fisher_indexes.parquet"
 
 def load_pq() -> pd.DataFrame:
     df = pd.read_parquet(PRICES_FILE)
-    df["date"] = pd.to_datetime(df["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
     df["volume"] = pd.to_numeric(df.get("volume", 0), errors="coerce")
     # leave zeros as NaN so panel can ffill prior session volume as quantity weight
@@ -93,9 +94,15 @@ def panel(prices: pd.DataFrame, tickers: list[str], freq: str = "D") -> tuple[pd
     # align
     p, q = p.align(q, join="inner")
     if freq and freq.upper() != "D":
-        # period-end price, sum volume
+        # period-end price, sum volume.
+        # resample requires a DatetimeIndex, so promote locally, then drop
+        # back to datetime.date so the panel index stays a date.
+        p = p.set_axis(pd.to_datetime(p.index))
+        q = q.set_axis(pd.to_datetime(q.index))
         p = p.resample(freq).last()
         q = q.resample(freq).sum()
+        p = p.set_axis([d.date() for d in p.index])
+        q = q.set_axis([d.date() for d in q.index])
         p, q = p.align(q, join="inner")
     # drop days with all-null prices
     mask = p.notna().any(axis=1)
@@ -241,7 +248,8 @@ def add_rate_decomposition(idx: pd.DataFrame, periods_per_year: float = 252.0) -
 def rebase_to_date(idx: pd.DataFrame, ref_date: str | pd.Timestamp, level_cols: list[str] | None = None) -> pd.DataFrame:
     """Rebase selected level columns so ref_date = 100."""
     out = idx.copy()
-    out["date"] = pd.to_datetime(out["date"])
+    # `date` is already datetime.date (carried through from the panel index),
+    # so the parquet `date` column is a DATE type with no casting.
     ref = pd.to_datetime(ref_date)
     # nearest available date on or before ref, else on or after
     dates = out["date"].sort_values()
@@ -305,14 +313,18 @@ def main():
         if out.empty:
             return
         if OUT_FILE.exists() and not args.backfill_all:
-            old = pd.read_csv(OUT_FILE, parse_dates=["date"])
+            old = pd.read_csv(OUT_FILE)
+            old["date"] = old["date"].apply(
+                lambda s: datetime.strptime(str(s)[:10], "%Y-%m-%d").date())
             for _, g in out.groupby(["universe", "freq"], dropna=False):
                 lab, fr = g["universe"].iloc[0], g["freq"].iloc[0]
                 old = old[~((old["universe"] == lab) & (old["freq"] == fr))]
             out = pd.concat([old, out], ignore_index=True)
         elif OUT_FILE.exists() and args.backfill_all:
             # replace all rebuilt universes
-            old = pd.read_csv(OUT_FILE, parse_dates=["date"])
+            old = pd.read_csv(OUT_FILE)
+            old["date"] = old["date"].apply(
+                lambda s: datetime.strptime(str(s)[:10], "%Y-%m-%d").date())
             labs = set(out["universe"].unique())
             old = old[~old["universe"].isin(labs)]
             out = pd.concat([old, out], ignore_index=True)
