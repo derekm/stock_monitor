@@ -19,7 +19,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
 PREF = DATA_DIR / "preferred_metrics.csv"
-HMM = DATA_DIR / "hmm_regimes.csv"
+HMM = DATA_DIR / "hmm_regime_states.csv"
 OUT = DATA_DIR / "black_litterman_views.csv"
 OUT_W = DATA_DIR / "black_litterman_weights_from_views.csv"
 
