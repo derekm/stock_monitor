@@ -45,12 +45,11 @@ None directly (each subprocess writes its own artifacts; see their docs).
 Ends by exporting `dashboard_data/data.json`.
 
 **Not in the job list (run manually):** `hmm_regime_detection.py` and
-`rebalance_calendar.py` are **not** in `JOBS`. The regime→calendar pipeline is a
-standalone step — run `python hmm_regime_detection.py --save` then
-`python rebalance_calendar.py --months 18 --save` after the daily stack, if you
-want the calendar artifact. (The `hmm_regimes.csv`→`hmm_regime_states.csv` filename
-bug is fixed; the calendar output itself remains an orphan — no consumer reads
-`rebalance_calendar.csv`; see [rebalance_calendar.md](rebalance_calendar.md).)
+`rebalance_calendar.py` are **not** in `JOBS`. Run
+`python hmm_regime_detection.py --save` then
+`python rebalance_calendar.py --months 18 --save` after the daily stack if you want
+the calendar artifact. `rebalance_calendar.csv` is not read by any other script (see
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md)).
 
 ## Related programs
 
