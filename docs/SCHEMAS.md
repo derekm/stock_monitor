@@ -118,6 +118,13 @@ auxiliary tables feeding several stages.
   `cross_section.py`; factors are point-in-time (as-of fundamentals +
   trailing momentum).
 
+### Signal aggregate  (`aggregate`)
+
+- `ticker`, per-family normalized scores (`preferred`,`peer`,`cross`,`pair`,
+  `earnings`), `composite`, `rank`; plus per-family `ic`, `n`, `weight`,
+  `weight_norm`. Produced only by `signal_aggregator.py`; weights are
+  trailing-window OOS (IC measured at cutoff − 21d).
+
 
 ## Full output catalog
 
@@ -397,3 +404,5 @@ auxiliary tables feeding several stages.
 | `cross_section_rankings.csv` | `cross_section.py` | Cross-section |
 | `cross_section_returns.csv` | `cross_section.py` | Cross-section |
 | `cross_section_stats.csv` | `cross_section.py` | Cross-section |
+| `signal_aggregator_scores.csv` | `signal_aggregator.py` | Aggregate |
+| `signal_aggregator_ic.csv` | `signal_aggregator.py` | Aggregate |

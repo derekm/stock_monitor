@@ -57,7 +57,8 @@ def rolling_metrics(rets: pd.Series, window: int) -> pd.DataFrame:
 
 
 def run(universe: str = "portfolio", window: int = 63, save: bool = True):
-    prices = pd.read_parquet(PRICES)
+    prices = pd.read_parquet(PRICES, columns=["date", "ticker", "adj_close"])
+    prices = prices.rename(columns={"adj_close": "close"})
     prices["date"] = pd.to_datetime(prices["date"])
     tickers = resolve(universe)
     wide = (prices[prices.ticker.isin(tickers)]

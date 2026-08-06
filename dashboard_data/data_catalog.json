@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-05T23:18:25.417760",
-  "count": 184,
+  "generated": "2026-08-06T06:10:21.422503",
+  "count": 186,
   "files": [
     {
       "name": "['all']",
@@ -260,7 +260,7 @@
       "path": "cross_section_rankings.csv",
       "url": "cross_section_rankings.csv",
       "kind": "csv",
-      "size": 54157,
+      "size": 57140,
       "sql_name": "cross_section_rankings"
     },
     {
@@ -269,7 +269,7 @@
       "path": "cross_section_returns.csv",
       "url": "cross_section_returns.csv",
       "kind": "csv",
-      "size": 89601,
+      "size": 111658,
       "sql_name": "cross_section_returns"
     },
     {
@@ -638,7 +638,7 @@
       "path": "fundamentals.parquet",
       "url": "fundamentals.parquet",
       "kind": "parquet",
-      "size": 454246,
+      "size": 324787,
       "sql_name": "fundamentals"
     },
     {
@@ -1025,7 +1025,7 @@
       "path": "momentum_ic.csv",
       "url": "momentum_ic.csv",
       "kind": "csv",
-      "size": 152,
+      "size": 153,
       "sql_name": "momentum_ic"
     },
     {
@@ -1034,7 +1034,7 @@
       "path": "momentum_metrics.csv",
       "url": "momentum_metrics.csv",
       "kind": "csv",
-      "size": 43091,
+      "size": 181871,
       "sql_name": "momentum_metrics"
     },
     {
@@ -1043,7 +1043,7 @@
       "path": "momentum_quintiles.csv",
       "url": "momentum_quintiles.csv",
       "kind": "csv",
-      "size": 378,
+      "size": 385,
       "sql_name": "momentum_quintiles"
     },
     {
@@ -1115,7 +1115,7 @@
       "path": "pair_engine_stats.csv",
       "url": "pair_engine_stats.csv",
       "kind": "csv",
-      "size": 777,
+      "size": 942,
       "sql_name": "pair_engine_stats"
     },
     {
@@ -1124,7 +1124,7 @@
       "path": "pair_engine_trades.csv",
       "url": "pair_engine_trades.csv",
       "kind": "csv",
-      "size": 4986,
+      "size": 8071,
       "sql_name": "pair_engine_trades"
     },
     {
@@ -1340,7 +1340,7 @@
       "path": "risk_metrics.csv",
       "url": "risk_metrics.csv",
       "kind": "csv",
-      "size": 35458,
+      "size": 35422,
       "sql_name": "risk_metrics"
     },
     {
@@ -1421,7 +1421,7 @@
       "path": "rolling_window_metrics.csv",
       "url": "rolling_window_metrics.csv",
       "kind": "csv",
-      "size": 1147,
+      "size": 1150,
       "sql_name": "rolling_window_metrics"
     },
     {
@@ -1513,6 +1513,24 @@
       "kind": "csv",
       "size": 255,
       "sql_name": "sharpe_comparison"
+    },
+    {
+      "name": "signal_aggregator_ic",
+      "filename": "signal_aggregator_ic.csv",
+      "path": "signal_aggregator_ic.csv",
+      "url": "signal_aggregator_ic.csv",
+      "kind": "csv",
+      "size": 156,
+      "sql_name": "signal_aggregator_ic"
+    },
+    {
+      "name": "signal_aggregator_scores",
+      "filename": "signal_aggregator_scores.csv",
+      "path": "signal_aggregator_scores.csv",
+      "url": "signal_aggregator_scores.csv",
+      "kind": "csv",
+      "size": 27178,
+      "sql_name": "signal_aggregator_scores"
     },
     {
       "name": "sp500_changes",

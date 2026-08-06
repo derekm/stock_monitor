@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from analytics_common import load_prices_pandas, wide_closes, clip_returns, load_membership, ann_stats
+from analytics_common import load_adj_prices_pandas, wide_closes, clip_returns, load_membership, ann_stats
 from index_registry import parse_indexes, tickers_for_index, available_indexes
 
 DATA_DIR = Path(__file__).resolve().parent
@@ -45,7 +45,7 @@ def skip_12_1(wide: pd.DataFrame) -> pd.Series:
 
 
 def build(tickers: list[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    prices = load_prices_pandas(prefer_clean=True, tickers=tickers)
+    prices = load_adj_prices_pandas(tickers=tickers)
     wide = wide_closes(prices).dropna(how="all")
     rets = clip_returns(wide.pct_change(), 0.35)
 
