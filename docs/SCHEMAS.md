@@ -416,3 +416,5 @@ auxiliary tables feeding several stages.
 | `signal_aggregator_scores.csv` | `signal_aggregator.py` | Aggregate |
 | `signal_aggregator_ic.csv` | `signal_aggregator.py` | Aggregate |
 | `regime_forecast_stats.csv` | `regime_forecast.py` | Forecast / anomaly |
+| `regime_model_oos.csv` | `pass6.py` | Forecast / anomaly |
+| `regime_model_best.csv` | `pass6.py` | Forecast / anomaly |
