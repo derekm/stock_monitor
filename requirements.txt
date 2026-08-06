@@ -1,0 +1,42 @@
+# stock_monitor / stockmagic — Python dependencies
+#
+# Install with the repo's venv:
+#   python -m venv .venv
+#   .venv/Scripts/pip install -r requirements.txt
+#
+# NOTE: torch is installed with CUDA support on Windows via the PyTorch index:
+#   .venv/Scripts/pip install torch==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+# (a CPU-only torch works for everything except GPU-accelerated Granite TTM
+# training; pass5/regime_forecast/pass5_sweep need the GPU build.)
+#
+# Versions below are the exact versions installed in the working venv
+# (stockmagic/.venv) as of 2026-08-06 — verified by importlib.metadata.
+
+# ── Core data stack ─────────────────────────────────────────────────────────
+pandas==3.0.5
+numpy==2.4.6
+pyarrow==25.0.0
+polars==1.43.2          # peer_analytics, signal_aggregator, cross_section
+duckdb==1.5.5           # dashboard SQL Lab, index math
+
+# ── Forecasting (Granite TTM) ──────────────────────────────────────────────
+# torch==2.6.0+cu124    # uncomment for GPU; see NOTE above for the index URL
+transformers==5.14.1
+granite-tsfm==0.3.8     # provides the `tsfm_public` import used by pass4/pass5
+
+# ── Quant / stats / regime ──────────────────────────────────────────────────
+scipy==1.17.1           # SLSQP portfolio optimization, EG tests
+statsmodels==0.14.6     # Engle-Granger cointegration (pair_engine)
+hmmlearn==0.3.3         # HMM regime detection
+
+# ── Data feeds ──────────────────────────────────────────────────────────────
+yfinance==1.5.2         # earnings calendar, statements, options IV
+lxml==6.1.1             # yfinance get_earnings_dates dependency
+requests==2.33.0        # SEC EDGAR companyfacts (backfill_edgar)
+
+# ── Testing ─────────────────────────────────────────────────────────────────
+pytest==8.4.1           # tests/ (index math property tests, threshold logic)
+
+# ── Optional extras (not in the base venv) ──────────────────────────────────
+# accelerate            # needed by some transformers paths for multi-GPU
+# matplotlib             # charting scratch scripts
