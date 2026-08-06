@@ -150,6 +150,13 @@ auxiliary tables feeding several stages.
 | `hmm_transition_matrix.csv` | `hmm_regime_detection.py` | Correlation matrix |
 | `hmm_transition_matrix.csv` | `monte_carlo.py` | Correlation matrix |
 | `kalman_correlations.csv` | `maintain_analytics.py` | Correlation matrix |
+| `kalman_gain_path.csv` | `kalman_gain_analysis.py` | Regime / state table |
+| `kalman_gain_summary.csv` | `kalman_gain_analysis.py` | Regime / state table |
+| `kalman_state_estimates.csv` | `kalman_state_estimates.py` | Regime / state table |
+| `kalman_state_summary.csv` | `kalman_state_estimates.py` | Regime / state table |
+| `mcmc_regime_means.csv` | `mcmc_regimes.py` | Regime / state table |
+| `mcmc_transition_draws.csv` | `mcmc_regimes.py` | Regime / state table |
+| `mcmc_regime_summary.csv` | `mcmc_regimes.py` | Regime / state table |
 | `regime_corr_breakdown.csv` | `regime_correlation_breakdown.py` | Correlation matrix |
 | `regime_corr_pair_delta.csv` | `regime_correlation_breakdown.py` | Correlation matrix |
 | `regime_sector_corr.csv` | `regime_correlation_breakdown.py` | Correlation matrix |

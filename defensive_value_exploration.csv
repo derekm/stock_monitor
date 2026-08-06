@@ -65,6 +65,7 @@ KMB,Consumer Staples,Household Products,,True,False,False,0.55,0.16,2.0,,20.27,2
 WM,Industrials,Environmental Services,,True,False,False,0.25,0.12,1.5,,9.15,2.584,0.9,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.37977500000000003
 MMM,Industrials,Industrial Conglomerates,,True,False,False,0.25,0.12,1.2,,30.64,2.261,0.72,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.3773000000000001
 DE,Industrials,Machinery,,True,False,False,0.35,0.15,1.8,,5.86,1.606,0.68,False,False,False,"de,ev,pb,mca",4,WATCH,WATCH,,0.37235
+SPR,Industrials,Aerospace & Defense,,False,True,False,-0.1,-0.05,2.0,15.0,1.2,0.8,0.4,False,False,False,"roe,roic,de,ev,mca",5,EXCLUDE,AVOID,,0.349
 HEI,Industrials,Aerospace & Defense,,False,True,False,0.16,0.12,0.6,28.0,7.0,4.0,0.85,False,False,False,"roic,ev,pb,mca",4,WATCH,WATCH,,0.343475
 BMY,Health Care,Pharmaceuticals,,True,False,False,0.18,0.12,1.1,,6.54,1.381,0.7,False,False,False,"roic,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.325875
 CTVA,Materials,Fertilizers & Agricultural Chemicals,,False,False,False,0.08,0.06,0.4,,2.2,1.275,0.65,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.320425
@@ -72,13 +73,12 @@ SCHW,Financials,Capital Markets,,False,True,False,0.14,0.1,0.5,,3.64,,0.75,False
 SO,Utilities,Electric Utilities,,True,False,False,0.11,0.05,1.6,,,0.779,0.88,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.29707999999999996
 NEE,Utilities,Electric Utilities,,True,False,False,0.12,0.06,1.4,,,0.961,0.85,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.28549500000000005
 RTX,Industrials,Aerospace & Defense,,True,False,False,0.12,0.08,0.7,,4.34,1.692,0.8,False,False,False,"roe,roic,ev,pb,mca",5,EXCLUDE,AVOID,,0.273625
+IVZ,Financials,Asset Management,financial_value,True,False,True,,,,,1.05,0.327,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
+HBAN,Financials,Banks,financial_value,True,False,True,,,,,1.16,0.191,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
 CFG,Financials,Banks,,True,False,False,,,,,1.26,0.169,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
 BEN,Financials,Asset Management,financial_value,True,False,True,,,,,1.44,0.35,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
-HBAN,Financials,Banks,financial_value,True,False,True,,,,,1.16,0.191,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
-IVZ,Financials,Asset Management,financial_value,True,False,True,,,,,1.05,0.327,,False,False,False,"roe,roic,de,ev",4,WATCH,WATCH,,0.27
 FITB,Financials,Banks,financial_value,True,False,True,,,,,1.59,0.284,,False,False,False,"roe,roic,de,ev,pb",5,EXCLUDE,AVOID,,0.2646
 SYF,Financials,Consumer Finance,,True,False,False,,,,,1.68,0.19,,False,False,False,"roe,roic,de,ev,pb",5,EXCLUDE,AVOID,,0.25920000000000004
-SPR,Industrials,Aerospace & Defense,,False,True,False,-0.1,-0.05,2.0,15.0,1.2,0.8,0.4,False,False,False,"roe,roic,de,ev,mca",5,EXCLUDE,AVOID,,0.2335
 D,Utilities,Electric Utilities,,True,False,False,,,,,2.17,0.556,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.21972
 TDG,Industrials,Aerospace & Defense,,False,True,False,0.0,0.15,5.0,20.0,50.0,3.0,0.75,False,False,False,"roe,de,ev,pb,mca",5,EXCLUDE,AVOID,,0.2107083333333334
 FANG,Energy,Oil & Gas E&P,,True,False,False,,,,,1.55,1.026,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.17232
@@ -86,17 +86,17 @@ VAL,Energy,Oil & Gas Drilling,,False,True,False,,,,,1.69,1.193,,False,False,Fals
 TDW,Energy,Oil & Gas Equipment,,False,True,False,,,,,2.71,0.926,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.12072
 PSX,Energy,Oil & Gas Refining,,True,False,False,,,,,2.95,1.122,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.07103999999999998
 BA,Industrials,Aerospace & Defense,,False,True,False,0.0,0.02,5.0,,27.43,,0.4,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0484
-STLD,Materials,Steel,,True,False,False,,,,,3.87,2.016,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+BX,Financials,Capital Markets,,False,False,False,,,,,11.43,4.009,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
 XBI,Health Care,ETF—Biotech,,False,True,False,,,,,,,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
-SPCX,Industrials,Aerospace & Defense,,False,True,False,,,,,18.38,36.053,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
-VLO,Energy,Oil & Gas Refining,,True,False,False,,,,,3.85,1.414,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+SATS,Communication Services,Telecom/Satellite,,False,True,False,,,,,5.34,1.506,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
 MPC,Energy,Oil & Gas Refining,,True,False,False,,,,,5.48,1.407,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
-RKLB,Industrials,Aerospace & Defense,,False,True,False,,,,,16.35,16.076,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
-ASTS,Communication Services,Telecom Services,,False,True,False,,,,,8.33,9.011,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
-BKSY,Industrials,Aerospace & Defense,,False,True,False,,,,,10.41,1.338,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
 IRDM,Communication Services,Telecom Services,,False,True,False,,,,,10.48,1.65,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+RKLB,Industrials,Aerospace & Defense,,False,True,False,,,,,16.35,16.076,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
 GD,Industrials,Aerospace & Defense,,False,True,False,,,,,3.82,1.864,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+STLD,Materials,Steel,,True,False,False,,,,,3.87,2.016,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+SPCX,Industrials,Aerospace & Defense,,False,True,False,,,,,18.38,36.053,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+BKSY,Industrials,Aerospace & Defense,,False,True,False,,,,,10.41,1.338,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+ASTS,Communication Services,Telecom Services,,False,True,False,,,,,8.33,9.011,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
 GSAT,Communication Services,Telecom Services,,False,True,False,,,,,31.13,7.126,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
 NOC,Industrials,Aerospace & Defense,,False,True,False,,,,,4.43,1.685,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
-SATS,Communication Services,Telecom/Satellite,,False,True,False,,,,,5.34,1.506,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
-BX,Financials,Capital Markets,,False,False,False,,,,,11.43,4.009,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0
+VLO,Energy,Oil & Gas Refining,,True,False,False,,,,,3.85,1.414,,False,False,False,"roe,roic,de,ev,pb,mca",6,EXCLUDE,AVOID,,0.0

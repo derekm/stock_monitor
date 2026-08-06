@@ -19,6 +19,48 @@ FORECAST_CSV = DATA_DIR / "forecasts_granite.csv"
 FORECAST_PQ = DATA_DIR / "forecasts_granite.parquet"
 BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.csv"
 PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+REGIME_STATS = DATA_DIR / "regime_forecast_stats.csv"
+HMM_FILE = DATA_DIR / "hmm_regime_states.csv"
+
+
+def load_regime_gate() -> tuple[str | None, dict[str, float]]:
+    """(current regime, {ticker: per-regime persistence dir-acc baseline}).
+
+    Returns (None, {}) when regime data is unavailable — the caller then
+    falls back to the raw signal with no gating. The persistence baseline is
+    the fraction of up-windows in the model's OOS test set per regime; a
+    forecast should be read against it, not against 50%.
+    """
+    regime_now = None
+    if HMM_FILE.exists():
+        try:
+            hmm = pd.read_csv(HMM_FILE)
+            if "date" in hmm.columns and "regime" in hmm.columns:
+                hmm["date"] = pd.to_datetime(hmm["date"], errors="coerce")
+                hmm = hmm.dropna(subset=["date"]).sort_values("date")
+                if len(hmm):
+                    regime_now = str(hmm.iloc[-1]["regime"])
+        except Exception:
+            pass
+    baselines: dict[str, float] = {}
+    if REGIME_STATS.exists():
+        try:
+            rs = pd.read_csv(REGIME_STATS)
+            col = f"persistence_dir_acc_by_regime"
+            for _, r in rs.iterrows():
+                tk = str(r.get("ticker", "")).upper()
+                raw = r.get(col)
+                if not tk or pd.isna(raw):
+                    continue
+                try:
+                    d = eval(raw) if isinstance(raw, str) else dict(raw or {})
+                except Exception:
+                    continue
+                if regime_now and regime_now in d and d[regime_now] is not None:
+                    baselines[tk] = float(d[regime_now]) / 100.0
+        except Exception:
+            pass
+    return regime_now, baselines
 
 
 def load_forecasts() -> pd.DataFrame:
@@ -65,8 +107,31 @@ def main():
     tail["signal"] = tail["pct_change"].apply(
         lambda x: "BULL" if x > 3 else ("BEAR" if x < -3 else "NEUTRAL")
     )
+
+    # Regime gate: annotate each forecast against the per-regime persistence
+    # baseline (fraction of up-windows the market realized in this regime).
+    regime_now, baselines = load_regime_gate()
+    if regime_now:
+        tail["regime"] = regime_now
+        tail["pers_baseline"] = tail["ticker"].map(baselines)
+        def _gate(row):
+            if pd.isna(row.get("pers_baseline")):
+                return row["signal"]
+            p = float(row["pers_baseline"])
+            # signal is meaningful only if the model's direction edge exceeds
+            # what persistence already predicts in this regime
+            if row["signal"] == "BULL" and p >= 0.60:
+                return "BULL*"
+            if row["signal"] == "BEAR" and p <= 0.40:
+                return "BEAR*"
+            return row["signal"]
+        tail["signal_gated"] = tail.apply(_gate, axis=1)
+        print(f"\nRegime gate: {regime_now} (per-regime persistence baseline; * = edge over baseline)")
     print(f"\n--- Horizon H+{max_h} snapshot ---")
     cols = ["ticker", "last_close", "forecast_close", "pct_change", "signal"]
+    if "signal_gated" in tail.columns:
+        cols.append("signal_gated")
+        cols.append("pers_baseline")
     print(tail[cols].sort_values("pct_change", ascending=False).to_string(index=False))
 
     # Path shape: early vs late horizon

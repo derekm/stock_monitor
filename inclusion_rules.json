@@ -2,9 +2,12 @@
   "dual_pass": {
     "roe_min": 0.15,
     "roic_min": 0.15,
+    "de_max": 1.0,
+    "ev_max": 9.0,
+    "pb_max": 1.5,
+    "mca_max": 0.5,
     "debt_to_equity_max": 1.0,
     "ev_ebitda_max": 9.0,
-    "pb_max": 1.5,
     "mktcap_to_assets_max": 0.5,
     "label": "INCLUDE_CORE"
   },

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-06T07:37:12.746431",
+  "generated": "2026-08-06T08:38:46.655478",
   "count": 187,
   "files": [
     {
@@ -260,7 +260,7 @@
       "path": "cross_section_rankings.csv",
       "url": "cross_section_rankings.csv",
       "kind": "csv",
-      "size": 207086,
+      "size": 207370,
       "sql_name": "cross_section_rankings"
     },
     {
@@ -269,7 +269,7 @@
       "path": "cross_section_returns.csv",
       "url": "cross_section_returns.csv",
       "kind": "csv",
-      "size": 443025,
+      "size": 442826,
       "sql_name": "cross_section_returns"
     },
     {
@@ -278,7 +278,7 @@
       "path": "cross_section_stats.csv",
       "url": "cross_section_stats.csv",
       "kind": "csv",
-      "size": 275,
+      "size": 274,
       "sql_name": "cross_section_stats"
     },
     {
@@ -341,7 +341,7 @@
       "path": "defensive_value_exploration.csv",
       "url": "defensive_value_exploration.csv",
       "kind": "csv",
-      "size": 15121,
+      "size": 15120,
       "sql_name": "defensive_value_exploration"
     },
     {
@@ -422,7 +422,7 @@
       "path": "earnings_catalyst_signals.csv",
       "url": "earnings_catalyst_signals.csv",
       "kind": "csv",
-      "size": 6996,
+      "size": 6989,
       "sql_name": "earnings_catalyst_signals"
     },
     {
@@ -503,7 +503,7 @@
       "path": "factor_rotation_weights.csv",
       "url": "factor_rotation_weights.csv",
       "kind": "csv",
-      "size": 1023477,
+      "size": 1023156,
       "sql_name": "factor_rotation_weights"
     },
     {
@@ -512,7 +512,7 @@
       "path": "factor_sleeve_returns.csv",
       "url": "factor_sleeve_returns.csv",
       "kind": "csv",
-      "size": 1926634,
+      "size": 1926570,
       "sql_name": "factor_sleeve_returns"
     },
     {
@@ -638,7 +638,7 @@
       "path": "fundamentals.parquet",
       "url": "fundamentals.parquet",
       "kind": "parquet",
-      "size": 584380,
+      "size": 588725,
       "sql_name": "fundamentals"
     },
     {
@@ -710,7 +710,7 @@
       "path": "growth_tech_fisher.csv",
       "url": "growth_tech_fisher.csv",
       "kind": "csv",
-      "size": 4741120,
+      "size": 4741329,
       "sql_name": "growth_tech_fisher"
     },
     {
@@ -845,7 +845,7 @@
       "path": "hmm_regime_states.csv",
       "url": "hmm_regime_states.csv",
       "kind": "csv",
-      "size": 1970925,
+      "size": 1970888,
       "sql_name": "hmm_regime_states"
     },
     {
@@ -872,7 +872,7 @@
       "path": "hmm_transition_matrix.csv",
       "url": "hmm_transition_matrix.csv",
       "kind": "csv",
-      "size": 250,
+      "size": 251,
       "sql_name": "hmm_transition_matrix"
     },
     {
@@ -908,7 +908,7 @@
       "path": "inclusion_rules.json",
       "url": "inclusion_rules.json",
       "kind": "json",
-      "size": 489,
+      "size": 550,
       "sql_name": "inclusion_rules"
     },
     {
@@ -1133,7 +1133,7 @@
       "path": "peer_analytics_signals.csv",
       "url": "peer_analytics_signals.csv",
       "kind": "csv",
-      "size": 148561,
+      "size": 148854,
       "sql_name": "peer_analytics_signals"
     },
     {
@@ -1142,7 +1142,7 @@
       "path": "peer_fundamental_trends.csv",
       "url": "peer_fundamental_trends.csv",
       "kind": "csv",
-      "size": 371478,
+      "size": 371528,
       "sql_name": "peer_fundamental_trends"
     },
     {
@@ -1151,7 +1151,7 @@
       "path": "peer_group_summary.csv",
       "url": "peer_group_summary.csv",
       "kind": "csv",
-      "size": 14881,
+      "size": 14872,
       "sql_name": "peer_group_summary"
     },
     {
@@ -1160,7 +1160,7 @@
       "path": "peer_recovery_signals.csv",
       "url": "peer_recovery_signals.csv",
       "kind": "csv",
-      "size": 300052,
+      "size": 300213,
       "sql_name": "peer_recovery_signals"
     },
     {
@@ -1214,7 +1214,7 @@
       "path": "preferred_metrics.parquet",
       "url": "preferred_metrics.parquet",
       "kind": "parquet",
-      "size": 119103,
+      "size": 119106,
       "sql_name": "preferred_metrics"
     },
     {
@@ -1223,7 +1223,7 @@
       "path": "preferred_metrics_history.parquet",
       "url": "preferred_metrics_history.parquet",
       "kind": "parquet",
-      "size": 364188,
+      "size": 364851,
       "sql_name": "preferred_metrics_history"
     },
     {
@@ -1322,7 +1322,7 @@
       "path": "regime_forecast_stats.csv",
       "url": "regime_forecast_stats.csv",
       "kind": "csv",
-      "size": 295,
+      "size": 1060,
       "sql_name": "regime_forecast_stats"
     },
     {
@@ -1403,7 +1403,7 @@
       "path": "rolling_screen_stability.csv",
       "url": "rolling_screen_stability.csv",
       "kind": "csv",
-      "size": 26974,
+      "size": 27043,
       "sql_name": "rolling_screen_stability"
     },
     {
@@ -1448,7 +1448,7 @@
       "path": "screen_backtest.csv",
       "url": "screen_backtest.csv",
       "kind": "csv",
-      "size": 32117,
+      "size": 32993,
       "sql_name": "screen_backtest"
     },
     {
@@ -1529,7 +1529,7 @@
       "path": "signal_aggregator_ic.csv",
       "url": "signal_aggregator_ic.csv",
       "kind": "csv",
-      "size": 161,
+      "size": 442,
       "sql_name": "signal_aggregator_ic"
     },
     {
@@ -1538,7 +1538,7 @@
       "path": "signal_aggregator_scores.csv",
       "url": "signal_aggregator_scores.csv",
       "kind": "csv",
-      "size": 27207,
+      "size": 27156,
       "sql_name": "signal_aggregator_scores"
     },
     {
@@ -1601,7 +1601,7 @@
       "path": "tail_risk_hedge_crisis.csv",
       "url": "tail_risk_hedge_crisis.csv",
       "kind": "csv",
-      "size": 1311,
+      "size": 1310,
       "sql_name": "tail_risk_hedge_crisis"
     },
     {
@@ -1610,7 +1610,7 @@
       "path": "tail_risk_hedge_performance.csv",
       "url": "tail_risk_hedge_performance.csv",
       "kind": "csv",
-      "size": 2234,
+      "size": 2232,
       "sql_name": "tail_risk_hedge_performance"
     },
     {

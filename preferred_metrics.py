@@ -41,14 +41,11 @@ OUT = DATA_DIR / "preferred_metrics.csv"
 OUT_PQ = DATA_DIR / "preferred_metrics.parquet"
 OUT_SCREEN = DATA_DIR / "preferred_screen_hits.csv"
 
-# Thresholds (tunable policy)
-ROE_MIN = 0.15
-ROIC_MIN = 0.15
-DE_MAX = 1.0          # debt/equity soft max
+# Thresholds (tunable policy) — canonical values live in analytics_common
+from analytics_common import (
+    ROE_MIN, ROIC_MIN, DE_MAX, EV_MAX as EV_EBITDA_MAX, PB_MAX, MCA_MAX,
+)
 DE_IDEAL = 0.5
-EV_EBITDA_MAX = 9.0
-PB_MAX = 1.5
-MCA_MAX = 0.5         # mktcap_to_assets
 BASE_W_MAX = 0.05     # default suggested max weight floor before composite scaling
 
 # Illustrative quality seeds (approx; replace with live filings/API)
