@@ -144,7 +144,52 @@ def iv_vs_realized(prices: pd.DataFrame, tickers: list[str], short: int = 21, lo
     return pd.Series(out)
 
 
-def build(cutoff: pd.Timestamp | None = None, drift_window: int = 750, lookback: int = 21) -> tuple[pd.DataFrame, pd.DataFrame]:
+def atm_implied_vol(tickers: list[str], max_tickers: int = 100) -> pd.Series:
+    """ATM implied vol from the nearest-dated options chain (yfinance).
+
+    Real IV: for each ticker, take the nearest expiry, pick the call strike
+    closest to last price, use its impliedVolatility. Returns NaN for tickers
+    without options (ETFs usually have chains; funds sometimes don't). This is
+    the drop-in real-IV feed that replaces the realized-vol proxy.
+    """
+    import yfinance as yf
+
+    out: dict[str, float] = {}
+    for t in tickers[:max_tickers]:
+        try:
+            tk = yf.Ticker(t)
+            expiries = tk.options
+            if not expiries:
+                continue
+            # nearest expiry has degenerate IVs (1e-5); pick the one ~30d out
+            now = pd.Timestamp.now().normalize()
+            target = now + pd.Timedelta(days=30)
+            best_exp = min(expiries, key=lambda e: abs(pd.Timestamp(e) - target))
+            chain = tk.option_chain(best_exp).calls
+            if chain.empty or "strike" not in chain.columns:
+                continue
+            spot = tk.fast_info.last_price if hasattr(tk, "fast_info") else None
+            if spot is None or not np.isfinite(spot):
+                continue
+            chain = chain.dropna(subset=["impliedVolatility", "strike"])
+            if chain.empty:
+                continue
+            # yfinance's IV column has degenerate 1e-5 rows even at the ATM
+            # strike; use the median IV of sane strikes (>0.05) as the market
+            # vol level — far more robust than a single strike.
+            sane = chain[chain["impliedVolatility"] > 0.05]
+            if sane.empty:
+                continue
+            iv = float(sane["impliedVolatility"].median())
+            if 0.05 < iv < 3.0:  # sanity band
+                out[t] = iv
+        except Exception:  # noqa: BLE001 - per-ticker failure tolerated
+            continue
+    return pd.Series(out)
+
+
+def build(cutoff: pd.Timestamp | None = None, drift_window: int = 750, lookback: int = 21,
+          args_max_tickers: int = 100, args_dry_run: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
     earn = _load_earnings()
     stocks = pd.read_parquet(STOCKS) if STOCKS.exists() else pd.DataFrame()
     tickers = sorted(stocks["ticker"].astype(str).unique()) if not stocks.empty else []
@@ -164,6 +209,7 @@ def build(cutoff: pd.Timestamp | None = None, drift_window: int = 750, lookback:
     drift_df, bucket_map = drift_by_bucket(earn, prices, pd.Timestamp(cutoff), drift_window)
     pre_mom = pre_earnings_momentum(prices, tickers, lookback)
     iv_ratio = iv_vs_realized(prices, tickers)
+    atm_iv = atm_implied_vol(tickers, max_tickers=args_max_tickers) if not args_dry_run else pd.Series(dtype=float)
 
     sig_rows: list[dict] = []
     for tk in tickers:
@@ -174,6 +220,7 @@ def build(cutoff: pd.Timestamp | None = None, drift_window: int = 750, lookback:
             "pre_mom_pctile": None,
             "pre_mom_flag": None,
             "iv_vs_realized": None,
+            "atm_iv": None,
             "iv_rich": None,
             "expected_drift_20d": None,
             "catalyst_score": None,
@@ -195,7 +242,18 @@ def build(cutoff: pd.Timestamp | None = None, drift_window: int = 750, lookback:
             row["pre_mom_flag"] = "hot" if pre_mom[tk] >= 0.67 else ("cold" if pre_mom[tk] <= 0.33 else "neutral")
         if tk in iv_ratio.index and pd.notna(iv_ratio[tk]):
             row["iv_vs_realized"] = round(float(iv_ratio[tk]), 3)
-            row["iv_rich"] = bool(iv_ratio[tk] > 1.2)
+        if tk in atm_iv.index and pd.notna(atm_iv[tk]):
+            row["atm_iv"] = round(float(atm_iv[tk]), 4)
+        # iv_rich: real ATM IV vs realized vol when available; else the
+        # short/long realized-vol ratio proxy (>1.2).
+        iv_num = atm_iv.get(tk) if tk in atm_iv.index else np.nan
+        rv_num = (iv_ratio.get(tk) if tk in iv_ratio.index else np.nan) or np.nan
+        if pd.notna(iv_num) and pd.notna(rv_num):
+            row["iv_rich"] = bool(iv_num / rv_num > 1.2)
+        elif pd.notna(rv_num):
+            row["iv_rich"] = bool(rv_num > 1.2)
+        else:
+            row["iv_rich"] = None
         sig_rows.append(row)
 
     sig = pd.DataFrame(sig_rows)
@@ -218,11 +276,14 @@ def main():
     ap.add_argument("--cutoff", default=None, help="YYYY-MM-DD; default = last price date")
     ap.add_argument("--drift-window", type=int, default=750, help="Trailing days for drift stats (default 750)")
     ap.add_argument("--lookback", type=int, default=21, help="Pre-earnings momentum lookback (default 21)")
+    ap.add_argument("--max-tickers", type=int, default=100, help="Cap for ATM-IV fetch")
+    ap.add_argument("--no-iv-fetch", action="store_true", help="Skip live options chain (proxy only)")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
     cutoff = pd.Timestamp(args.cutoff) if args.cutoff else None
-    sig, drift = build(cutoff=cutoff, drift_window=args.drift_window, lookback=args.lookback)
+    sig, drift = build(cutoff=cutoff, drift_window=args.drift_window, lookback=args.lookback,
+                       args_max_tickers=args.max_tickers, args_dry_run=args.no_iv_fetch)
     print("=== earnings_drift_stats ===")
     print(drift.to_string(index=False) if not drift.empty else "(no drift data yet)")
     hot = sig[sig["pre_mom_flag"] == "hot"]

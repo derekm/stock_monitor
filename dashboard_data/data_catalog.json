@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-06T07:10:47.135279",
-  "count": 186,
+  "generated": "2026-08-06T07:37:12.746431",
+  "count": 187,
   "files": [
     {
       "name": "['all']",
@@ -422,7 +422,7 @@
       "path": "earnings_catalyst_signals.csv",
       "url": "earnings_catalyst_signals.csv",
       "kind": "csv",
-      "size": 6324,
+      "size": 6996,
       "sql_name": "earnings_catalyst_signals"
     },
     {
@@ -638,7 +638,7 @@
       "path": "fundamentals.parquet",
       "url": "fundamentals.parquet",
       "kind": "parquet",
-      "size": 578490,
+      "size": 584380,
       "sql_name": "fundamentals"
     },
     {
@@ -1315,6 +1315,15 @@
       "kind": "csv",
       "size": 119132,
       "sql_name": "regime_corr_pair_delta"
+    },
+    {
+      "name": "regime_forecast_stats",
+      "filename": "regime_forecast_stats.csv",
+      "path": "regime_forecast_stats.csv",
+      "url": "regime_forecast_stats.csv",
+      "kind": "csv",
+      "size": 295,
+      "sql_name": "regime_forecast_stats"
     },
     {
       "name": "regime_pass1_results",

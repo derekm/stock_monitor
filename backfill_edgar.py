@@ -35,6 +35,7 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 import requests
 
 DATA_DIR = Path(__file__).parent
@@ -44,11 +45,23 @@ UA = {"User-Agent": "personal-research derek.moore@example.com"}
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 
+# Overrides: SEC's ticker->CIK map is sometimes stale/wrong. Known cases where
+# the map points to a shell/related entity with thin XBRL history while the
+# operating company's CIK holds the full history:
+#   XOM -> 2115436 is 'ExxonMobil Holdings Corp' (shell); real opco is 34088.
+#   AEP -> missing from map; real opco CIK 4904.
+CIK_OVERRIDES = {
+    "XOM": "0000034088",
+    "AEP": "0000004904",
+}
+
 # income tags we can use for TTM (in priority order)
 NI_TAGS = ["NetIncomeLoss"]
 OI_TAGS = ["OperatingIncomeLoss", "OperatingIncome"]
 DA_TAGS = ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet"]
 INT_TAGS = ["InterestExpenseNonOperating", "InterestExpense", "InterestAndDebtExpense"]
+TAX_TAGS = ["IncomeTaxExpenseBenefit", "IncomeTaxExpenseBenefitCurrentFederal", "IncomeTaxesPaid"]
+PRETAX_TAGS = ["PretaxIncomeLoss", "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"]
 EQ_TAGS = ["StockholdersEquity", "CommonStockholdersEquity"]
 ASSET_TAGS = ["Assets"]
 DEBT_TAGS = ["LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "Debt"]
@@ -132,6 +145,8 @@ def fetch_ticker(ticker: str, cik: str) -> list[dict]:
     oi = q(OI_TAGS)
     da = q(DA_TAGS)
     intexp = q(INT_TAGS)
+    tax = q(TAX_TAGS)
+    pretax = q(PRETAX_TAGS)
     eq = bal(EQ_TAGS)
     assets = bal(ASSET_TAGS)
     debt = bal(DEBT_TAGS)
@@ -147,6 +162,14 @@ def fetch_ticker(ticker: str, cik: str) -> list[dict]:
     oi_ttm = oi.rolling(4, min_periods=1).sum() if not oi.empty else pd.Series(dtype=float)
     da_ttm = da.rolling(4, min_periods=1).sum() if not da.empty else pd.Series(dtype=float)
     int_ttm = intexp.rolling(4, min_periods=1).sum() if not intexp.empty else pd.Series(dtype=float)
+    tax_ttm = tax.rolling(4, min_periods=1).sum() if not tax.empty else pd.Series(dtype=float)
+    pretax_ttm = pretax.rolling(4, min_periods=1).sum() if not pretax.empty else pd.Series(dtype=float)
+
+    def ttm_at(series: pd.Series, qend) -> float | None:
+        if series is None or series.empty:
+            return None
+        s = series[series.index <= qend].dropna()
+        return float(s.iloc[-1]) if len(s) else None
 
     rows = []
     for qend, equity in eq.items():
@@ -179,6 +202,13 @@ def fetch_ticker(ticker: str, cik: str) -> list[dict]:
         inv = bal_at(invested)
         if e is None or e <= 0:
             continue
+        # per-period effective tax rate: TTM tax / TTM pretax, clamped [0, 0.5];
+        # fall back to 25% proxy when either side is unavailable.
+        ttax = ttm_at(tax_ttm, qend)
+        tpre = ttm_at(pretax_ttm, qend)
+        eff_rate = None
+        if ttax is not None and tpre and abs(tpre) > 1e-9:
+            eff_rate = float(np.clip(ttax / tpre, 0.0, 0.5))
         rows.append({
             "qend": qend,
             "equity": e,
@@ -191,6 +221,7 @@ def fetch_ticker(ticker: str, cik: str) -> list[dict]:
             "ttm_oi": ttm_oi,
             "ttm_da": ttm_da,
             "ttm_int": ttm_int,
+            "eff_tax_rate": eff_rate,
         })
     return rows
 
@@ -211,7 +242,14 @@ def build_rows(ticker: str, frames: list[dict], px: dict[str, pd.Series]) -> lis
                 mcap = float(avail.iloc[-1]) * shares
         mcap_b = mcap / 1e9 if mcap else None
         roe = ttm_ni / equity if ttm_ni and equity else None
-        nopat = ttm_oi * 0.75 if ttm_oi else None
+        rate = fr.get("eff_tax_rate") if fr.get("eff_tax_rate") is not None else 0.25
+        if ttm_oi:
+            nopat = ttm_oi * (1 - rate)
+        elif ttm_ni is not None and fr.get("ttm_int"):
+            # banks/energy often omit OperatingIncome; use NI + interest(1-t)
+            nopat = ttm_ni + fr["ttm_int"] * (1 - rate)
+        else:
+            nopat = None
         invested = fr["invested"] if fr["invested"] else ((debt or 0) + equity)
         roic = nopat / invested if nopat and invested else None
         de = debt / equity if debt and equity else None
@@ -260,8 +298,13 @@ def main():
 
     print("Loading SEC ticker→CIK map...")
     cik_map = load_cik_map()
+    cik_map.update(CIK_OVERRIDES)
     matched = [(t, cik_map[t]) for t in tickers if t in cik_map]
+    unmatched = [t for t in tickers if t not in cik_map]
     print(f"  {len(matched)}/{len(tickers)} tickers have a CIK")
+    if unmatched:
+        print(f"  no CIK ({len(unmatched)}): {', '.join(unmatched)}")
+        print("    (ETFs/funds and delisted ADRs have no XBRL statements; expected gaps)")
     if args.dry_run:
         return
 

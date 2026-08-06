@@ -408,3 +408,4 @@ auxiliary tables feeding several stages.
 | `cross_section_stats.csv` | `cross_section.py` | Cross-section |
 | `signal_aggregator_scores.csv` | `signal_aggregator.py` | Aggregate |
 | `signal_aggregator_ic.csv` | `signal_aggregator.py` | Aggregate |
+| `regime_forecast_stats.csv` | `regime_forecast.py` | Forecast / anomaly |
