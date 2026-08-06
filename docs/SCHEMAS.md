@@ -93,6 +93,31 @@ auxiliary tables feeding several stages.
 
 - See producing script (mixed-shape outputs that don't fit a family cleanly).
 
+### Pair engine  (`pair_engine`)
+
+- `pair_id` (A|B), `group` (industry/sector), cointegration stats
+  (`coint_t`,`p_value`,`beta`,`half_life`), selection flags
+  (`fdr_survive`,`usable`,`fold`), live `z_now`; trades carry `entry_date`,
+  `exit_date` (DATE), `entry_z`/`exit_z`, `bars_held`, `exit_reason`
+  (revert/stop/time), `hedged_pnl`, `z_pnl`. Produced only by `pair_engine.py`;
+  all stats are walk-forward OOS.
+
+### Earnings catalyst  (`earnings`)
+
+- Per-ticker earnings signal rows: `ticker`, `next_earnings_date` (DATE),
+  `surprise_pct`, `pre_mom_pctile`/`pre_mom_flag`, `iv_vs_realized`/`iv_rich`,
+  `expected_drift_20d`, `catalyst_score`; plus drift-bucket aggregates
+  (`bucket`, `n_events`, `drift_5d/20d/63d`). Produced by `earnings_catalyst.py`
+  from `earnings_calendar.parquet` (`update_earnings.py`).
+
+### Cross-section  (`cross_section`)
+
+- `rebalance_date` (DATE), `ticker`, `bucket` (1=short … 5=long) rankings;
+  daily `long`/`short`/`long_short`/`equal_weight_long` returns; OOS stats vs
+  baseline incl. `sector_exposure_abs_dev_avg`. Produced only by
+  `cross_section.py`; factors are point-in-time (as-of fundamentals +
+  trailing momentum).
+
 
 ## Full output catalog
 
@@ -357,9 +382,18 @@ auxiliary tables feeding several stages.
 | `tail_risk_hedge_crisis.csv` | `tail_risk_hedging.py` | Other |
 | `vol_target_vs_risk_parity.csv` | `risk_parity_analytics.py` | Other |
 | `vol_targets.csv` | `preferred_metrics.py` | Other |
-|| `vol_targets.csv` | `vol_target.py` | Other ||
-|| `vol_targets.parquet` | `vol_target.py` | Other ||
-|| `peer_analytics_signals.csv` | `peer_analytics.py` | Screen / decision ||
-|| `peer_group_summary.csv` | `peer_analytics.py` | Summary / metrics ||
-|| `peer_fundamental_trends.csv` | `peer_analytics.py` | Summary / metrics ||
-|| `peer_recovery_signals.csv` | `peer_analytics.py` | Screen / decision ||
+| `vol_targets.csv` | `vol_target.py` | Other |
+| `vol_targets.parquet` | `vol_target.py` | Other |
+| `peer_analytics_signals.csv` | `peer_analytics.py` | Screen / decision |
+| `peer_group_summary.csv` | `peer_analytics.py` | Summary / metrics |
+| `peer_fundamental_trends.csv` | `peer_analytics.py` | Summary / metrics |
+| `peer_recovery_signals.csv` | `peer_analytics.py` | Screen / decision |
+| `earnings_calendar.parquet` | `update_earnings.py` | Earnings |
+| `earnings_catalyst_signals.csv` | `earnings_catalyst.py` | Earnings |
+| `earnings_drift_stats.csv` | `earnings_catalyst.py` | Earnings |
+| `pair_engine_pairs.csv` | `pair_engine.py` | Pair engine |
+| `pair_engine_trades.csv` | `pair_engine.py` | Pair engine |
+| `pair_engine_stats.csv` | `pair_engine.py` | Pair engine |
+| `cross_section_rankings.csv` | `cross_section.py` | Cross-section |
+| `cross_section_returns.csv` | `cross_section.py` | Cross-section |
+| `cross_section_stats.csv` | `cross_section.py` | Cross-section |

@@ -1,0 +1,2 @@
+n_days,model_ann_ret,model_ann_vol,model_sharpe,baseline_ann_ret,baseline_ann_vol,baseline_sharpe,excess_ann_ret,info_ratio,win_rate_vs_baseline,dir_agreement,sector_exposure_abs_dev_avg
+1245,0.0525,0.2153,0.0582,0.2135,0.4644,0.3736,-0.161,-0.4556,0.3679,0.6281,0.028

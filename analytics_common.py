@@ -44,8 +44,51 @@ def load_prices_pandas(prefer_clean: bool = True, tickers: Optional[list[str]] =
     return df.sort_values(["ticker", "date"])
 
 
+def load_adj_prices_pandas(tickers: Optional[list[str]] = None) -> pd.DataFrame:
+    """Split/dividend-adjusted closes from daily_prices.parquet (adj_close).
+
+    Return math for long-horizon backtests must use adj_close — raw ``close``
+    carries split artifacts (a 4:1 split looks like a -75% day). Prefer this
+    over load_prices_pandas for any engine that computes returns.
+    """
+    path = DATA_DIR / "daily_prices.parquet"
+    if HAS_POLARS:
+        lf = pl.scan_parquet(str(path)).select(
+            pl.col("date").cast(pl.Date, strict=False),
+            pl.col("ticker"),
+            pl.col("adj_close").cast(pl.Float64, strict=False),
+        )
+        if tickers:
+            lf = lf.filter(pl.col("ticker").is_in([t.upper() for t in tickers]))
+        df = lf.collect().to_pandas()
+    else:
+        df = pd.read_parquet(path, columns=cols)
+        if tickers:
+            df = df[df["ticker"].isin([t.upper() for t in tickers])]
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.rename(columns={"adj_close": "close"})
+    return df.sort_values(["ticker", "date"])
+
+
 def wide_closes(prices: pd.DataFrame) -> pd.DataFrame:
     return prices.pivot_table(index="date", columns="ticker", values="close", aggfunc="last").sort_index()
+
+
+def to_date_keys(df: pd.DataFrame, cols) -> pd.DataFrame:
+    """Cast daily date-key columns to python ``datetime.date`` so the parquet
+    writer serializes them as DATE (no time component), not TIMESTAMP.
+
+    Daily date-keys (trade dates, as-of dates, snapshot dates) should be DATE,
+    not midnight-stamped TIMESTAMP. Intraday event times (fills, alerts,
+    last_updated) must NOT be passed here.
+    """
+    df = df.copy()
+    if isinstance(cols, str):
+        cols = [cols]
+    for c in cols:
+        if c in df.columns:
+            df[c] = pd.to_datetime(df[c], errors="coerce").dt.date
+    return df
 
 
 def simple_returns(wide: pd.DataFrame) -> pd.DataFrame:

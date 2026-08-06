@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-02T16:16:15.123155",
-  "count": 201,
+  "generated": "2026-08-05T23:18:25.417760",
+  "count": 184,
   "files": [
     {
       "name": "['all']",
@@ -44,7 +44,7 @@
       "path": "allpairs_asset_corr_history.csv",
       "url": "allpairs_asset_corr_history.csv",
       "kind": "csv",
-      "size": 9594459,
+      "size": 9541878,
       "sql_name": "allpairs_asset_corr_history"
     },
     {
@@ -53,7 +53,7 @@
       "path": "allpairs_asset_corr_latest.csv",
       "url": "allpairs_asset_corr_latest.csv",
       "kind": "csv",
-      "size": 48026,
+      "size": 47952,
       "sql_name": "allpairs_asset_corr_latest"
     },
     {
@@ -62,7 +62,7 @@
       "path": "allpairs_corr_summary.csv",
       "url": "allpairs_corr_summary.csv",
       "kind": "csv",
-      "size": 284,
+      "size": 289,
       "sql_name": "allpairs_corr_summary"
     },
     {
@@ -71,7 +71,7 @@
       "path": "allpairs_sector_corr_history.csv",
       "url": "allpairs_sector_corr_history.csv",
       "kind": "csv",
-      "size": 1823785,
+      "size": 1881377,
       "sql_name": "allpairs_sector_corr_history"
     },
     {
@@ -80,7 +80,7 @@
       "path": "allpairs_sector_corr_latest.csv",
       "url": "allpairs_sector_corr_latest.csv",
       "kind": "csv",
-      "size": 1685,
+      "size": 1661,
       "sql_name": "allpairs_sector_corr_latest"
     },
     {
@@ -89,7 +89,7 @@
       "path": "analysis_snapshot.parquet",
       "url": "analysis_snapshot.parquet",
       "kind": "parquet",
-      "size": 10392,
+      "size": 4184,
       "sql_name": "analysis_snapshot"
     },
     {
@@ -107,7 +107,7 @@
       "path": "asset_correlation_matrix.csv",
       "url": "asset_correlation_matrix.csv",
       "kind": "csv",
-      "size": 42399,
+      "size": 44260,
       "sql_name": "asset_correlation_matrix"
     },
     {
@@ -224,7 +224,7 @@
       "path": "crisis_avg_corr_timeseries.csv",
       "url": "crisis_avg_corr_timeseries.csv",
       "kind": "csv",
-      "size": 926770,
+      "size": 1121657,
       "sql_name": "crisis_avg_corr_timeseries"
     },
     {
@@ -233,7 +233,7 @@
       "path": "crisis_correlation_pairs.csv",
       "url": "crisis_correlation_pairs.csv",
       "kind": "csv",
-      "size": 682282,
+      "size": 1734231,
       "sql_name": "crisis_correlation_pairs"
     },
     {
@@ -242,7 +242,7 @@
       "path": "crisis_correlation_summary.csv",
       "url": "crisis_correlation_summary.csv",
       "kind": "csv",
-      "size": 405,
+      "size": 361,
       "sql_name": "crisis_correlation_summary"
     },
     {
@@ -255,12 +255,39 @@
       "sql_name": "cross_asset_stability"
     },
     {
+      "name": "cross_section_rankings",
+      "filename": "cross_section_rankings.csv",
+      "path": "cross_section_rankings.csv",
+      "url": "cross_section_rankings.csv",
+      "kind": "csv",
+      "size": 54157,
+      "sql_name": "cross_section_rankings"
+    },
+    {
+      "name": "cross_section_returns",
+      "filename": "cross_section_returns.csv",
+      "path": "cross_section_returns.csv",
+      "url": "cross_section_returns.csv",
+      "kind": "csv",
+      "size": 89601,
+      "sql_name": "cross_section_returns"
+    },
+    {
+      "name": "cross_section_stats",
+      "filename": "cross_section_stats.csv",
+      "path": "cross_section_stats.csv",
+      "url": "cross_section_stats.csv",
+      "kind": "csv",
+      "size": 271,
+      "sql_name": "cross_section_stats"
+    },
+    {
       "name": "daily_prices",
       "filename": "daily_prices.parquet",
       "path": "daily_prices.parquet",
       "url": "daily_prices.parquet",
       "kind": "parquet",
-      "size": 62536496,
+      "size": 138603745,
       "sql_name": "daily_prices"
     },
     {
@@ -278,7 +305,7 @@
       "path": "daily_prices_yfinance.parquet",
       "url": "daily_prices_yfinance.parquet",
       "kind": "parquet",
-      "size": 34812443,
+      "size": 34647914,
       "sql_name": "daily_prices_yfinance"
     },
     {
@@ -296,7 +323,7 @@
       "path": "ttm_panels/defensive.parquet",
       "url": "ttm_panels/defensive.parquet",
       "kind": "parquet",
-      "size": 325171,
+      "size": 248989,
       "sql_name": "defensive"
     },
     {
@@ -323,8 +350,17 @@
       "path": "defensive_value_index.parquet",
       "url": "defensive_value_index.parquet",
       "kind": "parquet",
-      "size": 6781,
+      "size": 2473,
       "sql_name": "defensive_value_index"
+    },
+    {
+      "name": "distutils.schema",
+      "filename": "distutils.schema.json",
+      "path": "venv_cuda_test/Lib/site-packages/setuptools/config/distutils.schema.json",
+      "url": "venv_cuda_test/Lib/site-packages/setuptools/config/distutils.schema.json",
+      "kind": "json",
+      "size": 972,
+      "sql_name": "distutils_schema"
     },
     {
       "name": "dual_pass_sensitivity",
@@ -332,7 +368,7 @@
       "path": "dual_pass_sensitivity.csv",
       "url": "dual_pass_sensitivity.csv",
       "kind": "csv",
-      "size": 132,
+      "size": 136,
       "sql_name": "dual_pass_sensitivity"
     },
     {
@@ -341,7 +377,7 @@
       "path": "dual_pass_stress.csv",
       "url": "dual_pass_stress.csv",
       "kind": "csv",
-      "size": 3729,
+      "size": 3442,
       "sql_name": "dual_pass_stress"
     },
     {
@@ -368,8 +404,35 @@
       "path": "dupont_analysis.csv",
       "url": "dupont_analysis.csv",
       "kind": "csv",
-      "size": 12854,
+      "size": 88319,
       "sql_name": "dupont_analysis"
+    },
+    {
+      "name": "earnings_calendar",
+      "filename": "earnings_calendar.parquet",
+      "path": "earnings_calendar.parquet",
+      "url": "earnings_calendar.parquet",
+      "kind": "parquet",
+      "size": 25997,
+      "sql_name": "earnings_calendar"
+    },
+    {
+      "name": "earnings_catalyst_signals",
+      "filename": "earnings_catalyst_signals.csv",
+      "path": "earnings_catalyst_signals.csv",
+      "url": "earnings_catalyst_signals.csv",
+      "kind": "csv",
+      "size": 6207,
+      "sql_name": "earnings_catalyst_signals"
+    },
+    {
+      "name": "earnings_drift_stats",
+      "filename": "earnings_drift_stats.csv",
+      "path": "earnings_drift_stats.csv",
+      "url": "earnings_drift_stats.csv",
+      "kind": "csv",
+      "size": 272,
+      "sql_name": "earnings_drift_stats"
     },
     {
       "name": "erc_gmv_strategies",
@@ -395,7 +458,7 @@
       "path": "exclusion_candidates.csv",
       "url": "exclusion_candidates.csv",
       "kind": "csv",
-      "size": 10090,
+      "size": 52221,
       "sql_name": "exclusion_candidates"
     },
     {
@@ -404,7 +467,7 @@
       "path": "exogenous_panel.parquet",
       "url": "exogenous_panel.parquet",
       "kind": "parquet",
-      "size": 45760,
+      "size": 32531,
       "sql_name": "exogenous_panel"
     },
     {
@@ -431,7 +494,7 @@
       "path": "factor_rotation_performance.csv",
       "url": "factor_rotation_performance.csv",
       "kind": "csv",
-      "size": 752,
+      "size": 749,
       "sql_name": "factor_rotation_performance"
     },
     {
@@ -440,7 +503,7 @@
       "path": "factor_rotation_weights.csv",
       "url": "factor_rotation_weights.csv",
       "kind": "csv",
-      "size": 1024394,
+      "size": 1024457,
       "sql_name": "factor_rotation_weights"
     },
     {
@@ -449,7 +512,7 @@
       "path": "factor_sleeve_returns.csv",
       "url": "factor_sleeve_returns.csv",
       "kind": "csv",
-      "size": 1920218,
+      "size": 1926530,
       "sql_name": "factor_sleeve_returns"
     },
     {
@@ -458,7 +521,7 @@
       "path": "ttm_panels/fertilizer.parquet",
       "url": "ttm_panels/fertilizer.parquet",
       "kind": "parquet",
-      "size": 39670,
+      "size": 28665,
       "sql_name": "fertilizer"
     },
     {
@@ -476,7 +539,7 @@
       "path": "fertilizer_index.parquet",
       "url": "fertilizer_index.parquet",
       "kind": "parquet",
-      "size": 4221,
+      "size": 1107,
       "sql_name": "fertilizer_index"
     },
     {
@@ -485,7 +548,7 @@
       "path": "fisher_indexes.parquet",
       "url": "fisher_indexes.parquet",
       "kind": "parquet",
-      "size": 4435185,
+      "size": 520219,
       "sql_name": "fisher_indexes"
     },
     {
@@ -494,8 +557,17 @@
       "path": "fisher_indexes_duckdb.parquet",
       "url": "fisher_indexes_duckdb.parquet",
       "kind": "parquet",
-      "size": 234534,
+      "size": 191437,
       "sql_name": "fisher_indexes_duckdb"
+    },
+    {
+      "name": "fisher_indexes_sp500",
+      "filename": "fisher_indexes_sp500.parquet",
+      "path": "fisher_indexes_sp500.parquet",
+      "url": "fisher_indexes_sp500.parquet",
+      "kind": "parquet",
+      "size": 572349,
+      "sql_name": "fisher_indexes_sp500"
     },
     {
       "name": "fisher_rate_decomposition",
@@ -548,7 +620,7 @@
       "path": "forecasts_granite.parquet",
       "url": "forecasts_granite.parquet",
       "kind": "parquet",
-      "size": 671663,
+      "size": 610428,
       "sql_name": "forecasts_granite"
     },
     {
@@ -566,7 +638,7 @@
       "path": "fundamentals.parquet",
       "url": "fundamentals.parquet",
       "kind": "parquet",
-      "size": 309794,
+      "size": 454246,
       "sql_name": "fundamentals"
     },
     {
@@ -584,7 +656,7 @@
       "path": "fundamentals_yfinance.parquet",
       "url": "fundamentals_yfinance.parquet",
       "kind": "parquet",
-      "size": 85588,
+      "size": 69246,
       "sql_name": "fundamentals_yfinance"
     },
     {
@@ -595,15 +667,6 @@
       "kind": "csv",
       "size": 992,
       "sql_name": "granger_causality_sectors"
-    },
-    {
-      "name": "granite_series_cache",
-      "filename": "granite_series_cache.parquet",
-      "path": "granite_series_cache.parquet",
-      "url": "granite_series_cache.parquet",
-      "kind": "parquet",
-      "size": 3928082,
-      "sql_name": "granite_series_cache"
     },
     {
       "name": "growth_ai_vol_vs_risk_parity",
@@ -620,7 +683,7 @@
       "path": "growth_tech_backtest_stats.csv",
       "url": "growth_tech_backtest_stats.csv",
       "kind": "csv",
-      "size": 480,
+      "size": 481,
       "sql_name": "growth_tech_backtest_stats"
     },
     {
@@ -629,7 +692,7 @@
       "path": "growth_tech_corr_stability.csv",
       "url": "growth_tech_corr_stability.csv",
       "kind": "csv",
-      "size": 170,
+      "size": 171,
       "sql_name": "growth_tech_corr_stability"
     },
     {
@@ -638,7 +701,7 @@
       "path": "growth_tech_correlation_matrix.csv",
       "url": "growth_tech_correlation_matrix.csv",
       "kind": "csv",
-      "size": 35723,
+      "size": 35729,
       "sql_name": "growth_tech_correlation_matrix"
     },
     {
@@ -647,7 +710,7 @@
       "path": "growth_tech_fisher.csv",
       "url": "growth_tech_fisher.csv",
       "kind": "csv",
-      "size": 4741242,
+      "size": 4741515,
       "sql_name": "growth_tech_fisher"
     },
     {
@@ -656,7 +719,7 @@
       "path": "growth_tech_index.parquet",
       "url": "growth_tech_index.parquet",
       "kind": "parquet",
-      "size": 9817,
+      "size": 5007,
       "sql_name": "growth_tech_index"
     },
     {
@@ -665,7 +728,7 @@
       "path": "growth_tech_index_levels.parquet",
       "url": "growth_tech_index_levels.parquet",
       "kind": "parquet",
-      "size": 303419,
+      "size": 195752,
       "sql_name": "growth_tech_index_levels"
     },
     {
@@ -674,7 +737,7 @@
       "path": "growth_tech_index_levels_compare.parquet",
       "url": "growth_tech_index_levels_compare.parquet",
       "kind": "parquet",
-      "size": 694663,
+      "size": 645776,
       "sql_name": "growth_tech_index_levels_compare"
     },
     {
@@ -692,7 +755,7 @@
       "path": "growth_tech_risk_models.csv",
       "url": "growth_tech_risk_models.csv",
       "kind": "csv",
-      "size": 24577,
+      "size": 24458,
       "sql_name": "growth_tech_risk_models"
     },
     {
@@ -701,7 +764,7 @@
       "path": "growth_tech_rolling_corr.csv",
       "url": "growth_tech_rolling_corr.csv",
       "kind": "csv",
-      "size": 1839718,
+      "size": 1839829,
       "sql_name": "growth_tech_rolling_corr"
     },
     {
@@ -710,7 +773,7 @@
       "path": "growth_tech_sleeve_correlations.csv",
       "url": "growth_tech_sleeve_correlations.csv",
       "kind": "csv",
-      "size": 4173,
+      "size": 4161,
       "sql_name": "growth_tech_sleeve_correlations"
     },
     {
@@ -719,7 +782,7 @@
       "path": "growth_tech_sleeve_performance.csv",
       "url": "growth_tech_sleeve_performance.csv",
       "kind": "csv",
-      "size": 1328,
+      "size": 1310,
       "sql_name": "growth_tech_sleeve_performance"
     },
     {
@@ -728,7 +791,7 @@
       "path": "growth_tech_vol_returns.csv",
       "url": "growth_tech_vol_returns.csv",
       "kind": "csv",
-      "size": 7510,
+      "size": 7552,
       "sql_name": "growth_tech_vol_returns"
     },
     {
@@ -782,7 +845,7 @@
       "path": "hmm_regime_states.csv",
       "url": "hmm_regime_states.csv",
       "kind": "csv",
-      "size": 2343404,
+      "size": 1970818,
       "sql_name": "hmm_regime_states"
     },
     {
@@ -791,7 +854,7 @@
       "path": "hmm_regime_summary.csv",
       "url": "hmm_regime_summary.csv",
       "kind": "csv",
-      "size": 433,
+      "size": 436,
       "sql_name": "hmm_regime_summary"
     },
     {
@@ -809,7 +872,7 @@
       "path": "hmm_transition_matrix.csv",
       "url": "hmm_transition_matrix.csv",
       "kind": "csv",
-      "size": 248,
+      "size": 249,
       "sql_name": "hmm_transition_matrix"
     },
     {
@@ -836,7 +899,7 @@
       "path": "inclusion_candidates.csv",
       "url": "inclusion_candidates.csv",
       "kind": "csv",
-      "size": 3422,
+      "size": 18755,
       "sql_name": "inclusion_candidates"
     },
     {
@@ -845,7 +908,7 @@
       "path": "inclusion_rules.json",
       "url": "inclusion_rules.json",
       "kind": "json",
-      "size": 485,
+      "size": 489,
       "sql_name": "inclusion_rules"
     },
     {
@@ -872,7 +935,7 @@
       "path": "index_levels_1y.parquet",
       "url": "index_levels_1y.parquet",
       "kind": "parquet",
-      "size": 15293,
+      "size": 10168,
       "sql_name": "index_levels_1y"
     },
     {
@@ -989,7 +1052,7 @@
       "path": "monitored_stocks.parquet",
       "url": "monitored_stocks.parquet",
       "kind": "parquet",
-      "size": 13914,
+      "size": 13881,
       "sql_name": "monitored_stocks"
     },
     {
@@ -1020,30 +1083,12 @@
       "sql_name": "monte_carlo_terminal_wealth"
     },
     {
-      "name": "mt19937-testset-1",
-      "filename": "mt19937-testset-1.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/mt19937-testset-1.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/mt19937-testset-1.csv",
-      "kind": "csv",
-      "size": 16845,
-      "sql_name": "mt19937_testset_1"
-    },
-    {
-      "name": "mt19937-testset-2",
-      "filename": "mt19937-testset-2.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/mt19937-testset-2.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/mt19937-testset-2.csv",
-      "kind": "csv",
-      "size": 16826,
-      "sql_name": "mt19937_testset_2"
-    },
-    {
       "name": "near_dual_candidates",
       "filename": "near_dual_candidates.csv",
       "path": "near_dual_candidates.csv",
       "url": "near_dual_candidates.csv",
       "kind": "csv",
-      "size": 393,
+      "size": 1423,
       "sql_name": "near_dual_candidates"
     },
     {
@@ -1056,58 +1101,67 @@
       "sql_name": "package"
     },
     {
-      "name": "pcg64-testset-1",
-      "filename": "pcg64-testset-1.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/pcg64-testset-1.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/pcg64-testset-1.csv",
+      "name": "pair_engine_pairs",
+      "filename": "pair_engine_pairs.csv",
+      "path": "pair_engine_pairs.csv",
+      "url": "pair_engine_pairs.csv",
       "kind": "csv",
-      "size": 24840,
-      "sql_name": "pcg64_testset_1"
+      "size": 9385,
+      "sql_name": "pair_engine_pairs"
     },
     {
-      "name": "pcg64-testset-2",
-      "filename": "pcg64-testset-2.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/pcg64-testset-2.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/pcg64-testset-2.csv",
+      "name": "pair_engine_stats",
+      "filename": "pair_engine_stats.csv",
+      "path": "pair_engine_stats.csv",
+      "url": "pair_engine_stats.csv",
       "kind": "csv",
-      "size": 24846,
-      "sql_name": "pcg64_testset_2"
+      "size": 777,
+      "sql_name": "pair_engine_stats"
     },
     {
-      "name": "pcg64dxsm-testset-1",
-      "filename": "pcg64dxsm-testset-1.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/pcg64dxsm-testset-1.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/pcg64dxsm-testset-1.csv",
+      "name": "pair_engine_trades",
+      "filename": "pair_engine_trades.csv",
+      "path": "pair_engine_trades.csv",
+      "url": "pair_engine_trades.csv",
       "kind": "csv",
-      "size": 24834,
-      "sql_name": "pcg64dxsm_testset_1"
+      "size": 4986,
+      "sql_name": "pair_engine_trades"
     },
     {
-      "name": "pcg64dxsm-testset-2",
-      "filename": "pcg64dxsm-testset-2.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/pcg64dxsm-testset-2.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/pcg64dxsm-testset-2.csv",
+      "name": "peer_analytics_signals",
+      "filename": "peer_analytics_signals.csv",
+      "path": "peer_analytics_signals.csv",
+      "url": "peer_analytics_signals.csv",
       "kind": "csv",
-      "size": 24840,
-      "sql_name": "pcg64dxsm_testset_2"
+      "size": 189448,
+      "sql_name": "peer_analytics_signals"
     },
     {
-      "name": "philox-testset-1",
-      "filename": "philox-testset-1.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/philox-testset-1.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/philox-testset-1.csv",
+      "name": "peer_fundamental_trends",
+      "filename": "peer_fundamental_trends.csv",
+      "path": "peer_fundamental_trends.csv",
+      "url": "peer_fundamental_trends.csv",
       "kind": "csv",
-      "size": 24853,
-      "sql_name": "philox_testset_1"
+      "size": 413318,
+      "sql_name": "peer_fundamental_trends"
     },
     {
-      "name": "philox-testset-2",
-      "filename": "philox-testset-2.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/philox-testset-2.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/philox-testset-2.csv",
+      "name": "peer_group_summary",
+      "filename": "peer_group_summary.csv",
+      "path": "peer_group_summary.csv",
+      "url": "peer_group_summary.csv",
       "kind": "csv",
-      "size": 24839,
-      "sql_name": "philox_testset_2"
+      "size": 14883,
+      "sql_name": "peer_group_summary"
+    },
+    {
+      "name": "peer_recovery_signals",
+      "filename": "peer_recovery_signals.csv",
+      "path": "peer_recovery_signals.csv",
+      "url": "peer_recovery_signals.csv",
+      "kind": "csv",
+      "size": 324636,
+      "sql_name": "peer_recovery_signals"
     },
     {
       "name": "portfolio",
@@ -1160,7 +1214,7 @@
       "path": "preferred_metrics.parquet",
       "url": "preferred_metrics.parquet",
       "kind": "parquet",
-      "size": 38879,
+      "size": 119128,
       "sql_name": "preferred_metrics"
     },
     {
@@ -1169,7 +1223,7 @@
       "path": "preferred_metrics_history.parquet",
       "url": "preferred_metrics_history.parquet",
       "kind": "parquet",
-      "size": 96553,
+      "size": 267455,
       "sql_name": "preferred_metrics_history"
     },
     {
@@ -1178,7 +1232,7 @@
       "path": "preferred_screen_hits.csv",
       "url": "preferred_screen_hits.csv",
       "kind": "csv",
-      "size": 2867,
+      "size": 30298,
       "sql_name": "preferred_screen_hits"
     },
     {
@@ -1205,7 +1259,7 @@
       "path": "rebalance_calendar.csv",
       "url": "rebalance_calendar.csv",
       "kind": "csv",
-      "size": 1054,
+      "size": 1415,
       "sql_name": "rebalance_calendar"
     },
     {
@@ -1263,6 +1317,15 @@
       "sql_name": "regime_corr_pair_delta"
     },
     {
+      "name": "regime_pass1_results",
+      "filename": "regime_pass1_results.json",
+      "path": "regime_pass1_results.json",
+      "url": "regime_pass1_results.json",
+      "kind": "json",
+      "size": 6198,
+      "sql_name": "regime_pass1_results"
+    },
+    {
       "name": "regime_sector_corr",
       "filename": "regime_sector_corr.csv",
       "path": "regime_sector_corr.csv",
@@ -1277,7 +1340,7 @@
       "path": "risk_metrics.csv",
       "url": "risk_metrics.csv",
       "kind": "csv",
-      "size": 8943,
+      "size": 35458,
       "sql_name": "risk_metrics"
     },
     {
@@ -1304,7 +1367,7 @@
       "path": "rolling_corr_avg_timeseries.csv",
       "url": "rolling_corr_avg_timeseries.csv",
       "kind": "csv",
-      "size": 720787,
+      "size": 721394,
       "sql_name": "rolling_corr_avg_timeseries"
     },
     {
@@ -1313,7 +1376,7 @@
       "path": "rolling_corr_stability_by_asset.csv",
       "url": "rolling_corr_stability_by_asset.csv",
       "kind": "csv",
-      "size": 6556,
+      "size": 6681,
       "sql_name": "rolling_corr_stability_by_asset"
     },
     {
@@ -1331,7 +1394,7 @@
       "path": "rolling_screen_stability.csv",
       "url": "rolling_screen_stability.csv",
       "kind": "csv",
-      "size": 6785,
+      "size": 26969,
       "sql_name": "rolling_screen_stability"
     },
     {
@@ -1340,7 +1403,7 @@
       "path": "rolling_sector_corr_windows.csv",
       "url": "rolling_sector_corr_windows.csv",
       "kind": "csv",
-      "size": 10161401,
+      "size": 5007768,
       "sql_name": "rolling_sector_corr_windows"
     },
     {
@@ -1358,7 +1421,7 @@
       "path": "rolling_window_metrics.csv",
       "url": "rolling_window_metrics.csv",
       "kind": "csv",
-      "size": 1161,
+      "size": 1147,
       "sql_name": "rolling_window_metrics"
     },
     {
@@ -1376,7 +1439,7 @@
       "path": "screen_backtest.csv",
       "url": "screen_backtest.csv",
       "kind": "csv",
-      "size": 534,
+      "size": 2046,
       "sql_name": "screen_backtest"
     },
     {
@@ -1394,7 +1457,7 @@
       "path": "sector_correlation_matrix_latest.csv",
       "url": "sector_correlation_matrix_latest.csv",
       "kind": "csv",
-      "size": 3385,
+      "size": 3387,
       "sql_name": "sector_correlation_matrix_latest"
     },
     {
@@ -1412,7 +1475,7 @@
       "path": "sector_prices.parquet",
       "url": "sector_prices.parquet",
       "kind": "parquet",
-      "size": 7213757,
+      "size": 6435723,
       "sql_name": "sector_prices"
     },
     {
@@ -1434,22 +1497,13 @@
       "sql_name": "sector_tickers"
     },
     {
-      "name": "sfc64-testset-1",
-      "filename": "sfc64-testset-1.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/sfc64-testset-1.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/sfc64-testset-1.csv",
-      "kind": "csv",
-      "size": 24841,
-      "sql_name": "sfc64_testset_1"
-    },
-    {
-      "name": "sfc64-testset-2",
-      "filename": "sfc64-testset-2.csv",
-      "path": ".venv/Lib/site-packages/numpy/random/tests/data/sfc64-testset-2.csv",
-      "url": ".venv/Lib/site-packages/numpy/random/tests/data/sfc64-testset-2.csv",
-      "kind": "csv",
-      "size": 24834,
-      "sql_name": "sfc64_testset_2"
+      "name": "setuptools.schema",
+      "filename": "setuptools.schema.json",
+      "path": "venv_cuda_test/Lib/site-packages/setuptools/config/setuptools.schema.json",
+      "url": "venv_cuda_test/Lib/site-packages/setuptools/config/setuptools.schema.json",
+      "kind": "json",
+      "size": 16071,
+      "sql_name": "setuptools_schema"
     },
     {
       "name": "sharpe_comparison",
@@ -1466,8 +1520,17 @@
       "path": "sp500_changes.parquet",
       "url": "sp500_changes.parquet",
       "kind": "parquet",
-      "size": 14034,
+      "size": 31471,
       "sql_name": "sp500_changes"
+    },
+    {
+      "name": "sp500_changes_tickerleague",
+      "filename": "sp500_changes_tickerleague.parquet",
+      "path": "sp500_changes_tickerleague.parquet",
+      "url": "sp500_changes_tickerleague.parquet",
+      "kind": "parquet",
+      "size": 79427,
+      "sql_name": "sp500_changes_tickerleague"
     },
     {
       "name": "sp500_constituents",
@@ -1511,7 +1574,7 @@
       "path": "tail_risk_hedge_crisis.csv",
       "url": "tail_risk_hedge_crisis.csv",
       "kind": "csv",
-      "size": 1305,
+      "size": 1311,
       "sql_name": "tail_risk_hedge_crisis"
     },
     {
@@ -1520,44 +1583,8 @@
       "path": "tail_risk_hedge_performance.csv",
       "url": "tail_risk_hedge_performance.csv",
       "kind": "csv",
-      "size": 1853,
+      "size": 1846,
       "sql_name": "tail_risk_hedge_performance"
-    },
-    {
-      "name": "test",
-      "filename": "test.parquet",
-      "path": "test.parquet",
-      "url": "test.parquet",
-      "kind": "parquet",
-      "size": 0,
-      "sql_name": "test"
-    },
-    {
-      "name": "test2",
-      "filename": "test2.parquet",
-      "path": "test2.parquet",
-      "url": "test2.parquet",
-      "kind": "parquet",
-      "size": 2127,
-      "sql_name": "test2"
-    },
-    {
-      "name": "test3",
-      "filename": "test3.parquet",
-      "path": "test3.parquet",
-      "url": "test3.parquet",
-      "kind": "parquet",
-      "size": 0,
-      "sql_name": "test3"
-    },
-    {
-      "name": "test4",
-      "filename": "test4.parquet",
-      "path": "test4.parquet",
-      "url": "test4.parquet",
-      "kind": "parquet",
-      "size": 3549,
-      "sql_name": "test4"
     },
     {
       "name": "threshold_logic_rules",
@@ -1565,7 +1592,7 @@
       "path": "threshold_logic_rules.json",
       "url": "threshold_logic_rules.json",
       "kind": "json",
-      "size": 1250,
+      "size": 1312,
       "sql_name": "threshold_logic_rules"
     },
     {
@@ -1574,7 +1601,7 @@
       "path": "threshold_logic_screen.csv",
       "url": "threshold_logic_screen.csv",
       "kind": "csv",
-      "size": 23953,
+      "size": 158683,
       "sql_name": "threshold_logic_screen"
     },
     {
@@ -1594,186 +1621,6 @@
       "kind": "parquet",
       "size": 8827,
       "sql_name": "trades"
-    },
-    {
-      "name": "umath-validation-set-arccos",
-      "filename": "umath-validation-set-arccos.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arccos.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arccos.csv",
-      "kind": "csv",
-      "size": 62794,
-      "sql_name": "umath_validation_set_arccos"
-    },
-    {
-      "name": "umath-validation-set-arccosh",
-      "filename": "umath-validation-set-arccosh.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arccosh.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arccosh.csv",
-      "kind": "csv",
-      "size": 62794,
-      "sql_name": "umath_validation_set_arccosh"
-    },
-    {
-      "name": "umath-validation-set-arcsin",
-      "filename": "umath-validation-set-arcsin.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arcsin.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arcsin.csv",
-      "kind": "csv",
-      "size": 62768,
-      "sql_name": "umath_validation_set_arcsin"
-    },
-    {
-      "name": "umath-validation-set-arcsinh",
-      "filename": "umath-validation-set-arcsinh.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arcsinh.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arcsinh.csv",
-      "kind": "csv",
-      "size": 61718,
-      "sql_name": "umath_validation_set_arcsinh"
-    },
-    {
-      "name": "umath-validation-set-arctan",
-      "filename": "umath-validation-set-arctan.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arctan.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arctan.csv",
-      "kind": "csv",
-      "size": 61734,
-      "sql_name": "umath_validation_set_arctan"
-    },
-    {
-      "name": "umath-validation-set-arctanh",
-      "filename": "umath-validation-set-arctanh.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arctanh.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-arctanh.csv",
-      "kind": "csv",
-      "size": 62768,
-      "sql_name": "umath_validation_set_arctanh"
-    },
-    {
-      "name": "umath-validation-set-cbrt",
-      "filename": "umath-validation-set-cbrt.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-cbrt.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-cbrt.csv",
-      "kind": "csv",
-      "size": 62275,
-      "sql_name": "umath_validation_set_cbrt"
-    },
-    {
-      "name": "umath-validation-set-cos",
-      "filename": "umath-validation-set-cos.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-cos.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-cos.csv",
-      "kind": "csv",
-      "size": 60497,
-      "sql_name": "umath_validation_set_cos"
-    },
-    {
-      "name": "umath-validation-set-cosh",
-      "filename": "umath-validation-set-cosh.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-cosh.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-cosh.csv",
-      "kind": "csv",
-      "size": 62298,
-      "sql_name": "umath_validation_set_cosh"
-    },
-    {
-      "name": "umath-validation-set-exp",
-      "filename": "umath-validation-set-exp.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-exp.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-exp.csv",
-      "kind": "csv",
-      "size": 17903,
-      "sql_name": "umath_validation_set_exp"
-    },
-    {
-      "name": "umath-validation-set-exp2",
-      "filename": "umath-validation-set-exp2.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-exp2.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-exp2.csv",
-      "kind": "csv",
-      "size": 60053,
-      "sql_name": "umath_validation_set_exp2"
-    },
-    {
-      "name": "umath-validation-set-expm1",
-      "filename": "umath-validation-set-expm1.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-expm1.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-expm1.csv",
-      "kind": "csv",
-      "size": 61728,
-      "sql_name": "umath_validation_set_expm1"
-    },
-    {
-      "name": "umath-validation-set-log",
-      "filename": "umath-validation-set-log.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-log.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-log.csv",
-      "kind": "csv",
-      "size": 11963,
-      "sql_name": "umath_validation_set_log"
-    },
-    {
-      "name": "umath-validation-set-log10",
-      "filename": "umath-validation-set-log10.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-log10.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-log10.csv",
-      "kind": "csv",
-      "size": 70551,
-      "sql_name": "umath_validation_set_log10"
-    },
-    {
-      "name": "umath-validation-set-log1p",
-      "filename": "umath-validation-set-log1p.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-log1p.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-log1p.csv",
-      "kind": "csv",
-      "size": 61732,
-      "sql_name": "umath_validation_set_log1p"
-    },
-    {
-      "name": "umath-validation-set-log2",
-      "filename": "umath-validation-set-log2.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-log2.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-log2.csv",
-      "kind": "csv",
-      "size": 70546,
-      "sql_name": "umath_validation_set_log2"
-    },
-    {
-      "name": "umath-validation-set-sin",
-      "filename": "umath-validation-set-sin.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-sin.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-sin.csv",
-      "kind": "csv",
-      "size": 59981,
-      "sql_name": "umath_validation_set_sin"
-    },
-    {
-      "name": "umath-validation-set-sinh",
-      "filename": "umath-validation-set-sinh.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-sinh.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-sinh.csv",
-      "kind": "csv",
-      "size": 61722,
-      "sql_name": "umath_validation_set_sinh"
-    },
-    {
-      "name": "umath-validation-set-tan",
-      "filename": "umath-validation-set-tan.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-tan.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-tan.csv",
-      "kind": "csv",
-      "size": 61728,
-      "sql_name": "umath_validation_set_tan"
-    },
-    {
-      "name": "umath-validation-set-tanh",
-      "filename": "umath-validation-set-tanh.csv",
-      "path": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-tanh.csv",
-      "url": ".venv/Lib/site-packages/numpy/_core/tests/data/umath-validation-set-tanh.csv",
-      "kind": "csv",
-      "size": 61728,
-      "sql_name": "umath_validation_set_tanh"
     },
     {
       "name": "vix_term_structure",
@@ -1808,7 +1655,7 @@
       "path": "vol_targets.parquet",
       "url": "vol_targets.parquet",
       "kind": "parquet",
-      "size": 15087,
+      "size": 4147,
       "sql_name": "vol_targets"
     }
   ]

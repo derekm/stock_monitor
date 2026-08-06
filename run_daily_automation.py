@@ -19,7 +19,10 @@ Runs (in order):
   14. dupont_analysis          (ROE decomposition)
   15. growth_tech_analytics    (growth tech sleeve corr/perf)
   16. peer_analytics           (cross-stock peer comparison + signals)
-  17. export_dashboard_data    (dashboard_data/data.json)
+  17. earnings_catalyst        (pre-earnings momentum + drift + IV-vs-realized)
+  18. pair_engine              (cointegration pair trades, walk-forward OOS)
+  19. cross_section            (multi-factor sector-neutral L/S)
+  20. export_dashboard_data    (dashboard_data/data.json)
 
 Usage:
   python run_daily_automation.py
@@ -53,6 +56,9 @@ JOBS = [
     ("dupont", ["dupont_analysis.py", "--save"]),
     ("growth", ["growth_tech_analytics.py"]),
     ("peer", ["peer_analytics.py", "--save"]),
+    ("earnings", ["earnings_catalyst.py", "--save"]),
+    ("pairs", ["pair_engine.py", "--save"], 900),
+    ("cross", ["cross_section.py", "--save"], 600),
     ("export", ["export_dashboard_data.py"]),
 ]
 
