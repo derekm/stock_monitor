@@ -22,7 +22,8 @@ Runs (in order):
   17. earnings_catalyst        (pre-earnings momentum + drift + IV-vs-realized)
   18. pair_engine              (cointegration pair trades, walk-forward OOS)
   19. cross_section            (multi-factor sector-neutral L/S)
-  20. export_dashboard_data    (dashboard_data/data.json)
+  20. aggregate                (signal_aggregator: OOS IC-weighted composite)
+  21. export_dashboard_data    (dashboard_data/data.json)
 
 Usage:
   python run_daily_automation.py
@@ -59,6 +60,7 @@ JOBS = [
     ("earnings", ["earnings_catalyst.py", "--save"]),
     ("pairs", ["pair_engine.py", "--save"], 900),
     ("cross", ["cross_section.py", "--save"], 600),
+    ("aggregate", ["signal_aggregator.py", "--save"]),
     ("export", ["export_dashboard_data.py"]),
 ]
 

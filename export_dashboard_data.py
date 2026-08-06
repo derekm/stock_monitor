@@ -103,6 +103,8 @@ TABLES = [
     "cross_section_rankings",
     "cross_section_returns",
     "cross_section_stats",
+    "signal_aggregator_scores",
+    "signal_aggregator_ic",
 ]
 
 

@@ -185,6 +185,133 @@ def cmd_fetch(args):
     save(combined)
 
 
+def cmd_fetch_history(args):
+    """Real point-in-time fundamentals: quarterly statements from yfinance.
+
+    For each ticker pulls quarterly income statement + balance sheet and
+    computes as-of-quarter-end: ROE (TTM NI / equity), ROIC (TTM NOPAT /
+    invested capital), D/E, EV/EBITDA (mktcap + debt - cash)/TTM EBITDA,
+    P/B (mktcap / equity), MktCap/Assets. Market cap = price × shares at the
+    quarter end (from daily_prices.parquet adj_close, last price <= qend).
+
+    These are REAL dated rows (source=yfinance_history), replacing the
+    synthetic mean-reverting backfill that fundamentals_history.py generates.
+    """
+    import yfinance as yf
+
+    if STOCKS_FILE.exists():
+        tickers = sorted(pd.read_parquet(STOCKS_FILE)["ticker"].astype(str).str.upper().unique().tolist())
+    else:
+        tickers = sorted(load()["ticker"].unique().tolist())
+    skip = {".", "^", "=", "-", ":"}
+    tickers = [t for t in tickers if not any(s in t for s in skip)]
+    if args.tickers:
+        tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+    elif args.max_tickers:
+        tickers = tickers[: args.max_tickers]
+
+    # price series: ticker -> DataFrame(date, close=adj_close) for mktcap at qend
+    try:
+        from analytics_common import load_adj_prices_pandas
+        prices = load_adj_prices_pandas(tickers=tickers)
+        px = {tk: g.set_index("date")["close"] for tk, g in prices.groupby("ticker")}
+    except Exception as e:  # noqa: BLE001
+        print(f"  !! price load failed: {e}; market-cap-based rows will be None")
+        px = {}
+
+    new_rows: list[dict] = []
+    for t in tickers:
+        try:
+            tk = yf.Ticker(t)
+            inc = tk.get_income_stmt(freq="quarterly")
+            bal = tk.get_balance_sheet(freq="quarterly")
+            if inc is None or bal is None or inc.empty or bal.empty:
+                print(f"  !! {t}: no statements")
+                continue
+            # quarter-end dates = columns (tz-aware); use both frames' union
+            dates = sorted(set(inc.columns) | set(bal.columns))
+            for d in dates:
+                qend = d.date() if hasattr(d, "date") else pd.Timestamp(d).date()
+                # TTM income over 4 quarters ending at d
+                qi = inc.loc[:, inc.columns <= d]
+                qb = bal.loc[:, bal.columns <= d]
+                if qi.shape[1] == 0 or qb.shape[1] == 0:
+                    continue
+                def ttm(row_name: str) -> float | None:
+                    if row_name not in qi.index:
+                        return None
+                    s = qi.loc[row_name].dropna().tail(4)
+                    return float(s.sum()) if len(s) else None
+                def balv(row_name: str) -> float | None:
+                    if row_name not in qb.index:
+                        return None
+                    s = qb.loc[row_name].dropna()
+                    return float(s.iloc[-1]) if len(s) else None
+                ni = ttm("NetIncomeCommonStockholders")
+                oi = ttm("OperatingIncome")
+                ebitda = ttm("EBITDA")
+                equity = balv("StockholdersEquity")
+                total_assets = balv("TotalAssets")
+                debt = balv("TotalDebt")
+                cash = balv("CashAndCashEquivalents")
+                shares = balv("OrdinarySharesNumber")
+                # market cap at qend from price × shares (last close <= qend)
+                mcap = None
+                if t in px and shares:
+                    p = px[t]
+                    avail = p[p.index <= pd.Timestamp(qend)]
+                    if len(avail):
+                        mcap = float(avail.iloc[-1]) * shares
+                mcap_b = mcap / 1e9 if mcap else None
+                roe = ni / equity if ni and equity else None
+                nopat = oi * 0.75 if oi else None  # ~25% effective tax proxy
+                invested = balv("InvestedCapital")
+                roic = nopat / invested if nopat and invested else None
+                de = debt / equity if debt and equity else None
+                ev = (mcap + debt - cash) if mcap and debt and cash else None
+                ev_ebitda = ev / ebitda if ev and ebitda else None
+                pb = mcap / equity if mcap and equity else None
+                mca = mcap / total_assets if mcap and total_assets else None
+                new_rows.append({
+                    "ticker": t,
+                    "as_of_date": qend,
+                    "market_cap": int(mcap) if mcap else None,
+                    "market_cap_b": round(mcap_b, 2) if mcap_b else None,
+                    "total_assets": int(total_assets) if total_assets else None,
+                    "total_assets_b": round(total_assets / 1e9, 2) if total_assets else None,
+                    "pb_ratio": round(pb, 3) if pb else None,
+                    "mktcap_to_assets": round(mca, 3) if mca else None,
+                    "ev_ebitda": round(ev_ebitda, 2) if ev_ebitda else None,
+                    "roe": round(roe, 4) if roe else None,
+                    "roic": round(roic, 4) if roic else None,
+                    "debt_to_equity": round(de, 3) if de else None,
+                    "source": "yfinance_history",
+                    "notes": "real quarterly statements (TTM income)",
+                    "last_updated": pd.Timestamp.now(),
+                })
+            print(f"  {t}: {len([r for r in new_rows if r['ticker'] == t])} quarters")
+        except Exception as e:  # noqa: BLE001
+            print(f"  !! {t}: {e}")
+    if not new_rows:
+        print("No rows fetched.")
+        return
+    new_df = pd.DataFrame(new_rows)
+    # drop any synthetic backfill rows for these tickers (real data replaces noise)
+    existing = load()
+    real_tickers = set(new_df["ticker"])
+    existing = existing[
+        ~(
+            existing["ticker"].isin(real_tickers)
+            & (existing.get("source") == "fundamentals_history_backfill")
+        )
+    ]
+    keys = set(zip(new_df["ticker"], new_df["as_of_date"]))
+    existing = existing[~existing.apply(lambda r: (r["ticker"], r["as_of_date"]) in keys, axis=1)]
+    combined = pd.concat([existing, new_df], ignore_index=True)
+    save(combined)
+    print(f"Fetched real history: {len(new_df)} rows for {new_df['ticker'].nunique()} tickers")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Update P/B, market cap, total assets")
     sub = parser.add_subparsers(dest="cmd")
@@ -210,6 +337,11 @@ def main():
     p = sub.add_parser("fetch")
     p.add_argument("--tickers", help="Comma-separated subset")
     p.set_defaults(func=cmd_fetch)
+
+    p = sub.add_parser("fetch-history")
+    p.add_argument("--tickers", help="Comma-separated subset")
+    p.add_argument("--max-tickers", type=int, default=None, help="Cap batch size")
+    p.set_defaults(func=cmd_fetch_history)
 
     args = parser.parse_args()
     if not args.cmd:

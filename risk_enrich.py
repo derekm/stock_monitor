@@ -28,7 +28,8 @@ def metrics_for(tickers, rets, mkt):
 
 
 def main():
-    prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
+    prices = pd.read_parquet(PRICES, columns=["date", "ticker", "adj_close"])
+    prices = prices.rename(columns={"adj_close": "close"})
     prices["date"] = pd.to_datetime(prices["date"])
     wide = prices.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
     rets = np.log(wide / wide.shift(1)).dropna(how="all")
