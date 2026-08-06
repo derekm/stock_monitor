@@ -357,5 +357,9 @@ auxiliary tables feeding several stages.
 | `tail_risk_hedge_crisis.csv` | `tail_risk_hedging.py` | Other |
 | `vol_target_vs_risk_parity.csv` | `risk_parity_analytics.py` | Other |
 | `vol_targets.csv` | `preferred_metrics.py` | Other |
-| `vol_targets.csv` | `vol_target.py` | Other |
-| `vol_targets.parquet` | `vol_target.py` | Other |
+|| `vol_targets.csv` | `vol_target.py` | Other ||
+|| `vol_targets.parquet` | `vol_target.py` | Other ||
+|| `peer_analytics_signals.csv` | `peer_analytics.py` | Screen / decision ||
+|| `peer_group_summary.csv` | `peer_analytics.py` | Summary / metrics ||
+|| `peer_fundamental_trends.csv` | `peer_analytics.py` | Summary / metrics ||
+|| `peer_recovery_signals.csv` | `peer_analytics.py` | Screen / decision ||
