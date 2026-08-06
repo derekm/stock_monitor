@@ -1,5 +1,5 @@
 {
-  "active_regime": "normal",
+  "active_regime": "high_vol_stress",
   "base": {
     "roe_min": 0.15,
     "roic_min": 0.15,

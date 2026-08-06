@@ -1,0 +1,6 @@
+########## PART A: PASS-3 GRID (UNADJUSTED closes, warm-valid) ##########
+
+=== P3 AEP (unadjusted) ===
+  [_clean] dropping 3378 impossible-move rows (|adj logret|>0.3)
+[_clean_price_frame] rows 1334770 -> 1334770 (used close; dedup+clip2520d+drop-spikes+conflict-mean)
+  baseline     nw=500 {'mape': 14.57, 'mape_pers': 5.93, 'dir_acc': 62.6, 'mae': 13.687, 'part': 'P3', 'ticker': 'AEP', 'exp': 'baseline', 'use_adj': 'unadj'}

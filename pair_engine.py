@@ -30,6 +30,7 @@ import pandas as pd
 
 from analytics_common import DATA_DIR, load_adj_prices_pandas, wide_closes, clip_returns
 from cv_utils import bh_fdr
+from cost_model import apply_costs_to_trades
 
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
@@ -274,11 +275,16 @@ def build(
 
     trades_df = pd.DataFrame(all_trades)
 
-    # pair stats aggregated across folds
+    # net of costs: 10bps round trip per pair trade + borrow on short leg
+    if len(trades_df):
+        trades_df = apply_costs_to_trades(trades_df, pnl_col="hedged_pnl")
+
+    # pair stats aggregated across folds (on NET pnl)
     pair_stats: list[dict] = []
     if len(trades_df):
+        net_col = "net_hedged_pnl" if "net_hedged_pnl" in trades_df.columns else "hedged_pnl"
         for (pid,), grp in trades_df.groupby(["pair_id"]):
-            arr = grp["hedged_pnl"].to_numpy()
+            arr = grp[net_col].to_numpy()
             wins = float((arr > 0).mean())
             mean_hold = float(grp["bars_held"].mean()) if len(grp) else 1.0
             sharpe = float(arr.mean() / arr.std() * np.sqrt(252 / max(1, mean_hold))) if arr.std() > 0 else 0.0
@@ -290,6 +296,7 @@ def build(
                 "win_rate": round(wins, 3),
                 "avg_pnl": round(float(arr.mean()), 5),
                 "total_pnl": round(float(arr.sum()), 5),
+                "avg_gross_pnl": round(float(grp["hedged_pnl"].mean()), 5) if "hedged_pnl" in grp else None,
                 "sharpe": round(sharpe, 3),
                 "folds": int(grp["fold"].nunique()),
             })

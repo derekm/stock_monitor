@@ -1,0 +1,58 @@
+{
+  "pass": 1,
+  "note": "Initial training-regime sweep: Windows (fixed/scaled/daily/wstride512) x Steps (150/600/2000). Warm-started from the global ckpt for every cell so the window/steps effect is isolated.",
+  "metadata": {
+    "model": "ibm-granite/granite-timeseries-ttm-r2",
+    "warm_start_ckpt": "granite_ckpts/global/granite_ttm_tuned_20260802.pt",
+    "context": 512,
+    "horizon": 96,
+    "lr": 0.0001,
+    "batch_used_in_sweep": 512,
+    "batch_in_gd_default": 8,
+    "data_cleaning": "dedup exact dups + clip recent 2520 trading days + mean-resolve (ticker,date) conflicts",
+    "tickers": {"AEP": "low-volatility utility", "NVR": "high-volatility homebuilder"},
+    "metrics": {
+      "MAPE": "mean abs pct error of TTM forecast vs actual (scale-invariant, fund-comparable)",
+      "MAPE_pers": "MAPE of naive persistence baseline (predict last known close flat)",
+      "dir_acc": "percentage correct sign of mean change over the 96-step horizon",
+      "MAE": "mean abs error in raw price (NOT comparable across tickers; NVR~$1000 vs AEP~$100)"
+    }
+  },
+  "results": [
+    {"ticker":"AEP","win":"fixed200","step":"low150","steps":150,"n_windows":200,"MAPE":5.33,"MAPE_pers":8.54,"dir_acc":92.5,"MAE":3.708,"secs":8},
+    {"ticker":"AEP","win":"fixed200","step":"med600","steps":600,"n_windows":200,"MAPE":4.27,"MAPE_pers":8.54,"dir_acc":95.0,"MAE":3.063,"secs":31},
+    {"ticker":"AEP","win":"fixed200","step":"high2000","steps":2000,"n_windows":200,"MAPE":2.64,"MAPE_pers":8.54,"dir_acc":95.0,"MAE":2.104,"secs":87},
+    {"ticker":"AEP","win":"scaled400","step":"low150","steps":150,"n_windows":400,"MAPE":5.23,"MAPE_pers":8.83,"dir_acc":90.5,"MAE":3.593,"secs":8},
+    {"ticker":"AEP","win":"scaled400","step":"med600","steps":600,"n_windows":400,"MAPE":4.34,"MAPE_pers":8.83,"dir_acc":93.0,"MAE":2.969,"secs":33},
+    {"ticker":"AEP","win":"scaled400","step":"high2000","steps":4000,"n_windows":400,"MAPE":2.42,"MAPE_pers":8.83,"dir_acc":93.0,"MAE":1.897,"secs":224},
+    {"ticker":"AEP","win":"daily_stride1","step":"low150","steps":150,"n_windows":687,"MAPE":5.40,"MAPE_pers":8.78,"dir_acc":89.4,"MAE":3.752,"secs":9},
+    {"ticker":"AEP","win":"daily_stride1","step":"med600","steps":600,"n_windows":687,"MAPE":4.57,"MAPE_pers":8.78,"dir_acc":92.3,"MAE":3.025,"secs":40},
+    {"ticker":"AEP","win":"daily_stride1","step":"high2000","steps":6870,"n_windows":687,"MAPE":2.83,"MAPE_pers":8.78,"dir_acc":93.6,"MAE":2.146,"secs":364},
+    {"ticker":"AEP","win":"wstride512","step":"low150","steps":150,"n_windows":2,"MAPE":1.78,"MAPE_pers":8.82,"dir_acc":100.0,"MAE":1.123,"secs":8,"flag":"degenerate: 2 windows, memorized"},
+    {"ticker":"AEP","win":"wstride512","step":"med600","steps":600,"n_windows":2,"MAPE":0.82,"MAPE_pers":8.82,"dir_acc":100.0,"MAE":0.653,"secs":30,"flag":"degenerate: 2 windows, memorized"},
+    {"ticker":"AEP","win":"wstride512","step":"high2000","steps":20,"n_windows":2,"MAPE":4.12,"MAPE_pers":8.82,"dir_acc":100.0,"MAE":3.022,"secs":1,"flag":"BUG: scaled-steps logic fired, ran only 20 steps; ignore"},
+
+    {"ticker":"NVR","win":"fixed200","step":"low150","steps":150,"n_windows":200,"MAPE":3.40,"MAPE_pers":8.80,"dir_acc":94.0,"MAE":255.455,"secs":6},
+    {"ticker":"NVR","win":"fixed200","step":"med600","steps":600,"n_windows":200,"MAPE":2.15,"MAPE_pers":8.80,"dir_acc":97.0,"MAE":161.742,"secs":20},
+    {"ticker":"NVR","win":"fixed200","step":"high2000","steps":2000,"n_windows":200,"MAPE":1.49,"MAPE_pers":8.80,"dir_acc":98.5,"MAE":113.561,"secs":68},
+    {"ticker":"NVR","win":"scaled400","step":"low150","steps":150,"n_windows":400,"MAPE":3.09,"MAPE_pers":8.83,"dir_acc":94.2,"MAE":231.078,"secs":8},
+    {"ticker":"NVR","win":"scaled400","step":"med600","steps":600,"n_windows":400,"MAPE":2.02,"MAPE_pers":8.83,"dir_acc":96.8,"MAE":152.176,"secs":33},
+    {"ticker":"NVR","win":"scaled400","step":"high2000","steps":4000,"n_windows":400,"MAPE":1.24,"MAPE_pers":8.83,"dir_acc":97.2,"MAE":94.003,"secs":223},
+    {"ticker":"NVR","win":"daily_stride1","step":"low150","steps":150,"n_windows":648,"MAPE":3.41,"MAPE_pers":8.83,"dir_acc":93.1,"MAE":255.460,"secs":10},
+    {"ticker":"NVR","win":"daily_stride1","step":"med600","steps":600,"n_windows":648,"MAPE":2.26,"MAPE_pers":8.83,"dir_acc":95.1,"MAE":168.970,"secs":37},
+    {"ticker":"NVR","win":"daily_stride1","step":"high2000","steps":6480,"n_windows":648,"MAPE":1.22,"MAPE_pers":8.83,"dir_acc":97.7,"MAE":92.404,"secs":335},
+    {"ticker":"NVR","win":"wstride512","step":"low150","steps":150,"n_windows":2,"MAPE":0.55,"MAPE_pers":5.77,"dir_acc":50.0,"MAE":37.564,"secs":8,"flag":"degenerate: 2 windows, overfit; dir_acc=50% worse than random"},
+    {"ticker":"NVR","win":"wstride512","step":"med600","steps":600,"n_windows":2,"MAPE":0.57,"MAPE_pers":5.77,"dir_acc":50.0,"MAE":37.633,"secs":32,"flag":"degenerate: 2 windows, overfit; dir_acc=50%"},
+    {"ticker":"NVR","win":"wstride512","step":"high2000","steps":20,"n_windows":2,"MAPE":2.59,"MAPE_pers":5.77,"dir_acc":100.0,"MAE":173.615,"secs":2,"flag":"BUG: scaled-steps logic fired, ran only 20 steps; ignore"}
+  ],
+  "key_findings": [
+    "TTM beats persistence baseline decisively: AEP 2.64% vs 8.54% MAPE; NVR 1.49% vs 8.80% at high2000. The model has real signal.",
+    "Direction accuracy 92-98% (vs 50% random) — strong for a fund's long/short timing.",
+    "Steps dominate: AEP MAPE 5.33->4.27->2.64 (150->600->2000); NVR 3.40->2.15->1.49. Diminishing but clear.",
+    "More data + proportional steps wins: scaled400@4000 (AEP 2.42, NVR 1.24) beats fixed200@2000 (AEP 2.64, NVR 1.49).",
+    "At FIXED steps, finer stride (more windows) is slightly WORSE (underfit: fewer epochs). Daily@600 (4.57) < fixed200@600 (4.27) for AEP.",
+    "wstride512 is degenerate: only 2 windows (512-context vs ~1294 closes), so it memorizes (MAPE 0.8 but dir_acc 50% = useless for a fund). Half-overlap with a 512 context on this data yields only 3 windows — overlap exploration only meaningful at stride<=64.",
+    "Batch in sweep=512 (not gd.BATCH=8); relative comparisons hold, but real backfill should revisit batch size.",
+    "All cells warm-started from the SAME global ckpt, so differences are window/steps effects only."
+  ]
+}

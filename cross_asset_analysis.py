@@ -37,7 +37,7 @@ STABILITY_FILE = DATA_DIR / "cross_asset_stability.csv"
 
 def load_prices() -> pd.DataFrame:
     df = pd.read_parquet(PRICES_FILE)
-    df["date"] = pd.to_datetime(df["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
     return df
 
@@ -77,7 +77,7 @@ def save_sector_prices(levels: pd.DataFrame) -> None:
         slug = sector_slug(sector)
         for dt, px in levels[sector].dropna().items():
             rows.append({
-                "date": pd.Timestamp(dt),
+                "date": dt.date() if hasattr(dt, "date") else dt,
                 "ticker": slug,
                 "open": float(px),
                 "high": float(px) * 1.002,

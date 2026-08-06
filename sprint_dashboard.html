@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Monitor - Sprint Engines</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #e6edf3; line-height: 1.6; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #30363d; }
+        h1 { font-size: 1.6rem; font-weight: 600; }
+        h2 { font-size: 1.2rem; font-weight: 600; margin: 28px 0 12px; color: #e6edf3; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+        .card h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #21262d; }
+        th { color: #8b949e; font-weight: 500; }
+        tr:hover { background: #21262d; }
+        .pos { color: #3fb950; } .neg { color: #f85149; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+        .badge-buy { background: #3fb950; color: #0d1117; }
+        .badge-acc { background: #d29922; color: #0d1117; }
+        .badge-watch { background: #30363d; color: #8b949e; }
+        .badge-avoid { background: #f85149; color: #fff; }
+        .badge-hot { background: #1f6feb; color: #fff; }
+        .badge-cold { background: #58a6ff; color: #0d1117; }
+        .muted { color: #8b949e; font-size: 0.85rem; }
+        .stat-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #21262d; font-size: 0.9rem; }
+        .stat-row:last-child { border-bottom: none; }
+        .loading { text-align: center; color: #8b949e; padding: 60px; }
+        .error { color: #f85149; text-align: center; padding: 20px; }
+        .scroll { max-height: 420px; overflow-y: auto; }
+        a { color: #58a6ff; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sprint Engines</h1>
+            <span class="muted"><a href="index.html">Main dashboard</a> · <a href="single_stock.html">Single stock</a></span>
+        </header>
+
+        <div id="loading" class="loading">Loading data...</div>
+        <div id="error" class="error" style="display:none;"></div>
+
+        <div id="content" style="display:none;">
+
+            <h2>Signal Aggregator — OOS IC weights</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Family IC (trailing window, cutoff − 21d)</h3>
+                    <div id="icTable"></div>
+                    <p class="muted" style="margin-top:8px;">Weights = max(IC, 0), normalized. Negative-IC families contribute nothing.</p>
+                </div>
+                <div class="card">
+                    <h3>Composite leaders (top 15)</h3>
+                    <div class="scroll"><div id="compTable"></div></div>
+                </div>
+            </div>
+
+            <h2>Pair Engine — walk-forward OOS</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Selected pairs (FDR + half-life)</h3>
+                    <div class="scroll"><div id="pairTable"></div></div>
+                </div>
+                <div class="card">
+                    <h3>Pair stats (net of costs)</h3>
+                    <div class="scroll"><div id="pairStats"></div></div>
+                </div>
+            </div>
+
+            <h2>Cross-Section — sector-neutral L/S</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>OOS stats vs equal-weight long</h3>
+                    <div id="csStats"></div>
+                </div>
+                <div class="card">
+                    <h3>Last rebalance picks</h3>
+                    <div class="scroll"><div id="csPicks"></div></div>
+                </div>
+            </div>
+
+            <h2>Earnings Catalyst</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>PEAD drift buckets (trailing)</h3>
+                    <div id="driftTable"></div>
+                </div>
+                <div class="card">
+                    <h3>Top catalyst scores</h3>
+                    <div class="scroll"><div id="catTable"></div></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let DATA = null;
+        async function load() {
+            try {
+                const r = await fetch('dashboard_data/data.json');
+                const j = await r.json();
+                DATA = j.tables;
+                renderAll();
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            } catch (e) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = 'Failed to load data.json: ' + e.message;
+            }
+        }
+
+        function tbl(name) { return DATA && DATA[name] ? DATA[name] : []; }
+
+        function renderTable(el, rows, cols, fmt) {
+            if (!rows || !rows.length) { el.innerHTML = '<p class="muted">No data</p>'; return; }
+            const h = cols.map(c => `<th>${c}</th>`).join('');
+            const b = rows.map(r => '<tr>' + cols.map(c => {
+                let v = r[c];
+                if (fmt && fmt[c]) v = fmt[c](v, r);
+                const cls = (typeof v === 'number') ? (v > 0 ? 'pos' : v < 0 ? 'neg' : '') : '';
+                return `<td class="${cls}">${v === null || v === undefined || v === '' ? '—' : v}</td>`;
+            }).join('') + '</tr>').join('');
+            el.innerHTML = `<table><thead><tr>${h}</tr></thead><tbody>${b}</tbody></table>`;
+        }
+
+        function fmtPct(v) { return v === null || v === undefined || isNaN(v) ? '—' : (v * 100).toFixed(1) + '%'; }
+        function fmtNum(v, d) { return v === null || v === undefined || isNaN(v) ? '—' : Number(v).toFixed(d === undefined ? 2 : d); }
+        function fmtZ(v) { return v === null || v === undefined || isNaN(v) ? '—' : Number(v).toFixed(2); }
+
+        function renderAll() {
+            // IC table
+            const ic = tbl('signal_aggregator_ic');
+            renderTable(document.getElementById('icTable'), ic,
+                ['family', 'ic', 'n', 'weight_norm'],
+                { ic: v => fmtNum(v, 4), weight_norm: v => fmtPct(v) });
+
+            // composite leaders
+            const comp = tbl('signal_aggregator_scores').slice().sort((a, b) => (a.composite || 0) - (b.composite || 0)).reverse().slice(0, 15);
+            renderTable(document.getElementById('compTable'), comp,
+                ['ticker', 'composite', 'rank', 'peer', 'cross', 'earnings'],
+                { composite: v => fmtNum(v, 3), rank: v => v });
+
+            // pair table
+            const pairs = tbl('pair_engine_pairs').filter(p => p.usable).slice(0, 20);
+            renderTable(document.getElementById('pairTable'), pairs,
+                ['pair_id', 'group', 'coint_t', 'half_life', 'z_now'],
+                { coint_t: v => fmtNum(v, 2), half_life: v => fmtNum(v, 1), z_now: v => fmtZ(v) });
+
+            // pair stats
+            const pstats = tbl('pair_engine_stats').slice().sort((a, b) => (b.sharpe || -99) - (a.sharpe || -99)).slice(0, 12);
+            renderTable(document.getElementById('pairStats'), pstats,
+                ['pair_id', 'n_trades', 'win_rate', 'avg_pnl', 'total_pnl', 'sharpe'],
+                { win_rate: v => fmtPct(v), avg_pnl: v => fmtNum(v, 4), total_pnl: v => fmtNum(v, 4), sharpe: v => fmtNum(v, 2) });
+
+            // cross-section stats
+            const cs = tbl('cross_section_stats')[0] || {};
+            const statsEl = document.getElementById('csStats');
+            const rows = [
+                ['Model ann ret (L/S)', cs.model_ann_ret, fmtPct],
+                ['Model ann vol', cs.model_ann_vol, fmtPct],
+                ['Model Sharpe', cs.model_sharpe, fmtNum],
+                ['Baseline ann ret (EW long)', cs.baseline_ann_ret, fmtPct],
+                ['Baseline Sharpe', cs.baseline_sharpe, fmtNum],
+                ['Excess ann ret', cs.excess_ann_ret, fmtPct],
+                ['Info ratio', cs.info_ratio, fmtNum],
+                ['Win rate vs baseline', cs.win_rate_vs_baseline, fmtPct],
+                ['Sector exposure abs dev', cs.sector_exposure_abs_dev_avg, fmtNum],
+            ];
+            statsEl.innerHTML = rows.map(([k, v, f]) =>
+                `<div class="stat-row"><span>${k}</span><strong class="${v > 0 ? 'pos' : v < 0 ? 'neg' : ''}">${v === undefined ? '—' : f(v)}</strong></div>`
+            ).join('');
+
+            // cross-section picks (last rebalance)
+            const ranks = tbl('cross_section_rankings');
+            if (ranks.length) {
+                const lastDate = ranks.reduce((m, r) => r.rebalance_date > m ? r.rebalance_date : m, ranks[0].rebalance_date);
+                const last = ranks.filter(r => r.rebalance_date === lastDate);
+                const longs = last.filter(r => r.bucket === 5).map(r => r.ticker).slice(0, 12);
+                const shorts = last.filter(r => r.bucket === 1).map(r => r.ticker).slice(0, 12);
+                document.getElementById('csPicks').innerHTML =
+                    `<p class="muted" style="margin-bottom:8px;">Rebalance ${lastDate} · long ${longs.length} / short ${shorts.length}</p>` +
+                    `<table><tr><th>LONG (bucket 5)</th><th>SHORT (bucket 1)</th></tr>` +
+                    longs.map((t, i) => `<tr><td>${t}</td><td>${shorts[i] || ''}</td></tr>`).join('') + `</table>`;
+            }
+
+            // drift buckets
+            renderTable(document.getElementById('driftTable'), tbl('earnings_drift_stats'),
+                ['bucket', 'n_events', 'drift_5d', 'drift_20d', 'drift_63d'],
+                { drift_5d: v => fmtPct(v), drift_20d: v => fmtPct(v), drift_63d: v => fmtPct(v) });
+
+            // top catalyst
+            const cat = tbl('earnings_catalyst_signals').slice().sort((a, b) => (b.catalyst_score || 0) - (a.catalyst_score || 0)).slice(0, 15);
+            renderTable(document.getElementById('catTable'), cat,
+                ['ticker', 'catalyst_score', 'pre_mom_flag', 'expected_drift_20d', 'iv_rich'],
+                { catalyst_score: v => fmtNum(v, 3), expected_drift_20d: v => fmtPct(v),
+                  pre_mom_flag: v => v === 'hot' ? '<span class="badge badge-hot">hot</span>' : v === 'cold' ? '<span class="badge badge-cold">cold</span>' : v,
+                  iv_rich: v => v ? 'yes' : v === false ? 'no' : '—' });
+        }
+
+        load();
+    </script>
+</body>
+</html>

@@ -24,7 +24,7 @@ OUT_SHARPE = DATA_DIR / "sharpe_comparison.csv"
 def load_prices() -> pd.DataFrame:
     p = DATA_DIR / "daily_prices.parquet"
     df = pd.read_parquet(p)
-    df["date"] = pd.to_datetime(df["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     return df
 
 

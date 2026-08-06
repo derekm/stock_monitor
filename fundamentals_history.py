@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
@@ -40,7 +41,7 @@ EV_MAX, PB_MAX, MCA_MAX = 9.0, 1.5, 0.5
 
 def load_fund() -> pd.DataFrame:
     df = pd.read_parquet(FUND)
-    df["as_of_date"] = pd.to_datetime(df["as_of_date"])
+    # `as_of_date` is DATE on disk -> read as datetime.date; keep it a date.
     return df
 
 
@@ -63,9 +64,10 @@ def backfill_quarters(n_quarters: int = 8, seed: int = 42) -> None:
     rng = np.random.default_rng(seed)
     # quarter ends going back
     last = lat["as_of_date"].max()
-    dates = pd.date_range(end=last, periods=n_quarters + 1, freq="QE")
+    # quarter-end dates as datetime.date (ingest as date, not Timestamp)
+    dates = [d.date() for d in pd.date_range(end=last, periods=n_quarters + 1, freq="QE")]
     # drop the last if equals latest
-    dates = [d for d in dates if d < last.normalize() + pd.Timedelta(days=1)]
+    dates = [d for d in dates if d < last + timedelta(days=1)]
 
     metric_cols = [
         "roe", "roic", "debt_to_equity", "interest_coverage", "earnings_stability",

@@ -146,7 +146,7 @@ def derive_row(ticker: str, q_end: date, price: float | None,
 
     return {
         "ticker": ticker,
-        "as_of_date": pd.Timestamp(q_end),
+        "as_of_date": q_end,
         "market_cap": mcap,
         "market_cap_b": mcap / 1e9,
         "total_assets": ta,
@@ -248,7 +248,7 @@ def fetch_ticker(ticker: str, sleep: float = 0.4):
     if hist is not None and not hist.empty:
         for d in hist.index:
             price_rows.append({
-                "date": pd.Timestamp(d.date()),
+                "date": d.date(),
                 "ticker": ticker,
                 "open": float(hist.loc[d, "Open"]) if "Open" in hist else None,
                 "high": float(hist.loc[d, "High"]) if "High" in hist else None,

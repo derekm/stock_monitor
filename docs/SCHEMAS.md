@@ -396,6 +396,8 @@ auxiliary tables feeding several stages.
 | `peer_fundamental_trends.csv` | `peer_analytics.py` | Summary / metrics |
 | `peer_recovery_signals.csv` | `peer_analytics.py` | Screen / decision |
 | `earnings_calendar.parquet` | `update_earnings.py` | Earnings |
+| `fundamentals.parquet` | `update_fundamentals.py` | Base parquet table |
+| `fundamentals.parquet` | `backfill_edgar.py` | Base parquet table |
 | `earnings_catalyst_signals.csv` | `earnings_catalyst.py` | Earnings |
 | `earnings_drift_stats.csv` | `earnings_catalyst.py` | Earnings |
 | `pair_engine_pairs.csv` | `pair_engine.py` | Pair engine |

@@ -135,6 +135,21 @@ def run(save: bool = True):
 
     df = pd.DataFrame(rows)
     cdf = pd.DataFrame(crisis_rows)
+
+    # Honest OOS: regime_recommended vs defensive_ew on the last 2 years only
+    # (full-history stats mix regimes; this is what a live book saw recently).
+    from cv_utils import oos_stats_vs_baseline
+    rec = strategies.get("regime_recommended")
+    base = strategies.get("defensive_ew")
+    if rec is not None and base is not None and len(rec) > 504 and len(base) > 504:
+        oos = oos_stats_vs_baseline(rec.tail(504), base.tail(504))
+        oos["strategy"] = "regime_recommended_vs_defensive_ew_OOS_2y"
+        df = pd.concat([df, pd.DataFrame([oos])], ignore_index=True)
+        print("\n=== OOS 2y: regime_recommended vs defensive_ew ===")
+        for k, v in oos.items():
+            if k != "strategy":
+                print(f"  {k}: {v}")
+
     if save:
         df.to_csv(OUT, index=False)
         cdf.to_csv(OUT_CRISIS, index=False)

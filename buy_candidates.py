@@ -28,6 +28,7 @@ PREF = DATA_DIR / "preferred_metrics.csv"
 MOM = DATA_DIR / "momentum_metrics.csv"
 FAC = DATA_DIR / "factor_panel.csv"
 RISK = DATA_DIR / "risk_metrics_ext.csv"
+AGG = DATA_DIR / "signal_aggregator_scores.csv"
 HMM = DATA_DIR / "hmm_regime_states.csv"
 SP500 = DATA_DIR / "sp500_sleeve.csv"
 OUT = DATA_DIR / "buy_candidates.csv"
@@ -63,6 +64,12 @@ def build() -> pd.DataFrame:
             keep = [c for c in cols if c in extra.columns]
             if "ticker" in keep:
                 df = df.merge(extra[keep], on="ticker", how="left", suffixes=("", "_x"))
+    # signal aggregator composite (OOS IC-weighted blend of 5 families)
+    if AGG.exists():
+        agg = pd.read_csv(AGG)
+        keep = [c for c in ("ticker", "composite", "rank") if c in agg.columns]
+        if len(keep) >= 2:
+            df = df.merge(agg[keep], on="ticker", how="left", suffixes=("", "_agg"))
     if SP500.exists():
         sp = pd.read_csv(SP500)
         df = df.merge(sp[["ticker", "sp500_member", "sp500_sector"]], on="ticker", how="left")
@@ -109,6 +116,16 @@ def build() -> pd.DataFrame:
             elif fc > 0.0:
                 score += 0.05
 
+        # signal aggregator: OOS IC-weighted composite (top quintile = strong)
+        agg_c = r.get("composite")
+        if pd.notna(agg_c):
+            if agg_c >= 0.75:
+                score += 0.25; reasons.append("aggregate_top")
+            elif agg_c >= 0.60:
+                score += 0.15; reasons.append("aggregate_strong")
+            elif agg_c <= 0.25:
+                score -= 0.10; reasons.append("aggregate_weak")
+
         if r.get("leverage_flag") == "cheap-assets":
             score += 0.08; reasons.append("cheap_assets_flag")
         elif r.get("leverage_flag") == "levered-assets":
@@ -143,7 +160,7 @@ def build() -> pd.DataFrame:
                 "ticker", "sector", "decision", "composite_score", "roe", "roic", "ev_ebitda",
                 "pb_ratio", "mktcap_to_assets", "leverage_flag", "momentum_score", "mom_12_1",
                 "resid_mom_63", "factor_composite", "liquidity_score", "sp500_member", "sp500_sector",
-                "suggested_w_max", "sizing_action",
+                "suggested_w_max", "sizing_action", "composite", "rank",
             )},
             "buy_score": round(score, 4),
             "action": action,

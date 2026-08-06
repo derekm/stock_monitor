@@ -44,7 +44,8 @@ STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 def load_prices() -> pd.DataFrame:
     if PRICES_FILE.exists():
         df = pd.read_parquet(PRICES_FILE)
-        df["date"] = pd.to_datetime(df["date"])
+        # `date` is stored as a DATE column -> read back as datetime.date.
+        # Do NOT re-cast to Timestamp; keep it a plain date end-to-end.
         if "adj_close" not in df.columns:
             # backfill for pre-adj_close schema: assume close was raw
             df["adj_close"] = df["close"]
@@ -56,7 +57,8 @@ def load_prices() -> pd.DataFrame:
 
 def save_prices(df: pd.DataFrame) -> None:
     df = df.copy()
-    df["date"] = pd.to_datetime(df["date"])
+    # `date` must already be datetime.date (normalized at yfinance ingestion).
+    # Keep it a date; do NOT cast to Timestamp.
     if "adj_close" not in df.columns:
         df["adj_close"] = df["close"]
     # Explicit conflict reporting: a (date,ticker) with >1 distinct adj_close
@@ -172,7 +174,7 @@ def fetch_yfinance(tickers: list[str], start: str | None, end: str | None, perio
         return pd.DataFrame()
 
     df = pd.DataFrame(rows)
-    df["date"] = pd.to_datetime(df["date"])
+    # rows already carry datetime.date from ingestion; keep as date.
     print(f"  Retrieved {len(df)} rows across {df['ticker'].nunique()} tickers")
     return df
 
@@ -218,7 +220,7 @@ def generate_synthetic(tickers: list[str], days: int, seed: int = 42) -> pd.Data
             price = close_p
 
     df = pd.DataFrame(rows)
-    df["date"] = pd.to_datetime(df["date"])
+    # rows already carry datetime.date; keep as date (no Timestamp).
     print(f"Generated {len(df)} synthetic rows for {len(tickers)} tickers over {days} days")
     return df
 
@@ -228,7 +230,8 @@ def import_csv(path: str) -> pd.DataFrame:
     required = {"date", "ticker", "open", "close"}
     if not required.issubset(df.columns):
         raise ValueError(f"CSV must contain columns: {required}")
-    df["date"] = pd.to_datetime(df["date"])
+    df["date"] = df["date"].apply(
+        lambda s: datetime.strptime(str(s)[:10], "%Y-%m-%d").date())
     df["ticker"] = df["ticker"].str.upper()
     if "high" not in df.columns:
         df["high"] = df[["open", "close"]].max(axis=1)
