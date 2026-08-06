@@ -94,6 +94,15 @@ TABLES = [
     "peer_group_summary",
     "peer_fundamental_trends",
     "peer_recovery_signals",
+    # Sprint: pair engine, earnings catalyst, cross-section
+    "pair_engine_pairs",
+    "pair_engine_trades",
+    "pair_engine_stats",
+    "earnings_catalyst_signals",
+    "earnings_drift_stats",
+    "cross_section_rankings",
+    "cross_section_returns",
+    "cross_section_stats",
 ]
 
 
