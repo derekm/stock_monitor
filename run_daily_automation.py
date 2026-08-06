@@ -3,20 +3,28 @@
 run_daily_automation.py — Master daily job for stock_monitor analytics stack.
 
 Runs (in order):
-  1. preferred_metrics
-  2. inclusion_criteria (+ defensive exploration)
-  3. stress_dual_pass
-  4. rolling_window_analysis
-  5. allpairs_correlations
-  6. fundamentals_history snapshot + screen backtest
-  7. dupont_analysis
-  8. growth_tech_analytics (optional light)
-  9. export_dashboard_data
+  1. hmm_regime_detection      (regime states → feeds rebalance, constraints, hedges)
+  2. rebalance_calendar        (month-end schedule + regime-driven turnover band)
+  3. preferred_metrics         (dual-pass screen → preferred_metrics.csv)
+  4. inclusion_criteria        (defensive/quality/value exploration)
+  5. stress_dual_pass          (scenario analysis on dual-pass)
+  6. crisis_correlation        (calm vs crisis corr breakdown)
+  7. factor_rotation_defense   (factor sleeve performance)
+  8. risk_enrich               (enrich fundamentals)
+  9. rolling_window_analysis   (portfolio 63d metrics + screen stability)
+  10. rolling_correlation_windows (rolling corr + corr stability)
+  11. tail_risk_hedging        (regime-aware hedge overlays)
+  12. allpairs_correlations    (asset/sector pairwise corr history)
+  13. fundamentals_history     (snapshot + screen backtest)
+  14. dupont_analysis          (ROE decomposition)
+  15. growth_tech_analytics    (growth tech sleeve corr/perf)
+  16. peer_analytics           (cross-stock peer comparison + signals)
+  17. export_dashboard_data    (dashboard_data/data.json)
 
 Usage:
   python run_daily_automation.py
   python run_daily_automation.py --skip-growth --skip-allpairs
-  python run_daily_automation.py --only export,inclusion
+  python run_daily_automation.py --only hmm,rebalance,preferred,export
 """
 from __future__ import annotations
 import argparse
@@ -28,10 +36,12 @@ from pathlib import Path
 DATA_DIR = Path(__file__).parent
 
 JOBS = [
+    ("hmm", ["hmm_regime_detection.py", "--n-states", "3", "--save"]),
+    ("rebalance", ["rebalance_calendar.py", "--months", "18", "--save"]),
     ("preferred", ["preferred_metrics.py", "--save"]),
     ("inclusion", ["inclusion_criteria.py", "--explore-defensive", "--save"]),
     ("stress", ["stress_dual_pass.py", "--save"]),
-    ("crisis", ["crisis_correlation.py", "--save"]),
+    ("crisis", ["crisis_correlation.py", "--save"], 600),
     ("factor_rot", ["factor_rotation_defense.py", "--save"]),
     ("risk_enrich", ["risk_enrich.py"]),
     ("rolling", ["rolling_window_analysis.py", "--universe", "portfolio", "--save"]),
@@ -42,6 +52,7 @@ JOBS = [
     ("screen_bt", ["fundamentals_history.py", "backtest-screens"]),
     ("dupont", ["dupont_analysis.py", "--save"]),
     ("growth", ["growth_tech_analytics.py"]),
+    ("peer", ["peer_analytics.py", "--save"]),
     ("export", ["export_dashboard_data.py"]),
 ]
 
@@ -60,7 +71,7 @@ def run_job(name: str, args: list[str], timeout: int = 300) -> bool:
         print(f"{'OK' if ok else 'FAIL'} {name} in {dt:.1f}s (code={r.returncode})")
         return ok
     except subprocess.TimeoutExpired:
-        print(f"TIMEOUT {name}")
+        print(f"TIMEOUT {name} (limit={timeout}s)")
         return False
     except Exception as e:
         print(f"ERROR {name}: {e}")
@@ -76,14 +87,17 @@ def main():
 
     only = set(args.only.split(",")) if args.only else None
     results = {}
-    for name, cmd in JOBS:
+    for job in JOBS:
+        name = job[0]
+        cmd = job[1]
+        timeout = job[2] if len(job) > 2 else 300
         if only and name not in only:
             continue
         if args.skip_growth and name == "growth":
             continue
         if args.skip_allpairs and name == "allpairs":
             continue
-        results[name] = run_job(name, cmd)
+        results[name] = run_job(name, cmd, timeout)
 
     print("\n══ SUMMARY ══")
     for k, v in results.items():

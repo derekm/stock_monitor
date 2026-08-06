@@ -89,6 +89,11 @@ TABLES = [
     "monte_carlo_path_stats",
     "forecast_backtest_metrics",
     "forecast_reliability_rank",
+    # Peer analytics
+    "peer_analytics_signals",
+    "peer_group_summary",
+    "peer_fundamental_trends",
+    "peer_recovery_signals",
 ]
 
 
