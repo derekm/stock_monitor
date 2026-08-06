@@ -31,14 +31,7 @@ HMM = DATA_DIR / "hmm_regime_states.csv"
 OUT = DATA_DIR / "threshold_logic_screen.csv"
 OUT_RULES = DATA_DIR / "threshold_logic_rules.json"
 
-BASE_THRESHOLDS: dict[str, float] = {
-    "roe_min": 0.15,
-    "roic_min": 0.15,
-    "de_max": 1.0,
-    "ev_max": 9.0,
-    "pb_max": 1.5,
-    "mca_max": 0.5,
-}
+from analytics_common import BASE_THRESHOLDS  # canonical dual-pass thresholds
 
 REGIME_THRESHOLDS: dict[str, dict[str, Any]] = {
     "low_vol": {

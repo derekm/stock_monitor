@@ -50,10 +50,19 @@ FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 # operating company's CIK holds the full history:
 #   XOM -> 2115436 is 'ExxonMobil Holdings Corp' (shell); real opco is 34088.
 #   AEP -> missing from map; real opco CIK 4904.
+# Resolved via EDGAR full-text search (efts.sec.gov) for names the standard
+# maps lack:
+#   SATS -> EchoStar Corp CIK 1415404 (33 quarters)
+#   SPR  -> Spirit AeroSystems Holdings CIK 1364885 (61 quarters)
+# NOTE: BAYRY (Bayer ADR, CIK 1144145) has NO XBRL companyfacts on EDGAR
+# (German issuer, 20-F filing) — permanently skipped, do not re-probe.
 CIK_OVERRIDES = {
     "XOM": "0000034088",
     "AEP": "0000004904",
+    "SATS": "0001415404",
+    "SPR": "0001364885",
 }
+NO_COMPANYFACTS = {"BAYRY"}
 
 # income tags we can use for TTM (in priority order)
 NI_TAGS = ["NetIncomeLoss"]
@@ -305,6 +314,9 @@ def main():
     if unmatched:
         print(f"  no CIK ({len(unmatched)}): {', '.join(unmatched)}")
         print("    (ETFs/funds and delisted ADRs have no XBRL statements; expected gaps)")
+    matched = [(t, c) for t, c in matched if t not in NO_COMPANYFACTS]
+    if NO_COMPANYFACTS & {t for t, _ in matched}:
+        print(f"  skipped (no XBRL companyfacts): {', '.join(sorted(NO_COMPANYFACTS & {t for t, _ in matched}))}")
     if args.dry_run:
         return
 

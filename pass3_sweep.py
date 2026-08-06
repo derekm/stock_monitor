@@ -41,8 +41,7 @@ RAW = pd.read_parquet(b.PRICES)
 CLEAN = _clean_price_frame(RAW, None)
 g_ckpt = gd.latest_ckpt_in(b.GLOBAL_DIR)
 warm = torch.load(g_ckpt, map_location=device)
-BATCH = 512
-RECENT = 2520  # clip each ticker to last ~10y of ADJUSTED history (stationary)
+from pass4 import BATCH, RECENT  # canonical training constants (was local)
 TICKERS = ["AEP", "NVR", "FICO"]
 STEPS = 6000  # comparable across cells
 CAP = 500  # windows per ticker (linspace over available)

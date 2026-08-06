@@ -35,8 +35,10 @@ SNAP_CSV = DATA_DIR / "preferred_metrics_history.csv"
 SCREEN_BT = DATA_DIR / "screen_backtest.csv"
 
 # thresholds (same as preferred_metrics)
-ROE_MIN, ROIC_MIN, DE_MAX = 0.15, 0.15, 1.0
-EV_MAX, PB_MAX, MCA_MAX = 9.0, 1.5, 0.5
+from analytics_common import (
+    ROE_MIN, ROIC_MIN, DE_MAX, EV_MAX, PB_MAX, MCA_MAX,
+    quality_value_parts, COMP_W_Q, COMP_W_V,
+)
 
 
 def load_fund() -> pd.DataFrame:
@@ -122,22 +124,12 @@ def score_row(r: pd.Series) -> dict:
         and pd.notna(mca) and mca <= MCA_MAX
     )
     # simplified scores aligned with preferred_metrics
-    q = 0.0
-    if pd.notna(roe):
-        q += 0.35 * float(np.clip(roe / 0.25, 0, 1))
-    if pd.notna(roic):
-        q += 0.35 * float(np.clip(roic / 0.25, 0, 1))
-    if pd.notna(de):
-        q += 0.15 * float(np.clip(1 - de / 2, 0, 1))
-    if pd.notna(r.get("earnings_stability")):
-        q += 0.15 * float(r["earnings_stability"])
-    v = 0.0
-    def inv(val, thr):
-        if pd.isna(val):
-            return 0.0
-        return 1.0 if val <= thr else float(np.clip(1 - (val - thr) / (thr * 1.5), 0, 1))
-    v = 0.4 * inv(ev, EV_MAX) + 0.3 * inv(pb, PB_MAX) + 0.3 * inv(mca, MCA_MAX)
-    composite = 0.55 * q + 0.45 * v
+    # composite via the canonical weighted formula (weights in analytics_common)
+    q, v = quality_value_parts(
+        roe=roe, roic=roic, de=de, earnings_stability=r.get("earnings_stability"),
+        ev=ev, pb=pb, mca=mca,
+    )
+    composite = COMP_W_Q * q + COMP_W_V * v
     if buffett and trifecta:
         composite = min(1.0, composite + 0.08)
     decision = (

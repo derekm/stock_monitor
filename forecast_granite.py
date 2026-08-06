@@ -43,7 +43,8 @@ STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 FORECAST_FILE = DATA_DIR / "forecasts_granite.parquet"
 FORECAST_CSV = DATA_DIR / "forecasts_granite.csv"
 BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.csv"
-DEFAULT_MODEL = "ibm-granite/granite-timeseries-ttm-r2"
+
+from granite_daily import DEFAULT_MODEL  # canonical Granite model id (was local)
 
 from ttm_features import (  # noqa: E402
     build_panel,

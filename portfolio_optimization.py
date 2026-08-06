@@ -39,11 +39,8 @@ from cli_common import (
 )
 from index_registry import parse_indexes, tickers_for_index, available_indexes, index_help_text
 
-try:
-    from scipy.optimize import minimize
-    HAS_SCIPY = True
-except ImportError:
-    HAS_SCIPY = False
+from scipy.optimize import minimize  # noqa: F401  (canonical availability flag in analytics_common)
+from analytics_common import HAS_SCIPY  # canonical scipy-availability flag
 
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"

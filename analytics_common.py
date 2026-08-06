@@ -14,7 +14,82 @@ try:
 except ImportError:
     HAS_POLARS = False
 
+try:
+    import scipy.optimize  # noqa: F401
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+
 DATA_DIR = Path(__file__).resolve().parent
+
+# ── Canonical dual-pass / INCLUDE_CORE thresholds ───────────────────────────
+# Single source of truth for the quality/value dual-pass gates. Consumers:
+# preferred_metrics.py, fundamentals_history.py, threshold_logic.py,
+# inclusion_criteria.py. Regime-specific relaxations/tightenings live in
+# threshold_logic.REGIME_THRESHOLDS (which layers over BASE_THRESHOLDS).
+BASE_THRESHOLDS: dict[str, float] = {
+    "roe_min": 0.15,
+    "roic_min": 0.15,
+    "de_max": 1.0,
+    "ev_max": 9.0,
+    "pb_max": 1.5,
+    "mca_max": 0.5,
+}
+
+# Named aliases for the older scripts that used module-level constants.
+ROE_MIN = BASE_THRESHOLDS["roe_min"]
+ROIC_MIN = BASE_THRESHOLDS["roic_min"]
+DE_MAX = BASE_THRESHOLDS["de_max"]
+EV_MAX = BASE_THRESHOLDS["ev_max"]
+PB_MAX = BASE_THRESHOLDS["pb_max"]
+MCA_MAX = BASE_THRESHOLDS["mca_max"]
+
+# ── Canonical quality/value composite (preferred_metrics family) ────────────
+# The same weighted formula appears in fundamentals_history.py and
+# inclusion_criteria.py; keep it in ONE place so weights can't drift.
+# q (quality) = w_qroe*clip(roe/0.25) + w_qroic*clip(roic/0.25)
+#             + w_qde*clip(1 - de/2)  + w_qstab*earnings_stability
+# v (value)   = w_vev*inv(ev) + w_vpb*inv(pb) + w_vmca*inv(mca)
+# composite   = w_q*q + w_v*v
+Q_W_ROE, Q_W_ROIC = 0.35, 0.35
+Q_W_DE, Q_W_STAB = 0.15, 0.15
+V_W_EV, V_W_PB, V_W_MCA = 0.4, 0.3, 0.3
+COMP_W_Q, COMP_W_V = 0.55, 0.45
+Q_SCALE = 0.25  # roe/roic denominator
+
+
+def quality_value_composite(roe=None, roic=None, de=None, earnings_stability=None,
+                            ev=None, pb=None, mca=None,
+                            ev_max=EV_MAX, pb_max=PB_MAX, mca_max=MCA_MAX) -> float:
+    """Weighted quality+value composite (0..1) — single canonical formula."""
+    q, v = quality_value_parts(
+        roe=roe, roic=roic, de=de, earnings_stability=earnings_stability,
+        ev=ev, pb=pb, mca=mca, ev_max=ev_max, pb_max=pb_max, mca_max=mca_max,
+    )
+    return float(COMP_W_Q * q + COMP_W_V * v)
+
+
+def quality_value_parts(roe=None, roic=None, de=None, earnings_stability=None,
+                        ev=None, pb=None, mca=None,
+                        ev_max=EV_MAX, pb_max=PB_MAX, mca_max=MCA_MAX) -> tuple[float, float]:
+    """(quality_score, value_score) components of the canonical composite."""
+    def _clip(x):
+        return float(np.clip(x, 0.0, 1.0))
+    def _inv(val, thr):
+        if val is None or pd.isna(val):
+            return 0.0
+        return 1.0 if val <= thr else _clip(1 - (val - thr) / (thr * 1.5))
+    q = 0.0
+    if roe is not None and pd.notna(roe):
+        q += Q_W_ROE * _clip(roe / Q_SCALE)
+    if roic is not None and pd.notna(roic):
+        q += Q_W_ROIC * _clip(roic / Q_SCALE)
+    if de is not None and pd.notna(de):
+        q += Q_W_DE * _clip(1 - de / 2)
+    if earnings_stability is not None and pd.notna(earnings_stability):
+        q += Q_W_STAB * float(earnings_stability)
+    v = V_W_EV * _inv(ev, ev_max) + V_W_PB * _inv(pb, pb_max) + V_W_MCA * _inv(mca, mca_max)
+    return float(q), float(v)
 
 
 def prices_path(prefer_clean: bool = True) -> Path:

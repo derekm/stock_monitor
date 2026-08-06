@@ -124,6 +124,38 @@ def forward_returns(cutoff: pd.Timestamp) -> pd.Series:
     return obs.iloc[-1]
 
 
+def load_regime_map() -> pd.Series:
+    """Date-indexed HMM regime labels (hmm_regime_states.csv), or empty."""
+    hmm = DATA_DIR / "hmm_regime_states.csv"
+    if not hmm.exists():
+        return pd.Series(dtype=str)
+    df = pd.read_csv(hmm)
+    if "date" not in df.columns or "regime" not in df.columns:
+        return pd.Series(dtype=str)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"]).sort_values("date")
+    return df.set_index("date")["regime"].astype(str)
+
+
+def forward_return_series(cutoff: pd.Timestamp, trailing: int = 504) -> pd.DataFrame:
+    """Forward 21d returns for each trailing date (cols = tickers, rows = dates).
+
+    Only dates with fully-observable forward returns (<= cutoff - horizon) are
+    kept — no future leak. This is the per-date cross-section needed for
+    regime-conditioned IC estimation.
+    """
+    prices = load_adj_prices_pandas()
+    wide = wide_closes(prices).sort_index()
+    wide = wide[wide.index <= cutoff]
+    if len(wide) < FORWARD_HORIZON + 2:
+        return pd.DataFrame()
+    fwd = wide.shift(-FORWARD_HORIZON) / wide - 1.0
+    fwd = fwd.dropna(how="all")
+    if len(fwd) > trailing:
+        fwd = fwd.tail(trailing)
+    return fwd
+
+
 def estimate_ic(scores: pd.DataFrame, fwd: pd.Series) -> pd.DataFrame:
     """Trailing-window IC (rank corr of each family vs forward 21d return)."""
     ic_rows = []
@@ -147,14 +179,86 @@ def estimate_ic(scores: pd.DataFrame, fwd: pd.Series) -> pd.DataFrame:
     return ic_df
 
 
+def estimate_ic_by_regime(scores: pd.DataFrame, fwd_series: pd.DataFrame,
+                          regime_s: pd.Series) -> pd.DataFrame:
+    """Per-regime IC: mean rank corr of each family vs forward returns, by the
+    HMM regime in force at each measurement date.
+
+    Current-regime IC is the honest weight for the live snapshot: if the
+    signal only predicts in calm regimes, it should not get full weight now.
+    Falls back to the global IC when a regime has < 20 observations.
+    """
+    if fwd_series.empty or regime_s.empty:
+        return estimate_ic(scores, fwd_series.iloc[-1] if len(fwd_series) else pd.Series(dtype=float))
+
+    # tag each measurement date with the regime in force at-or-before it
+    tags: dict[pd.Timestamp, str] = {}
+    dates = sorted(fwd_series.index)
+    rdates = regime_s.index
+    for d in dates:
+        prior = regime_s[rdates <= d]
+        tags[d] = str(prior.iloc[-1]) if len(prior) else "unknown"
+
+    rows = []
+    for family in ["preferred", "peer", "cross", "pair", "earnings"]:
+        if family not in scores:
+            continue
+        s = scores[family].dropna()
+        if len(s) < 20:
+            rows.append({"family": family, "ic": np.nan, "n": 0, "weight": 0.0})
+            continue
+        per_regime: dict[str, list[float]] = {}
+        for d in dates:
+            if d not in tags:
+                continue
+            fwd_row = fwd_series.loc[d].dropna()
+            common = s.index.intersection(fwd_row.index)
+            if len(common) < 20:
+                continue
+            ic = s.loc[common].corr(fwd_row.loc[common], method="spearman")
+            if np.isfinite(ic):
+                per_regime.setdefault(tags[d], []).append(ic)
+        row = {"family": family}
+        for reg in ["low_vol", "normal", "high_vol_stress"]:
+            vals = per_regime.get(reg, [])
+            row[f"ic_{reg}"] = round(float(np.mean(vals)), 4) if len(vals) >= 5 else np.nan
+            row[f"n_{reg}"] = len(vals)
+        # weight from the CURRENT regime's IC (else global mean of per-regime)
+        cur = tags.get(dates[-1], "unknown") if dates else "unknown"
+        if cur in per_regime and len(per_regime[cur]) >= 5:
+            ic_now = float(np.mean(per_regime[cur]))
+        else:
+            all_ics = [v for vals in per_regime.values() for v in vals]
+            ic_now = float(np.mean(all_ics)) if all_ics else np.nan
+        row["ic"] = round(ic_now, 4) if np.isfinite(ic_now) else np.nan
+        row["regime_now"] = cur
+        row["weight"] = round(max(ic_now, 0.0), 4) if np.isfinite(ic_now) else 0.0
+        row["n"] = int(sum(len(v) for v in per_regime.values()))
+        rows.append(row)
+    ic_df = pd.DataFrame(rows)
+    wsum = ic_df["weight"].sum()
+    if wsum > 0:
+        ic_df["weight_norm"] = (ic_df["weight"] / wsum).round(4)
+    else:
+        ic_df["weight_norm"] = 0.0
+    return ic_df
+
+
 def build(cutoff: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     scores = load_scores()
     prices = load_adj_prices_pandas()
     if cutoff is None:
         cutoff = prices["date"].max()
     cutoff = pd.Timestamp(cutoff)
-    fwd = forward_returns(cutoff)
-    ic_df = estimate_ic(scores, fwd)
+    regime_s = load_regime_map()
+    fwd_series = forward_return_series(cutoff)
+    if not fwd_series.empty and not regime_s.empty:
+        ic_df = estimate_ic_by_regime(scores, fwd_series, regime_s)
+        print(f"Per-regime IC weights (regime_now={ic_df['regime_now'].iloc[0] if len(ic_df) else '?'})")
+    else:
+        fwd = forward_returns(cutoff)
+        ic_df = estimate_ic(scores, fwd)
+        print("Global IC weights (no HMM regime map available)")
 
     # composite = weighted mean of normalized family scores
     normed = scores.copy()

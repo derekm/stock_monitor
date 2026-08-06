@@ -27,9 +27,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from granite_daily import CONTEXT, HORIZON  # canonical Granite config
+
 PRICES = "daily_prices.parquet"
 CONSTITS = "sp500_constituents.parquet"
-CONTEXT = 512
 
 
 def _load():

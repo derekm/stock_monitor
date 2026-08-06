@@ -34,11 +34,8 @@ from robust_covariance import load_returns, ledoit_wolf_cov, resolve, sample_cov
 DATA_DIR = Path(__file__).parent
 OUT = DATA_DIR / "black_litterman_weights.csv"
 
-try:
-    from scipy.optimize import minimize
-    HAS_SCIPY = True
-except ImportError:
-    HAS_SCIPY = False
+from scipy.optimize import minimize  # noqa: F401  (canonical availability flag in analytics_common)
+from analytics_common import HAS_SCIPY  # canonical scipy-availability flag
 
 
 def black_litterman(

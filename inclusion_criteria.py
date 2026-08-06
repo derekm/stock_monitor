@@ -58,14 +58,16 @@ OUT_RULES = DATA_DIR / "inclusion_rules.json"
 OUT_ACORR = DATA_DIR / "asset_correlation_matrix.csv"
 OUT_SCORR = DATA_DIR / "sector_correlation_matrix_latest.csv"
 
+from analytics_common import (
+    BASE_THRESHOLDS, quality_value_parts, COMP_W_Q, COMP_W_V,
+)
+
 RULES = {
     "dual_pass": {
-        "roe_min": 0.15,
-        "roic_min": 0.15,
-        "debt_to_equity_max": 1.0,
-        "ev_ebitda_max": 9.0,
-        "pb_max": 1.5,
-        "mktcap_to_assets_max": 0.5,
+        **BASE_THRESHOLDS,
+        "debt_to_equity_max": BASE_THRESHOLDS["de_max"],
+        "ev_ebitda_max": BASE_THRESHOLDS["ev_max"],
+        "mktcap_to_assets_max": BASE_THRESHOLDS["mca_max"],
         "label": "INCLUDE_CORE",
     },
     "sizing": {
@@ -212,25 +214,14 @@ def explore_defensive(df: pd.DataFrame, stocks: pd.DataFrame) -> pd.DataFrame:
         "Energy", "Materials", "Communication Services", "Industrials",
     }
     sub = df[df["sector"].isin(defensive_sectors)].copy()
-    # rank by composite-like score
+    # rank by composite-like score (canonical formula, weights in analytics_common)
     def score(row):
-        q = 0
-        if pd.notna(row.roe):
-            q += 0.35 * min(row.roe / 0.25, 1)
-        if pd.notna(row.roic):
-            q += 0.35 * min(row.roic / 0.25, 1)
-        if pd.notna(row.debt_to_equity):
-            q += 0.15 * max(0, 1 - row.debt_to_equity / 2)
-        if pd.notna(row.earnings_stability):
-            q += 0.15 * row.earnings_stability
-        v = 0
-        for val, thr, w in [
-            (row.ev_ebitda, 9, 0.4), (row.pb_ratio, 1.5, 0.3), (row.mktcap_to_assets, 0.5, 0.3)
-        ]:
-            if pd.isna(val):
-                continue
-            v += w * (1.0 if val <= thr else max(0, 1 - (val - thr) / (thr * 1.5)))
-        return 0.55 * q + 0.45 * v
+        q, v = quality_value_parts(
+            roe=row.roe, roic=row.roic, de=row.debt_to_equity,
+            earnings_stability=row.earnings_stability,
+            ev=row.ev_ebitda, pb=row.pb_ratio, mca=row.mktcap_to_assets,
+        )
+        return COMP_W_Q * q + COMP_W_V * v
 
     sub["defensive_score"] = sub.apply(score, axis=1)
     sub = sub.sort_values("defensive_score", ascending=False)
