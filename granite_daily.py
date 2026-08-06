@@ -71,10 +71,8 @@ def _sector_for(ticker: str):
 # alias so the pad call above reads clearly
 pad_to_context = wp.pad_to_context
 ACC_FILE = DATA_DIR / "granite_accuracy.json"
-DEFAULT_MODEL = "ibm-granite/granite-timeseries-ttm-r2"
+from granite_config import DEFAULT_MODEL, CONTEXT, HORIZON  # canonical (leaf)
 
-CONTEXT = 512
-HORIZON = 96
 SERIES_CAP = 1100          # max closes kept per ticker (bounds memory + windows)
 WINDOWS_PER_TICKER = 48    # last N rolling (512->96) windows used for training
 STEPS_PER_DAY = 150

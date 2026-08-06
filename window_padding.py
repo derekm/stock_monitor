@@ -27,7 +27,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from granite_daily import CONTEXT, HORIZON  # canonical Granite config
+from granite_config import CONTEXT, HORIZON  # canonical Granite config (leaf)
 
 PRICES = "daily_prices.parquet"
 CONSTITS = "sp500_constituents.parquet"

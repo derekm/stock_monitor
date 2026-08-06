@@ -44,7 +44,7 @@ FORECAST_FILE = DATA_DIR / "forecasts_granite.parquet"
 FORECAST_CSV = DATA_DIR / "forecasts_granite.csv"
 BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.csv"
 
-from granite_daily import DEFAULT_MODEL  # canonical Granite model id (was local)
+from granite_config import DEFAULT_MODEL  # canonical Granite model id
 
 from ttm_features import (  # noqa: E402
     build_panel,
