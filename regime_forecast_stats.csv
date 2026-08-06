@@ -1,0 +1,6 @@
+mape,mape_pers,dir_acc,mae,n_train,n_test,secs,tag,test_regime_mix,persistence_dir_acc_by_regime,ticker
+8.47,5.87,69.0,1.909,200,200,578.3,AEP,"{'low_vol': 61, 'normal': 85, 'high_vol_stress': 54, 'unknown': 0}","{'low_vol': 62.3, 'normal': 68.2, 'high_vol_stress': 79.6, 'unknown': None}",AEP
+8.74,7.96,63.0,72.248,200,200,377.8,NVR,"{'low_vol': 58, 'normal': 87, 'high_vol_stress': 55, 'unknown': 0}","{'low_vol': 58.6, 'normal': 73.6, 'high_vol_stress': 65.5, 'unknown': None}",NVR
+16.76,10.4,56.0,5.724,200,200,361.7,FICO,"{'low_vol': 58, 'normal': 87, 'high_vol_stress': 55, 'unknown': 0}","{'low_vol': 81.0, 'normal': 69.0, 'high_vol_stress': 50.9, 'unknown': None}",FICO
+5.8,4.7,55.5,1.211,200,200,382.0,KO,"{'low_vol': 61, 'normal': 83, 'high_vol_stress': 56, 'unknown': 0}","{'low_vol': 73.8, 'normal': 66.3, 'high_vol_stress': 71.4, 'unknown': None}",KO
+6.95,5.39,48.0,3.121,200,200,371.9,XOM,"{'low_vol': 61, 'normal': 85, 'high_vol_stress': 54, 'unknown': 0}","{'low_vol': 47.5, 'normal': 43.5, 'high_vol_stress': 61.1, 'unknown': None}",XOM
