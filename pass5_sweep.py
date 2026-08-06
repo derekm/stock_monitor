@@ -55,6 +55,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--output", default="/tmp/pass5_sweep.jsonl")
     ap.add_argument("--quick", action="store_true", help="Run quick subset for testing")
+    ap.add_argument("--resume", action="store_true", help="Skip configs already in the output file")
+    ap.add_argument("--max-experiments", type=int, default=None, help="Stop after N experiments (bounded runs)")
     args = ap.parse_args()
 
     # Define sweep space
@@ -90,7 +92,24 @@ def main():
         print("Running QUICK sweep...", flush=True)
 
     done = 0
-    with open(args.output, "w") as f:
+    seen = set()
+    if args.resume:
+        from pathlib import Path
+        p = Path(args.output)
+        if p.exists():
+            for line in p.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    r = json.loads(line)
+                    key = (r.get("ticker"), r.get("mode"), r.get("train_window_years"),
+                           r.get("stride"), r.get("cap"), r.get("steps"), r.get("use_pretrained"))
+                    seen.add(key)
+                except Exception:
+                    pass
+            print(f"Resume: {len(seen)} configs already done, skipping", flush=True)
+
+    with open(args.output, "a" if args.resume else "w") as f:
         for tk in sweep["tickers"]:
             for tw in sweep["train_windows"]:
                 for tew in sweep["test_windows"]:
@@ -104,7 +123,12 @@ def main():
                                             continue
                                         if pretrained and mode != "trainlast":
                                             continue  # pretrained only makes sense in trainlast
-                                        
+                                        if args.resume and (tk, mode, tw, stride, cap, steps, pretrained) in seen:
+                                            continue
+                                        if args.max_experiments and done >= args.max_experiments:
+                                            print(f"\nReached --max-experiments {args.max_experiments}; stopping", flush=True)
+                                            f.flush()
+                                            return
                                         done += 1
                                         if done % 50 == 0:
                                             print(f"Progress: {done}/{total}", flush=True)

@@ -18,6 +18,8 @@
   header p { margin: 0; color: var(--muted); font-size: 0.9rem; }
   nav { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(15,20,25,0.92); backdrop-filter: blur(8px); z-index: 10; }
   nav button { background: var(--chip); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 0.35rem 0.85rem; cursor: pointer; font-size: 0.82rem; }
+  nav a.ext-link { display:inline-block; background: var(--chip); color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0.35rem 0.85rem; font-size: 0.82rem; text-decoration: none; margin-left: 0.25rem; }
+  nav a.ext-link:hover { background: var(--accent); color: var(--bg, #0d1117); }
   nav button.active, nav button:hover { background: var(--accent); border-color: var(--accent); }
   main { padding: 1rem 1.5rem 3rem; max-width: 1400px; margin: 0 auto; }
   section { display: none; }
@@ -114,6 +116,8 @@
   <button data-tab="manage">Manage</button>
   <button data-tab="ops">Ops / Services</button>
   <button data-tab="csvcat">CSV Catalog</button>
+  <a href="single_stock.html" class="ext-link">Single Stock</a>
+  <a href="sprint_dashboard.html" class="ext-link">Sprint Engines</a>
 </nav>
 <main>
   <!-- DECISIONS -->
