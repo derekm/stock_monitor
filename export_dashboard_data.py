@@ -105,6 +105,15 @@ TABLES = [
     "cross_section_stats",
     "signal_aggregator_scores",
     "signal_aggregator_ic",
+    "technical_signals",
+    "economic_calendar",
+    "estimate_revisions",
+    "shadow_book",
+    "shadow_lots",
+    "filings_sentiment",
+    "options_skew",
+    "signal_model_oos",
+    "signal_model_weights",
 ]
 
 

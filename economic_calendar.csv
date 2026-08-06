@@ -1,0 +1,360 @@
+date,event_type,label,source,days_until,is_trading_day
+1962-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-23519,True
+1962-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-23428,True
+1962-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-23330,True
+1962-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-23239,True
+1963-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-23155,True
+1963-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-23057,True
+1963-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-22966,True
+1963-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-22875,True
+1964-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-22784,True
+1964-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-22693,True
+1964-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-22602,True
+1964-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-22511,True
+1965-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-22420,True
+1965-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-22329,True
+1965-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-22238,True
+1965-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-22147,True
+1966-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-22056,True
+1966-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-21965,True
+1966-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-21874,True
+1966-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-21783,True
+1967-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-21692,True
+1967-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-21601,True
+1967-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-21510,True
+1967-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-21419,True
+1968-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-21328,True
+1968-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-21230,True
+1968-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-21139,True
+1968-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-21048,True
+1969-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-20957,True
+1969-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-20866,True
+1969-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-20775,True
+1969-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-20684,True
+1970-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-20593,True
+1970-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-20502,True
+1970-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-20411,True
+1970-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-20320,True
+1971-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-20229,True
+1971-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-20138,True
+1971-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-20047,True
+1971-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-19956,True
+1972-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-19865,True
+1972-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-19774,True
+1972-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-19683,True
+1972-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-19592,True
+1973-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-19501,True
+1973-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-19410,True
+1973-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-19312,True
+1973-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-19221,True
+1974-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-19137,True
+1974-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-19039,True
+1974-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-18948,True
+1974-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-18857,True
+1975-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-18766,True
+1975-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-18675,True
+1975-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-18584,True
+1975-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-18493,True
+1976-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-18402,True
+1976-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-18311,True
+1976-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-18220,True
+1976-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-18129,True
+1977-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-18038,True
+1977-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-17947,True
+1977-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-17856,True
+1977-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-17765,True
+1978-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-17674,True
+1978-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-17583,True
+1978-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-17492,True
+1978-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-17401,True
+1979-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-17310,True
+1979-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-17219,True
+1979-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-17121,True
+1979-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-17030,True
+1980-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-16939,True
+1980-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-16848,True
+1980-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-16757,True
+1980-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-16666,True
+1981-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-16575,True
+1981-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-16484,True
+1981-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-16393,True
+1981-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-16302,True
+1982-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-16211,True
+1982-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-16120,True
+1982-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-16029,True
+1982-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-15938,True
+1983-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-15847,True
+1983-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-15756,True
+1983-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-15665,True
+1983-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-15574,True
+1984-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-15483,True
+1984-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-15392,True
+1984-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-15294,True
+1984-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-15203,True
+1985-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-15119,True
+1985-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-15021,True
+1985-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-14930,True
+1985-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-14839,True
+1986-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-14748,True
+1986-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-14657,True
+1986-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-14566,True
+1986-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-14475,True
+1987-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-14384,True
+1987-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-14293,True
+1987-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-14202,True
+1987-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-14111,True
+1988-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-14020,True
+1988-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-13929,True
+1988-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-13838,True
+1988-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-13747,True
+1989-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-13656,True
+1989-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-13565,True
+1989-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-13474,True
+1989-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-13383,True
+1990-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-13292,True
+1990-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-13201,True
+1990-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-13103,True
+1990-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-13012,True
+1991-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-12928,True
+1991-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-12830,True
+1991-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-12739,True
+1991-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-12648,True
+1992-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-12557,True
+1992-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-12466,True
+1992-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-12375,True
+1992-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-12284,True
+1993-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-12193,True
+1993-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-12102,True
+1993-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-12011,True
+1993-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-11920,True
+1994-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-11829,True
+1994-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-11738,True
+1994-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-11647,True
+1994-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-11556,True
+1995-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-11465,True
+1995-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-11374,True
+1995-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-11283,True
+1995-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-11192,True
+1996-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-11101,True
+1996-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-11003,True
+1996-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-10912,True
+1996-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-10821,True
+1997-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-10730,True
+1997-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-10639,True
+1997-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-10548,True
+1997-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-10457,True
+1998-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-10366,True
+1998-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-10275,True
+1998-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-10184,True
+1998-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-10093,True
+1999-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-10002,True
+1999-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-9911,True
+1999-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-9820,True
+1999-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-9729,True
+2000-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-9638,True
+2000-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-9547,True
+2000-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-9456,True
+2000-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-9365,True
+2001-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-9274,True
+2001-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-9183,True
+2001-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-9085,True
+2001-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-8994,True
+2002-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-8910,True
+2002-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-8812,True
+2002-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-8721,True
+2002-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-8630,True
+2003-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-8539,True
+2003-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-8448,True
+2003-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-8357,True
+2003-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-8266,True
+2004-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-8175,True
+2004-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-8084,True
+2004-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-7993,True
+2004-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-7902,True
+2005-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-7811,True
+2005-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-7720,True
+2005-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-7629,True
+2005-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-7538,True
+2006-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-7447,True
+2006-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-7356,True
+2006-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-7265,True
+2006-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-7174,True
+2007-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-7083,True
+2007-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-6992,True
+2007-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-6894,True
+2007-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-6803,True
+2008-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-6712,False
+2008-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-6621,True
+2008-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-6530,True
+2008-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-6439,True
+2009-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-6348,True
+2009-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-6257,True
+2009-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-6166,True
+2009-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-6075,True
+2010-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-5984,True
+2010-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-5893,True
+2010-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-5802,True
+2010-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-5711,True
+2011-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-5620,True
+2011-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-5529,True
+2011-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-5438,True
+2011-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-5347,True
+2012-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-5256,True
+2012-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-5165,True
+2012-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-5067,True
+2012-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-4976,True
+2013-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-4892,True
+2013-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-4794,True
+2013-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-4703,True
+2013-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-4612,True
+2014-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-4521,True
+2014-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-4430,True
+2014-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-4339,True
+2014-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-4248,True
+2015-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-4157,True
+2015-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-4066,True
+2015-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-3975,True
+2015-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-3884,True
+2016-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-3793,True
+2016-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-3702,True
+2016-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-3611,True
+2016-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-3520,True
+2017-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-3429,True
+2017-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-3338,True
+2017-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-3247,True
+2017-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-3156,True
+2018-03-16,option_expiry,Quarterly expiry,computed (3rd Fri),-3065,True
+2018-06-15,option_expiry,Quarterly expiry,computed (3rd Fri),-2974,True
+2018-09-21,option_expiry,Quarterly expiry,computed (3rd Fri),-2876,True
+2018-12-21,option_expiry,Quarterly expiry,computed (3rd Fri),-2785,True
+2019-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-2701,True
+2019-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-2603,True
+2019-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-2512,True
+2019-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-2421,True
+2020-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-2330,True
+2020-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-2239,True
+2020-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),-2148,True
+2020-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),-2057,True
+2021-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),-1966,True
+2021-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),-1875,True
+2021-09-17,option_expiry,Quarterly expiry,computed (3rd Fri),-1784,True
+2021-12-17,option_expiry,Quarterly expiry,computed (3rd Fri),-1693,True
+2022-03-18,option_expiry,Quarterly expiry,computed (3rd Fri),-1602,True
+2022-06-17,option_expiry,Quarterly expiry,computed (3rd Fri),-1511,True
+2022-09-16,option_expiry,Quarterly expiry,computed (3rd Fri),-1420,True
+2022-12-16,option_expiry,Quarterly expiry,computed (3rd Fri),-1329,True
+2023-03-17,option_expiry,Quarterly expiry,computed (3rd Fri),-1238,True
+2023-06-16,option_expiry,Quarterly expiry,computed (3rd Fri),-1147,True
+2023-09-15,option_expiry,Quarterly expiry,computed (3rd Fri),-1056,True
+2023-12-15,option_expiry,Quarterly expiry,computed (3rd Fri),-965,True
+2024-03-15,option_expiry,Quarterly expiry,computed (3rd Fri),-874,True
+2024-06-21,option_expiry,Quarterly expiry,computed (3rd Fri),-776,True
+2024-09-20,option_expiry,Quarterly expiry,computed (3rd Fri),-685,True
+2024-12-20,option_expiry,Quarterly expiry,computed (3rd Fri),-594,True
+2025-01-29,FOMC,FOMC decision,federalreserve.gov,-554,True
+2025-03-19,FOMC,FOMC decision,federalreserve.gov,-505,True
+2025-03-21,option_expiry,Quarterly expiry,computed (3rd Fri),-503,True
+2025-05-07,FOMC,FOMC decision,federalreserve.gov,-456,True
+2025-06-18,FOMC,FOMC decision,federalreserve.gov,-414,True
+2025-06-20,option_expiry,Quarterly expiry,computed (3rd Fri),-412,True
+2025-07-30,FOMC,FOMC decision,federalreserve.gov,-372,True
+2025-09-17,FOMC,FOMC decision,federalreserve.gov,-323,True
+2025-09-19,option_expiry,Quarterly expiry,computed (3rd Fri),-321,True
+2025-10-29,FOMC,FOMC decision,federalreserve.gov,-281,True
+2025-12-10,FOMC,FOMC decision,federalreserve.gov,-239,True
+2025-12-19,option_expiry,Quarterly expiry,computed (3rd Fri),-230,True
+2026-01-28,FOMC,FOMC decision,federalreserve.gov,-190,True
+2026-03-18,FOMC,FOMC decision,federalreserve.gov,-141,True
+2026-03-20,option_expiry,Quarterly expiry,computed (3rd Fri),-139,True
+2026-04-29,FOMC,FOMC decision,federalreserve.gov,-99,True
+2026-06-17,FOMC,FOMC decision,federalreserve.gov,-50,True
+2026-06-19,option_expiry,Quarterly expiry,computed (3rd Fri),-48,True
+2026-07-29,FOMC,FOMC decision,federalreserve.gov,-8,True
+2026-07-30,earnings,AAPL earnings,earnings_calendar.parquet,-7,True
+2026-07-30,earnings,AEP earnings,earnings_calendar.parquet,-7,True
+2026-07-30,earnings,BAYRY earnings,earnings_calendar.parquet,-7,True
+2026-07-30,earnings,BMY earnings,earnings_calendar.parquet,-7,True
+2026-07-30,earnings,CTVA earnings,earnings_calendar.parquet,-7,True
+2026-07-30,earnings,HII earnings,earnings_calendar.parquet,-7,True
+2026-07-31,earnings,ABBV earnings,earnings_calendar.parquet,-6,True
+2026-07-31,earnings,BEN earnings,earnings_calendar.parquet,-6,True
+2026-07-31,earnings,CL earnings,earnings_calendar.parquet,-6,True
+2026-07-31,earnings,CVX earnings,earnings_calendar.parquet,-6,True
+2026-07-31,earnings,D earnings,earnings_calendar.parquet,-6,True
+2026-08-03,earnings,ANDE earnings,earnings_calendar.parquet,-3,True
+2026-08-03,earnings,FANG earnings,earnings_calendar.parquet,-3,True
+2026-08-04,earnings,CAT earnings,earnings_calendar.parquet,-2,False
+2026-08-04,earnings,DD earnings,earnings_calendar.parquet,-2,False
+2026-08-04,earnings,DUK earnings,earnings_calendar.parquet,-2,False
+2026-08-05,earnings,CF earnings,earnings_calendar.parquet,-1,False
+2026-08-06,earnings,AFL earnings,earnings_calendar.parquet,0,False
+2026-08-06,earnings,BKSY earnings,earnings_calendar.parquet,0,False
+2026-08-06,earnings,GSAT earnings,earnings_calendar.parquet,0,False
+2026-08-07,earnings,ASIX earnings,earnings_calendar.parquet,1,False
+2026-08-10,earnings,ASTS earnings,earnings_calendar.parquet,4,False
+2026-08-12,earnings,CSCO earnings,earnings_calendar.parquet,6,False
+2026-08-13,earnings,AMAT earnings,earnings_calendar.parquet,7,False
+2026-08-20,earnings,DE earnings,earnings_calendar.parquet,14,False
+2026-08-25,earnings,HEI earnings,earnings_calendar.parquet,19,False
+2026-08-26,earnings,CRWD earnings,earnings_calendar.parquet,20,False
+2026-08-26,earnings,HPQ earnings,earnings_calendar.parquet,20,False
+2026-08-27,earnings,DG earnings,earnings_calendar.parquet,21,False
+2026-09-09,earnings,CPB earnings,earnings_calendar.parquet,34,False
+2026-09-16,FOMC,FOMC decision,federalreserve.gov,41,False
+2026-09-18,option_expiry,Quarterly expiry,computed (3rd Fri),43,False
+2026-09-23,earnings,GIS earnings,earnings_calendar.parquet,48,False
+2026-09-24,earnings,COST earnings,earnings_calendar.parquet,49,False
+2026-09-30,earnings,CAG earnings,earnings_calendar.parquet,55,False
+2026-10-13,earnings,C earnings,earnings_calendar.parquet,68,False
+2026-10-13,earnings,JPM earnings,earnings_calendar.parquet,68,False
+2026-10-14,earnings,BAC earnings,earnings_calendar.parquet,69,False
+2026-10-14,earnings,BLK earnings,earnings_calendar.parquet,69,False
+2026-10-16,earnings,CFG earnings,earnings_calendar.parquet,71,False
+2026-10-19,earnings,FITB earnings,earnings_calendar.parquet,74,False
+2026-10-21,earnings,IBM earnings,earnings_calendar.parquet,76,False
+2026-10-22,earnings,BX earnings,earnings_calendar.parquet,77,False
+2026-10-22,earnings,DOW earnings,earnings_calendar.parquet,77,False
+2026-10-22,earnings,HBAN earnings,earnings_calendar.parquet,77,False
+2026-10-22,earnings,HON earnings,earnings_calendar.parquet,77,False
+2026-10-22,earnings,INTC earnings,earnings_calendar.parquet,77,False
+2026-10-22,earnings,IRDM earnings,earnings_calendar.parquet,77,False
+2026-10-27,earnings,CB earnings,earnings_calendar.parquet,82,False
+2026-10-27,earnings,ENPH earnings,earnings_calendar.parquet,82,False
+2026-10-27,earnings,IVZ earnings,earnings_calendar.parquet,82,False
+2026-10-28,FOMC,FOMC decision,federalreserve.gov,83,False
+2026-10-28,earnings,BA earnings,earnings_calendar.parquet,83,False
+2026-10-28,earnings,FMC earnings,earnings_calendar.parquet,83,False
+2026-10-28,earnings,GD earnings,earnings_calendar.parquet,83,False
+2026-10-28,earnings,GOOGL earnings,earnings_calendar.parquet,83,False
+2026-10-28,earnings,MSFT earnings,earnings_calendar.parquet,83,False
+2026-10-29,earnings,AAPL earnings,earnings_calendar.parquet,84,False
+2026-10-29,earnings,ABBV earnings,earnings_calendar.parquet,84,False
+2026-10-29,earnings,AEP earnings,earnings_calendar.parquet,84,False
+2026-10-29,earnings,BMY earnings,earnings_calendar.parquet,84,False
+2026-10-29,earnings,CAT earnings,earnings_calendar.parquet,84,False
+2026-10-29,earnings,HII earnings,earnings_calendar.parquet,84,False
+2026-10-30,earnings,CL earnings,earnings_calendar.parquet,85,False
+2026-10-30,earnings,CVX earnings,earnings_calendar.parquet,85,False
+2026-10-30,earnings,D earnings,earnings_calendar.parquet,85,False
+2026-11-02,earnings,FANG earnings,earnings_calendar.parquet,88,False
+2026-11-03,earnings,AMD earnings,earnings_calendar.parquet,89,False
+2026-11-03,earnings,ANDE earnings,earnings_calendar.parquet,89,False
+2026-11-03,earnings,BAYRY earnings,earnings_calendar.parquet,89,False
+2026-11-03,earnings,CTVA earnings,earnings_calendar.parquet,89,False
+2026-11-04,earnings,DVN earnings,earnings_calendar.parquet,90,False
+2026-11-04,earnings,IPI earnings,earnings_calendar.parquet,90,False
+2026-11-05,earnings,DD earnings,earnings_calendar.parquet,91,False
+2026-11-05,earnings,DUK earnings,earnings_calendar.parquet,91,False
+2026-11-06,earnings,BEN earnings,earnings_calendar.parquet,92,False
+2026-12-09,FOMC,FOMC decision,federalreserve.gov,125,False
+2026-12-18,option_expiry,Quarterly expiry,computed (3rd Fri),134,False
+2027-01-27,FOMC,FOMC decision,federalreserve.gov,174,False
+2027-03-17,FOMC,FOMC decision,federalreserve.gov,223,False
+2027-03-19,option_expiry,Quarterly expiry,computed (3rd Fri),225,False
+2027-04-28,FOMC,FOMC decision,federalreserve.gov,265,False
+2027-06-16,FOMC,FOMC decision,federalreserve.gov,314,False
+2027-06-18,option_expiry,Quarterly expiry,computed (3rd Fri),316,False
+2027-07-28,FOMC,FOMC decision,federalreserve.gov,356,False
+2027-09-15,FOMC,FOMC decision,federalreserve.gov,405,False
+2027-10-27,FOMC,FOMC decision,federalreserve.gov,447,False
+2027-12-08,FOMC,FOMC decision,federalreserve.gov,489,False
