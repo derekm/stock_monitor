@@ -1,0 +1,3 @@
+{"date": "2026-08-03", "ticker": "AEP", "n": 16264, "bucket": "full", "global_mae": 0.961099978685379, "per_ticker_mae": 0.961099978685379, "padded_mae": NaN}
+{"date": "2026-08-03", "ticker": "NVR", "n": 10337, "bucket": "full", "global_mae": 112.89409816741943, "per_ticker_mae": 112.89409816741943, "padded_mae": NaN}
+{"date": "2026-08-03", "ticker": "FICO", "n": 9832, "bucket": "full", "global_mae": 20.609931540191173, "per_ticker_mae": 20.609931540191173, "padded_mae": NaN}

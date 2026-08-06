@@ -50,6 +50,7 @@ PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 CALENDAR = DATA_DIR / "rebalance_calendar.csv"
+HMM = DATA_DIR / "hmm_regime_states.csv"
 OUT_W = DATA_DIR / "erc_gmv_strategies.csv"
 OUT_S = DATA_DIR / "erc_gmv_summary.csv"
 
@@ -261,9 +262,12 @@ def turnover_band() -> float:
     cal = pd.read_csv(CALENDAR)
     if cal.empty:
         return 1.0
-    cal["date"] = pd.to_datetime(cal["date"]).dt.date
+    date_col = "rebalance_date" if "rebalance_date" in cal.columns else ("date" if "date" in cal.columns else None)
+    if date_col is None or "turnover_band" not in cal.columns:
+        return 1.0
+    cal[date_col] = pd.to_datetime(cal[date_col]).dt.date
     today = date.today()
-    row = cal[cal["date"] <= today].tail(1)
+    row = cal[cal[date_col] <= today].tail(1)
     if row.empty:
         return 1.0
     return float(row.iloc[-1]["turnover_band"])
@@ -280,6 +284,49 @@ def apply_turnover_cap(w: np.ndarray, w_cur: np.ndarray, band: float) -> np.ndar
     return w_capped / s if s > 0 else w
 
 
+def regime_scaled_cov(cov: np.ndarray, tickers: list[str], window: int = 126) -> np.ndarray:
+    """Blend sample covariance toward a crisis-elevated correlation matrix.
+
+    Measured regime shift: avg pairwise corr ~0.19 calm vs ~0.40 crisis
+    (crisis_correlation.py). When HMM says high_vol_stress, correlations are
+    scaled up toward the crisis level so allocation doesn't assume the calm
+    regime will persist. Blend weight = 0.5 in stress, 0.1 otherwise.
+    """
+    import numpy as np
+
+    reg = ""
+    if HMM.exists():
+        try:
+            h = pd.read_csv(HMM)
+            h["date"] = pd.to_datetime(h.get("date"), errors="coerce")
+            h = h.dropna(subset=["date"]).sort_values("date")
+            if len(h):
+                for c in ("regime", "state", "label"):
+                    if c in h.columns:
+                        reg = str(h.iloc[-1][c])
+                        break
+        except Exception:  # noqa: BLE001
+            reg = ""
+    stress = "stress" in reg.lower()
+    # crisis correlation matrix from 63d sample (the shift is in corr, not vol)
+    rets = load_returns(tickers, window=window)
+    corr63 = np.array(rets.corr().values, copy=True)
+    np.fill_diagonal(corr63, 1.0)
+    # shift the average off-diagonal correlation toward the measured crisis
+    # level (0.40) rather than multiply — multiplicative inflation blows up
+    # already-high pairs past 1.0 and distorts the cross-section.
+    calm_level, crisis_level = 0.19, 0.40
+    n = len(tickers)
+    off_mask = ~np.eye(n, dtype=bool)
+    cur_mean = float(corr63[off_mask].mean()) if n > 1 else calm_level
+    delta = crisis_level - cur_mean
+    shifted = np.where(off_mask, np.clip(corr63 + delta, -1, 1), 1.0).reshape(corr63.shape)
+    vols = np.sqrt(np.maximum(np.diag(cov), 1e-18))
+    cov_crisis = (shifted * vols) * vols[:, None]
+    blend = 0.5 if stress else 0.1
+    return blend * cov_crisis + (1 - blend) * cov
+
+
 def run(universe: str = "portfolio", window: int = 126, name_cap: float = 0.05,
         w_floor: float = 0.02) -> None:
     tickers = resolve_universe(universe)
@@ -287,6 +334,7 @@ def run(universe: str = "portfolio", window: int = 126, name_cap: float = 0.05,
     tickers = list(rets.columns)
     cov = rets.cov().values * 252.0
     mu = rets.mean().values * 252.0
+    cov = regime_scaled_cov(cov, tickers, window=window)
 
     w_cur = current_weights(tickers)
     band = turnover_band()

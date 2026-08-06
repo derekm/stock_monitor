@@ -9,7 +9,7 @@
     "label": "INCLUDE_CORE"
   },
   "sizing": {
-    "smci_max_weight": 0.05,
+    "per_name_max_weight": 0.05,
     "core_max_weight": 0.12,
     "value_max_weight": 0.08,
     "satellite_max_weight": 0.05

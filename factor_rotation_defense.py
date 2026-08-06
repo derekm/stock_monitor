@@ -169,6 +169,20 @@ def run(save: bool = True):
     print("\n=== Factor / rotation performance ===")
     print(perf_df.to_string(index=False))
 
+    # Honest OOS: rotation vs static defensive on the last 2 years only.
+    # (Weights are already point-in-time — trailing signals decide each month —
+    # but full-history stats mix regimes; the OOS window is what a live book
+    # would have seen recently.)
+    from cv_utils import oos_stats_vs_baseline
+    if len(pdf) > 504 and len(static) > 504:
+        oos = oos_stats_vs_baseline(pdf.tail(504), static.tail(504))
+        oos["strategy"] = "rotation_vs_static_OOS_2y"
+        perf_df = pd.concat([perf_df, pd.DataFrame([oos])], ignore_index=True)
+        print("\n=== OOS 2y: rotation vs static defensive ===")
+        for k, v in oos.items():
+            if k != "strategy":
+                print(f"  {k}: {v}")
+
     if save:
         wdf.to_csv(OUT_W, index=False)
         perf_df.to_csv(OUT_PERF, index=False)

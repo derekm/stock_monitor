@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from analytics_common import (
-    DATA_DIR, load_prices_pandas, wide_closes, clip_returns, to_date_keys,
+    DATA_DIR, load_adj_prices_pandas, wide_closes, clip_returns, to_date_keys,
 )
 
 EARN = DATA_DIR / "earnings_calendar.parquet"
@@ -148,7 +148,7 @@ def build(cutoff: pd.Timestamp | None = None, drift_window: int = 750, lookback:
     earn = _load_earnings()
     stocks = pd.read_parquet(STOCKS) if STOCKS.exists() else pd.DataFrame()
     tickers = sorted(stocks["ticker"].astype(str).unique()) if not stocks.empty else []
-    prices = load_prices_pandas(prefer_clean=True, tickers=tickers)
+    prices = load_adj_prices_pandas(tickers=tickers)
 
     if cutoff is None:
         cutoff = prices["date"].max()
@@ -156,6 +156,10 @@ def build(cutoff: pd.Timestamp | None = None, drift_window: int = 750, lookback:
     # Latest earnings date per ticker (upcoming OR most recent)
     earn = earn.sort_values("earnings_date")
     latest = earn.groupby("ticker").tail(1)
+    # LAST REPORTED surprise per ticker (non-null) — drives expected drift.
+    # Using the upcoming row (surprise NaN) was why most names had no drift.
+    reported = earn[earn["surprise_pct"].notna()]
+    last_reported = reported.groupby("ticker").tail(1) if len(reported) else pd.DataFrame()
 
     drift_df, bucket_map = drift_by_bucket(earn, prices, pd.Timestamp(cutoff), drift_window)
     pre_mom = pre_earnings_momentum(prices, tickers, lookback)
@@ -177,33 +181,34 @@ def build(cutoff: pd.Timestamp | None = None, drift_window: int = 750, lookback:
         if tk in latest["ticker"].values:
             lr = latest[latest["ticker"] == tk].iloc[0]
             row["next_earnings_date"] = lr["earnings_date"].date()
-            row["surprise_pct"] = lr.get("surprise_pct")
+        if tk in last_reported["ticker"].values:
+            lr = last_reported[last_reported["ticker"] == tk].iloc[0]
+            row["surprise_pct"] = lr["surprise_pct"]
+            # expected drift from trailing bucket stats (OOS-estimated)
+            if bucket_map:
+                b = "big_beat" if lr["surprise_pct"] >= 5 else ("beat" if lr["surprise_pct"] >= 0 else "miss")
+                bm = bucket_map.get(b)
+                if bm and pd.notna(bm.get("drift_20d")):
+                    row["expected_drift_20d"] = round(float(bm["drift_20d"]), 4)
         if tk in pre_mom.index and pd.notna(pre_mom[tk]):
             row["pre_mom_pctile"] = round(float(pre_mom[tk]), 3)
             row["pre_mom_flag"] = "hot" if pre_mom[tk] >= 0.67 else ("cold" if pre_mom[tk] <= 0.33 else "neutral")
         if tk in iv_ratio.index and pd.notna(iv_ratio[tk]):
             row["iv_vs_realized"] = round(float(iv_ratio[tk]), 3)
             row["iv_rich"] = bool(iv_ratio[tk] > 1.2)
-        # expected drift: use bucket of most recent surprise
-        if row["surprise_pct"] is not None and bucket_map:
-            b = "big_beat" if row["surprise_pct"] >= 5 else ("beat" if row["surprise_pct"] >= 0 else "miss")
-            bm = bucket_map.get(b)
-            if bm and pd.notna(bm.get("drift_20d")):
-                row["expected_drift_20d"] = round(float(bm["drift_20d"]), 4)
-        # catalyst score: pre-mom hot (+1) + iv cheap (-0.5 if rich) + drift expected
-        score = 0.0
-        if row["pre_mom_flag"] == "hot":
-            score += 1.0
-        elif row["pre_mom_flag"] == "cold":
-            score -= 0.5
-        if row["iv_rich"]:
-            score -= 0.5
-        if row["expected_drift_20d"] is not None and row["expected_drift_20d"] > 0:
-            score += 0.5
-        row["catalyst_score"] = round(score, 2)
         sig_rows.append(row)
 
     sig = pd.DataFrame(sig_rows)
+    # catalyst_score: rank-normalized blend — 70% OOS expected drift,
+    # 30% pre-earnings momentum. Names with no reported surprise get a
+    # neutral drift term (0) so momentum alone can't dominate.
+    if len(sig):
+        sig["_drift_rank"] = sig["expected_drift_20d"].rank(pct=True, na_option="keep").fillna(0.5)
+        sig["_mom_rank"] = sig["pre_mom_pctile"].rank(pct=True, na_option="keep").fillna(0.5)
+        sig["_has_drift"] = sig["expected_drift_20d"].notna().astype(float)
+        score = (0.7 * sig["_drift_rank"] + 0.3 * sig["_mom_rank"]) * sig["_has_drift"]
+        sig["catalyst_score"] = score.round(3)
+        sig = sig.drop(columns=["_drift_rank", "_mom_rank", "_has_drift"])
     sig = to_date_keys(sig, ["next_earnings_date"])
     return sig, drift_df
 

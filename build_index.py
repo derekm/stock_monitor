@@ -76,7 +76,7 @@ def main():
 
     # Persist a daily index record
     idx_row = {
-        "date": latest["date"].iloc[0] if "date" in latest.columns else pd.Timestamp.now().normalize(),
+        "date": latest["date"].iloc[0] if "date" in latest.columns else datetime.now().date(),
         "index_level": index_level,
         "avg_close": avg_close,
         "n_members": n,

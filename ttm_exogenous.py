@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -32,7 +33,7 @@ EXOG_FILE = DATA_DIR / "exogenous_panel.parquet"
 
 def _load_prices() -> pd.DataFrame:
     df = pd.read_parquet(PRICES_FILE)
-    df["date"] = pd.to_datetime(df["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
     return df.sort_values(["ticker", "date"])
 
@@ -52,10 +53,13 @@ def build_exog_panel(
     prices = _load_prices()
     wide = prices.pivot_table(index="date", columns="ticker", values="close").sort_index()
     if start is not None:
-        wide = wide[wide.index >= pd.Timestamp(start)]
-    # business day grid
+        s = start.date() if hasattr(start, "date") else start
+        wide = wide[wide.index >= s]
+    # business day grid, kept as datetime.date (no Timestamp)
     if len(wide) >= 2:
-        wide = wide.reindex(pd.bdate_range(wide.index.min(), wide.index.max())).ffill()
+        d0, d1 = wide.index.min(), wide.index.max()
+        bdays = [d.date() for d in pd.bdate_range(d0, d1)]
+        wide = wide.reindex(bdays).ffill()
 
     logret = np.log(wide / wide.shift(1))
     mkt_ret = logret.mean(axis=1)
@@ -80,10 +84,11 @@ def build_exog_panel(
                 exog[key] = logret[cols].mean(axis=1)
 
     if external_csv is not None and Path(external_csv).exists():
-        ext = pd.read_csv(external_csv, parse_dates=True)
+        ext = pd.read_csv(external_csv)
         # expect a date column
         dcol = "date" if "date" in ext.columns else ext.columns[0]
-        ext[dcol] = pd.to_datetime(ext[dcol])
+        ext[dcol] = ext[dcol].apply(
+            lambda s: datetime.strptime(str(s)[:10], "%Y-%m-%d").date())
         ext = ext.set_index(dcol).sort_index()
         for c in ext.columns:
             exog[f"ext_{c}"] = ext[c].reindex(exog.index).ffill()
@@ -101,10 +106,9 @@ def merge_exog(
         if EXOG_FILE.exists():
             exog = pd.read_parquet(EXOG_FILE)
             if 'date' in exog.columns:
-                exog['date'] = pd.to_datetime(exog['date'])
                 exog = exog.set_index('date')
             else:
-                exog.index = pd.to_datetime(exog.index)
+                exog.index.name = 'date'
         else:
             exog = build_exog_panel()
     if cols:

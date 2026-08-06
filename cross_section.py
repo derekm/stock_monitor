@@ -32,6 +32,7 @@ import pandas as pd
 
 from analytics_common import DATA_DIR, load_adj_prices_pandas, wide_closes, clip_returns
 from cv_utils import oos_stats_vs_baseline
+from cost_model import apply_costs_to_daily
 
 FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
@@ -191,6 +192,8 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         "long_short": ls_ret,
         "equal_weight_long": ew_ret,
     })
+    # net of costs: monthly rebalance = 2 × 10bps per month ≈ 20bps/21d turnover
+    out = apply_costs_to_daily(out, turnover_frac=1.0 / 21.0)
     rankings = pd.DataFrame(all_rankings)
     stats = oos_stats_vs_baseline(out["long_short"], out["equal_weight_long"])
     if exposure_devs:

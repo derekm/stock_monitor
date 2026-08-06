@@ -38,7 +38,7 @@ PANEL_DIR = DATA_DIR / "ttm_panels"
 
 def load_ohlcv(tickers: Optional[list[str]] = None) -> pd.DataFrame:
     df = pd.read_parquet(PRICES_FILE)
-    df["date"] = pd.to_datetime(df["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     for c in ["open", "high", "low", "close", "volume"]:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -96,11 +96,12 @@ def build_panel(
         return pd.DataFrame()
     sub = enrich_ticker(sub)
     if start is not None:
-        sub = sub[sub["date"] >= pd.Timestamp(start)]
+        s = start.date() if hasattr(start, "date") else start
+        sub = sub[sub["date"] >= s]
     sub = sub.set_index("date").sort_index()
-    # Reindex to business days for consistent frequency
+    # Reindex to business days for consistent frequency (kept as datetime.date)
     if len(sub) >= 2:
-        bidx = pd.bdate_range(sub.index.min(), sub.index.max())
+        bidx = [d.date() for d in pd.bdate_range(sub.index.min(), sub.index.max())]
         sub = sub.reindex(bidx)
         # price columns interpolate lightly; indicators recompute would be ideal but ffill is OK for gaps
         for col in ["open", "high", "low", "close", "typical", "ma_10", "ma_20"]:
@@ -134,9 +135,11 @@ def build_multivariate_bundle(
         wide = prices.pivot_table(index="date", columns="ticker", values="close").sort_index()
         wide = wide[[t for t in tickers if t in wide.columns]]
         if start is not None:
-            wide = wide[wide.index >= pd.Timestamp(start)]
+            s = start.date() if hasattr(start, "date") else start
+            wide = wide[wide.index >= s]
         if len(wide) >= 2:
-            wide = wide.reindex(pd.bdate_range(wide.index.min(), wide.index.max())).ffill()
+            bidx = [d.date() for d in pd.bdate_range(wide.index.min(), wide.index.max())]
+            wide = wide.reindex(bidx).ffill()
         return wide.dropna(how="all")
 
     # full channel mode

@@ -35,7 +35,8 @@ def avg_pairwise(corr: pd.DataFrame) -> tuple[float, float]:
 
 
 def run(windows=(21, 63, 126), step: int = 5, max_assets: int = 80, save: bool = True):
-    prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
+    prices = pd.read_parquet(PRICES, columns=["date", "ticker", "adj_close"])
+    prices = prices.rename(columns={"adj_close": "close"})
     prices["date"] = pd.to_datetime(prices["date"])
     stocks = pd.read_parquet(STOCKS, columns=["ticker", "sector"])
     sector_map = stocks.set_index("ticker")["sector"].to_dict()

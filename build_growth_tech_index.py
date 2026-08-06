@@ -38,7 +38,7 @@ def main():
         return
 
     prices = pd.read_parquet(PRICES)
-    prices["date"] = pd.to_datetime(prices["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     latest = prices.sort_values("date").groupby("ticker").tail(1).set_index("ticker")
 
     fund = pd.read_parquet(FUND) if FUND.exists() else pd.DataFrame()

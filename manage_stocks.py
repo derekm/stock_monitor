@@ -56,7 +56,7 @@ def cmd_add(args):
         "status": args.status,
         "index_member": args.index_member,
         "notes": args.notes or "",
-        "added_date": pd.Timestamp.now().normalize(),
+        "added_date": datetime.now().date(),
         "last_updated": pd.Timestamp.now(),
     }
     df = pd.concat([df, pd.DataFrame([new])], ignore_index=True)

@@ -1,0 +1,6 @@
+  [_clean] dropping 4396 impossible-move rows (|adj logret|>0.3)
+[_clean_price_frame] rows 4650055 -> 4650055 (used adj_close; dedup+full-history+drop-spikes+conflict-mean)
+
+=== AEP ===
+  baseline       nw= 500 MAPE= 22.16% (pers=6.07%) dir= 58.6% MAE=18.096
+  hor32          nw= 500 MAPE= 23.38% (pers=3.87%) dir= 56.0% MAE=19.163

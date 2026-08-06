@@ -52,7 +52,7 @@ def members(stocks: pd.DataFrame) -> pd.DataFrame:
 
 def load_panel(prices: pd.DataFrame, tickers: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
     sub = prices[prices["ticker"].isin(tickers)].copy()
-    sub["date"] = pd.to_datetime(sub["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     wide = sub.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
     wide = wide.dropna(how="all")
     rets = np.log(wide / wide.shift(1))
@@ -328,12 +328,12 @@ def cmd_sleeve_perf(rets: pd.DataFrame, m: pd.DataFrame) -> pd.DataFrame:
 def run(window: int = 126) -> None:
     stocks = pd.read_parquet(STOCKS)
     prices = pd.read_parquet(PRICES)
-    prices["date"] = pd.to_datetime(prices["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     m = members(stocks)
     tickers = m["ticker"].tolist()
     wide, rets = load_panel(prices, tickers)
     print(f"Growth tech panel: {len(tickers)} tickers, {len(wide)} days "
-          f"({wide.index.min().date()} → {wide.index.max().date()})")
+          f"({wide.index.min()} → {wide.index.max()})")
 
     cmd_membership(m)
     cmd_vol_return(rets, wide, m, window)

@@ -1,0 +1,6 @@
+{"ticker": "AEP", "use_adj": false, "n_windows": 200, "mape_pct": 5.28}
+{"ticker": "FICO", "use_adj": false, "n_windows": 200, "mape_pct": 11.65}
+{"ticker": "NVR", "use_adj": false, "n_windows": 200, "mape_pct": 27.31}
+{"ticker": "AEP", "use_adj": true, "n_windows": 200, "mape_pct": 5.6}
+{"ticker": "FICO", "use_adj": true, "n_windows": 200, "mape_pct": 11.89}
+{"ticker": "NVR", "use_adj": true, "n_windows": 200, "mape_pct": 25.73}

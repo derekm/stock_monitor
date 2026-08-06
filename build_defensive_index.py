@@ -9,6 +9,7 @@ Outputs defensive_value_index.parquet and prints P/B, EV/EBITDA, market-cap cont
 """
 
 from pathlib import Path
+from datetime import datetime
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -31,7 +32,7 @@ def main():
         return
 
     prices = pd.read_parquet(PRICES_FILE)
-    prices["date"] = pd.to_datetime(prices["date"])
+    # `date` is DATE on disk -> read as datetime.date; keep it a date.
     latest = prices.sort_values("date").groupby("ticker").tail(1).set_index("ticker")
 
     fund = pd.read_parquet(FUND_FILE) if FUND_FILE.exists() else pd.DataFrame()
@@ -74,7 +75,7 @@ def main():
 
     # Persist snapshot
     idx_row = {
-        "date": latest["date"].iloc[0] if "date" in latest.columns else pd.Timestamp.now().normalize(),
+        "date": latest["date"].iloc[0] if "date" in latest.columns else datetime.now().date(),
         "index_level": 100.0,
         "avg_close": comp["close"].mean(),
         "n_members": n,
