@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-06T08:38:46.655478",
-  "count": 187,
+  "generated": "2026-08-06T14:24:31.460747",
+  "count": 198,
   "files": [
     {
       "name": "['all']",
@@ -435,6 +435,15 @@
       "sql_name": "earnings_drift_stats"
     },
     {
+      "name": "economic_calendar",
+      "filename": "economic_calendar.csv",
+      "path": "economic_calendar.csv",
+      "url": "economic_calendar.csv",
+      "kind": "csv",
+      "size": 25779,
+      "sql_name": "economic_calendar"
+    },
+    {
       "name": "erc_gmv_strategies",
       "filename": "erc_gmv_strategies.csv",
       "path": "erc_gmv_strategies.csv",
@@ -451,6 +460,15 @@
       "kind": "csv",
       "size": 909,
       "sql_name": "erc_gmv_summary"
+    },
+    {
+      "name": "estimate_revisions",
+      "filename": "estimate_revisions.parquet",
+      "path": "estimate_revisions.parquet",
+      "url": "estimate_revisions.parquet",
+      "kind": "parquet",
+      "size": 12858,
+      "sql_name": "estimate_revisions"
     },
     {
       "name": "exclusion_candidates",
@@ -541,6 +559,15 @@
       "kind": "parquet",
       "size": 1107,
       "sql_name": "fertilizer_index"
+    },
+    {
+      "name": "filings_sentiment",
+      "filename": "filings_sentiment.csv",
+      "path": "filings_sentiment.csv",
+      "url": "filings_sentiment.csv",
+      "kind": "csv",
+      "size": 366,
+      "sql_name": "filings_sentiment"
     },
     {
       "name": "fisher_indexes",
@@ -1092,6 +1119,15 @@
       "sql_name": "near_dual_candidates"
     },
     {
+      "name": "options_skew",
+      "filename": "options_skew.csv",
+      "path": "options_skew.csv",
+      "url": "options_skew.csv",
+      "kind": "csv",
+      "size": 371,
+      "sql_name": "options_skew"
+    },
+    {
       "name": "package",
       "filename": "package.json",
       "path": "package.json",
@@ -1326,6 +1362,24 @@
       "sql_name": "regime_forecast_stats"
     },
     {
+      "name": "regime_model_best",
+      "filename": "regime_model_best.csv",
+      "path": "regime_model_best.csv",
+      "url": "regime_model_best.csv",
+      "kind": "csv",
+      "size": 1156,
+      "sql_name": "regime_model_best"
+    },
+    {
+      "name": "regime_model_oos",
+      "filename": "regime_model_oos.csv",
+      "path": "regime_model_oos.csv",
+      "url": "regime_model_oos.csv",
+      "kind": "csv",
+      "size": 3797,
+      "sql_name": "regime_model_oos"
+    },
+    {
       "name": "regime_pass1_results",
       "filename": "regime_pass1_results.json",
       "path": "regime_pass1_results.json",
@@ -1515,6 +1569,24 @@
       "sql_name": "setuptools_schema"
     },
     {
+      "name": "shadow_book",
+      "filename": "shadow_book.csv",
+      "path": "shadow_book.csv",
+      "url": "shadow_book.csv",
+      "kind": "csv",
+      "size": 40701,
+      "sql_name": "shadow_book"
+    },
+    {
+      "name": "shadow_lots",
+      "filename": "shadow_lots.csv",
+      "path": "shadow_lots.csv",
+      "url": "shadow_lots.csv",
+      "kind": "csv",
+      "size": 170967,
+      "sql_name": "shadow_lots"
+    },
+    {
       "name": "sharpe_comparison",
       "filename": "sharpe_comparison.csv",
       "path": "sharpe_comparison.csv",
@@ -1540,6 +1612,24 @@
       "kind": "csv",
       "size": 27156,
       "sql_name": "signal_aggregator_scores"
+    },
+    {
+      "name": "signal_model_oos",
+      "filename": "signal_model_oos.csv",
+      "path": "signal_model_oos.csv",
+      "url": "signal_model_oos.csv",
+      "kind": "csv",
+      "size": 176,
+      "sql_name": "signal_model_oos"
+    },
+    {
+      "name": "signal_model_weights",
+      "filename": "signal_model_weights.csv",
+      "path": "signal_model_weights.csv",
+      "url": "signal_model_weights.csv",
+      "kind": "csv",
+      "size": 81,
+      "sql_name": "signal_model_weights"
     },
     {
       "name": "sp500_changes",
@@ -1612,6 +1702,15 @@
       "kind": "csv",
       "size": 2232,
       "sql_name": "tail_risk_hedge_performance"
+    },
+    {
+      "name": "technical_signals",
+      "filename": "technical_signals.csv",
+      "path": "technical_signals.csv",
+      "url": "technical_signals.csv",
+      "kind": "csv",
+      "size": 60359,
+      "sql_name": "technical_signals"
     },
     {
       "name": "threshold_logic_rules",

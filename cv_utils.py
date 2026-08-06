@@ -118,14 +118,27 @@ def oos_stats_vs_baseline(
     win = float((m > b).mean())
     # direction accuracy of model vs baseline sign
     dir_acc = float((np.sign(m) == np.sign(b)).mean())
+    # extended metric set (Sortino, Calmar) via perf_metrics
+    try:
+        from perf_metrics import perf_metrics
+        pm_m = perf_metrics(m, rf=rf)
+        pm_b = perf_metrics(b, rf=rf)
+    except Exception:
+        pm_m, pm_b = {}, {}
     return {
         "n_days": int(len(df)),
         "model_ann_ret": round(m_ret, 4),
         "model_ann_vol": round(m_vol, 4),
         "model_sharpe": round(m_sh, 4),
+        "model_sortino": pm_m.get("sortino"),
+        "model_calmar": pm_m.get("calmar"),
+        "model_max_dd": pm_m.get("max_dd"),
         "baseline_ann_ret": round(b_ret, 4),
         "baseline_ann_vol": round(b_vol, 4),
         "baseline_sharpe": round(b_sh, 4),
+        "baseline_sortino": pm_b.get("sortino"),
+        "baseline_calmar": pm_b.get("calmar"),
+        "baseline_max_dd": pm_b.get("max_dd"),
         "excess_ann_ret": round(m_ret - b_ret, 4),
         "info_ratio": round(info_ratio, 4),
         "win_rate_vs_baseline": round(win, 4),

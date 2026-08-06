@@ -12,8 +12,8 @@ Dependency order (edges = must-finish-before):
   preferred → risk_enrich → rolling → rolling_corr → tail_hedge
   preferred → dupont → growth
   preferred → peer
-  growth/peer → earnings → pairs → cross → aggregate → export
-  everything else is independent
+  growth/peer → earnings → pairs → cross → aggregate → technical → export
+  econ_cal / est_rev are independent; shadow runs after preferred+aggregate
 
 Usage:
   python run_daily_automation.py
@@ -51,6 +51,10 @@ JOBS = {
     "pairs": (["pair_engine.py", "--save"], 900),
     "cross": (["cross_section.py", "--save"], 600),
     "aggregate": (["signal_aggregator.py", "--save"], 300),
+    "technical": (["technical_signals.py", "--save"], 600),
+    "econ_cal": (["economic_calendar.py", "--save"], 120),
+    "est_rev": (["estimate_revisions.py", "--save"], 600),
+    "shadow": (["shadow_book.py", "--save"], 300),
     "export": (["export_dashboard_data.py"], 600),
 }
 
@@ -72,7 +76,11 @@ DEPS = {
     "pairs": {"peer", "earnings"},
     "cross": {"peer", "earnings", "pairs"},
     "aggregate": {"cross", "earnings", "pairs", "peer", "preferred"},
-    "export": {"aggregate"},
+    "technical": {"aggregate"},
+    "econ_cal": set(),
+    "est_rev": set(),
+    "shadow": {"preferred", "aggregate"},
+    "export": {"aggregate", "technical", "econ_cal", "est_rev", "shadow"},
 }
 
 # jobs with no deps start at wave 0
