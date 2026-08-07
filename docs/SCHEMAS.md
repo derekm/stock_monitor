@@ -418,6 +418,8 @@ auxiliary tables feeding several stages.
 | `regime_forecast_stats.csv` | `regime_forecast.py` | Forecast / anomaly |
 | `regime_model_oos.csv` | `pass6.py` | Forecast / anomaly |
 | `regime_model_best.csv` | `pass6.py` | Forecast / anomaly |
+| `regime_model_matrix.csv` | `pass7.py` | Forecast / anomaly |
+| `regime_model_matrix_summary.csv` | `pass7.py` | Forecast / anomaly |
 | `technical_signals.csv` | `technical_signals.py` | Technical |
 | `economic_calendar.csv` | `economic_calendar.py` | Calendar / events |
 | `estimate_revisions.parquet` | `estimate_revisions.py` | Fundamental |
