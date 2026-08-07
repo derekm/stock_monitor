@@ -76,12 +76,11 @@ def run(tickers, arms, split_fracs, caps, steps_list, lrs, fresh_years,
                 continue
             try:
                 r = json.loads(line)
-                done.add((r.get("arm"), r.get("ticker"), r.get("regime"),
-                          r.get("split_frac"), r.get("steps"), r.get("cap"),
-                          r.get("lr"), r.get("fresh_years")))
+                done.add((r.get("ticker"), r.get("regime"), r.get("split_frac"),
+                          r.get("steps"), r.get("cap"), r.get("lr"), r.get("composition")))
             except Exception:
                 pass
-        print(f"resume: {len(done)} cells done", flush=True)
+        print(f"resume: {len(done)} unique cells done", flush=True)
 
     results = []
     n_run = 0
@@ -136,10 +135,8 @@ def run(tickers, arms, split_fracs, caps, steps_list, lrs, fresh_years,
                                     if cap and len(tr_win) > cap:
                                         idxs = np.linspace(0, len(tr_win) - 1, cap).astype(int)
                                         tr_win = [tr_win[i] for i in idxs]
-                                    key = (sf, steps, cap, lr, comp)
-                                    if resume and any(
-                                            (a, tk, reg, sf, steps, cap, lr, None) in done
-                                            for a in cell_arms):
+                                    key = (tk, reg, sf, steps, cap, lr, comp)
+                                    if resume and key in done:
                                         continue
                                     if max_experiments and n_run >= max_experiments:
                                         print(f"reached --max-experiments {max_experiments}", flush=True)
