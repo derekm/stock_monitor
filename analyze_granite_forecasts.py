@@ -21,6 +21,50 @@ BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.csv"
 PRICES_FILE = DATA_DIR / "daily_prices.parquet"
 REGIME_STATS = DATA_DIR / "regime_forecast_stats.csv"
 HMM_FILE = DATA_DIR / "hmm_regime_states.csv"
+REGIME_BEST = DATA_DIR / "regime_model_best.csv"
+
+
+def load_regime_selection() -> tuple[str | None, dict[str, dict]]:
+    """(current regime, {ticker: {steps, cap, lr, dir_acc, pers_dir, excess}}).
+
+    Regime-SELECTED models: pass6 trained one model per HMM regime and picked
+    the best config per (ticker, regime) by max OOS direction excess over the
+    regime's persistence baseline. This loads that table and returns the
+    config that SHOULD be used for the CURRENT regime — the production
+    consumption of pass6. Falls back to ({}, None) when unavailable.
+    """
+    regime_now = None
+    if HMM_FILE.exists():
+        try:
+            hmm = pd.read_csv(HMM_FILE)
+            if "date" in hmm.columns and "regime" in hmm.columns:
+                hmm["date"] = pd.to_datetime(hmm["date"], errors="coerce")
+                hmm = hmm.dropna(subset=["date"]).sort_values("date")
+                if len(hmm):
+                    regime_now = str(hmm.iloc[-1]["regime"])
+        except Exception:
+            pass
+    sel: dict[str, dict] = {}
+    if REGIME_BEST.exists():
+        try:
+            rb = pd.read_csv(REGIME_BEST)
+            for _, r in rb.iterrows():
+                tk = str(r.get("ticker", "")).upper()
+                reg = str(r.get("regime", ""))
+                if not tk or reg != regime_now:
+                    continue
+                sel[tk] = {
+                    "steps": int(r.get("steps", 0)) if pd.notna(r.get("steps")) else None,
+                    "cap": int(r.get("cap", 0)) if pd.notna(r.get("cap")) else None,
+                    "lr": r.get("lr"),
+                    "dir_acc": float(r.get("dir_acc")) if pd.notna(r.get("dir_acc")) else None,
+                    "pers_dir": float(r.get("pers_dir")) if pd.notna(r.get("pers_dir")) else None,
+                    "excess": float(r.get("dir_acc", 0) - r.get("pers_dir", 50))
+                              if pd.notna(r.get("dir_acc")) and pd.notna(r.get("pers_dir")) else None,
+                }
+        except Exception:
+            pass
+    return regime_now, sel
 
 
 def load_regime_gate() -> tuple[str | None, dict[str, float]]:
@@ -111,6 +155,9 @@ def main():
     # Regime gate: annotate each forecast against the per-regime persistence
     # baseline (fraction of up-windows the market realized in this regime).
     regime_now, baselines = load_regime_gate()
+    regime_now_s, selection = load_regime_selection()
+    if regime_now_s:
+        regime_now = regime_now_s
     if regime_now:
         tail["regime"] = regime_now
         tail["pers_baseline"] = tail["ticker"].map(baselines)
@@ -127,6 +174,15 @@ def main():
             return row["signal"]
         tail["signal_gated"] = tail.apply(_gate, axis=1)
         print(f"\nRegime gate: {regime_now} (per-regime persistence baseline; * = edge over baseline)")
+        if selection:
+            tail["regime_model_dir"] = tail["ticker"].map(
+                lambda t: selection[t]["dir_acc"] if t in selection else None)
+            tail["regime_model_excess"] = tail["ticker"].map(
+                lambda t: selection[t]["excess"] if t in selection else None)
+            n_sel = tail["regime_model_dir"].notna().sum()
+            print(f"Regime-selected models (pass6): {n_sel} tickers have a {regime_now} "
+                  f"model; mean OOS dir {tail['regime_model_dir'].mean():.1f}% "
+                  f"(excess +{tail['regime_model_excess'].mean():.1f}pt)")
     print(f"\n--- Horizon H+{max_h} snapshot ---")
     cols = ["ticker", "last_close", "forecast_close", "pct_change", "signal"]
     if "signal_gated" in tail.columns:
