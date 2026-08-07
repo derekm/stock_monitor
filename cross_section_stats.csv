@@ -1,2 +1,2 @@
-n_days,model_ann_ret,model_ann_vol,model_sharpe,baseline_ann_ret,baseline_ann_vol,baseline_sharpe,excess_ann_ret,info_ratio,win_rate_vs_baseline,dir_agreement,sector_exposure_abs_dev_avg
-4999,-0.0108,0.2121,-0.2393,0.1404,0.3066,0.3275,-0.1512,-0.6125,0.4153,0.5987,0.029
+n_days,model_ann_ret,model_ann_vol,model_sharpe,model_sortino,model_calmar,model_max_dd,baseline_ann_ret,baseline_ann_vol,baseline_sharpe,baseline_sortino,baseline_calmar,baseline_max_dd,excess_ann_ret,info_ratio,win_rate_vs_baseline,dir_agreement,sector_exposure_abs_dev_avg,recommended_use,actionable_strategy,long_only_sharpe
+4999,-0.0108,0.2121,-0.2393,-0.27,-0.019,-0.5705,0.1404,0.3066,0.3275,0.366,0.374,-0.3753,-0.1512,-0.6125,0.4153,0.5987,0.029,signal_only,long_only_top_quintile,0.3275

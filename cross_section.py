@@ -198,6 +198,13 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     stats = oos_stats_vs_baseline(out["long_short"], out["equal_weight_long"])
     if exposure_devs:
         stats["sector_exposure_abs_dev_avg"] = round(float(np.mean(exposure_devs)), 4)
+    # Decision (2026-08): L/S is SIGNAL-ONLY. The short leg adds no OOS value
+    # vs the equal-weight long baseline (see sharpe columns); the rankings
+    # still feed signal_aggregator as the cross-sectional family. Actionable
+    # strategy = long-only top quintile (bucket 5).
+    stats["recommended_use"] = "signal_only"
+    stats["actionable_strategy"] = "long_only_top_quintile"
+    stats["long_only_sharpe"] = stats.get("baseline_sharpe")
     return rankings, out, stats
 
 

@@ -118,6 +118,7 @@
   <button data-tab="csvcat">CSV Catalog</button>
   <a href="single_stock.html" class="ext-link">Single Stock</a>
   <a href="sprint_dashboard.html" class="ext-link">Sprint Engines</a>
+  <button data-tab="sprint">Sprint (inline)</button>
 </nav>
 <main>
   <!-- DECISIONS -->
@@ -1015,6 +1016,10 @@ ORDER BY ev_ebitda;</textarea>
       <div class="sql-actions"><span id="csv-cat-status" style="color:var(--muted);font-size:0.82rem"></span></div>
       <div class="scroll" style="max-height:480px"><table id="tbl-csvcat"><thead></thead><tbody></tbody></table></div>
     </div>
+  </section>
+  <section id="sprint">
+    <h2>Sprint Engines (inline)</h2>
+    <iframe src="sprint_dashboard.html" style="width:100%; height:calc(100vh - 120px); border:1px solid var(--border); border-radius:8px; background:#0d1117;"></iframe>
   </section>
 </main>
 <footer>

@@ -314,6 +314,34 @@ def build_table() -> pd.DataFrame:
     if "as_of_date" in fund.columns:
         fund = fund.sort_values("as_of_date").groupby("ticker", as_index=False).tail(1)
 
+    # Quality-TREND guard (generalized RF-demotion rule): a name whose quality
+    # is deteriorating should not hold INCLUDE_CORE even if it still clears the
+    # level thresholds. Compare first vs latest quarter in the fundamentals
+    # history (now deep thanks to EDGAR). Applies to every ticker — no
+    # special-casing.
+    quality_trend_demote: dict[str, bool] = {}
+    try:
+        fhist = pd.read_parquet(FUND)
+        if "as_of_date" in fhist.columns and "ticker" in fhist.columns:
+            fhist = fhist.sort_values(["ticker", "as_of_date"])
+            for tk, g in fhist.groupby("ticker"):
+                g = g.dropna(subset=["roe", "roic", "earnings_stability"])
+                if len(g) < 4:
+                    continue
+                first, last = g.iloc[0], g.iloc[-1]
+                # decline tests only valid from a positive baseline (negative
+                # ROE/ROIC invert the comparison)
+                roe_drop = bool(first["roe"] > 0 and last["roe"] and last["roe"] < first["roe"] * 0.7)
+                roic_drop = bool(first["roic"] > 0 and last["roic"] and last["roic"] < first["roic"] * 0.7)
+                stab_drop = bool(first["earnings_stability"] > 0 and last["earnings_stability"]
+                                 and last["earnings_stability"] < first["earnings_stability"] * 0.5)
+                # at least two of the three quality pillars deteriorating
+                demote = sum(bool(x) for x in (roe_drop, roic_drop, stab_drop)) >= 2
+                if demote:
+                    quality_trend_demote[tk] = True
+    except Exception:
+        pass
+
     stocks = pd.read_parquet(STOCKS) if STOCKS.exists() else pd.DataFrame()
     holdings = pd.read_parquet(HOLDINGS) if HOLDINGS.exists() else pd.DataFrame()
     h_w = {}
@@ -354,6 +382,12 @@ def build_table() -> pd.DataFrame:
             composite = min(1.0, composite + 0.08)
         composite, lev_adj = apply_leverage_flag_to_scores(composite, lev, q, v)
         dual = bool(q["buffett_pass"] and v["trifecta_pass"])
+        if t in quality_trend_demote:
+            # quality deteriorating (>=2 of roe/roic/earnings_stability down
+            # >30-50% across history) — keep the quality label, drop CORE
+            dual = False
+        if not r.get("earnings_stability") or r["earnings_stability"] < 0.5:
+            dual = False
         if dual and lev.get("leverage_flag") == "levered-assets":
             ic = r.get("interest_coverage")
             if pd.isna(ic) or float(ic) < 5.0:

@@ -1,0 +1,4 @@
+mape,dir_acc,mape_pers,pers_dir,n_train,n_test,secs,tag,arm,ticker,regime,split_frac,steps,cap,lr,composition
+5.44,58.9,5.38,35.6,100,90,16.7,boundary|AEP|low_vol|sf=0.7|st=300|cap=100|lr=None|pure,boundary,AEP,low_vol,0.7,300,100,,pure
+5.92,61.2,5.73,38.8,100,98,14.3,boundary|AEP|normal|sf=0.7|st=300|cap=100|lr=None|pure,boundary,AEP,normal,0.7,300,100,,pure
+6.29,72.9,6.56,35.4,29,48,14.7,boundary|AEP|high_vol_stress|sf=0.7|st=300|cap=100|lr=None|pure,boundary,AEP,high_vol_stress,0.7,300,100,,pure
