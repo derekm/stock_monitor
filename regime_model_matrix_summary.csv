@@ -1,7 +1,7 @@
 arm,n,mean_excess,max_excess,best_config_most_common
-boundary,10,28.03,44.7,"(np.int64(3000), np.int64(100))"
-boundary+composition,10,28.26,44.7,"(np.int64(6000), np.int64(100))"
-boundary+composition+lr,20,28.64,51.1,"(np.int64(3000), np.int64(100))"
-boundary+freshness,10,28.71,48.9,"(np.int64(6000), np.int64(100))"
-boundary+lr,20,29.28,48.9,"(np.int64(6000), np.int64(100))"
-boundary+lr+freshness,20,27.68,51.1,"(np.int64(6000), np.int64(100))"
+boundary,15,21.73,37.5,"(np.int64(3000), np.int64(100))"
+boundary+composition,15,28.44,43.8,"(np.int64(3000), np.int64(100))"
+boundary+composition+lr,15,29.56,45.8,"(np.int64(3000), np.int64(100))"
+boundary+freshness,15,22.47,35.5,"(np.int64(3000), np.int64(100))"
+boundary+lr,15,20.33,35.4,"(np.int64(3000), np.int64(100))"
+boundary+lr+freshness,15,20.31,35.4,"(np.int64(6000), np.int64(100))"
