@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-08T10:27:26.735033",
-  "count": 207,
+  "generated": "2026-08-08T18:16:03.766571",
+  "count": 209,
   "files": [
     {
       "name": "['all']",
@@ -858,6 +858,15 @@
       "sql_name": "growth_tech_vol_returns"
     },
     {
+      "name": "hidden_optionality",
+      "filename": "hidden_optionality.csv",
+      "path": "hidden_optionality.csv",
+      "url": "hidden_optionality.csv",
+      "kind": "csv",
+      "size": 210,
+      "sql_name": "hidden_optionality"
+    },
+    {
       "name": "hmm_2state_regime_correlations",
       "filename": "hmm_2state_regime_correlations.csv",
       "path": "hmm_2state_regime_correlations.csv",
@@ -1421,7 +1430,7 @@
       "path": "regime_model_best.csv",
       "url": "regime_model_best.csv",
       "kind": "csv",
-      "size": 210,
+      "size": 344,
       "sql_name": "regime_model_best"
     },
     {
@@ -1448,7 +1457,7 @@
       "path": "regime_model_oos.csv",
       "url": "regime_model_oos.csv",
       "kind": "csv",
-      "size": 184,
+      "size": 318,
       "sql_name": "regime_model_oos"
     },
     {
@@ -1828,6 +1837,15 @@
       "kind": "parquet",
       "size": 8827,
       "sql_name": "trades"
+    },
+    {
+      "name": "ttm_rpt_400_config",
+      "filename": "ttm_rpt_400_config.json",
+      "path": "checkpoints/rpt_base_smoke/ttm_rpt_400_config.json",
+      "url": "checkpoints/rpt_base_smoke/ttm_rpt_400_config.json",
+      "kind": "json",
+      "size": 3160,
+      "sql_name": "ttm_rpt_400_config"
     },
     {
       "name": "vix_term_structure",

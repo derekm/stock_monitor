@@ -15,7 +15,7 @@ Read **[docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)** for a holistic summa
 **Docs map:**
 - **[docs/SYSTEM_ORCHESTRATION.md](docs/SYSTEM_ORCHESTRATION.md)** — how the programs chain (data spine → analytics → services), what `start_dashboard.sh` launches, and what an agent should know before running analytics.
 - **[docs/SCHEMAS.md](docs/SCHEMAS.md)** — the single catalog of every output file → producing script → schema family.
-- **Per-program docs:** `docs/<script>.md` for all 123 scripts (description, rationale, outputs, cross-links).
+- **Per-program docs:** `docs/<script>.md` for all 130 scripts (description, rationale, outputs, cross-links).
 - **[GLOSSARY.md](https://github.com/derekm/stockmagic/blob/master/GLOSSARY.md)** — cross-repo acronym dictionary (root of the stockmagic repo, covers both repos).
 - **Diagrams:** `docs/diagrams/*.png` (+ Mermaid sources) — framework architecture, daily-automation DAG, signal stack, regime-selected forecasting pipeline; `render_mermaid.py` re-renders them.
 
@@ -70,10 +70,10 @@ python forecast_granite.py forecast --index portfolio --from-first-trade --horiz
 
 **Full daily refresh (recommended):** run the master orchestrator, or trigger it from the dashboard
 ```bash
-python run_daily_automation.py   # 26 jobs: hmm → rebalance → preferred → inclusion → stress → crisis → factor_rot → risk_enrich → rolling → rolling_corr → tail_hedge → allpairs → fund_snap → screen_bt → dupont → growth → peer → earnings → pairs → cross → aggregate → technical → econ_cal → est_rev → shadow → export
+python run_daily_automation.py   # 32 jobs: hmm → rebalance → preferred → inclusion → stress → crisis → factor_rot → risk_enrich → rolling → rolling_corr → tail_hedge → allpairs → fund_snap → screen_bt → dupont → growth → peer → earnings → pairs → cross → aggregate → technical → econ_cal → est_rev → shadow → taleb_tail → taleb_gap → taleb_ergodic → taleb_fragility → taleb_barbell → taleb_optionality → export
 # or from the dashboard Ops tab: analytics_service POST /run/all-daily
 ```
-Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, export`).
+Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_barbell, taleb_optionality, export`).
 
 **Refresh just the data:**
 ```bash
@@ -143,8 +143,9 @@ Backfilled rows are stamped `source='yfinance'`. We do NOT synthesize history
 | **Valuation** | P/B, MktCap/Assets, EV/EBITDA, value trifecta inclusion screen |
 | **Sectors** | Correlation matrices, rolling/stability, HMM regimes, Granger, Kalman |
 | **Signals** | Preferred/peer/cross/pairs/earnings families → **OOS-IC-weighted aggregator** + GradientBoosting blend; technical (RSI/MACD/Bollinger), options skew & put/call, estimate revisions, 8-K filings sentiment |
-| **Forecasting** | Granite TTM (or statistical fallback), multivariate, exogenous, sector EW, **regime-selected models** (pass5/6/7), MC-dropout uncertainty bands, per-span direction accuracy (H+10..96) |
+| **Forecasting** | Granite TTM (or statistical fallback), multivariate, exogenous, sector EW, **regime-selected models** (pass5/6/7/8), **Student-t MC-dropout uncertainty** (`forecast_nu`), **dials of doubt** (`--epistemic-error`), per-span direction accuracy (H+10..96) |
 | **Anomalies** | TSPulse-ready + statistical z-score / dispersion shocks |
+| **Taleb layer** | Fat-tail index (`tail_index`), gap risk (`gap_risk`), fragility veto (`fragility_screen`), ergodicity/ruin (`ergodicity_ruin`), barbell check (`barbell_check`), **hidden-optionality audit** (`hidden_optionality_audit` — decision flip rates); soft-stress posterior + noise-convolved decisions in `buy_candidates` |
 | **Fisher indexes** | Chained Laspeyres / Paasche / Fisher P&Q + √(Fp×Fq) nominal |
 | **Costs & execution** | Cost model (10bps + borrow) in backtests; **shadow book** paper-trading with FIFO lots + kill switches; perf metrics (Sharpe/Sortino/Calmar/capacity) |
 | **Dashboard** | Decision memos, SQL Lab, CSV catalog, Chart.js, DuckDB-Wasm Fisher, Sprint Engines tab |
@@ -230,10 +231,19 @@ Detailed usage for each module:
 - [docs/pass5.md](docs/pass5.md) — Granite-TTM as direction forecaster (honest OOS)
 - [docs/pass5_sweep.md](docs/pass5_sweep.md) — 648-experiment training-parameter sweep
 - [docs/regime_forecast.md](docs/regime_forecast.md) — regime-conditioned direction accuracy
-- [docs/pass6.md](docs/pass6.md) — per-regime models, per-regime parameters
+- [docs/pass6.md](docs/pass6.md) — per-regime models, per-regime parameters (`--head-only`, `--exog`, `--rpt`)
 - [docs/pass7.md](docs/pass7.md) — experiment-design matrix (boundary/composition/lr/freshness)
+- [docs/pass8.md](docs/pass8.md) — own RPT-pre-trained base (`num_patches=9`, daily `freq_token=8`) + fine-tunes from it
 - [docs/regime_serving.md](docs/regime_serving.md) — serving regime checkpoints in production
 - [docs/regime_calibrate.md](docs/regime_calibrate.md) — MC-dropout band calibration + coverage training
+
+### Taleb / fat tails
+- [docs/tail_index.md](docs/tail_index.md) — tail index / fragility metrics
+- [docs/gap_risk.md](docs/gap_risk.md) — gap risk screen
+- [docs/fragility_screen.md](docs/fragility_screen.md) — fragility veto (feeds buy_candidates)
+- [docs/ergodicity_ruin.md](docs/ergodicity_ruin.md) — ergodicity / ruin probability
+- [docs/barbell_check.md](docs/barbell_check.md) — barbell portfolio check
+- [docs/hidden_optionality_audit.md](docs/hidden_optionality_audit.md) — decision-flip audit (American-options method); drove the soft-stress + noise-convolved decision fixes
 
 ### Fisher indexes
 - [docs/run_fisher_duckdb.md](docs/run_fisher_duckdb.md) — **DuckDB chained Fisher (preferred)**
@@ -313,13 +323,16 @@ python ttm_features.py --index portfolio --save
 python ttm_exogenous.py --save
 python forecast_granite.py forecast --index portfolio --from-first-trade --multivariate --exog --horizon 10
 python forecast_granite.py forecast --index sectors --horizon 10
-# uncertainty band + regime-selected serving:
+# uncertainty band (Student-t predictive) + regime-selected serving:
 python forecast_granite.py forecast --index portfolio --horizon 10 --uncertainty
+# Forecasting-Paradox dial of doubt: treat the vol estimate as a 50/50
+# sigma*(1±EPS) mixture (widens the band by the scale-mixture factor):
+python forecast_granite.py forecast --index portfolio --horizon 10 --uncertainty --epistemic-error 0.10
 ```
 
 Without model weights, scripts use a statistical drift/seasonal **fallback** so the pipeline still runs offline.
 
-**Regime-selected forecasting (pass5 → pass7 → serving):** research validates Granite-TTM as a *direction* forecaster against per-regime persistence baselines (honest OOS, temporally disjoint). `pass6.py` fine-tunes one model per HMM regime and picks the best config per (ticker, regime) by max OOS direction excess (`regime_model_best.csv`); `pass7.py` runs the experiment-design matrix (boundary / composition / lr / freshness arms) to confirm the findings are robust. `regime_serving.py` serves the current regime's checkpoint in `forecast_granite.py` as an **ensemble** (0.5 general + 0.5 regime), with per-span direction accuracy (`regime_dir_h10..h96`), MC-dropout std bands (`--uncertainty`), checkpoint staleness flags, and a calibration check (`regime_calibrate.py`). See [docs/pass5.md](docs/pass5.md), [docs/pass6.md](docs/pass6.md), [docs/pass7.md](docs/pass7.md), [docs/regime_serving.md](docs/regime_serving.md).
+**Regime-selected forecasting (pass5 → pass8 → serving):** research validates Granite-TTM as a *direction* forecaster against per-regime persistence baselines (honest OOS, temporally disjoint). `pass6.py` fine-tunes one model per HMM regime and picks the best config per (ticker, regime) by max OOS direction excess (`regime_model_best.csv`); `--head-only` freezes the backbone (TTM-paper mode), `--exog` adds the calendar-event channel, `--rpt` probes the base for RPT compatibility (degrades truthfully when absent). `pass7.py` runs the experiment-design matrix (boundary / composition / lr / freshness arms); `pass8.py` pre-trains our OWN RPT-enabled base (`num_patches=9`, daily `freq_token=8`) and fine-tunes regime models from it. `regime_serving.py` serves the current regime's checkpoint in `forecast_granite.py` as an **ensemble** (0.5 general + 0.5 regime), with per-span direction accuracy (`regime_dir_h10..h96`), **Student-t MC-dropout std bands** (`--uncertainty` → `forecast_nu` from sample kurtosis — the Forecasting-Paradox scale-mixture result), checkpoint staleness flags, and a calibration check (`regime_calibrate.py`). See [docs/pass5.md](docs/pass5.md), [docs/pass6.md](docs/pass6.md), [docs/pass7.md](docs/pass7.md), [docs/pass8.md](docs/pass8.md), [docs/regime_serving.md](docs/regime_serving.md).
 
 ---
 
@@ -364,6 +377,7 @@ python -m ttm_backfill cmp-adj-unadj --tickers AEP,NVR,FICO --steps 150
 - **CSV Catalog** — SQL reproducing each analysis CSV  
 - **Fisher Indexes** — DuckDB-Wasm port of `run_fisher_duckdb.py` + Chart.js  
 - **Sprint Engines** — inline tab rendering pair/cross/aggregator/earnings views (live via DuckDB)
+- **Fragility** — tail index, gap risk, ergodicity/ruin, fragility screen, barbell check, **hidden-optionality audit** (live via DuckDB)
 
 See [docs/dashboard.md](docs/dashboard.md).
 

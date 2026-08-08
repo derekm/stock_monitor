@@ -62,6 +62,10 @@ def load_regime_selection() -> tuple[str | None, dict[str, dict]]:
                     "excess": float(r.get("dir_acc", 0) - r.get("pers_dir", 50))
                               if pd.notna(r.get("dir_acc")) and pd.notna(r.get("pers_dir")) else None,
                 }
+                for s in (10, 21, 42, 63, 96):
+                    col = f"dir_acc_h{s}"
+                    if col in rb.columns and pd.notna(r.get(col)):
+                        sel[tk][f"dir_acc_h{s}"] = float(r[col])
         except Exception:
             pass
     return regime_now, sel
@@ -179,6 +183,10 @@ def main():
                 lambda t: selection[t]["dir_acc"] if t in selection else None)
             tail["regime_model_excess"] = tail["ticker"].map(
                 lambda t: selection[t]["excess"] if t in selection else None)
+            for s in (10, 21, 42, 63, 96):
+                col = f"regime_model_dir_h{s}"
+                tail[col] = tail["ticker"].map(
+                    lambda t, s=s: selection[t].get(f"dir_acc_h{s}") if t in selection else None)
             n_sel = tail["regime_model_dir"].notna().sum()
             print(f"Regime-selected models (pass6): {n_sel} tickers have a {regime_now} "
                   f"model; mean OOS dir {tail['regime_model_dir'].mean():.1f}% "

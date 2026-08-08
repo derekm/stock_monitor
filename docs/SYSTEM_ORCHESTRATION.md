@@ -30,7 +30,8 @@ flowchart TB
     RISK["Risk: portfolio_optimization / risk_parity / robust_cov / vol_target / kelly"]
     IDX["Indexes: build_* → fisher_index / run_fisher_duckdb"]
     SIG["Signals: peer/pairs/cross/earnings + technical/options/revisions/sentiment → signal_aggregator (+ signal_model GBM)"]
-    FC["Forecast: ttm_features+ttm_exogenous → ttm_backfill → granite_daily → pass5/6/7 research → regime_serving → forecast_granite → analyze_granite_forecasts"]
+    FC["Forecast: ttm_features+ttm_exogenous → ttm_backfill → granite_daily → pass5/6/7/8 research → regime_serving → forecast_granite → analyze_granite_forecasts"]
+    TALEb["Taleb: tail_index → ergodicity_ruin; gap_risk + tail → fragility_screen → barbell_check; aggregate → hidden_optionality_audit"]
     EXEC["Execution: cost_model → pair/cross backtests; shadow_book (FIFO + kill switches); perf_metrics"]
   end
 
@@ -52,7 +53,7 @@ flowchart TB
   GS --> WEB
   AS --> WEB
   WEB --> BROWSER
-  RUN["run_daily_automation.py (master orchestrator, 26 jobs)"] --> LOOPS
+  RUN["run_daily_automation.py (master orchestrator, 32 jobs)"] --> LOOPS
 ```
 
 > Two equivalent entry points drive the analytics loops: `run_daily_automation.py`
@@ -97,7 +98,8 @@ Almost every program reads from a small set of canonical parquet/CSV tables in `
    regimes:   hmm_regime_detection → regime_correlation_breakdown / regime_aware_constraints / kalman_state_estimates
    corr:      allpairs_correlations / crisis_correlation / cross_asset_analysis / rolling_*
    signals:   peer_analytics / pair_engine / cross_section / earnings_catalyst → signal_aggregator (+ signal_model)
-   forecasts: ttm_features + ttm_exogenous → granite_backfill/ttm_backfill (pretrain) → granite_daily → pass6/7 (regime models) → regime_serving → forecast_granite
+   forecasts: ttm_features + ttm_exogenous → granite_backfill/ttm_backfill (pretrain) → granite_daily → pass6/7/8 (regime models) → regime_serving → forecast_granite
+   taleb:     tail_index → ergodicity_ruin · gap_risk + tail_index → fragility_screen → barbell_check · aggregate + preferred → hidden_optionality_audit
    execution: cost_model (in pair/cross) · shadow_book (paper) · perf_metrics
               └────────────────────────────────────────────────────────────────────┘
 
@@ -106,7 +108,7 @@ Almost every program reads from a small set of canonical parquet/CSV tables in `
               └─────────────────────────────────────┘
 ```
 
-`run_daily_automation.py` is the master orchestrator — 26 jobs in dependency waves (hmm → rebalance; preferred → inclusion/stress/risk_enrich/rolling/rolling_corr/allpairs/screen_bt/dupont/growth/peer; growth+peer → earnings → pairs → cross → aggregate → technical; econ_cal/est_rev independent; shadow after preferred+aggregate; export last). Use it instead of calling steps by hand.
+`run_daily_automation.py` is the master orchestrator — 32 jobs in dependency waves (hmm → rebalance; preferred → inclusion/stress/risk_enrich/rolling/rolling_corr/allpairs/screen_bt/dupont/growth/peer/taleb_tail/taleb_gap; growth+peer → earnings → pairs → cross → aggregate → technical → taleb_optionality; taleb_tail → taleb_ergodic → taleb_fragility (with taleb_gap) → taleb_barbell; econ_cal/est_rev independent; shadow after preferred+aggregate; export last). Use it instead of calling steps by hand.
 
 ## 3. Services (started by `start_dashboard.sh`)
 
@@ -135,8 +137,8 @@ Forecasts are the most stateful part. Order matters:
 1. **Build panels**: `ttm_features.py` (multivariate panels from `daily_prices`) + `ttm_exogenous.py` (market/sector/dispersion channels → `exogenous_panel.parquet`).
 2. **Pre-train** history once (or when data grows): `ttm_backfill.py` / `granite_backfill.py` (thin shim) / `train_adjusted_full.py` (adj-close config) produce global adjusted checkpoints under `checkpoints/`. `window_padding.py` pads sub-512-day tickers with a rescaled market proxy so the fixed 512-token TTM context is valid.
 3. **Daily**: `granite_daily.py` runs the 512→96-day model with continual retraining on prior-day actuals (caching series in `granite_series_cache.parquet`); `forecast_granite.py` produces `forecasts_granite.csv/.parquet` used by `granite_service.py`.
-4. **Regime-selected research**: `pass5.py`/`pass5_sweep.py` establish direction beats persistence (honest OOS, temporally disjoint); `pass6.py` fine-tunes one model per HMM regime and selects the best config per (ticker, regime) into `regime_model_best.csv` (per-span direction `dir_acc_h10..h96`); `pass7.py` runs the experiment-design matrix (boundary/composition/lr/freshness) confirming robustness. Run manually on GPU; checkpoints land in `checkpoints/regime/` via `pass6.py --ckpt-dir`.
-5. **Serving**: `regime_serving.py` reads the current HMM regime + `regime_model_best.csv` and returns the matching checkpoint; `forecast_granite.py` **ensembles** it (0.5 general + 0.5 regime) when available, and can emit MC-dropout std bands (`--uncertainty`), per-span direction (`regime_dir_h10..h96`), and staleness flags. `regime_calibrate.py` checks the band's z=1 coverage (68% = honest) and batch-trains uncovered tickers (`--train`).
+4. **Regime-selected research**: `pass5.py`/`pass5_sweep.py` establish direction beats persistence (honest OOS, temporally disjoint); `pass6.py` fine-tunes one model per HMM regime and selects the best config per (ticker, regime) into `regime_model_best.csv` (per-span direction `dir_acc_h10..h96`; `--head-only` freezes the backbone per the TTM paper, `--exog` adds a calendar-event channel, `--rpt` probes RPT compatibility and degrades truthfully); `pass7.py` runs the experiment-design matrix (boundary/composition/lr/freshness) confirming robustness; `pass8.py` pre-trains our OWN RPT-enabled base (`num_patches=9`, `freq_token=8` daily) and fine-tunes from it. Run manually on GPU; checkpoints land in `checkpoints/regime/` via `pass6.py --ckpt-dir`.
+5. **Serving**: `regime_serving.py` reads the current HMM regime + `regime_model_best.csv` and returns the matching checkpoint; `forecast_granite.py` **ensembles** it (0.5 general + 0.5 regime) when available, and can emit MC-dropout std bands (`--uncertainty`) as a **Student-t predictive** (`forecast_nu` from sample kurtosis — the Forecasting-Paradox scale-mixture result), an optional **dial of doubt** (`--epistemic-error EPS` widens the band by the 50/50 σ(1±EPS) mixture), per-span direction (`regime_dir_h10..h96`), and staleness flags. `regime_calibrate.py` checks the band's z=1 coverage (68% = honest) and batch-trains uncovered tickers (`--train`).
 6. **Score**: `analyze_granite_forecasts.py` backtests the forecasts (writes `forecast_backtest_metrics.csv/.parquet`), annotates `signal_gated` BULL*/BEAR* against per-regime persistence baselines, and reports the regime-selected model's expected edge; `forecast_reliability.py` ranks setups on the actual holdings; `research_hygiene.py` reports reliability.
 7. **Anomalies**: `tspulse_anomaly.py` scans for outliers.
 
@@ -150,11 +152,12 @@ Independent reimplementation of S&P 500 inclusion/exclusion, scored against actu
 
 ## 6. What an agent should know before "running analytics"
 
-- Always start from `run_daily_automation.py` (or the dashboard's `analytics_service` → `/run/all-daily`), not individual scripts. Valid job names (26): `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, export`.
+- Always start from `run_daily_automation.py` (or the dashboard's `analytics_service` → `/run/all-daily`), not individual scripts. Valid job names (32): `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_barbell, taleb_optionality, export`.
 - Data must be fresh: if `daily_prices.parquet` is stale, run `update_prices.py --fetch --days N` first.
 - The dashboard reads `dashboard_data/data.json`; if tables look empty, re-run `export_dashboard_data.py`. The dashboard exposes 198 resources (catalog in `data_catalog.json`).
 - Don't hand-edit the base parquet tables; use the dedicated writer scripts (`manage_stocks`, `update_fundamentals`, `update_prices`).
 - Forecasts need pretrained checkpoints; if `forecasts_granite.parquet` is missing, run `granite_backfill.py`/`ttm_backfill.py` then `granite_daily.py`.
 - Regime-selected serving is a GPU research path: `pass6.py --ckpt-dir checkpoints/regime` retrains the per-regime models; `regime_serving.py` (no args) prints the serving plan. Tickers without coverage keep the general model — that is the intended degradation.
 - Signal aggregation runs inside the daily DAG (`aggregate` job); `signal_aggregator.py --save` re-runs it alone. The composite feeds `buy_candidates.py` and `shadow_book.py`.
+- `buy_candidates.py` decisions are **noise-robust**: the stress haircut reads the HMM posterior `p(stress)` (soft stress — `regime_stress_prob()`), and every numeric driver's contribution is the noise-convolved expectation `E[g(x+ε)]` (`_step_expectation` + the `*STEPS` configs, widths from `_est_error`). `hidden_optionality_audit.py` re-measures decision flip rates daily (the `taleb_optionality` job); if a driver's flip rate climbs, stochasticize it before trusting the decisions.
 - Full program catalog with cross-links: see each `docs/<script>.md` and [SCHEMAS.md](SCHEMAS.md).

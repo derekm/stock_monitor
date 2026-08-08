@@ -3,7 +3,10 @@
 
 Rules (defaults):
   - Monthly: last trading day of month (from daily_prices calendar)
-  - Skip / reduce if current regime is high_vol_stress (optional half-band)
+  - Soft stress band: turnover_band = 1 - 0.5·p(stress) from the HMM
+    posterior — p≈1 (certain stress) gives the half band, p≈0 full
+    rebalance, in between proportional to regime belief (no hard cliff;
+    see hidden_optionality_audit)
   - Accelerate (mid-month) if dual-pass set churns heavily
 
 Usage:
@@ -65,6 +68,41 @@ def latest_regime_on(date) -> str:
         return "unknown"
 
 
+def stress_prob_on(date) -> float:
+    """Soft stress belief on a given date: posterior p(stress) from the HMM.
+
+    The rebalance calendar used the hard regime label ('stress' in label →
+    half turnover band). The hidden-optionality audit showed that hard cliff
+    flips 28.4% of decisions on a small label perturbation — so the band now
+    scales continuously with the posterior: band = 1 - 0.5·p(stress).
+    p=1 behaves like the old stress band; p=0 is a full rebalance; in
+    between the turnover is proportional to regime belief.
+    """
+    if not HMM.exists():
+        return 0.0
+    try:
+        h = pd.read_csv(HMM)
+        if "date" not in h.columns:
+            return 0.0
+        h["date"] = pd.to_datetime(h["date"])
+        h = h[h["date"] <= pd.Timestamp(date)]
+        if h.empty:
+            return 0.0
+        last = h.iloc[-1]
+        for c in h.columns:
+            if c.startswith("p_state_"):
+                i = int(c.split("_")[-1])
+                for rc in ("regime", "label"):
+                    if rc not in h.columns:
+                        continue
+                    mask = h.get("state_id") == i
+                    if mask.any() and "stress" in str(h.loc[mask, rc].iloc[0]).lower():
+                        return float(np.clip(last.get(c, 0.0), 0.0, 1.0))
+        return 0.0
+    except Exception:
+        return 0.0
+
+
 def dual_core_tickers() -> set[str]:
     if not PREF.exists():
         return set()
@@ -81,16 +119,25 @@ def build(months: int = 12) -> pd.DataFrame:
     rows = []
     for d in ends:
         regime = latest_regime_on(d)
+        p = stress_prob_on(d)
+        # soft band: 1.0 - 0.5·p(stress) — p=1 (certain stress) → 0.5 band
+        # (matches the old hard rule), p=0 → full rebalance, in between the
+        # turnover is proportional to regime belief (no hard cliff).
         action = "full_rebalance"
         band = 1.0
         note = "month-end"
-        if "stress" in regime.lower() or regime == "high_vol_stress":
+        if p >= 0.99:
             action = "reduced_rebalance"
             band = 0.5
-            note = "high_vol_stress → half turnover band"
+            note = "high_vol_stress (p≈1) → half turnover band"
+        elif p >= 0.01:
+            action = "partial_rebalance"
+            band = round(1.0 - 0.5 * p, 3)
+            note = f"soft stress p={p:.2f} → turnover band {band:.2f}"
         rows.append({
             "rebalance_date": pd.Timestamp(d).date().isoformat(),
             "regime": regime,
+            "stress_prob": round(p, 4),
             "action": action,
             "turnover_band": band,
             "n_dual_core": len(core),
