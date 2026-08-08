@@ -16,7 +16,7 @@ Read **[docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)** for a holistic summa
 - **[docs/SYSTEM_ORCHESTRATION.md](docs/SYSTEM_ORCHESTRATION.md)** — how the programs chain (data spine → analytics → services), what `start_dashboard.sh` launches, and what an agent should know before running analytics.
 - **[docs/SCHEMAS.md](docs/SCHEMAS.md)** — the single catalog of every output file → producing script → schema family.
 - **Per-program docs:** `docs/<script>.md` for all 123 scripts (description, rationale, outputs, cross-links).
-- **[GLOSSARY.md](../GLOSSARY.md)** — cross-repo acronym dictionary (root of the stockmagic repo, covers both repos).
+- **[GLOSSARY.md](https://github.com/derekm/stockmagic/blob/master/GLOSSARY.md)** — cross-repo acronym dictionary (root of the stockmagic repo, covers both repos).
 - **Diagrams:** `docs/diagrams/*.png` (+ Mermaid sources) — framework architecture, daily-automation DAG, signal stack, regime-selected forecasting pipeline; `render_mermaid.py` re-renders them.
 
 **Documentation architecture (read in this order):**
