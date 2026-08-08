@@ -385,15 +385,23 @@ def forecast_ttm_univariate(model, kind: str, y: np.ndarray, horizon: int, conte
 
 
 def forecast_ttm_mc_dropout(model, kind: str, y: np.ndarray, horizon: int,
-                            context: int = 512, samples: int = 8) -> tuple[np.ndarray, np.ndarray]:
-    """MC-dropout forecast: (mean, std) over `samples` stochastic forwards.
+                            context: int = 512, samples: int = 8) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    """MC-dropout forecast: (mean, std, nu) over `samples` stochastic forwards.
 
     Turns on dropout at inference and runs the forward pass repeatedly —
     a cheap, model-agnostic uncertainty estimate (no distribution head
     required). std = None when the model can't be sampled (fallback).
+
+    nu (Student-t degrees of freedom): the Forecasting Paradox result
+    (Taleb-Cirillo 2025, §5) — a Gaussian with an uncertain scale is a scale
+    mixture, and mixing a Normal with a Gamma prior on precision yields a
+    Student-t. The MC-dropout sample spread IS the empirical scale mixture:
+    we estimate nu from the excess kurtosis of the sample distribution
+    (kurt_t = 6/(nu-4)), so the reported uncertainty is honest about the
+    vol-of-vol that a point std hides. nu is None for fallback.
     """
     if model is None or kind == "fallback":
-        return forecast_fallback(y, horizon), None
+        return forecast_fallback(y, horizon), None, None
     import torch
 
     y = np.asarray(y, dtype=np.float32)
@@ -424,10 +432,20 @@ def forecast_ttm_mc_dropout(model, kind: str, y: np.ndarray, horizon: int,
         P = np.stack(preds)
         mean = P.mean(0).astype(float)
         std = P.std(0).astype(float)
-        return mean, std
+        # Student-t dof from sample excess kurtosis of the MC distribution:
+        # excess_kurt_t = 6/(nu-4)  =>  nu = 4 + 6/excess_kurt (nu>=4).
+        # Clamp [4, 30]; nu->30 behaves like Gaussian (the no-uncertainty limit).
+        nu = None
+        if samples >= 4 and std.max() > 0:
+            kurt = float(pd.Series(P.flatten()).kurtosis())
+            if kurt > 0:
+                nu = float(np.clip(4 + 6.0 / kurt, 4.0, 30.0))
+            else:
+                nu = 30.0  # platykurtic sample: treat as near-Gaussian
+        return mean, std, nu
     except Exception as e:
         print(f"  MC-dropout failed ({e}); point forecast only.")
-        return forecast_ttm_univariate(model, kind, y, horizon, context=context), None
+        return forecast_ttm_univariate(model, kind, y, horizon, context=context), None, None
 
 
 def rolling_iterative_forecast(model, kind: str, y: np.ndarray, horizon: int, step: int = 8, context: int = 512) -> np.ndarray:
@@ -690,8 +708,9 @@ def cmd_forecast(args):
             pred = rolling_iterative_forecast(model, kind, y_in, horizon, step=min(8, horizon), context=context)
         else:
             use_mc = getattr(args, "uncertainty", False)
+            pred_nu = None
             if use_mc and kind != "fallback":
-                pred, pred_std = forecast_ttm_mc_dropout(model, kind, y_in, horizon, context=context)
+                pred, pred_std, pred_nu = forecast_ttm_mc_dropout(model, kind, y_in, horizon, context=context)
             else:
                 pred = forecast_ttm_univariate(model, kind, y_in, horizon, context=context)
                 pred_std = None
@@ -715,6 +734,23 @@ def cmd_forecast(args):
             pred = np.exp(pred)
             if "pred_std" in dir() and pred_std is not None:
                 pred_std = pred_std * pred  # log-normal approx: std scales with exp(mean)
+
+        # Forecasting Paradox dial of doubt (Taleb-Cirillo 2025 §7.1): the vol
+        # estimate is itself uncertain. Model it as a 50/50 mixture of
+        # sigma*(1±EPS) — variance scales by (1+EPS^2), so std by sqrt(1+EPS^2).
+        # This is NOT a flat haircut: it is the scale-mixture that the paper
+        # proves fattens the predictive tail (and with --uncertainty the
+        # Student-t dof already carries the empirical vol-of-vol).
+        eps = getattr(args, "epistemic_error", None)
+        if eps and "pred_std" in dir() and pred_std is not None:
+            mix = float(np.sqrt(1.0 + eps * eps))
+            pred_std = pred_std * mix
+            if "pred_nu" in dir() and pred_nu is not None:
+                # scale mixture also thins the dof: excess kurt of the 50/50
+                # mixture is 3*eps^4/(1+eps^2)^2 (approx), so nu = 4 + 6/kurt
+                kurt_mix = 3.0 * eps ** 4 / (1.0 + eps * eps) ** 2
+                if kurt_mix > 0:
+                    pred_nu = float(np.clip(4 + 6.0 / kurt_mix, 4.0, pred_nu if pred_nu else 30.0))
 
         last_date = hist_index[-1]
         last_price = float(y[-1])
@@ -743,6 +779,7 @@ def cmd_forecast(args):
                 "forecast_date": dt,
                 "forecast_close": round(float(p), 4),
                 "forecast_std": round(float(pred_std[h - 1]), 4) if "pred_std" in dir() and pred_std is not None and h - 1 < len(pred_std) else None,
+                "forecast_nu": round(float(pred_nu), 2) if "pred_nu" in dir() and pred_nu is not None else None,
                 "last_close": last_price,
                 "pct_change": round(chg, 3),
                 "model": args.model if kind != "fallback" else "statistical_fallback",
@@ -927,6 +964,13 @@ def main():
                    help="Disable regime-selected model serving (default: ON when checkpoints exist)")
     p.add_argument("--uncertainty", action="store_true",
                    help="Emit MC-dropout std band (forecast_std column) on forecasts")
+    p.add_argument("--epistemic-error", type=float, default=None, metavar="EPS",
+                   help="Forecasting Paradox dial of doubt: treat the vol estimate as a "
+                        "50/50 mixture of sigma*(1±EPS) (Taleb-Cirillo 2025 §7.1) and emit "
+                        "the fatter-tailed predictive std (forecast_std widened by the scale "
+                        "mixture; Student-t dof from the MC sample kurtosis when "
+                        "--uncertainty is on). A 10%% epistemic error raises the 99%% VaR "
+                        "by ~6.5bp per $1B — the quantifiable cost of ignoring it.")
     p.set_defaults(func=cmd_forecast)
 
     p = sub.add_parser("backtest")

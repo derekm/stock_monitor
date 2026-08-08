@@ -128,6 +128,7 @@ TABLES = [
     "portfolio_ergodic",
     "fragility_screen",
     "barbell_check",
+    "hidden_optionality",
 ]
 
 

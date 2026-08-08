@@ -552,6 +552,18 @@
       <h3>Worst gap events</h3>
       <div class="scroll"><table id="tbl-gap-events"><thead></thead><tbody></tbody></table></div>
     </div>
+    <div class="card">
+      <h3>Hidden optionality audit — which point estimates ride on noise?</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        The American-options lesson: every quantity we treat as deterministic while it is
+        stochastic contains unpriced convexity. This audit perturbs each decision driver
+        (momentum, factor composite, aggregate composite, the HMM regime label) by its own
+        estimation error and measures the decision flip rate — the probability our
+        BUY/ACCUMULATE/WATCH/AVOID verdict is riding on noise. High flip rate = high
+        hidden optionality = stochasticize before trusting.
+      </p>
+      <div class="scroll"><table id="tbl-optionality"><thead></thead><tbody></tbody></table></div>
+    </div>
   </section>
 
   <!-- INDEXES -->
@@ -4536,7 +4548,7 @@ async function renderFragility() {
   const status = document.querySelector("#fragility-status");
   if (status) status.textContent = "Querying DuckDB…";
   try {
-    const [frag, tail, portTail, ergodic, barbell, dep, gap, gapEvents] = await Promise.all([
+    const [frag, tail, portTail, ergodic, barbell, dep, gap, gapEvents, optionality] = await Promise.all([
       liveTable("fragility_screen"),
       liveTable("tail_index"),
       liveTable("portfolio_tail"),
@@ -4545,6 +4557,7 @@ async function renderFragility() {
       liveTable("tail_dependence"),
       liveTable("gap_risk"),
       liveTable("gap_events"),
+      liveTable("hidden_optionality"),
     ]);
     const fragSorted = (frag || []).slice().sort((a, b) => (+b.fragility_score || 0) - (+a.fragility_score || 0));
     fillSimple("#tbl-fragility", fragSorted, FRAGILITY_COLS);
@@ -4558,6 +4571,7 @@ async function renderFragility() {
     const gapSorted = (gap || []).slice().sort((a, b) => (+b.gap_share_of_var || 0) - (+a.gap_share_of_var || 0));
     fillSimple("#tbl-gap", gapSorted, GAP_COLS);
     fillSimple("#tbl-gap-events", gapEvents, null);
+    fillSimple("#tbl-optionality", optionality, null);
     if (status) status.textContent = `Updated from DuckDB · ${(frag||[]).length + (tail||[]).length + (gap||[]).length} rows`;
   } catch (e) {
     if (status) status.textContent = e.message || String(e);

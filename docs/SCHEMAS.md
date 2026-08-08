@@ -443,3 +443,4 @@ auxiliary tables feeding several stages.
 | `portfolio_ergodic.csv` | `ergodicity_ruin.py` | Taleb / fat tails |
 | `fragility_screen.csv` | `fragility_screen.py` | Taleb / fat tails |
 | `barbell_check.csv` | `barbell_check.py` | Taleb / fat tails |
+| `hidden_optionality.csv` | `hidden_optionality_audit.py` | Taleb / fat tails |
