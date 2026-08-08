@@ -52,6 +52,7 @@ from ttm_features import (  # noqa: E402
     load_ohlcv,
 )
 from ttm_exogenous import build_exog_panel, merge_exog  # noqa: E402
+from regime_serving import serve_regime_model, current_regime  # noqa: E402
 
 def load_ohlcv_with_sectors(tickers: list[str] | None = None) -> pd.DataFrame:
     """Combine stock daily_prices with sector_prices for SECT_* tickers."""
@@ -127,7 +128,7 @@ def sector_slugs() -> list[str]:
     return []
 
 
-from cli_common import add_index_args, add_ticker_args, resolve_tickers_from_args, ticker_index_map_from_args
+from cli_common import add_index_args, add_ticker_args, add_sector_arg, resolve_tickers_from_args, ticker_index_map_from_args
 from index_registry import (  # noqa: E402
     available_indexes,
     parse_indexes,
@@ -298,6 +299,18 @@ def forecast_fallback(y: np.ndarray, horizon: int) -> np.ndarray:
     return np.asarray(out, dtype=float)
 
 
+def _channels_from_series(w) -> np.ndarray:
+    """(close, pct_return, realized_vol20) — must match pass6._channels_from_close."""
+    c = np.asarray(w, dtype=np.float32)
+    r = np.zeros_like(c)
+    r[1:] = np.diff(c) / np.clip(c[:-1], 1e-9, None)
+    v = np.zeros_like(c)
+    for i in range(len(c)):
+        lo = max(0, i - 19)
+        v[i] = np.std(r[lo:i + 1]) if i > lo else 0.0
+    return np.stack([c, r, v], axis=-1)
+
+
 def forecast_ttm_univariate(model, kind: str, y: np.ndarray, horizon: int, context: int = 512) -> np.ndarray:
     if model is None or kind == "fallback":
         return forecast_fallback(y, horizon)
@@ -323,6 +336,50 @@ def forecast_ttm_univariate(model, kind: str, y: np.ndarray, horizon: int, conte
     except Exception as e:
         print(f"  TTM forward failed ({e}); fallback.")
     return forecast_fallback(y, horizon)
+
+
+def forecast_ttm_mc_dropout(model, kind: str, y: np.ndarray, horizon: int,
+                            context: int = 512, samples: int = 8) -> tuple[np.ndarray, np.ndarray]:
+    """MC-dropout forecast: (mean, std) over `samples` stochastic forwards.
+
+    Turns on dropout at inference and runs the forward pass repeatedly —
+    a cheap, model-agnostic uncertainty estimate (no distribution head
+    required). std = None when the model can't be sampled (fallback).
+    """
+    if model is None or kind == "fallback":
+        return forecast_fallback(y, horizon), None
+    import torch
+
+    y = np.asarray(y, dtype=np.float32)
+    hist = y[-min(context, len(y)):]
+    try:
+        x = torch.tensor(hist).view(1, -1, 1)
+        # enable dropout stochasticity for the forward passes
+        train_state = model.training
+        model.eval()
+        for m in model.modules():
+            if isinstance(m, torch.nn.Dropout):
+                m.train()
+        preds = []
+        with torch.no_grad():
+            for _ in range(samples):
+                out = model(past_values=x) if "past_values" in model.forward.__code__.co_varnames else model(x)
+                if hasattr(out, "prediction_outputs"):
+                    p = out.prediction_outputs
+                elif isinstance(out, torch.Tensor):
+                    p = out
+                else:
+                    p = out[0]
+                p = p.detach().cpu().numpy().reshape(-1)
+                preds.append(p[:horizon])
+        model.train(train_state)
+        P = np.stack(preds)
+        mean = P.mean(0).astype(float)
+        std = P.std(0).astype(float)
+        return mean, std
+    except Exception as e:
+        print(f"  MC-dropout failed ({e}); point forecast only.")
+        return forecast_ttm_univariate(model, kind, y, horizon, context=context), None
 
 
 def rolling_iterative_forecast(model, kind: str, y: np.ndarray, horizon: int, step: int = 8, context: int = 512) -> np.ndarray:
@@ -441,7 +498,45 @@ def cmd_forecast(args):
         peer_panel = build_multivariate_bundle(tickers, mode="close_only")
         print(f"Multivariate peer panel: {peer_panel.shape}")
 
+    # Regime-selected serving: plan which tickers have a pass6 checkpoint for
+    # the current regime. Those get their regime model swapped in; the rest
+    # keep the general model (honest degradation — regime selection is an
+    # upgrade when available, never a downgrade).
+    regime_now = current_regime()
+    if getattr(args, "no_regime", False):
+        serving_plan = {t: (None, None, "disabled") for t in tickers}
+    else:
+        serving_plan = {t: serve_regime_model(t) for t in tickers}
+    n_served = sum(1 for (_, _, reason) in serving_plan.values() if reason == "served")
+    n_cov = sum(1 for (_, _, reason) in serving_plan.values() if reason == "no_checkpoint")
+    if regime_now:
+        print(f"Regime serving: regime={regime_now}  served={n_served}  "
+              f"checkpoint-missing={n_cov}  no-coverage={len(tickers)-n_served-n_cov}")
+        stale = [(t, c.get("age_days")) for t, (p, c, r) in serving_plan.items()
+                 if r == "served" and c and (c.get("age_days") or 0) > 90]
+        if stale:
+            print(f"  WARNING: stale regime checkpoints (>90d): "
+                  f"{', '.join(f'{t} ({d}d)' for t, d in stale)} — retrain with pass6 --channels")
+
     for t in tickers:
+        # Regime-selected serving + ensemble: when a regime checkpoint exists,
+        # forecast with BOTH the general model and the regime model, then
+        # average (equal-weight ensemble). Without a checkpoint, use the
+        # general model alone.
+        ckpt_path, reg_cfg, reg_reason = serving_plan.get(t, (None, None, "no_coverage"))
+        regime_model = None
+        if ckpt_path is not None and model is not None and kind != "fallback":
+            try:
+                import copy as _copy
+                import torch as _torch
+                regime_model = _copy.deepcopy(model)
+                state = _torch.load(ckpt_path, map_location="cpu")
+                regime_model.load_state_dict(state["model"])
+                regime_model.eval()
+                regime_model = regime_model.to(next(model.parameters()).device)
+            except Exception as e:
+                print(f"  {t}: regime model load failed ({e}); general model")
+                regime_model = None
         # Resolve start: days-ago > first-trade > full history
         start = None
         try:
@@ -481,7 +576,10 @@ def cmd_forecast(args):
             prices = load_ohlcv_with_sectors([t])
             sub = prices[prices["ticker"] == t].set_index("date")["close"].sort_index().dropna()
             if start is not None:
-                sub2 = sub[sub.index >= start]
+                # index holds datetime.date values; normalize start to date
+                start_d = pd.Timestamp(start).date()
+                mask = [(d.date() if hasattr(d, "date") else d) >= start_d for d in sub.index]
+                sub2 = sub[mask]
                 if len(sub2) >= 10:
                     sub = sub2
                 else:
@@ -523,10 +621,28 @@ def cmd_forecast(args):
         elif use_rolling:
             pred = rolling_iterative_forecast(model, kind, y_in, horizon, step=min(8, horizon), context=context)
         else:
-            pred = forecast_ttm_univariate(model, kind, y_in, horizon, context=context)
+            use_mc = getattr(args, "uncertainty", False)
+            if use_mc and kind != "fallback":
+                pred, pred_std = forecast_ttm_mc_dropout(model, kind, y_in, horizon, context=context)
+            else:
+                pred = forecast_ttm_univariate(model, kind, y_in, horizon, context=context)
+                pred_std = None
+            # ensemble: average with the regime-selected model when available
+            if regime_model is not None and kind != "fallback":
+                n_ch = int(reg_cfg.get("n_channels", 1)) if reg_cfg else 1
+                if n_ch > 1:
+                    # build (close, return, vol20) channels for the regime model
+                    y3 = np.stack(_channels_from_series(y_in), axis=-1) if y_in.ndim == 1 else y_in
+                    pred_reg = forecast_ttm_univariate(regime_model, "regime", y3, horizon, context=context)
+                else:
+                    pred_reg = forecast_ttm_univariate(regime_model, "regime", y_in, horizon, context=context)
+                pred = 0.5 * pred + 0.5 * pred_reg
+                kind = "ensemble"
 
         if args.log:
             pred = np.exp(pred)
+            if "pred_std" in dir() and pred_std is not None:
+                pred_std = pred_std * pred  # log-normal approx: std scales with exp(mean)
 
         last_date = hist_index[-1]
         last_price = float(y[-1])
@@ -534,7 +650,7 @@ def cmd_forecast(args):
         since = (last_price / entry - 1) * 100
         future_idx = pd.bdate_range(last_date + pd.Timedelta(days=1), periods=horizon)
 
-        print(f"\n{t}  last={last_price:.2f} @ {last_date.date()}  n={len(y)}  "
+        print(f"\n{t}  last={last_price:.2f} @ {last_date if hasattr(last_date, 'date') else last_date}  n={len(y)}  "
               f"since_start={since:+.1f}%  backend={kind}"
               f"{'  [multivariate]' if multivariate else ''}"
               f"{'  [rolling]' if use_rolling else ''}"
@@ -554,10 +670,16 @@ def cmd_forecast(args):
                 "horizon": h,
                 "forecast_date": dt,
                 "forecast_close": round(float(p), 4),
+                "forecast_std": round(float(pred_std[h - 1]), 4) if "pred_std" in dir() and pred_std is not None and h - 1 < len(pred_std) else None,
                 "last_close": last_price,
                 "pct_change": round(chg, 3),
                 "model": args.model if kind != "fallback" else "statistical_fallback",
                 "backend": kind,
+                "regime_model": "regime" if (ckpt_path is not None) else ("none" if reg_reason == "no_coverage" else reg_reason),
+                "regime_dir_acc": round(float(reg_cfg["dir_acc"]), 1) if reg_cfg and reg_cfg.get("dir_acc") is not None else None,
+                "regime_excess": round(float(reg_cfg["dir_acc"] - reg_cfg["pers_dir"]), 1)
+                                 if reg_cfg and reg_cfg.get("dir_acc") is not None and reg_cfg.get("pers_dir") is not None else None,
+                "regime_ckpt_age_days": reg_cfg.get("age_days") if reg_cfg and reg_cfg.get("age_days") is not None else None,
                 "multivariate": bool(multivariate),
                 "rolling": bool(use_rolling),
                 "channels": channels_mode,
@@ -726,6 +848,10 @@ def main():
                    help="close=price only; full=OHLCV+indicators panel")
     p.add_argument("--exog", action="store_true",
                    help="Merge exogenous channels (mkt return, vol, sector, dispersion)")
+    p.add_argument("--no-regime", action="store_true",
+                   help="Disable regime-selected model serving (default: ON when checkpoints exist)")
+    p.add_argument("--uncertainty", action="store_true",
+                   help="Emit MC-dropout std band (forecast_std column) on forecasts")
     p.set_defaults(func=cmd_forecast)
 
     p = sub.add_parser("backtest")
