@@ -30,12 +30,19 @@ CSVs) + hmm_regime_states.csv — i.e. run the analytics first.
   flip_rate (decision flips / trials × tickers), mean_score_move, n.
 
 ## Findings (2026-08 run)
-The HMM regime label is the single most fragile point estimate: **28.4% of
-decisions flip** when the stress verdict changes (perturb scale 0.10).
-Momentum/factor/composite each flip ~26% at their own estimation-error scales.
+The HMM regime label was the single most fragile point estimate: **28.4% of
+decisions flipped** when the stress verdict changed (perturb scale 0.10).
+Fixed with the soft posterior (score -= 0.08·p(stress)); re-measured at
+**1.6%**. Momentum_score is the next frontier: at its own estimation error
+(std/4 ≈ 0.157) the hard threshold cliffs (mom>0.5→+0.20, mom>0.0→+0.10)
+flipped **6.8%** of decisions. Replaced with the noise-convolved expectation
+E[g(mom+ε)] (erf blend over the step function, asymptotic credit preserved):
+**6.25%** at 1σ — and the cliff itself is gone (a 0.02 momentum move no
+longer flips 0.10 of contribution; measured 1.79%→1.23% at 0.039 perturb).
 
 ## Related
-buy_candidates.py (the decisions being audited), regime_forecast.py
-(hmm_regime_states), the Forecasting-Paradox upgrades in forecast_granite.py
-(--epistemic-error, forecast_nu). Registered as the `taleb_optionality` daily
-job (after aggregate + preferred).
+buy_candidates.py (the decisions being audited, score_row/regime_stress_prob/
+_momentum_contribution), regime_forecast.py (hmm_regime_states), the
+Forecasting-Paradox upgrades in forecast_granite.py (--epistemic-error,
+forecast_nu). Registered as the `taleb_optionality` daily job (after
+aggregate + preferred).

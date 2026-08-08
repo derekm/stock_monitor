@@ -57,15 +57,16 @@ def main():
     # the flips below are perturbed-vs-unperturbed under the same logic.
     frag_map, skew_map = bc._load_maps()
 
-    def actions_at(df, stress_p):
+    def actions_at(df, stress_p, mom_sig):
         acts = []
         for _, r in df.iterrows():
-            score, _ = bc.score_row(r, stress_p, frag_map, skew_map)
+            score, _ = bc.score_row(r, stress_p, frag_map, skew_map, mom_sig)
             acts.append(bc.action_from_score(score))
         return pd.Series(acts, index=df.index, dtype=object)
 
     ref_stress = bc.regime_stress_prob()
-    ref_acts = actions_at(base, ref_stress)
+    ref_mom_sig = bc._momentum_est_error(base.get("momentum_score"))
+    ref_acts = actions_at(base, ref_stress, ref_mom_sig)
 
     def perturb_and_flip(driver_col, scale_fn):
         """Perturb one numeric driver per row by a row-specific scale (the
@@ -81,7 +82,7 @@ def main():
             noise = rng.normal(0.0, 1.0, size=len(df))
             s = scale_fn(df)
             df[driver_col] = pd.to_numeric(df[driver_col], errors="coerce") + noise * s
-            acts = actions_at(df, ref_stress)
+            acts = actions_at(df, ref_stress, ref_mom_sig)
             ref = ref_acts.reindex(acts.index)
             flips += int((acts != ref).sum())
             n = len(acts)
@@ -120,7 +121,7 @@ def main():
             p_pert = float(np.clip(p0 + rng.normal(0.0, 0.10), 0.0, 1.0))
             if abs(p_pert - p0) < 1e-9:
                 continue
-            acts = actions_at(base, p_pert)
+            acts = actions_at(base, p_pert, ref_mom_sig)
             ref = ref_acts.reindex(acts.index)
             flips += int((acts != ref).sum())
             n_reg += len(acts)

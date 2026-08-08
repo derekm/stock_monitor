@@ -111,13 +111,64 @@ def _load_maps():
     return fragility_map, skew_map
 
 
-def score_row(r, stress_p: float, fragility_map=None, skew_map=None):
+def _momentum_est_error(series) -> float:
+    """Estimation error of momentum_score: a loose standard error for a
+    rolling-window estimate (cross-sectional std / 4). Shared by build() and
+    hidden_optionality_audit.py so the production smoothing width matches the
+    audit's perturbation scale exactly."""
+    s = pd.to_numeric(series, errors="coerce").dropna()
+    if len(s) < 4 or float(s.std()) == 0:
+        return 0.0
+    return float(s.std()) / 4.0
+
+
+def _momentum_contribution(mom: float, sig: float) -> float:
+    """Expected momentum contribution under the driver's estimation noise.
+
+    American-options fix #2 (the paper's §I-A prescription): instead of the
+    hard threshold function g(mom) evaluated at the point estimate, use
+    E[g(mom + ε)] with ε ~ N(0, sig). g is the ORIGINAL step function
+    (-0.15 below -0.5, 0 in [-0.5,0], +0.10 in [0,0.5], +0.20 above 0.5),
+    written as a -0.15 baseline plus three UP-steps (+0.15 at -0.5,
+    +0.10 at 0.0, +0.10 at 0.5). The expectation is the erf-blend
+
+        E = -0.15 + 0.15·Φ((mom+0.5)/sig) + 0.10·Φ(mom/sig)
+                  + 0.10·Φ((mom-0.5)/sig)
+
+    so the asymptotic credit is EXACTLY preserved (mom>>0.5 → +0.20,
+    mom~0.2 → +0.10, mom<<-0.5 → -0.15) while the transitions are smoothed
+    over the true noise width. The decision is made on the de-noised
+    expectation, so small perturbations move it only slightly.
+    """
+    if sig <= 0:
+        # no measured error: exact thresholds (old behavior)
+        if mom > 0.5:
+            return 0.20
+        if mom > 0.0:
+            return 0.10
+        if mom < -0.5:
+            return -0.15
+        return 0.0
+    import math
+
+    def Phi(z):
+        return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+    return (-0.15
+            + 0.15 * Phi((mom + 0.5) / sig)
+            + 0.10 * Phi(mom / sig)
+            + 0.10 * Phi((mom - 0.5) / sig))
+
+
+def score_row(r, stress_p: float, fragility_map=None, skew_map=None, mom_sig: float = 0.0):
     """Score ONE candidate row -> (score, reasons). Single source of truth for
     the decision loop — shared by build() and hidden_optionality_audit.py so
     the audit perturbs the REAL scorer, not a drifted copy.
 
     stress_p: soft HMM posterior p(stress) in [0,1] — scales the stress
-    haircut continuously (see regime_stress_prob)."""
+    haircut continuously (see regime_stress_prob).
+    mom_sig: momentum_score estimation error — width of the noise-convolved
+    momentum contribution (see _momentum_contribution)."""
     reasons = []
     score = 0.0
     # gate pieces
@@ -135,12 +186,18 @@ def score_row(r, stress_p: float, fragility_map=None, skew_map=None):
 
     mom = r.get("momentum_score")
     if pd.notna(mom):
-        if mom > 0.5:
-            score += 0.20; reasons.append("strong_momentum")
-        elif mom > 0.0:
-            score += 0.10; reasons.append("positive_momentum")
-        elif mom < -0.5:
-            score -= 0.15; reasons.append("weak_momentum")
+        # Momentum contribution = E[g(mom + ε)], ε~N(0, mom_sig): the noise-
+        # convolved expectation of the original step function (see
+        # _momentum_contribution). De-noised decision; asymptotic credit
+        # identical to the old thresholds.
+        m_contrib = _momentum_contribution(float(mom), mom_sig)
+        score += m_contrib
+        if m_contrib >= 0.15:
+            reasons.append("strong_momentum")
+        elif m_contrib > 0.0:
+            reasons.append("positive_momentum")
+        elif m_contrib < 0.0:
+            reasons.append("weak_momentum")
 
     rm = r.get("resid_mom_63")
     if pd.notna(rm) and rm > 0.05:
@@ -195,9 +252,12 @@ def score_row(r, stress_p: float, fragility_map=None, skew_map=None):
     if stress_p > 0.01:
         score -= 0.08 * stress_p
         reasons.append(f"stress_regime_haircut_p{stress_p:.0%}")
-        # require stronger momentum in stress for buy (soft too)
-        if pd.isna(mom) or mom < 0.25:
+        # require stronger momentum in stress for buy (continuous: the penalty
+        # scales with the shortfall below the 0.25 anchor, not a cliff at it)
+        if pd.isna(mom):
             score -= 0.05 * stress_p
+        elif mom < 0.25:
+            score -= 0.05 * stress_p * ((0.25 - mom) / 0.25)
     return score, reasons
 
 
@@ -244,9 +304,10 @@ def build() -> pd.DataFrame:
 
     reg = regime()
     stress_p_global = regime_stress_prob()
+    mom_sig = _momentum_est_error(df.get("momentum_score"))
     rows = []
     for _, r in df.iterrows():
-        score, reasons = score_row(r, stress_p_global, fragility_map, skew_map)
+        score, reasons = score_row(r, stress_p_global, fragility_map, skew_map, mom_sig)
         action = action_from_score(score)
 
         rows.append({
