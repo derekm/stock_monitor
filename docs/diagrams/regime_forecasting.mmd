@@ -1,0 +1,38 @@
+%%{init: {"theme": "dark", "themeVariables": {"background": "#020617", "primaryColor": "#0f172a", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#334155", "lineColor": "#475569", "secondaryColor": "#0c2a3a", "tertiaryColor": "#0f1f14", "fontFamily": "monospace", "fontSize": "13px"}}}%%
+flowchart LR
+    subgraph RES["RESEARCH (HONEST OOS)"]
+        R1["pass5: direction beats<br/>persistence 12/12"]
+        R2["pass5_sweep: 648 exps<br/>stride=1 best, steps flat"]
+        R3["pass6: per-regime models<br/>+26 to +42pt excess"]
+        R4["pass7: boundary/composition<br/>matrix - cap=100 robust"]
+    end
+
+    subgraph SEL["SELECTION"]
+        S1["regime_model_best.csv<br/>best config per ticker x regime"]
+        S2["hmm_regime_states.csv<br/>current regime"]
+    end
+
+    subgraph SERVE["SERVING"]
+        V1["regime_serving.py<br/>serve_regime_model()"]
+        V2["checkpoints/regime/<br/>TICKER__regime__steps.pt"]
+        V3["ensemble 0.5 general<br/>+ 0.5 regime model"]
+    end
+
+    subgraph OUT2["FORECAST OUTPUT"]
+        O1["forecasts_granite.csv<br/>BULL/BEAR + signal_gated"]
+        O2["regime_dir_h10..h96<br/>per-span direction"]
+        O3["forecast_std<br/>MC-dropout band"]
+        O4["ckpt age + calibration<br/>staleness warning"]
+    end
+
+    R1 --> R3
+    R2 --> R3
+    R3 --> R4
+    R3 --> S1
+    R4 --> S1
+    S2 --> V1
+    S1 --> V1
+    V1 --> V2
+    V1 --> V3
+    V2 --> V3
+    V3 --> OUT2

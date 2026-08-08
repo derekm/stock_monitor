@@ -1,0 +1,34 @@
+%%{init: {"theme": "dark", "themeVariables": {"background": "#020617", "primaryColor": "#0f172a", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#334155", "lineColor": "#475569", "secondaryColor": "#0c2a3a", "tertiaryColor": "#0f1f14", "fontFamily": "monospace", "fontSize": "14px"}}}%%
+flowchart TB
+    subgraph FAM["SIGNAL FAMILIES"]
+        A1["preferred<br/>fundamental quality"]
+        A2["peer<br/>relative value"]
+        A3["cross<br/>cross-sectional rank"]
+        A4["pairs<br/>cointegration z"]
+        A5["earnings<br/>surprise + drift"]
+        A6["technical / options /<br/>revisions / filings"]
+    end
+
+    subgraph AGG["AGGREGATION (OOS-IC WEIGHTED)"]
+        B1["per-regime IC<br/>high_vol_stress: peer 52.9%<br/>cross 39.1% earnings 8%"]
+        B2["signal_model.py<br/>GBM blend IC 0.237<br/>vs composite 0.152"]
+    end
+
+    subgraph USE["CONSUMPTION"]
+        C1["buy_candidates.py<br/>composite + gates"]
+        C2["shadow_book.py<br/>paper PnL"]
+        C3["regime-gated<br/>BULL* / BEAR*"]
+    end
+
+    FAM --> AGG
+    A1 --> B1
+    A2 --> B1
+    A3 --> B1
+    A4 --> B1
+    A5 --> B1
+    A6 --> B2
+    B1 --> USE
+    B2 --> USE
+    B1 --> C1
+    B1 --> C2
+    B2 --> C1

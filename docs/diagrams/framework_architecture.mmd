@@ -1,0 +1,70 @@
+%%{init: {"theme": "dark", "themeVariables": {"background": "#020617", "primaryColor": "#0f172a", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#334155", "lineColor": "#475569", "secondaryColor": "#0c2a3a", "tertiaryColor": "#0f1f14", "fontFamily": "monospace", "fontSize": "14px"}}}%%
+flowchart TB
+    subgraph DATA["DATA SPINE - parquet tables"]
+        P1["daily_prices.parquet<br/>adj_close, split-adjusted"]
+        P2["fundamentals.parquet<br/>EDGAR XBRL + yfinance"]
+        P3["monitored_stocks.parquet<br/>GICS sectors"]
+        P4["earnings_calendar.parquet"]
+        P5["portfolio_holdings / trades"]
+    end
+
+    subgraph INGEST["INGESTION"]
+        I1["update_prices.py<br/>yfinance daily"]
+        I2["update_fundamentals.py<br/>fetch-history"]
+        I3["backfill_edgar.py<br/>SEC XBRL companyfacts"]
+        I4["update_polygon.py<br/>key-gated"]
+        I5["economic_calendar.py<br/>FOMC + expiries"]
+    end
+
+    subgraph ENGINES["ANALYTICS ENGINES"]
+        E1["hmm_regime_detection<br/>HMM 3-state"]
+        E2["preferred_metrics<br/>quality/value/leverage"]
+        E3["peer_analytics<br/>peer groups + trends"]
+        E4["earnings_catalyst<br/>surprise + drift"]
+        E5["pair_engine<br/>cointegration pairs"]
+        E6["cross_section<br/>cross-sectional ranks"]
+        E7["cost_model<br/>10bps + borrow"]
+    end
+
+    subgraph SIGNALS["SIGNAL AGGREGATION"]
+        S1["signal_aggregator.py<br/>OOS IC-derived weights"]
+        S2["signal_model.py<br/>GradientBoosting blend"]
+        S3["technical_signals<br/>RSI/MACD/Bollinger"]
+        S4["options_skew<br/>IV skew + put/call"]
+        S5["estimate_revisions"]
+        S6["filings_sentiment<br/>8-K lexicon"]
+    end
+
+    subgraph FORECAST["GRANITE TTM FORECASTING"]
+        F1["pass5 / pass5_sweep<br/>direction vs persistence"]
+        F2["pass6 regime-selected<br/>per-regime models"]
+        F3["pass7 experiment matrix<br/>boundary/composition/lr"]
+        F4["regime_serving.py<br/>checkpoint serving"]
+        F5["forecast_granite.py<br/>ensemble + MC-dropout"]
+        F6["analyze_granite_forecasts<br/>signal_gated BULL/BEAR"]
+    end
+
+    subgraph DECIDE["DECISIONS & PORTFOLIO"]
+        D1["buy_candidates.py<br/>composite scoring"]
+        D2["portfolio_optimization<br/>ERC / vol-target"]
+        D3["shadow_book.py<br/>paper trade + kill switches"]
+        D4["perf_metrics.py<br/>Sharpe/Calmar/capacity"]
+    end
+
+    subgraph OUT["OUTPUT"]
+        O1["export_dashboard_data.py<br/>198 resources"]
+        O2["data.json + data_catalog"]
+        O3["DuckDB-Wasm dashboard"]
+    end
+
+    INGEST --> DATA
+    DATA --> ENGINES
+    ENGINES --> SIGNALS
+    ENGINES --> FORECAST
+    SIGNALS --> DECIDE
+    FORECAST --> DECIDE
+    DECIDE --> OUT
+    I3 -.-> P2
+    I1 -.-> P1
+    E7 -.-> E5
+    E7 -.-> E6
