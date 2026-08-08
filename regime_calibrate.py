@@ -51,6 +51,7 @@ def _window_block(s, dates, lo, hi):
 
 def calibration_report(tickers: list[str]) -> pd.DataFrame:
     """Coverage of the z=1 MC-dropout band on OOS test windows."""
+    from forecast_granite import forecast_ttm_mc_dropout
     regime_s = load_regime_map()
     rows = []
     for tk in tickers:
@@ -77,16 +78,14 @@ def calibration_report(tickers: list[str]) -> pd.DataFrame:
                 idxs = np.linspace(0, len(tr_win) - 1, cfg["cap"]).astype(int)
                 tr_win = [train[i] for i in idxs]
             tag = f"{tk}|{reg}|cal"
+            # return_model=True: calibrate the ACTUAL served model's MC band
+            # (not the base model's) — pass6 keeps the trained model alive.
             r = pass6.train_regime_model(tr_win, test, cfg["steps"], tag,
-                                         lr=cfg.get("lr"), n_channels=1)
+                                         lr=cfg.get("lr"), n_channels=1,
+                                         return_model=True)
             if r.get("skipped"):
                 continue
-            # MC-dropout z=1 band coverage on the first 10 OOS points
-            import torch
-            import copy
-            from pass6 import BASE_MODEL, device
-            from forecast_granite import forecast_ttm_mc_dropout
-            m = copy.deepcopy(BASE_MODEL).to(device)
+            m = r["_model"]
             m.eval()
             covered, n_pts = 0, 0
             for (c, t, *_ ) in test:
@@ -101,6 +100,7 @@ def calibration_report(tickers: list[str]) -> pd.DataFrame:
                     if mean[h] - std[h] <= a[h] <= mean[h] + std[h]:
                         covered += 1
                     n_pts += 1
+            del m  # caller owns the model
             rows.append({
                 "ticker": tk, "regime": reg, "n_test_windows": len(test),
                 "mc_band_cov_z1": round(covered / n_pts, 3) if n_pts else None,

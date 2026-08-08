@@ -42,6 +42,7 @@ Usage:
 from __future__ import annotations
 
 import argparse, json, time, copy
+from pathlib import Path
 import numpy as np
 import torch
 import pandas as pd
@@ -109,17 +110,23 @@ def _channels_from_close(w: np.ndarray) -> np.ndarray:
 
 
 def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None,
-                       n_channels: int = 1):
+                       n_channels: int = 1, return_model: bool = False):
     """Fine-tune from the IBM base on train_wins; score on test_wins.
 
     When ckpt_dir is given, the trained model is saved there as
-    <ticker>__<regime>__<steps>__<cap>__<lr>.pt so the production forecaster
+    <TICKER>__<regime>__<steps>__<lr>.pt so the production forecaster
     can serve it (regime-selected forecasts).
 
     n_channels=1: close-only (the pass5/6 default). n_channels=3: expand the
     pretrained model to (close, pct_return, realized_vol20) via
-    resize_token_embeddings with mean-resizing — the documented TTM path for
-    adding channels to a pretrained single-channel model.
+    AutoConfig num_input_channels + ignore_mismatched_sizes — the documented
+    TTM path for adding channels to a pretrained single-channel model.
+
+    return_model=True: the trained model is attached to the result dict as
+    ``_model`` (caller owns it and must del it) so downstream calibration can
+    measure the ACTUAL served model's MC-dropout band, not the base model's.
+    Default False keeps the sweep memory-safe (model deleted + CUDA cache
+    emptied after scoring).
     """
     if len(train_wins) < 3 or len(test_wins) < 3:
         return dict(skipped=True, n_train=len(train_wins), n_test=len(test_wins), tag=tag)
@@ -216,17 +223,22 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
         torch.save({"model": m.state_dict(), "dir_acc": dir_acc,
                     "tag": tag, "n_channels": n_channels,
                     "trained_on": pd.Timestamp.now().isoformat()}, ckpt_dir / fname)
-    del m
-    if device.type == "cuda":
-        torch.cuda.empty_cache()
     pers = persistence_on_test(te)
-    return dict(
+    result = dict(
         mape=round(mape, 2), dir_acc=round(dir_acc, 1),
         **span_acc,
         mape_pers=pers["mape"] if pers else None,
         pers_dir=pers["dir_acc"] if pers else None,
         n_train=len(tr), n_test=len(te), secs=round(dt, 1), tag=tag,
     )
+    if return_model:
+        # caller owns the model (calibration measures the actual served model)
+        result["_model"] = m
+    else:
+        del m
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+    return result
 
 
 def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, max_experiments,
