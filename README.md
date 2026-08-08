@@ -363,7 +363,7 @@ python -m ttm_backfill cmp-adj-unadj --tickers AEP,NVR,FICO --steps 150
 - **SQL Lab** — query builder + templates  
 - **CSV Catalog** — SQL reproducing each analysis CSV  
 - **Fisher Indexes** — DuckDB-Wasm port of `run_fisher_duckdb.py` + Chart.js  
-- **Sprint Engines** — inline tab rendering pair/cross/aggregator/earnings views (plus the standalone `sprint_dashboard.html`)
+- **Sprint Engines** — inline tab rendering pair/cross/aggregator/earnings views (live via DuckDB)
 
 See [docs/dashboard.md](docs/dashboard.md).
 

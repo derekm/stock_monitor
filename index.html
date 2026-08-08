@@ -38,6 +38,13 @@
   .widget-live-bar .widget-status {
     color: var(--muted); font-size: 0.78rem; margin-left: 0.25rem;
   }
+  .stat-list .stat-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.35rem 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .stat-list .stat-row:last-child { border-bottom: none; }
+  .stat-list .stat-row span { color: var(--muted); }
+  .stat-list .stat-row strong.pos { color: var(--pos, #3fb950); }
+  .stat-list .stat-row strong.neg { color: var(--neg, #f85149); }
+  .stock-picker { display: flex; align-items: center; gap: 0.6rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .stock-picker select { padding: 0.35rem 0.5rem; background: var(--bg2, #161b22); color: var(--text, #e6edf3); border: 1px solid var(--border); border-radius: 6px; min-width: 220px; font-size: 0.9rem; }
   .widget-card-title {
     display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;
   }
@@ -116,9 +123,8 @@
   <button data-tab="manage">Manage</button>
   <button data-tab="ops">Ops / Services</button>
   <button data-tab="csvcat">CSV Catalog</button>
-  <a href="single_stock.html" class="ext-link">Single Stock</a>
-  <a href="sprint_dashboard.html" class="ext-link">Sprint Engines</a>
-  <button data-tab="sprint">Sprint (inline)</button>
+  <button data-tab="stock">Single Stock</button>
+  <button data-tab="sprint">Sprint Engines</button>
 </nav>
 <main>
   <!-- DECISIONS -->
@@ -233,11 +239,20 @@
         </div>
         <div>
           <label>Index name(s)</label>
-          <input id="fc-index" value="portfolio" placeholder="portfolio,growth,defensive or all" />
+          <select id="fc-index" multiple size="4" title="Ctrl/Cmd+click for multiple">
+            <option value="portfolio" selected>portfolio</option>
+            <option value="growth">growth</option>
+            <option value="defensive">defensive</option>
+            <option value="all">all</option>
+          </select>
         </div>
         <div>
           <label>Tickers (custom)</label>
-          <input id="fc-tickers" value="MOS,CF,SHEL" />
+          <select id="fc-tickers" multiple size="4" title="Ctrl/Cmd+click for multiple">
+            <option value="MOS">MOS</option>
+            <option value="CF">CF</option>
+            <option value="SHEL">SHEL</option>
+          </select>
         </div>
         <div>
           <label>Horizon</label>
@@ -277,11 +292,22 @@
         </div>
         <div>
           <label>Peer index</label>
-          <input id="fc-peer-index" value="defensive" placeholder="defensive,growth,sectors…" />
+          <select id="fc-peer-index">
+            <option value="defensive" selected>defensive</option>
+            <option value="growth">growth</option>
+            <option value="sectors">sectors</option>
+            <option value="all">all</option>
+          </select>
         </div>
         <div>
           <label>Peer tickers</label>
-          <input id="fc-peer-tickers" value="" placeholder="SPY,XLP,…" />
+          <select id="fc-peer-tickers" multiple size="4" title="Ctrl/Cmd+click for multiple">
+            <option value="SPY">SPY</option>
+            <option value="XLP">XLP</option>
+            <option value="XLU">XLU</option>
+            <option value="XLK">XLK</option>
+            <option value="XLE">XLE</option>
+          </select>
         </div>
         <div>
           <label>Peer top N</label>
@@ -403,7 +429,12 @@
       <div class="qb">
         <div>
           <label>Indexes</label>
-          <input id="bt-indexes" value="fertilizer,defensive,portfolio,growth" placeholder="fertilizer,defensive,portfolio,growth" />
+          <select id="bt-indexes" multiple size="4" title="Ctrl/Cmd+click for multiple">
+            <option value="fertilizer" selected>fertilizer</option>
+            <option value="defensive" selected>defensive</option>
+            <option value="portfolio" selected>portfolio</option>
+            <option value="growth" selected>growth</option>
+          </select>
         </div>
         <div>
           <label>Years</label>
@@ -419,7 +450,14 @@
         </div>
         <div>
           <label>Benchmark</label>
-          <input id="bt-bench" value="SPY" />
+          <select id="bt-bench">
+            <option value="SPY" selected>SPY</option>
+            <option value="^GSPC">^GSPC (S&P 500)</option>
+            <option value="QQQ">QQQ</option>
+            <option value="DIA">DIA</option>
+            <option value="IWM">IWM</option>
+            <option value="none">none</option>
+          </select>
         </div>
         <div>
           <label>Include benchmark</label>
@@ -1018,8 +1056,91 @@ ORDER BY ev_ebitda;</textarea>
     </div>
   </section>
   <section id="sprint">
-    <h2>Sprint Engines (inline)</h2>
-    <iframe src="sprint_dashboard.html" style="width:100%; height:calc(100vh - 120px); border:1px solid var(--border); border-radius:8px; background:#0d1117;"></iframe>
+    <h2>Sprint Engines — signal aggregation, pairs, cross-section, earnings</h2>
+    <p style="color:var(--muted);font-size:0.85rem">Live from DuckDB: reads the signal/pair/cross/earnings CSVs directly (no data.json snapshot). Click a refresh to re-query.</p>
+    <div class="widget-live-bar" id="sprint-live-bar"></div>
+
+    <h3 style="margin-top:1.2rem">Signal Aggregator — OOS IC weights</h3>
+    <div class="grid2">
+      <div class="card">
+        <h4>Family IC (trailing window, cutoff − 21d)</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-sprint-ic"><thead></thead><tbody></tbody></table></div>
+        <p class="muted" style="margin-top:8px;font-size:0.8rem">Weights = max(IC, 0), normalized. Negative-IC families contribute nothing.</p>
+      </div>
+      <div class="card">
+        <h4>Composite leaders (top 15)</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-sprint-comp"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.2rem">Pair Engine — walk-forward OOS (net of costs)</h3>
+    <div class="grid2">
+      <div class="card">
+        <h4>Selected pairs (FDR + half-life)</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-sprint-pairs"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h4>Pair stats (net of costs)</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-sprint-pstats"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.2rem">Cross-Section — L/S vs equal-weight long</h3>
+    <div class="grid2">
+      <div class="card">
+        <h4>OOS stats</h4>
+        <div id="sprint-cs-stats" class="stat-list"></div>
+        <p class="muted" style="margin-top:8px;font-size:0.8rem">Decision: signal-only; actionable strategy = long-only top quintile (see <code>recommended_use</code> in the stats).</p>
+      </div>
+      <div class="card">
+        <h4>Last rebalance picks</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-sprint-cspicks"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.2rem">Earnings Catalyst</h3>
+    <div class="grid2">
+      <div class="card">
+        <h4>PEAD drift buckets (trailing)</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-sprint-drift"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h4>Top catalyst scores</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-sprint-cat"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="stock">
+    <h2>Single Stock Analytics — peer signals, trends, recovery</h2>
+    <p style="color:var(--muted);font-size:0.85rem">Live from DuckDB: pick a ticker (populated from <code>monitored_stocks.parquet</code>), the peer tables are queried live from their CSVs.</p>
+    <div class="widget-live-bar" id="stock-live-bar"></div>
+    <div class="stock-picker">
+      <label for="stock-ticker">Ticker</label>
+      <select id="stock-ticker"><option value="">Select a ticker…</option></select>
+      <button type="button" class="chip-btn" id="stock-refresh">Refresh</button>
+      <span id="stock-status" class="widget-status" style="margin-left:0.6rem"></span>
+    </div>
+    <div id="stock-content" style="display:none">
+      <div class="grid2" style="margin-top:1rem">
+        <div class="card">
+          <h4>Signals</h4>
+          <div id="stock-signals" class="stat-list"></div>
+        </div>
+        <div class="card">
+          <h4>Key metrics</h4>
+          <div id="stock-metrics" class="stat-list"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <h4>Fundamental trends (first → latest)</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-stock-trends"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <h4>Recovery / deterioration signals</h4>
+        <div class="scroll" style="max-height:300px"><table id="tbl-stock-recovery"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
   </section>
 </main>
 <footer>
@@ -1076,7 +1197,7 @@ function mountLiveToolbar(sectionId, opts) {
       widgetStatus(status, "DuckDB…");
       try {
         for (const q of queries) {
-          await duckQuery(q.sql, q.tableId, q.limit || 80);
+          await duckQuery(q.sql, q.tableId);
         }
         widgetStatus(status, "Updated from DuckDB");
       } catch (e) {
@@ -1194,9 +1315,9 @@ const LIVE_TAB_WIDGETS = {
   rolling: {
     duckLabel: "Live: rolling",
     queries: [
-      { sql: "SELECT universe, ticker, window, vol, ann_ret, sharpe, max_dd, beta, vol_stability FROM rolling_window_metrics ORDER BY universe, ticker, window", tableId: "tbl-rolling", limit: 80 },
-      { sql: "SELECT ticker, n_dates, buffett_rate, trifecta_rate, dual_rate, median_composite, composite_std FROM rolling_screen_stability ORDER BY dual_rate DESC, buffett_rate DESC", tableId: "tbl-roll-stab", limit: 120 },
-      { sql: "SELECT date, window, avg_pairwise_corr, median_pairwise_corr, mkt_vol FROM rolling_corr_avg_timeseries ORDER BY date DESC", tableId: "tbl-roll-corr-tab", limit: 60 },
+      { sql: 'SELECT universe, ticker, "window", vol, ann_ret, sharpe, max_dd, beta, vol_stability FROM rolling_window_metrics ORDER BY universe, ticker, "window"', tableId: "tbl-rolling" },
+      { sql: "SELECT ticker, n_dates, buffett_rate, trifecta_rate, dual_rate, median_composite, composite_std FROM rolling_screen_stability ORDER BY dual_rate DESC, buffett_rate DESC", tableId: "tbl-roll-stab" },
+      { sql: 'SELECT date, "window", avg_pairwise_corr, median_pairwise_corr, mkt_vol FROM rolling_corr_avg_timeseries ORDER BY date DESC', tableId: "tbl-roll-corr-tab" },
     ],
   },
   inclusion: {
@@ -1346,7 +1467,7 @@ function renderValue() {
   const fund = DATA.fundamentals || [];
   fillTable("tbl-low-ev", lowEv, ["ticker","name","sector","ev_ebitda","pb_ratio","mktcap_to_assets","market_cap_b","in_portfolio"]);
   fillTable("tbl-low-pb", lowPb, ["ticker","name","sector","pb_ratio","mktcap_to_assets","ev_ebitda","in_portfolio"]);
-  fillTable("tbl-fund", fund.slice(0, 80), ["ticker","name","sector","pb_ratio","mktcap_to_assets","ev_ebitda","in_portfolio","index_member"]);
+  fillTable("tbl-fund", fund, ["ticker","name","sector","pb_ratio","mktcap_to_assets","ev_ebitda","in_portfolio","index_member"]);
 }
 
 function renderSectors() {
@@ -1410,10 +1531,11 @@ function renderSectors() {
 }
 
 function fcConfigFromForm() {
+  const selVals = id => [...(document.querySelector(id)?.selectedOptions || [])].map(o => o.value).join(",");
   return {
     source: $("#fc-source")?.value || "portfolio",
-    index: ($("#fc-index")?.value || "").trim(),
-    tickers: ($("#fc-tickers")?.value || "").trim(),
+    index: selVals("#fc-index"),
+    tickers: selVals("#fc-tickers"),
     horizon: parseInt($("#fc-horizon")?.value || "10", 10),
     context: parseInt($("#fc-context")?.value || "512", 10),
     days_ago: parseInt($("#fc-days-ago")?.value || "0", 10) || null,
@@ -1421,7 +1543,8 @@ function fcConfigFromForm() {
     multivariate: ($("#fc-multivariate")?.value || "0") === "1",
     peer_mode: $("#fc-peer-mode")?.value || "none",
     peer_index: ($("#fc-peer-index")?.value || "").trim(),
-    peer_tickers: ($("#fc-peer-tickers")?.value || "").trim(),
+    peer_tickers: [...(document.querySelector("#fc-peer-tickers")?.selectedOptions || [])]
+      .map(o => o.value).join(","),
     peer_top_n: parseInt($("#fc-peer-topn")?.value || "5", 10),
     label: ($("#fc-run-label")?.value || "").trim(),
     api: ($("#fc-api")?.value || GRANITE_API).replace(/\/$/, ""),
@@ -1470,7 +1593,18 @@ function renderForecasts() {
         $("#fc-status").textContent = j.ok
           ? ("Indexes: " + (j.indexes || []).join(", "))
           : JSON.stringify(j);
-        if (j.indexes && !$("#fc-index").value) $("#fc-index").value = j.indexes[0];
+        if (j.indexes && j.indexes.length) {
+          const sel = $("#fc-index");
+          const have = new Set([...sel.options].map(o => o.value));
+          j.indexes.forEach(n => {
+            if (!have.has(n)) {
+              const opt = document.createElement("option");
+              opt.value = n; opt.textContent = n;
+              sel.appendChild(opt);
+            }
+          });
+          if (![...sel.selectedOptions].length && !sel.value) sel.options[0].selected = true;
+        }
       } catch (e) {
         $("#fc-status").textContent = "Indexes error: " + e.message;
       }
@@ -1818,11 +1952,12 @@ function bindBacktestStudio() {
 
   run.addEventListener("click", async () => {
     const status = $("#bt-status");
-    const indexes = ($("#bt-indexes")?.value || "fertilizer,defensive,portfolio").trim();
     const years = $("#bt-years")?.value || "1";
     const rf = $("#bt-rf")?.value || "0.04";
     const clip = $("#bt-clip")?.value || "0.25";
     const bench = ($("#bt-bench")?.value || "SPY").trim();
+    const indexes = [...(document.querySelector("#bt-indexes")?.selectedOptions || [])]
+      .map(o => o.value).join(",") || "fertilizer,defensive,portfolio";
     const incl = ($("#bt-incl-bench")?.value || "1") === "1";
     const args = [
       "--indexes", indexes,
@@ -1860,7 +1995,8 @@ function bindBacktestStudio() {
     const status = $("#bt-status");
     if (status) status.textContent = "Running forecast backtest…";
     try {
-      const indexes = ($("#bt-indexes")?.value || "portfolio").split(",")[0].trim() || "portfolio";
+      const indexes = [...(document.querySelector("#bt-indexes")?.selectedOptions || [])]
+        .map(o => o.value)[0] || "portfolio";
       const j = await postJob("forecast_bt", ["--index", indexes, "--from-first-trade", "--horizon", "10"]);
       if (status) {
         status.textContent = j.ok
@@ -1887,7 +2023,6 @@ async function duckQuery(sql, tableId, limit) {
       try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind); } catch (e) {}
     }
   }
-  if (limit && !/\blimit\b/i.test(q)) q = q.replace(/;?\s*$/, "") + `\nLIMIT ${limit}`;
   if (!q.endsWith(";")) q += ";";
   const result = await CONN.query(q);
   const fields = result.schema.fields.map(f => f.name);
@@ -2053,7 +2188,7 @@ function applyQualityThresholds() {
       failed_legs: r.failed_legs,
     }))
     .sort((a,b)=>(+a.mktcap_to_assets)-(+b.mktcap_to_assets));
-  fillSimple("#tbl-lev-disc", lev, null, 40);
+  fillSimple("#tbl-lev-disc", lev, null);
   if ($("#quality-status")) {
     $("#quality-status").textContent =
       `Dual-pass ${dual.length} / ${scored.length} · thresholds ROE≥${th.roe_min} ROIC≥${th.roic_min} D/E≤${th.de_max} MCA≤${th.mca_max}`;
@@ -2159,7 +2294,7 @@ function sleevesApply() {
     members = members.filter(r => String(r[mode]||"") === group);
   }
   if (filt) members = members.filter(r => String(r.ticker||"").toUpperCase().includes(filt));
-  fillSimple("#tbl-slv-members", members, ["ticker","name","sector","industry","growth_sleeve","value_sleeve","status"], 120);
+  fillSimple("#tbl-slv-members", members, ["ticker","name","sector","industry","growth_sleeve","value_sleeve","status"]);
   widgetStatus("slv-status", `${members.length} members · mode=${mode}` + (group ? ` · ${group}` : ""));
 }
 
@@ -2204,8 +2339,8 @@ function manageStage() {
 }
 
 function manageRenderStocks() {
-  const rows = getMonitoredRows().slice(0, 80);
-  fillSimple("#tbl-mg-stocks", rows, ["ticker","name","sector","growth_sleeve","value_sleeve","index_member","defensive_value_index","growth_tech_index","in_portfolio"], 80);
+  const rows = getMonitoredRows();
+  fillSimple("#tbl-mg-stocks", rows, ["ticker","name","sector","growth_sleeve","value_sleeve","index_member","defensive_value_index","growth_tech_index","in_portfolio"]);
 }
 
 function bindSleevesManage() {
@@ -2444,7 +2579,7 @@ function renderSqlCatalog() {
     if (!q) return true;
     return (f.sql_name + " " + f.filename + " " + f.path).toLowerCase().includes(q);
   });
-  host.innerHTML = files.slice(0, 200).map(f => {
+  host.innerHTML = files.map(f => {
     const loaded = window.SQL_LOADED && window.SQL_LOADED.has(f.sql_name);
     const sizeKb = (f.size / 1024).toFixed(1);
     return `<label title="${f.path}" style="display:flex;gap:0.35rem;align-items:center">
@@ -2455,18 +2590,14 @@ function renderSqlCatalog() {
 }
 
 /** Lazy-load a local CSV/Parquet into DuckDB via static server URL */
-async function ensureLocalTable(sqlName, url, kind) {
+async function ensureLocalTable(sqlName, url, kind, force) {
   if (!CONN || !DB) throw new Error("DuckDB not ready");
-  if (window.SQL_LOADED.has(sqlName)) return sqlName;
+  if (!force && window.SQL_LOADED.has(sqlName)) return sqlName;
   const status = $("#sql-status");
   if (status) status.textContent = `Fetching ${url}…`;
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
   const buf = new Uint8Array(await resp.arrayBuffer());
-  // size guard ~40MB
-  if (buf.byteLength > 40 * 1024 * 1024) {
-    throw new Error(`${url} too large (${(buf.byteLength/1e6).toFixed(1)}MB) — query with read_* on a sample offline`);
-  }
   const fname = url.split("/").pop();
   await DB.registerFileBuffer(fname, buf);
   const safe = sqlName.replace(/[^A-Za-z0-9_]/g, "_");
@@ -2821,7 +2952,7 @@ function renderCsvCatalog() {
     if (host) host.innerHTML = "<p style='color:var(--muted)'>No catalog — run build_data_catalog.py</p>";
     return;
   }
-  const htmlRows = files.slice(0, 250).map((c, i) => {
+  const htmlRows = files.map((c, i) => {
     const name = c.sql_name || c.name || c.filename;
     const path = c.url || c.path || c.filename;
     const kind = c.kind || "";
@@ -3575,11 +3706,37 @@ async function bindLiveDuckControls() {
   fiInit();
   await initDuckDB(DATA);
   bindLiveDuckControls();
+  // Primary data path: re-render the main tabs from LIVE parquet/csv via
+  // DuckDB (the same queries the per-tab 'Live: DuckDB' buttons run). data.json
+  // is only the initial paint / offline fallback now.
+  if (typeof LIVE_TAB_WIDGETS !== "undefined") {
+    for (const [sectionId, spec] of Object.entries(LIVE_TAB_WIDGETS)) {
+      try {
+        const queries = (spec && spec.queries) || [];
+        for (const q of queries) {
+          if (CONN) {
+            // Force re-register every referenced table from its real file so the
+            // live query hits the full parquet/csv, not the export-truncated
+            // data.json snapshot that initDuckDB pre-loaded.
+            const names = (q.sql.match(/\bfrom\s+([a-z_][a-z0-9_]*)/gi) || [])
+              .map(m => m.split(/\s+/)[1]);
+            for (const n of names) {
+              const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === n);
+              if (meta) { try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind, true); } catch (e) {} }
+            }
+            await duckQuery(q.sql, q.tableId);
+          }
+        }
+      } catch (e) { console.warn("live auto-refresh", sectionId, e); }
+    }
+  }
+  if (typeof populateStockTickers === "function") await populateStockTickers();
+  if (typeof renderSprint === "function") renderSprint();
 })();
 
 
 
-function fillSimple(id, rows, cols, limit) {
+function fillSimple(id, rows, cols) {
   const el = document.querySelector(id);
   if (!el) return;
   if (!rows || !rows.length) {
@@ -3589,9 +3746,8 @@ function fillSimple(id, rows, cols, limit) {
     return;
   }
   const keys = cols || Object.keys(rows[0]);
-  const lim = limit || 80;
   el.querySelector("thead").innerHTML = "<tr>" + keys.map(k => "<th>" + k + "</th>").join("") + "</tr>";
-  el.querySelector("tbody").innerHTML = rows.slice(0, lim).map(r =>
+  el.querySelector("tbody").innerHTML = rows.map(r =>
     "<tr>" + keys.map(k => "<td>" + (r[k] ?? "") + "</td>").join("") + "</tr>"
   ).join("");
 }
@@ -3603,8 +3759,8 @@ async function loadAllLateTabs() {
     const T = payload.tables || {};
     // Buy candidates on decisions
     const buys = (T.buy_candidates || DATA.buy_candidates || []).filter(r => ["BUY","ACCUMULATE"].includes(r.action));
-    fillSimple("#tbl-buys", buys.length ? buys : (T.buy_candidates || []).slice(0, 25),
-      ["ticker","action","buy_score","decision","momentum_score","factor_composite","sp500_sector","reasons"], 30);
+    fillSimple("#tbl-buys", buys.length ? buys : (T.buy_candidates || []),
+      ["ticker","action","buy_score","decision","momentum_score","factor_composite","sp500_sector","reasons"]);
     // Quality / Dual tab — store universe then live-score with thresholds
     window._qualityPreferred = T.preferred_metrics || [];
     // load benchmarks from inclusion_rules if present later
@@ -3647,8 +3803,8 @@ async function loadAllLateTabs() {
       dual_rate: r.dual_rate != null ? +(+r.dual_rate).toFixed(3) : r.dual_rate,
       median_composite: r.median_composite != null ? +(+r.median_composite).toFixed(4) : r.median_composite,
       composite_std: r.composite_std != null ? +(+r.composite_std).toFixed(4) : r.composite_std,
-    })), ["ticker","n_dates","buffett_rate","trifecta_rate","dual_rate","median_composite","composite_std"], 120);
-    const rcorr = (T.rolling_corr_avg_timeseries || []).slice().reverse().slice(0, 60);
+    })), ["ticker","n_dates","buffett_rate","trifecta_rate","dual_rate","median_composite","composite_std"]);
+    const rcorr = (T.rolling_corr_avg_timeseries || []).slice().reverse();
     fillSimple("#tbl-roll-corr-tab", rcorr.map(r => ({
       date: (r.date||"").toString().slice(0,10),
       window: r.window,
@@ -3704,7 +3860,7 @@ async function loadAllLateTabs() {
     fillSimple("#tbl-near", T.near_dual_candidates || []);
     fillSimple("#tbl-defexp", T.defensive_value_exploration || []);
     fillSimple("#tbl-scorr", T.sector_correlation_matrix_latest || []);
-    fillSimple("#tbl-acorr", T.asset_correlation_matrix || [], null, 60);
+    fillSimple("#tbl-acorr", T.asset_correlation_matrix || [], null);
     // Stress
     // Stress / ETFs tab
     const stress = (T.dual_pass_stress || []).slice().sort((a,b) => (a.mode||"").localeCompare(b.mode||"") || (a.param||"").localeCompare(b.param||""));
@@ -3724,7 +3880,7 @@ async function loadAllLateTabs() {
     fillSimple("#tbl-tail", tail);
     // rolling corr: latest first
     const rollc = (T.rolling_corr_avg_timeseries || []).slice().reverse();
-    fillSimple("#tbl-rollcorr", rollc, ["date","window","avg_pairwise_corr","median_pairwise_corr","mkt_vol"], 60);
+    fillSimple("#tbl-rollcorr", rollc, ["date","window","avg_pairwise_corr","median_pairwise_corr","mkt_vol"]);
     const frot = (T.factor_rotation_performance || []).slice().sort((a,b)=>(b.sharpe||0)-(a.sharpe||0));
     fillSimple("#tbl-frot", frot, ["strategy","ann_ret","ann_vol","sharpe","max_dd"]);
     fillSimple("#tbl-apsum", T.allpairs_corr_summary || []);
@@ -3758,9 +3914,9 @@ async function loadAllLateTabs() {
     fillSimple("#tbl-regime-meta", meta);
     const thrAll = T.threshold_logic_screen || [];
     const thrPass = thrAll.filter(r => r.dual_pass === true || r.dual_pass === "true" || r.dual_pass === 1);
-    const thrShow = (thrPass.length ? thrPass : thrAll.slice(0, 40));
+    const thrShow = (thrPass.length ? thrPass : thrAll);
     fillSimple("#tbl-thr", thrShow,
-      ["ticker","regime","label","dual_pass","n_failed","failed_legs","roe","roic","ev_ebitda","pb_ratio","mktcap_to_assets"], 50);
+      ["ticker","regime","label","dual_pass","n_failed","failed_legs","roe","roic","ev_ebitda","pb_ratio","mktcap_to_assets"]);
   } catch (e) {
     console.warn("loadAllLateTabs", e);
   }
@@ -3789,7 +3945,7 @@ else loadAllLateTabs();
       try {
         const r = await fetch(base + btn.dataset.job, { method: "POST" });
         const j = await r.json();
-        if (log) log.textContent += JSON.stringify(j, null, 2).slice(0, 3000) + "\n";
+        if (log) log.textContent += JSON.stringify(j, null, 2) + "\n";
       } catch (e) {
         if (log) log.textContent += "ERROR: " + e + " (start: python analytics_service.py --port 8767)\n";
       }
@@ -3915,6 +4071,209 @@ function bindPipelines() {
   });
 }
 
+/* ========== Sprint Engines + Single Stock (DuckDB-backed, inline) ========== */
+
+/** Fetch rows for a catalog table: prefer DuckDB (live parquet/csv), fall back to DATA (data.json).
+ *  Catalog-backed tables are ALWAYS re-registered from the real file: initDuckDB pre-loads
+ *  data.json tables (export-truncated, e.g. peer_* capped at 500 rows), so trusting SQL_LOADED
+ *  would serve the truncated snapshot instead of the live CSV. */
+async function liveTable(name) {
+  if (CONN && window.SQL_CATALOG) {
+    const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === name);
+    if (meta) {
+      try {
+        await ensureLocalTable(meta.sql_name, meta.url, meta.kind, true /* force re-register */);
+      } catch (e) { console.warn("liveTable", name, e); }
+    }
+    if (window.SQL_LOADED.has(name) || (meta && window.SQL_LOADED.has(meta.sql_name))) {
+      try {
+        const rows = await duckQuery(`SELECT * FROM "${meta ? meta.sql_name : name}"`, null, null);
+        return rows;
+      } catch (e) { console.warn("liveTable duck", name, e); }
+    }
+  }
+  return (DATA && DATA[name]) || [];
+}
+
+/** Like liveTable but filters at the SQL level (avoids the duckQuery row cap).
+ *  where = SQL predicate for DuckDB; matchFn = row->bool for the DATA fallback. */
+async function liveTableWhere(name, where, matchFn) {
+  if (CONN && window.SQL_CATALOG) {
+    const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === name);
+    if (meta) {
+      try {
+        await ensureLocalTable(meta.sql_name, meta.url, meta.kind, true /* force re-register */);
+      } catch (e) { console.warn("liveTableWhere", name, e); }
+    }
+    if (window.SQL_LOADED.has(name) || (meta && window.SQL_LOADED.has(meta.sql_name))) {
+      try {
+        const safe = meta ? meta.sql_name : name;
+        const rows = await duckQuery(`SELECT * FROM "${safe}" WHERE ${where}`, null, null);
+        return rows;
+      } catch (e) { console.warn("liveTableWhere duck", name, e); }
+    }
+  }
+  const all = (DATA && DATA[name]) || [];
+  return matchFn ? all.filter(matchFn) : all;
+}
+
+const SPRINT_COLS = {
+  ic: ["family", "ic", "n", "weight_norm"],
+  comp: ["ticker", "composite", "rank", "peer", "cross", "earnings"],
+  pairs: ["pair_id", "group", "coint_t", "p_value", "half_life", "usable"],
+  pstats: ["pair_id", "n_trades", "win_rate", "avg_pnl", "total_pnl", "avg_gross_pnl", "sharpe"],
+  cspicks: ["bucket", "ticker"],
+  drift: ["bucket", "n_events", "drift_5d", "drift_20d", "drift_63d"],
+  cat: ["ticker", "catalyst_score", "pre_mom_flag", "expected_drift_20d", "iv_rich"],
+};
+
+async function renderSprint() {
+  const status = document.querySelector("#sprint-live-bar .widget-status");
+  if (status) status.textContent = "Querying DuckDB…";
+  try {
+    const [ic, comp, pairs, pstats, csStats, csRanks, drift, cat] = await Promise.all([
+      liveTable("signal_aggregator_ic"),
+      liveTable("signal_aggregator_scores"),
+      liveTable("pair_engine_pairs"),
+      liveTable("pair_engine_stats"),
+      liveTable("cross_section_stats"),
+      liveTable("cross_section_rankings"),
+      liveTable("earnings_drift_stats"),
+      liveTable("earnings_catalyst_signals"),
+    ]);
+    fillSimple("#tbl-sprint-ic", ic, SPRINT_COLS.ic);
+    const topComp = (comp || []).slice().sort((a, b) => (+b.composite || 0) - (+a.composite || 0));
+    fillSimple("#tbl-sprint-comp", topComp, SPRINT_COLS.comp);
+    const usable = (pairs || []).filter(p => p.usable);
+    fillSimple("#tbl-sprint-pairs", usable, SPRINT_COLS.pairs);
+    const topStats = (pstats || []).slice().sort((a, b) => (+b.sharpe || -99) - (+a.sharpe || -99));
+    fillSimple("#tbl-sprint-pstats", topStats, SPRINT_COLS.pstats);
+    const cs = (csStats && csStats[0]) || {};
+    const statList = document.querySelector("#sprint-cs-stats");
+    if (statList) {
+      const fmtPct = v => v === null || v === undefined || isNaN(v) ? "—" : (+v * 100).toFixed(1) + "%";
+      const fmtNum = v => v === null || v === undefined || isNaN(v) ? "—" : (+v).toFixed(3);
+      const rows = [
+        ["Model ann ret (L/S)", cs.model_ann_ret, fmtPct],
+        ["Model ann vol", cs.model_ann_vol, fmtPct],
+        ["Model Sharpe", cs.model_sharpe, fmtNum],
+        ["Baseline ann ret (EW long)", cs.baseline_ann_ret, fmtPct],
+        ["Baseline Sharpe", cs.baseline_sharpe, fmtNum],
+        ["Excess ann ret", cs.excess_ann_ret, fmtPct],
+        ["Info ratio", cs.info_ratio, fmtNum],
+        ["Win rate vs baseline", cs.win_rate_vs_baseline, fmtPct],
+        ["Sector exposure abs dev", cs.sector_exposure_abs_dev_avg, fmtNum],
+        ["Use", cs.recommended_use || "signal_only", v => v],
+      ];
+      statList.innerHTML = rows.map(([k, v, f]) =>
+        `<div class="stat-row"><span>${k}</span><strong class="${(+v || 0) > 0 ? 'pos' : (+v || 0) < 0 ? 'neg' : ''}">${v === undefined || v === null ? '—' : f(v)}</strong></div>`
+      ).join("");
+    }
+    if (csRanks && csRanks.length) {
+      const lastDate = csRanks.reduce((m, r) => String(r.rebalance_date) > String(m) ? r.rebalance_date : m, csRanks[0].rebalance_date);
+      const last = csRanks.filter(r => String(r.rebalance_date) === String(lastDate));
+      const picks = [...last.filter(r => +r.bucket === 5).map(r => ({ bucket: "LONG", ticker: r.ticker })),
+                     ...last.filter(r => +r.bucket === 1).map(r => ({ bucket: "SHORT", ticker: r.ticker }))];
+      fillSimple("#tbl-sprint-cspicks", picks, SPRINT_COLS.cspicks);
+    } else {
+      fillSimple("#tbl-sprint-cspicks", [], SPRINT_COLS.cspicks);
+    }
+    fillSimple("#tbl-sprint-drift", drift, SPRINT_COLS.drift);
+    const topCat = (cat || []).slice().sort((a, b) => (+b.catalyst_score || 0) - (+a.catalyst_score || 0));
+    fillSimple("#tbl-sprint-cat", topCat, SPRINT_COLS.cat);
+    if (status) status.textContent = `Updated from DuckDB · ${ic.length + comp.length + pairs.length} rows`;
+  } catch (e) {
+    if (status) status.textContent = e.message || String(e);
+    console.error("renderSprint", e);
+  }
+}
+
+/* Single-stock: populate ticker select from DuckDB (monitored_stocks), render peer tables live. */
+async function populateStockTickers() {
+  const sel = document.querySelector("#stock-ticker");
+  if (!sel) return;
+  try {
+    const rows = await liveTable("monitored_stocks");
+    const tickers = [...new Set((rows || []).map(r => r.ticker).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">Select a ticker…</option>' +
+      tickers.map(t => `<option value="${t}">${t}</option>`).join("");
+  } catch (e) {
+    console.warn("populateStockTickers", e);
+  }
+}
+
+const STOCK_METRIC_COLS = ["roe", "roic", "debt_to_equity", "ev_ebitda", "pb_ratio", "earnings_stability", "mktcap_to_assets"];
+
+async function renderStock() {
+  const ticker = document.querySelector("#stock-ticker")?.value;
+  const status = document.querySelector("#stock-status");
+  const content = document.querySelector("#stock-content");
+  if (!ticker) { if (content) content.style.display = "none"; return; }
+  if (status) status.textContent = "Querying…";
+  try {
+    const [signals, trends, recovery] = await Promise.all([
+      liveTable("peer_analytics_signals"),
+      liveTableWhere("peer_fundamental_trends",
+        `ticker = '${ticker.replace(/'/g, "''")}'`,
+        r => String(r.ticker) === ticker),
+      liveTableWhere("peer_recovery_signals",
+        `ticker = '${ticker.replace(/'/g, "''")}'`,
+        r => String(r.ticker) === ticker),
+    ]);
+    const sig = (signals || []).find(r => String(r.ticker) === ticker);
+    if (!sig) throw new Error("No peer_analytics_signals row for " + ticker);
+    const trendRows = (trends || []).filter(r => String(r.ticker) === ticker);
+    const recRows = (recovery || []).filter(r => String(r.ticker) === ticker);
+
+    const sigList = document.querySelector("#stock-signals");
+    if (sigList) {
+      sigList.innerHTML = [
+        ["Fundamental signal", sig.fundamental_signal],
+        ["Peer signal", sig.peer_signal],
+        ["Beta signal", sig.beta_signal],
+        ["Best peer group", sig.best_peer_group],
+        ["Recovery count", sig.recovery_count],
+        ["Deterioration count", sig.deterioration_count],
+        ["Strong trend count", sig.strong_trend_count],
+      ].map(([k, v]) => `<div class="stat-row"><span>${k}</span><strong>${v ?? "—"}</strong></div>`).join("");
+    }
+    const metricList = document.querySelector("#stock-metrics");
+    if (metricList) {
+      metricList.innerHTML = STOCK_METRIC_COLS.map(c =>
+        `<div class="stat-row"><span>${c}</span><strong>${sig[c] ?? "—"}</strong></div>`).join("");
+    }
+    fillSimple("#tbl-stock-trends", trendRows, ["metric", "slope_per_period", "pct_change", "recent_vs_early_pct", "trend_direction"]);
+    fillSimple("#tbl-stock-recovery", recRows, ["metric", "overall_slope", "recent_vs_early_pct", "is_recovery", "is_deteriorating", "strong_trend", "trend_direction"]);
+    if (content) content.style.display = "block";
+    if (status) status.textContent = `${ticker} · ${trendRows.length} trends · ${recRows.length} recovery`;
+  } catch (e) {
+    if (status) status.textContent = e.message || String(e);
+    if (content) content.style.display = "none";
+    console.error("renderStock", e);
+  }
+}
+
+function initSprintStock() {
+  const sprintBar = document.querySelector("#sprint-live-bar");
+  if (sprintBar) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip-btn"; b.textContent = "Refresh (DuckDB)";
+    b.addEventListener("click", renderSprint);
+    sprintBar.appendChild(b);
+    const st = document.createElement("span"); st.className = "widget-status"; st.textContent = "";
+    sprintBar.appendChild(st);
+  }
+  const stockBar = document.querySelector("#stock-live-bar");
+  if (stockBar) {
+    const st = document.createElement("span"); st.className = "widget-status"; st.textContent = "";
+    stockBar.appendChild(st);
+  }
+  document.querySelector("#stock-refresh")?.addEventListener("click", renderStock);
+  document.querySelector("#stock-ticker")?.addEventListener("change", renderStock);
+  renderSprint();
+}
+
+initSprintStock();
 
 </script>
 </body>
