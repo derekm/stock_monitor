@@ -420,6 +420,9 @@ auxiliary tables feeding several stages.
 | `regime_model_best.csv` | `pass6.py` | Forecast / anomaly |
 | `regime_model_matrix.csv` | `pass7.py` | Forecast / anomaly |
 | `regime_model_matrix_summary.csv` | `pass7.py` | Forecast / anomaly |
+| `regime_model_oos_rpt.csv` | `pass8.py` | Forecast / anomaly |
+| `regime_model_best_rpt.csv` | `pass8.py` | Forecast / anomaly |
+| `rpt_vs_ibm_compare.csv` | `pass8.py` | Forecast / anomaly |
 | `regime_calibration.csv` | `regime_calibrate.py` | Forecast / anomaly |
 | `checkpoints/regime/*.pt` | `pass6.py --ckpt-dir` | Forecast / anomaly |
 | `technical_signals.csv` | `technical_signals.py` | Technical |

@@ -65,6 +65,11 @@ GAP_DAYS = HORIZON  # embargo between train targets and test start (96d)
 OUT_JSONL = "/tmp/pass6_results.jsonl"
 OUT_CSV = None  # set in main from DATA_DIR
 OUT_BEST = None
+# pass8 hook: a path to OUR OWN pre-trained base checkpoint (e.g. an
+# RPT-enabled base trained on the full price history). When set, channel
+# expansion rebuilds from this checkpoint's config + weights instead of the
+# IBM hub model — this is how regime fine-tunes from a custom base work.
+_CUSTOM_BASE_CKPT: str | None = None
 
 
 def tag_windows(wins: list, regime_s: pd.Series, dates, lookback: int = 20) -> list[tuple]:
@@ -213,20 +218,33 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
         # channel weights keep pretrained values; new-channel weights get
         # fresh init). This is the standard TTM channel-expansion recipe.
         try:
-            from transformers import AutoConfig
-            cfg = AutoConfig.from_pretrained(gd.DEFAULT_MODEL)
-            cfg.num_input_channels = n_channels
-            if rpt:
-                # Resolution Prefix Tuning: teach the model its sampling
-                # resolution explicitly. Daily data = freq token 2. Helps
-                # short-context regime windows where resolution is hard to
-                # infer from the data alone (TTM paper 3.1.1, RPT).
-                cfg.resolution_prefix_tuning = True
-                cfg.frequency_token_vocab_size = 5
-            m = type(BASE_MODEL).from_pretrained(
-                gd.DEFAULT_MODEL, config=cfg, ignore_mismatched_sizes=True)
-            m = m.to(device)
-            if rpt:
+            if _CUSTOM_BASE_CKPT is not None:
+                # pass8: fine-tune from OUR OWN pre-trained base (RPT-enabled
+                # or otherwise) instead of the IBM hub model. Rebuild from the
+                # saved config so resolution_prefix_tuning etc. carry over;
+                # load the state dict loosely so channel expansion works.
+                from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig as _TMC
+                from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction as _TMP
+                _state = torch.load(_CUSTOM_BASE_CKPT, map_location="cpu")
+                _cfg = _TMC(**_state.get("config", {})) if "config" in _state else _TMC.from_pretrained(gd.DEFAULT_MODEL)
+                _cfg.num_input_channels = n_channels
+                m = _TMP(_cfg).to(device)
+                m.load_state_dict(_state["model"], strict=False)
+            else:
+                from transformers import AutoConfig
+                cfg = AutoConfig.from_pretrained(gd.DEFAULT_MODEL)
+                cfg.num_input_channels = n_channels
+                if rpt:
+                    # Resolution Prefix Tuning: teach the model its sampling
+                    # resolution explicitly. Daily data = freq token 2. Helps
+                    # short-context regime windows where resolution is hard to
+                    # infer from the data alone (TTM paper 3.1.1, RPT).
+                    cfg.resolution_prefix_tuning = True
+                    cfg.frequency_token_vocab_size = 5
+                m = type(BASE_MODEL).from_pretrained(
+                    gd.DEFAULT_MODEL, config=cfg, ignore_mismatched_sizes=True)
+                m = m.to(device)
+            if rpt and _CUSTOM_BASE_CKPT is None:
                 # RPT is a PRE-TRAINING technique: the freq token adds a patch,
                 # which changes the multi-level patch-partition arithmetic the
                 # pretrained backbone was built for. Probe a real forward; if
