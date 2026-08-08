@@ -111,6 +111,7 @@
   <button data-tab="forecasts">Forecasts</button>
     <button type="button" data-tab="pipelines">Pipelines</button>
   <button data-tab="anomalies">Anomalies</button>
+  <button data-tab="signals">Signals &amp; Alpha</button>
   <button data-tab="indexes">Index Backtest</button>
   <button data-tab="sql">SQL Lab</button>
   <button data-tab="fisher">Fisher Indexes</button>
@@ -174,6 +175,20 @@
     <div class="card">
       <h3>Asset ↔ sector correlation (home vs market)</h3>
       <div class="scroll"><table id="tbl-asset-sector"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="grid2" style="margin-top:1rem">
+      <div class="card">
+        <h3>Shadow book — paper-trade replay (FIFO lots, kill switches)</h3>
+        <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
+          buy_candidates weights replayed against realized prices, net of the cost model,
+          with FIFO tax lots and kill switches. Kill threshold −25% (never fired).
+        </p>
+        <div class="scroll" style="max-height:300px"><table id="tbl-shadow"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Shadow lots (FIFO tax lots)</h3>
+        <div class="scroll" style="max-height:300px"><table id="tbl-shadow-lots"><thead></thead><tbody></tbody></table></div>
+      </div>
     </div>
   </section>
 
@@ -411,6 +426,62 @@
         Sorted by |score|. Use SQL Lab for filters (e.g. <code>abs(score) &gt;= 3</code>).
       </p>
       <div class="scroll" style="max-height:480px"><table id="tbl-anom"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- SIGNALS & ALPHA -->
+  <section id="signals">
+    <h2>Signals &amp; Alpha — technicals, options, revisions, filings, blended model</h2>
+    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
+      Alpha-engine outputs: technical signals (RSI/MACD/Bollinger/Keltner), options IV skew,
+      consensus estimate revisions, 8-K filings sentiment, the supervised signal blend (GBM)
+      and its OOS IC, plus the economic/earnings calendar. Live from DuckDB via catalog CSVs.
+    </p>
+    <div class="sql-actions" style="margin-bottom:0.75rem">
+      <button type="button" class="chip-btn" id="live-refresh-signals">Live: signals tables (DuckDB)</button>
+      <span id="signals-status" style="color:var(--muted);font-size:0.78rem"></span>
+    </div>
+
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Signal model — OOS IC vs composite</h3>
+        <div class="scroll"><table id="tbl-signal-oos"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Signal family importance (GBM)</h3>
+        <div class="scroll"><table id="tbl-signal-weights"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Options skew (ATM IV, skew, put/call)</h3>
+        <div class="scroll"><table id="tbl-opt-skew"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Estimate revisions (consensus EPS / PT)</h3>
+        <div class="scroll"><table id="tbl-est-rev"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Filings sentiment (8-K)</h3>
+        <div class="scroll"><table id="tbl-filings"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Economic / earnings calendar (next events)</h3>
+        <div class="scroll"><table id="tbl-econ-cal"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Technical signals — latest snapshot</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        RSI14, MACD histogram, Bollinger %B, SMA20/50 cross for the monitored universe
+        (one row per ticker — most recent date).
+      </p>
+      <div class="scroll" style="max-height:480px"><table id="tbl-technical"><thead></thead><tbody></tbody></table></div>
     </div>
   </section>
 
@@ -756,7 +827,22 @@ ORDER BY ev_ebitda;</textarea>
         <div class="scroll"><table id="tbl-regime-meta"><thead></thead><tbody></tbody></table></div>
       </div>
     </div>
-    <div class="card">
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Regime-selected Granite models — best config per ticker</h3>
+        <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
+          pass6/7 regime-SELECTED fine-tunes (dedicated model per HMM regime), chosen by max OOS
+          direction excess over the regime's own persistence baseline. Serving ensembles the
+          current-regime checkpoint with the general model.
+        </p>
+        <div class="scroll"><table id="tbl-regime-best"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Regime model OOS eval (all cells)</h3>
+        <div class="scroll" style="max-height:360px"><table id="tbl-regime-oos"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
       <h3>Threshold logic screen (dual-pass first)</h3>
       <div class="scroll"><table id="tbl-thr"><thead></thead><tbody></tbody></table></div>
     </div>
@@ -3732,6 +3818,9 @@ async function bindLiveDuckControls() {
   }
   if (typeof populateStockTickers === "function") await populateStockTickers();
   if (typeof renderSprint === "function") renderSprint();
+  if (typeof renderSignals === "function") renderSignals();
+  if (typeof renderRegimeModels === "function") renderRegimeModels();
+  if (typeof renderShadow === "function") renderShadow();
 })();
 
 
@@ -4273,7 +4362,96 @@ function initSprintStock() {
   renderSprint();
 }
 
-initSprintStock();
+/* ========== Signals & Alpha tab (DuckDB-backed) ========== */
+
+const SIGNALS_COLS = {
+  oos: ["fold", "n_train", "n_val", "model_ic", "composite_ic", "ic_delta"],
+  weights: ["family", "importance"],
+  skew: ["ticker", "date", "atm_iv", "skew", "put_call_vol", "expiry", "spot"],
+  est: ["ticker", "period", "mean_eps", "mean_eps_rev_pct", "mean_pt", "prev_pt", "snapshot_date"],
+  filings: ["ticker", "filing_date", "form", "n_pos", "n_neg", "n_fwd", "score_per_1k"],
+  econ: ["date", "event_type", "label", "days_until", "is_trading_day", "source"],
+  technical: ["ticker", "date", "close", "rsi14", "macd_hist", "bb_pct", "sma20", "sma50", "sma_cross", "above_sma20", "above_sma50"],
+};
+
+async function renderSignals() {
+  const status = document.querySelector("#signals-status");
+  if (status) status.textContent = "Querying DuckDB…";
+  try {
+    const [oos, weights, skew, est, filings, econ, tech] = await Promise.all([
+      liveTable("signal_model_oos"),
+      liveTable("signal_model_weights"),
+      liveTable("options_skew"),
+      liveTable("estimate_revisions"),
+      liveTable("filings_sentiment"),
+      liveTable("economic_calendar"),
+      liveTable("technical_signals"),
+    ]);
+    fillSimple("#tbl-signal-oos", oos, SIGNALS_COLS.oos);
+    fillSimple("#tbl-signal-weights", weights, SIGNALS_COLS.weights);
+    fillSimple("#tbl-opt-skew", skew, SIGNALS_COLS.skew);
+    const estSorted = (est || []).slice().sort((a, b) => Math.abs(+b.mean_eps_rev_pct || 0) - Math.abs(+a.mean_eps_rev_pct || 0));
+    fillSimple("#tbl-est-rev", estSorted, SIGNALS_COLS.est);
+    const filSorted = (filings || []).slice().sort((a, b) => (+b.score_per_1k || 0) - (+a.score_per_1k || 0));
+    fillSimple("#tbl-filings", filSorted, SIGNALS_COLS.filings);
+    const econSorted = (econ || []).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).slice(0, 120);
+    fillSimple("#tbl-econ-cal", econSorted, SIGNALS_COLS.econ);
+    // technical: one row per ticker (most recent date)
+    const techByTicker = {};
+    for (const r of tech || []) {
+      const t = String(r.ticker || "");
+      if (!techByTicker[t] || String(r.date || "") > String(techByTicker[t].date || "")) techByTicker[t] = r;
+    }
+    fillSimple("#tbl-technical", Object.values(techByTicker).sort((a, b) => String(a.ticker).localeCompare(String(b.ticker))), SIGNALS_COLS.technical);
+    if (status) status.textContent = `Updated from DuckDB · ${(oos||[]).length + (tech||[]).length} rows`;
+  } catch (e) {
+    if (status) status.textContent = e.message || String(e);
+    console.error("renderSignals", e);
+  }
+}
+
+/* ========== Regime-selected models (Regime tab) + shadow book (Portfolio tab) ========== */
+
+const REGIME_BEST_COLS = ["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir", "excess", "n_train", "n_test", "tag"];
+
+async function renderRegimeModels() {
+  try {
+    const [best, oos] = await Promise.all([
+      liveTable("regime_model_best"),
+      liveTable("regime_model_oos"),
+    ]);
+    fillSimple("#tbl-regime-best", best, REGIME_BEST_COLS);
+    const oosSorted = (oos || []).slice().sort((a, b) =>
+      String(a.ticker || "").localeCompare(String(b.ticker || "")) ||
+      String(a.regime || "").localeCompare(String(b.regime || "")) ||
+      (+b.dir_acc || 0) - (+a.dir_acc || 0));
+    fillSimple("#tbl-regime-oos", oosSorted, ["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir", "excess", "n_train", "n_test"]);
+  } catch (e) {
+    console.warn("renderRegimeModels", e);
+  }
+}
+
+const SHADOW_COLS = ["date", "equity", "cash", "drawdown", "n_holdings", "kill_switch", "ann_ret", "sharpe"];
+
+async function renderShadow() {
+  try {
+    const [book, lots] = await Promise.all([
+      liveTable("shadow_book"),
+      liveTable("shadow_lots"),
+    ]);
+    const bookSorted = (book || []).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).slice(-250);
+    fillSimple("#tbl-shadow", bookSorted, SHADOW_COLS);
+    fillSimple("#tbl-shadow-lots", lots, ["ticker", "buy_date", "shares", "cost_basis", "status", "sell_date", "realized_pl"]);
+  } catch (e) {
+    console.warn("renderShadow", e);
+  }
+}
+
+function initSignalsShadow() {
+  document.querySelector("#live-refresh-signals")?.addEventListener("click", renderSignals);
+}
+
+initSignalsShadow();
 
 </script>
 </body>

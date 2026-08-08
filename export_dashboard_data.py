@@ -114,6 +114,10 @@ TABLES = [
     "options_skew",
     "signal_model_oos",
     "signal_model_weights",
+    # Regime-selected Granite forecasting (pass6/7)
+    "regime_model_best",
+    "regime_model_oos",
+    "regime_calibration",
 ]
 
 
