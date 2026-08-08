@@ -311,6 +311,35 @@ def _channels_from_series(w) -> np.ndarray:
     return np.stack([c, r, v], axis=-1)
 
 
+def _event_proximity_series(n: int, end_ts: pd.Timestamp) -> np.ndarray:
+    """Days-until-next-FOMC/expiry per timestep for the LAST n days ending at
+    end_ts — the serving-side twin of pass6._exog_channel (known-future calendar
+    events as an exogenous input channel; TTM paper 3.2, input form)."""
+    out = np.zeros(n, dtype=np.float32)
+    try:
+        ev = pd.read_csv(Path(__file__).resolve().parent / "economic_calendar.csv")
+        dates = []
+        for _, r in ev.iterrows():
+            et = str(r.get("event_type", ""))
+            if "fomc" in et.lower() or "expiry" in et.lower() or "fed" in et.lower():
+                try:
+                    dates.append(pd.Timestamp(r["date"]))
+                except Exception:
+                    pass
+        dates = sorted(dates)
+        if not dates:
+            return out
+        day = pd.Timedelta(days=1)
+        for i in range(n):
+            t = end_ts - (n - 1 - i) * day
+            nxt = min((d for d in dates if d >= t), default=None)
+            if nxt is not None:
+                out[i] = float(min((nxt - t).days, 180)) / 180.0
+    except Exception:
+        pass
+    return out
+
+
 def forecast_ttm_univariate(model, kind: str, y: np.ndarray, horizon: int, context: int = 512) -> np.ndarray:
     if model is None or kind == "fallback":
         return forecast_fallback(y, horizon)
@@ -319,18 +348,33 @@ def forecast_ttm_univariate(model, kind: str, y: np.ndarray, horizon: int, conte
     y = np.asarray(y, dtype=np.float32)
     hist = y[-min(context, len(y)):]
     try:
-        x = torch.tensor(hist).view(1, -1, 1)
+        # multi-channel input: (context, n_ch) already built by the caller
+        # (regime ensemble passes close+return+vol20+exog); else 1-channel.
+        if hist.ndim == 1:
+            x = torch.tensor(hist).view(1, -1, 1)
+        else:
+            x = torch.tensor(hist).unsqueeze(0)
         if next(model.parameters()).is_cuda:
             x = x.to(next(model.parameters()).device)
+        fwd_kw = {}
+        if getattr(model, "_rpt", False):
+            # Resolution Prefix Tuning checkpoint: pass the daily freq token (2)
+            fwd_kw["freq_token"] = torch.full((x.shape[0],), 2, dtype=torch.long,
+                                              device=x.device)
         with torch.no_grad():
-            out = model(past_values=x) if "past_values" in model.forward.__code__.co_varnames else model(x)
+            out = model(past_values=x, **fwd_kw) if "past_values" in model.forward.__code__.co_varnames else model(x, **fwd_kw)
             if hasattr(out, "prediction_outputs"):
                 pred = out.prediction_outputs
             elif isinstance(out, torch.Tensor):
                 pred = out
             else:
                 pred = out[0]
-            pred = pred.detach().cpu().numpy().reshape(-1)
+            pred = pred.detach().cpu().numpy()
+            # (1, horizon, n_ch) -> (horizon,) on the close channel
+            if pred.ndim == 3:
+                pred = pred[0, :, 0]
+            else:
+                pred = pred.reshape(-1)
             if len(pred) >= horizon:
                 return pred[:horizon].astype(float)
             if len(pred):
@@ -533,11 +577,31 @@ def cmd_forecast(args):
             try:
                 import copy as _copy
                 import torch as _torch
-                regime_model = _copy.deepcopy(model)
+                from transformers import AutoConfig
                 state = _torch.load(ckpt_path, map_location="cpu")
-                regime_model.load_state_dict(state["model"])
+                ckpt_ch = int(state.get("n_channels", 1))
+                ckpt_rpt = bool(state.get("rpt", False))
+                ckpt_exog = bool(state.get("exog", False)) or ckpt_ch >= 4
+                base_cfg = AutoConfig.from_pretrained(gd.DEFAULT_MODEL)
+                base_cfg.num_input_channels = ckpt_ch
+                if ckpt_rpt:
+                    base_cfg.resolution_prefix_tuning = True
+                    base_cfg.frequency_token_vocab_size = 5
+                if ckpt_ch > 1 or ckpt_rpt:
+                    # rebuild with the checkpoint's exact architecture (channel
+                    # count / RPT) so the state dict matches — deepcopying the
+                    # general 1-channel model would size-mismatch silently.
+                    regime_model = type(model).from_pretrained(
+                        gd.DEFAULT_MODEL, config=base_cfg, ignore_mismatched_sizes=True)
+                else:
+                    regime_model = _copy.deepcopy(model)
+                regime_model.load_state_dict(state["model"], strict=False)
                 regime_model.eval()
                 regime_model = regime_model.to(next(model.parameters()).device)
+                # stash the checkpoint's flags so the inference path can pass
+                # the daily freq token (RPT) and build exog channels
+                regime_model._rpt = ckpt_rpt
+                regime_model._exog = ckpt_exog
             except Exception as e:
                 print(f"  {t}: regime model load failed ({e}); general model")
                 regime_model = None
@@ -634,9 +698,13 @@ def cmd_forecast(args):
             # ensemble: average with the regime-selected model when available
             if regime_model is not None and kind != "fallback":
                 n_ch = int(reg_cfg.get("n_channels", 1)) if reg_cfg else 1
+                ckpt_exog = bool(getattr(regime_model, "_exog", False)) or n_ch >= 4
                 if n_ch > 1:
-                    # build (close, return, vol20) channels for the regime model
+                    # build (close, return, vol20[, exog]) channels for the regime model
                     y3 = np.stack(_channels_from_series(y_in), axis=-1) if y_in.ndim == 1 else y_in
+                    if ckpt_exog and hist_index is not None and len(hist_index):
+                        ex = _event_proximity_series(len(y_in), pd.Timestamp(hist_index[-1]))
+                        y3 = np.concatenate([y3, ex[:, None]], axis=-1)
                     pred_reg = forecast_ttm_univariate(regime_model, "regime", y3, horizon, context=context)
                 else:
                     pred_reg = forecast_ttm_univariate(regime_model, "regime", y_in, horizon, context=context)

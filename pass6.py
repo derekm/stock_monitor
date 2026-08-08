@@ -109,8 +109,59 @@ def _channels_from_close(w: np.ndarray) -> np.ndarray:
     return np.stack([c, r, v], axis=-1)
 
 
+# ---- exogenous event-proximity channel (TTM paper 3.2, Exogenous Mixer) ----
+# The model only accepts past_values, so the honest form of "known-future
+# exog" is a per-timestep channel: days-until-next-scheduled-event, computed
+# from the economic calendar (FOMC + option expiries — both known years in
+# advance). The model can learn to be cautious as an event approaches.
+_EVENT_DATES: np.ndarray | None = None
+
+
+def _load_event_dates() -> np.ndarray:
+    """Sorted array of known-future event dates (FOMC + option expiry)."""
+    global _EVENT_DATES
+    if _EVENT_DATES is not None:
+        return _EVENT_DATES
+    events: list[pd.Timestamp] = []
+    path = Path(__file__).resolve().parent / "economic_calendar.csv"
+    if path.exists():
+        ec = pd.read_csv(path)
+        if "date" in ec.columns and "event_type" in ec.columns:
+            for _, r in ec.iterrows():
+                et = str(r.get("event_type", ""))
+                if "fomc" in et.lower() or "expiry" in et.lower() or "fed" in et.lower():
+                    try:
+                        events.append(pd.Timestamp(r["date"]))
+                    except Exception:
+                        pass
+    events.sort()
+    _EVENT_DATES = np.array([e.value / 1e9 for e in events])  # epoch seconds
+    return _EVENT_DATES
+
+
+def _exog_channel(w: np.ndarray, end_epoch: float) -> np.ndarray:
+    """Per-timestep channel: days-until-next-event as of each context day.
+    end_epoch = epoch-seconds of the context-end date; the channel is built
+    by walking the event calendar relative to each timestep's date."""
+    n = len(w)
+    ev = _load_event_dates()
+    if len(ev) == 0:
+        return np.zeros(n, dtype=np.float32)
+    day = 86400.0
+    out = np.zeros(n, dtype=np.float32)
+    # context day i sits (n-1-i) days before the context end
+    for i in range(n):
+        t = end_epoch - (n - 1 - i) * day
+        nxt = ev[ev >= t]
+        if len(nxt):
+            out[i] = float(min((nxt[0] - t) / day, 180.0))  # cap at 180d
+    return out / 180.0  # normalize to [0,1]
+
+
 def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None,
-                       n_channels: int = 1, return_model: bool = False):
+                       n_channels: int = 1, return_model: bool = False,
+                       head_only: bool = False, rpt: bool = False,
+                       exog: bool = False, dates=None):
     """Fine-tune from the IBM base on train_wins; score on test_wins.
 
     When ckpt_dir is given, the trained model is saved there as
@@ -121,6 +172,8 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
     pretrained model to (close, pct_return, realized_vol20) via
     AutoConfig num_input_channels + ignore_mismatched_sizes — the documented
     TTM path for adding channels to a pretrained single-channel model.
+    exog=True appends a 4th channel: days-until-next-FOMC/expiry per timestep
+    (known-future calendar events; TTM paper 3.2 Exogenous Mixer, input form).
 
     return_model=True: the trained model is attached to the result dict as
     ``_model`` (caller owns it and must del it) so downstream calibration can
@@ -133,8 +186,19 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
     # strip the extra tuple fields for the loader
     tr = [(c, t) for c, t, *_ in train_wins]
     te = [(c, t) for c, t, *_ in test_wins]
+    if exog:
+        n_channels = max(n_channels, 4)
     if n_channels > 1:
-        ctx = np.stack([_channels_from_close(w[0]) for w in tr])
+        ctx_parts = []
+        for i, (c, t) in enumerate(tr):
+            ch = _channels_from_close(c)
+            if exog and dates is not None:
+                fpt = train_wins[i][2] if len(train_wins[i]) > 2 else 0
+                end_epoch = pd.Timestamp(dates[fpt]).timestamp()
+                ex = _exog_channel(c, end_epoch)
+                ch = np.concatenate([ch, ex[:, None]], axis=-1)
+            ctx_parts.append(ch)
+        ctx = np.stack(ctx_parts)
         tgt = np.stack([w[1] for w in tr])[:, :, None]
     else:
         ctx = np.stack([w[0] for w in tr])[:, :, None]
@@ -152,20 +216,59 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
             from transformers import AutoConfig
             cfg = AutoConfig.from_pretrained(gd.DEFAULT_MODEL)
             cfg.num_input_channels = n_channels
+            if rpt:
+                # Resolution Prefix Tuning: teach the model its sampling
+                # resolution explicitly. Daily data = freq token 2. Helps
+                # short-context regime windows where resolution is hard to
+                # infer from the data alone (TTM paper 3.1.1, RPT).
+                cfg.resolution_prefix_tuning = True
+                cfg.frequency_token_vocab_size = 5
             m = type(BASE_MODEL).from_pretrained(
                 gd.DEFAULT_MODEL, config=cfg, ignore_mismatched_sizes=True)
             m = m.to(device)
+            if rpt:
+                # RPT is a PRE-TRAINING technique: the freq token adds a patch,
+                # which changes the multi-level patch-partition arithmetic the
+                # pretrained backbone was built for. Probe a real forward; if
+                # the shapes break, RPT is not compatible with this base and we
+                # fall back (honest degradation, never a silent wrong model).
+                try:
+                    with torch.no_grad():
+                        probe = torch.randn(2, CONTEXT, n_channels, device=device)
+                        tok = torch.full((2,), 2, dtype=torch.long, device=device)
+                        m(past_values=probe, freq_token=tok)
+                    print("    [RPT probe OK — resolution prefix active]")
+                except Exception as e:
+                    print(f"    [RPT incompatible with base ({str(e)[:80]}); continuing without RPT]")
+                    rpt = False
+                    m = type(BASE_MODEL).from_pretrained(
+                        gd.DEFAULT_MODEL, ignore_mismatched_sizes=True).to(device)
         except Exception as e:
             print(f"    [channel expansion failed ({e}); falling back to close-only]")
             n_channels = 1
+    if head_only:
+        # TTM paper finding: freeze the backbone, tune only decoder + head
+        # (36% of params). Backbone learned transferable temporal dynamics in
+        # pre-training; regime-specific behavior lives in the head. Also
+        # ~3x cheaper per cell on the 2GB GPU.
+        for p in m.backbone.parameters():
+            p.requires_grad = False
     m.train()
-    opt = torch.optim.AdamW(m.parameters(), lr=lr if lr is not None else gd.LR)
+    opt = torch.optim.AdamW(
+        [p for p in m.parameters() if p.requires_grad],
+        lr=lr if lr is not None else gd.LR)
+    # effective flags: RPT may have been disabled by the probe fallback
+    eff_rpt = rpt
     s = 0
     t0 = time.time()
     while s < steps:
         for xb, yb in dl:
             xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
-            o = m(past_values=xb, future_values=yb)
+            fwd_kw = {}
+            if eff_rpt:
+                # daily resolution token (2); shape [batch]
+                fwd_kw["freq_token"] = torch.full((xb.shape[0],), 2, dtype=torch.long, device=device)
+            o = m(past_values=xb, future_values=yb, **fwd_kw)
             loss = o.loss
             if not torch.isfinite(loss):
                 print(f"    [NaN loss {tag}, aborting]")
@@ -184,12 +287,26 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
     m.eval()
     p_all, a_all, cl = [], [], []
     with torch.no_grad():
-        te_ctx = np.stack([_channels_from_close(w[0]) for w in te]) if n_channels > 1 \
-            else np.stack([w[0] for w in te])[:, :, None]
+        if n_channels > 1:
+            te_parts = []
+            for i, (c, t) in enumerate(te):
+                ch = _channels_from_close(c)
+                if exog and dates is not None:
+                    fpt = test_wins[i][2] if len(test_wins[i]) > 2 else 0
+                    end_epoch = pd.Timestamp(dates[fpt]).timestamp()
+                    ex = _exog_channel(c, end_epoch)
+                    ch = np.concatenate([ch, ex[:, None]], axis=-1)
+                te_parts.append(ch)
+            te_ctx = np.stack(te_parts)
+        else:
+            te_ctx = np.stack([w[0] for w in te])[:, :, None]
         te_tgt = np.stack([w[1] for w in te])[:, :, None]
         for xb, yb in DataLoader(TensorDataset(torch.tensor(te_ctx), torch.tensor(te_tgt)),
                                  batch_size=BATCH, shuffle=False, pin_memory=True):
-            out = m(past_values=xb.to(device))
+            fwd_kw = {}
+            if eff_rpt:
+                fwd_kw["freq_token"] = torch.full((xb.shape[0],), 2, dtype=torch.long, device=device)
+            out = m(past_values=xb.to(device), **fwd_kw)
             p = getattr(out, "prediction_outputs", out)
             if not isinstance(p, torch.Tensor):
                 p = p[0] if isinstance(p, (tuple, list)) else out
@@ -222,6 +339,7 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
         fname = f"{tk_part}__{reg_part}__{steps}__{safe_lr}.pt"
         torch.save({"model": m.state_dict(), "dir_acc": dir_acc,
                     "tag": tag, "n_channels": n_channels,
+                    "rpt": eff_rpt, "exog": exog,
                     "trained_on": pd.Timestamp.now().isoformat()}, ckpt_dir / fname)
     pers = persistence_on_test(te)
     result = dict(
@@ -230,6 +348,7 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
         mape_pers=pers["mape"] if pers else None,
         pers_dir=pers["dir_acc"] if pers else None,
         n_train=len(tr), n_test=len(te), secs=round(dt, 1), tag=tag,
+        head_only=head_only, rpt=eff_rpt, exog=exog,
     )
     if return_model:
         # caller owns the model (calibration measures the actual served model)
@@ -242,7 +361,8 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
 
 
 def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, max_experiments,
-        n_channels: int = 1, ckpt_dir=None):
+        n_channels: int = 1, ckpt_dir=None, head_only: bool = False, rpt: bool = False,
+        exog: bool = False):
     global OUT_CSV, OUT_BEST
     from pathlib import Path
     import os
@@ -258,7 +378,8 @@ def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, ma
                 continue
             try:
                 r = json.loads(line)
-                done.add((r.get("ticker"), r.get("regime"), r.get("steps"), r.get("cap"), r.get("lr")))
+                done.add((r.get("ticker"), r.get("regime"), r.get("steps"), r.get("cap"), r.get("lr"),
+                          r.get("head_only", False), r.get("rpt", False), r.get("exog", False)))
             except Exception:
                 pass
         print(f"resume: {len(done)} configs already done", flush=True)
@@ -295,7 +416,7 @@ def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, ma
                 for steps in steps_list:
                     for cap in caps_list:
                         for lr in lr_list:
-                            key = (tk, reg, steps, cap, lr)
+                            key = (tk, reg, steps, cap, lr, head_only, rpt, exog)
                             if resume and key in done:
                                 continue
                             if max_experiments and n_run >= max_experiments:
@@ -307,9 +428,11 @@ def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, ma
                             if cap and len(tr_win) > cap:
                                 idxs = np.linspace(0, len(tr_win) - 1, cap).astype(int)
                                 tr_win = [train[i] for i in idxs]
-                            tag = f"{tk}|{reg}|st={steps}|cap={cap}|lr={lr}"
+                            tag = f"{tk}|{reg}|st={steps}|cap={cap}|lr={lr}" + ("|head" if head_only else "") + ("|rpt" if rpt else "") + ("|exog" if exog else "")
                             r = train_regime_model(tr_win, test, steps, tag, lr=lr,
-                                                   n_channels=n_channels, ckpt_dir=ckpt_dir)
+                                                   n_channels=n_channels, ckpt_dir=ckpt_dir,
+                                                   head_only=head_only, rpt=rpt,
+                                                   exog=exog, dates=dates)
                             if r.get("skipped"):
                                 print(f"    {tag}: skipped", flush=True)
                                 continue
@@ -338,7 +461,7 @@ def _finish(results):
     best.to_csv(OUT_BEST, index=False)
     span_cols = [f"dir_acc_h{s}" for s in HORIZON_SPANS if f"dir_acc_h{s}" in df.columns]
     print("=== best per-regime configs (max OOS dir excess over persistence) ===")
-    show = ["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir",
+    show = ["ticker", "regime", "steps", "cap", "lr", "head_only", "rpt", "exog", "dir_acc", "pers_dir",
             "mape", "n_test", "secs"] + span_cols
     print(best[[c for c in show if c in best.columns]].to_string(index=False))
     print(f"\nWrote {OUT_CSV}\nWrote {OUT_BEST}")
@@ -358,6 +481,18 @@ def main():
                     help="dir to save per-regime checkpoints for production serving "
                          "(e.g. checkpoints/regime)")
     ap.add_argument("--quick", action="store_true", help="1 config x 1 regime, tiny")
+    ap.add_argument("--head-only", action="store_true",
+                    help="TTM-paper mode: freeze the backbone, fine-tune only the "
+                         "decoder+head (36% of params). Tests whether regime-specific "
+                         "skill lives in the head vs full-model fine-tune.")
+    ap.add_argument("--rpt", action="store_true",
+                    help="Resolution Prefix Tuning: pass the daily freq token (2) to the "
+                         "model so short-context regime windows don't have to infer "
+                         "resolution from the data (TTM paper 3.1.1).")
+    ap.add_argument("--exog", action="store_true",
+                    help="Add an exogenous event-proximity channel (days-to-next FOMC/"
+                         "expiry per timestep from economic_calendar.csv) — known-future "
+                         "calendar exog in input form (TTM paper 3.2).")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--max-experiments", type=int, default=None)
     args = ap.parse_args()
@@ -369,7 +504,8 @@ def main():
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     run(tickers, args.steps, args.caps, args.lrs, args.regimes,
         args.split_frac, args.resume, args.max_experiments, n_channels=args.channels,
-        ckpt_dir=Path(args.ckpt_dir) if args.ckpt_dir else None)
+        ckpt_dir=Path(args.ckpt_dir) if args.ckpt_dir else None, head_only=args.head_only,
+        rpt=args.rpt, exog=args.exog)
 
 
 if __name__ == "__main__":
