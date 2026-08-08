@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-06T14:24:31.460747",
+  "generated": "2026-08-07T00:19:35.460845",
   "count": 198,
   "files": [
     {
@@ -278,7 +278,7 @@
       "path": "cross_section_stats.csv",
       "url": "cross_section_stats.csv",
       "kind": "csv",
-      "size": 274,
+      "size": 499,
       "sql_name": "cross_section_stats"
     },
     {
@@ -352,15 +352,6 @@
       "kind": "parquet",
       "size": 2473,
       "sql_name": "defensive_value_index"
-    },
-    {
-      "name": "distutils.schema",
-      "filename": "distutils.schema.json",
-      "path": "venv_cuda_test/Lib/site-packages/setuptools/config/distutils.schema.json",
-      "url": "venv_cuda_test/Lib/site-packages/setuptools/config/distutils.schema.json",
-      "kind": "json",
-      "size": 972,
-      "sql_name": "distutils_schema"
     },
     {
       "name": "dual_pass_sensitivity",
@@ -1250,7 +1241,7 @@
       "path": "preferred_metrics.parquet",
       "url": "preferred_metrics.parquet",
       "kind": "parquet",
-      "size": 119106,
+      "size": 102230,
       "sql_name": "preferred_metrics"
     },
     {
@@ -1369,6 +1360,24 @@
       "kind": "csv",
       "size": 1156,
       "sql_name": "regime_model_best"
+    },
+    {
+      "name": "regime_model_matrix",
+      "filename": "regime_model_matrix.csv",
+      "path": "regime_model_matrix.csv",
+      "url": "regime_model_matrix.csv",
+      "kind": "csv",
+      "size": 9304,
+      "sql_name": "regime_model_matrix"
+    },
+    {
+      "name": "regime_model_matrix_summary",
+      "filename": "regime_model_matrix_summary.csv",
+      "path": "regime_model_matrix_summary.csv",
+      "url": "regime_model_matrix_summary.csv",
+      "kind": "csv",
+      "size": 454,
+      "sql_name": "regime_model_matrix_summary"
     },
     {
       "name": "regime_model_oos",
@@ -1558,15 +1567,6 @@
       "kind": "csv",
       "size": 651,
       "sql_name": "sector_tickers"
-    },
-    {
-      "name": "setuptools.schema",
-      "filename": "setuptools.schema.json",
-      "path": "venv_cuda_test/Lib/site-packages/setuptools/config/setuptools.schema.json",
-      "url": "venv_cuda_test/Lib/site-packages/setuptools/config/setuptools.schema.json",
-      "kind": "json",
-      "size": 16071,
-      "sql_name": "setuptools_schema"
     },
     {
       "name": "shadow_book",

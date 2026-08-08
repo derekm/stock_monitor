@@ -1,10 +1,2 @@
 mape,dir_acc,mape_pers,pers_dir,n_train,n_test,secs,tag,ticker,regime,steps,cap,lr,pers_mape,excess
-6.26,77.1,6.56,35.4,29,48,496.6,AEP|high_vol_stress|st=6000|cap=100|lr=None,AEP,high_vol_stress,6000,100,,6.56,41.699999999999996
-5.39,70.0,5.38,35.6,100,90,364.9,AEP|low_vol|st=6000|cap=100|lr=None,AEP,low_vol,6000,100,,5.38,34.4
-5.62,70.4,5.73,38.8,162,98,367.4,AEP|normal|st=6000|cap=200|lr=None,AEP,normal,6000,200,,5.73,31.60000000000001
-17.44,64.7,14.92,32.4,73,34,171.3,FICO|high_vol_stress|st=3000|cap=100|lr=None,FICO,high_vol_stress,3000,100,,14.92,32.300000000000004
-8.76,70.7,9.05,35.4,100,82,207.5,FICO|low_vol|st=3000|cap=100|lr=None,FICO,low_vol,3000,100,,9.05,35.300000000000004
-12.31,58.8,11.13,26.8,100,97,354.1,FICO|normal|st=6000|cap=100|lr=None,FICO,normal,6000,100,,11.13,31.999999999999996
-11.02,70.3,11.66,35.1,77,37,169.1,NVR|high_vol_stress|st=3000|cap=100|lr=None,NVR,high_vol_stress,3000,100,,11.66,35.199999999999996
-9.03,64.7,9.33,24.7,100,85,231.3,NVR|low_vol|st=3000|cap=100|lr=None,NVR,low_vol,3000,100,,9.33,40.0
-7.74,72.5,7.08,31.9,186,91,235.2,NVR|normal|st=3000|cap=200|lr=None,NVR,normal,3000,200,,7.08,40.6
+26.72,57.1,5.73,38.8,50,98,19.4,AEP|normal|st=300|cap=50|lr=None,AEP,normal,300,50,,5.73,18.300000000000004

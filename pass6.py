@@ -56,6 +56,8 @@ device = pass4.device
 BATCH = pass4.BATCH
 BASE_MODEL = pass4.BASE_MODEL
 CONTEXT, HORIZON = gd.CONTEXT, gd.HORIZON
+# direction-accuracy spans reported in production runs (cap = model horizon)
+HORIZON_SPANS = [10, 21, 42, 63, 96]
 REGIMES = ["low_vol", "normal", "high_vol_stress"]
 MIN_TEST = 30  # min test windows to claim a per-regime result
 GAP_DAYS = HORIZON  # embargo between train targets and test start (96d)
@@ -94,18 +96,61 @@ def temporal_split(wins: list[tuple], boundary: int):
     return train, test
 
 
-def train_regime_model(train_wins, test_wins, steps, tag, lr=None):
-    """Fine-tune from the IBM base on train_wins; score on test_wins."""
+def _channels_from_close(w: np.ndarray) -> np.ndarray:
+    """(close, pct_return, realized_vol20) channels from a close series."""
+    c = np.asarray(w, dtype=np.float32)
+    r = np.zeros_like(c)
+    r[1:] = np.diff(c) / np.clip(c[:-1], 1e-9, None)
+    v = np.zeros_like(c)
+    for i in range(len(c)):
+        lo = max(0, i - 19)
+        v[i] = np.std(r[lo:i + 1]) if i > lo else 0.0
+    return np.stack([c, r, v], axis=-1)
+
+
+def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None,
+                       n_channels: int = 1):
+    """Fine-tune from the IBM base on train_wins; score on test_wins.
+
+    When ckpt_dir is given, the trained model is saved there as
+    <ticker>__<regime>__<steps>__<cap>__<lr>.pt so the production forecaster
+    can serve it (regime-selected forecasts).
+
+    n_channels=1: close-only (the pass5/6 default). n_channels=3: expand the
+    pretrained model to (close, pct_return, realized_vol20) via
+    resize_token_embeddings with mean-resizing — the documented TTM path for
+    adding channels to a pretrained single-channel model.
+    """
     if len(train_wins) < 3 or len(test_wins) < 3:
         return dict(skipped=True, n_train=len(train_wins), n_test=len(test_wins), tag=tag)
     # strip the extra tuple fields for the loader
     tr = [(c, t) for c, t, *_ in train_wins]
     te = [(c, t) for c, t, *_ in test_wins]
-    ctx = np.stack([w[0] for w in tr])[:, :, None]
-    tgt = np.stack([w[1] for w in tr])[:, :, None]
+    if n_channels > 1:
+        ctx = np.stack([_channels_from_close(w[0]) for w in tr])
+        tgt = np.stack([w[1] for w in tr])[:, :, None]
+    else:
+        ctx = np.stack([w[0] for w in tr])[:, :, None]
+        tgt = np.stack([w[1] for w in tr])[:, :, None]
     dl = DataLoader(TensorDataset(torch.tensor(ctx), torch.tensor(tgt)),
                     batch_size=BATCH, shuffle=True, pin_memory=True, drop_last=False)
     m = copy.deepcopy(BASE_MODEL)  # IBM base only — no checkpoint contamination
+    if n_channels > 1:
+        # Expand a 1-channel pretrained model to n_channels: rebuild the
+        # config with the larger channel count, re-instantiate from the
+        # pretrained checkpoint, load state dict non-strictly (matching
+        # channel weights keep pretrained values; new-channel weights get
+        # fresh init). This is the standard TTM channel-expansion recipe.
+        try:
+            from transformers import AutoConfig
+            cfg = AutoConfig.from_pretrained(gd.DEFAULT_MODEL)
+            cfg.num_input_channels = n_channels
+            m = type(BASE_MODEL).from_pretrained(
+                gd.DEFAULT_MODEL, config=cfg, ignore_mismatched_sizes=True)
+            m = m.to(device)
+        except Exception as e:
+            print(f"    [channel expansion failed ({e}); falling back to close-only]")
+            n_channels = 1
     m.train()
     opt = torch.optim.AdamW(m.parameters(), lr=lr if lr is not None else gd.LR)
     s = 0
@@ -132,10 +177,11 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None):
     m.eval()
     p_all, a_all, cl = [], [], []
     with torch.no_grad():
-        for xb, yb in DataLoader(TensorDataset(
-                torch.tensor(np.stack([w[0] for w in te])[:, :, None]),
-                torch.tensor(np.stack([w[1] for w in te])[:, :, None])),
-                batch_size=BATCH, shuffle=False, pin_memory=True):
+        te_ctx = np.stack([_channels_from_close(w[0]) for w in te]) if n_channels > 1 \
+            else np.stack([w[0] for w in te])[:, :, None]
+        te_tgt = np.stack([w[1] for w in te])[:, :, None]
+        for xb, yb in DataLoader(TensorDataset(torch.tensor(te_ctx), torch.tensor(te_tgt)),
+                                 batch_size=BATCH, shuffle=False, pin_memory=True):
             out = m(past_values=xb.to(device))
             p = getattr(out, "prediction_outputs", out)
             if not isinstance(p, torch.Tensor):
@@ -143,24 +189,48 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None):
             p_all.append(p.cpu().float().numpy())
             a_all.append(yb.numpy())
             cl.append(xb[:, -1, 0].cpu().numpy())
-    P = np.concatenate(p_all, 0).squeeze(-1)
+    P = np.concatenate(p_all, 0)
     A = np.concatenate(a_all, 0).squeeze(-1)
     CL = np.concatenate(cl, 0)
+    if P.ndim == 3:
+        P = P[..., 0]  # close channel only
+    P = P.squeeze(-1) if P.ndim == 2 and P.shape[-1] == 1 else P
+    mape = float((np.abs(P - A) / np.abs(A).clip(min=1e-6)).mean() * 100)
+    dir_acc = float((np.sign(A.mean(1) - CL) == np.sign(P.mean(1) - CL)).mean() * 100)
+    # Production-horizon direction at several spans (up to the 96 max): the
+    # live forecast uses --horizon 10 but signals can be read at 21/42/63/96.
+    # Each span s measures mean-sign over the first s days of the target.
+    spans = [s for s in HORIZON_SPANS if s <= A.shape[1]]
+    span_acc = {}
+    for s in spans:
+        span_acc[f"dir_acc_h{s}"] = round(float(
+            (np.sign(A[:, :s].mean(1) - CL) == np.sign(P[:, :s].mean(1) - CL)).mean() * 100), 1)
+    if ckpt_dir is not None and dir_acc >= 55.0:
+        # only persist models that beat the random-ish 50% floor; the
+        # production consumer filters by regime_model_best.csv anyway
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        safe_lr = str(lr).replace(".", "p") if lr is not None else "None"
+        tk_part = tag.split("|")[0]
+        reg_part = tag.split("|")[1] if "|" in tag else "regime"
+        fname = f"{tk_part}__{reg_part}__{steps}__{safe_lr}.pt"
+        torch.save({"model": m.state_dict(), "dir_acc": dir_acc,
+                    "tag": tag, "n_channels": n_channels,
+                    "trained_on": pd.Timestamp.now().isoformat()}, ckpt_dir / fname)
     del m
     if device.type == "cuda":
         torch.cuda.empty_cache()
-    mape = float((np.abs(P - A) / np.abs(A).clip(min=1e-6)).mean() * 100)
-    dir_acc = float((np.sign(A.mean(1) - CL) == np.sign(P.mean(1) - CL)).mean() * 100)
     pers = persistence_on_test(te)
     return dict(
         mape=round(mape, 2), dir_acc=round(dir_acc, 1),
+        **span_acc,
         mape_pers=pers["mape"] if pers else None,
         pers_dir=pers["dir_acc"] if pers else None,
         n_train=len(tr), n_test=len(te), secs=round(dt, 1), tag=tag,
     )
 
 
-def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, max_experiments):
+def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, max_experiments,
+        n_channels: int = 1, ckpt_dir=None):
     global OUT_CSV, OUT_BEST
     from pathlib import Path
     import os
@@ -226,7 +296,8 @@ def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, ma
                                 idxs = np.linspace(0, len(tr_win) - 1, cap).astype(int)
                                 tr_win = [train[i] for i in idxs]
                             tag = f"{tk}|{reg}|st={steps}|cap={cap}|lr={lr}"
-                            r = train_regime_model(tr_win, test, steps, tag, lr=lr)
+                            r = train_regime_model(tr_win, test, steps, tag, lr=lr,
+                                                   n_channels=n_channels, ckpt_dir=ckpt_dir)
                             if r.get("skipped"):
                                 print(f"    {tag}: skipped", flush=True)
                                 continue
@@ -253,9 +324,11 @@ def _finish(results):
     df["excess"] = df["dir_acc"] - df["pers_dir"].fillna(50.0)
     best = df.loc[df.groupby(["ticker", "regime"])["excess"].idxmax()].reset_index(drop=True)
     best.to_csv(OUT_BEST, index=False)
-    print("\n=== best per-regime configs (max OOS dir excess over persistence) ===")
-    print(best[["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir",
-                "mape", "n_test", "secs"]].to_string(index=False))
+    span_cols = [f"dir_acc_h{s}" for s in HORIZON_SPANS if f"dir_acc_h{s}" in df.columns]
+    print("=== best per-regime configs (max OOS dir excess over persistence) ===")
+    show = ["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir",
+            "mape", "n_test", "secs"] + span_cols
+    print(best[[c for c in show if c in best.columns]].to_string(index=False))
     print(f"\nWrote {OUT_CSV}\nWrote {OUT_BEST}")
 
 
@@ -267,6 +340,11 @@ def main():
     ap.add_argument("--lrs", nargs="+", type=float, default=[None])  # None = gd.LR
     ap.add_argument("--regimes", nargs="+", default=REGIMES)
     ap.add_argument("--split-frac", type=float, default=0.7, help="train fraction of history (shared boundary)")
+    ap.add_argument("--channels", type=int, default=1, choices=[1, 3],
+                    help="1=close-only (default); 3=close+return+realized-vol channels")
+    ap.add_argument("--ckpt-dir", default=None,
+                    help="dir to save per-regime checkpoints for production serving "
+                         "(e.g. checkpoints/regime)")
     ap.add_argument("--quick", action="store_true", help="1 config x 1 regime, tiny")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--max-experiments", type=int, default=None)
@@ -278,7 +356,8 @@ def main():
         args.regimes = ["normal"]
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     run(tickers, args.steps, args.caps, args.lrs, args.regimes,
-        args.split_frac, args.resume, args.max_experiments)
+        args.split_frac, args.resume, args.max_experiments, n_channels=args.channels,
+        ckpt_dir=Path(args.ckpt_dir) if args.ckpt_dir else None)
 
 
 if __name__ == "__main__":
