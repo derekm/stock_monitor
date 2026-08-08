@@ -160,10 +160,27 @@ def run(tickers, arms, split_fracs, caps, steps_list, lrs, fresh_years,
 
 
 def _finish(results):
-    if not results:
+    # Merge with the append-only JSONL so the CSV always reflects FULL history.
+    # Each chunk run passes only its own `results`; without this, a later chunk
+    # (e.g. the NVR run) would overwrite the matrix with just its cells, dropping
+    # earlier tickers (the AEP cells were lost exactly this way at a33f674->1f83538).
+    all_rows = list(results)
+    if os.path.exists(OUT_JSONL):
+        for line in open(OUT_JSONL, encoding="utf-8"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue  # tolerate a partial write from a killed run
+            all_rows.append(r)
+    if not all_rows:
         print("No results.")
         return
-    df = pd.DataFrame(results)
+    # dedupe by full cell identity (last write wins)
+    keys = ["ticker", "regime", "split_frac", "steps", "cap", "lr", "composition"]
+    df = pd.DataFrame(all_rows).drop_duplicates(subset=keys, keep="last")
     df.to_csv(OUT_CSV, index=False)
     df["excess"] = df["dir_acc"] - df["pers_dir"].fillna(50.0)
     # per-arm summary: mean/max excess, and config stability (best config freq)
@@ -181,7 +198,8 @@ def _finish(results):
     summary.to_csv(OUT_SUM, index=False)
     print("\n=== pass7 arm summary (mean/max OOS dir excess over persistence) ===")
     print(summary.to_string(index=False))
-    print(f"\nWrote {OUT_CSV}\nWrote {OUT_SUM}")
+    print(f"\nWrote {OUT_CSV} ({len(df)} unique cells from {len(all_rows)} jsonl+run rows)")
+    print(f"Wrote {OUT_SUM}")
 
 
 def main():
