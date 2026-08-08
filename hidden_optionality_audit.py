@@ -57,16 +57,23 @@ def main():
     # the flips below are perturbed-vs-unperturbed under the same logic.
     frag_map, skew_map = bc._load_maps()
 
-    def actions_at(df, stress_p, mom_sig):
+    def actions_at(df, stress_p, sigs):
         acts = []
         for _, r in df.iterrows():
-            score, _ = bc.score_row(r, stress_p, frag_map, skew_map, mom_sig)
+            score, _ = bc.score_row(r, stress_p, frag_map, skew_map, sigs)
             acts.append(bc.action_from_score(score))
         return pd.Series(acts, index=df.index, dtype=object)
 
     ref_stress = bc.regime_stress_prob()
-    ref_mom_sig = bc._momentum_est_error(base.get("momentum_score"))
-    ref_acts = actions_at(base, ref_stress, ref_mom_sig)
+    ref_sigs = {
+        "momentum": bc._est_error(base.get("momentum_score")),
+        "factor": bc._est_error(base.get("factor_composite")),
+        "composite": bc._est_error(base.get("composite")),
+        "resid_mom": bc._est_error(base.get("resid_mom_63")),
+        "liquidity": bc._est_error(base.get("liquidity_score")),
+        "skew": bc._est_error(pd.Series(list(skew_map.values()))) if skew_map else 0.0,
+    }
+    ref_acts = actions_at(base, ref_stress, ref_sigs)
 
     def perturb_and_flip(driver_col, scale_fn):
         """Perturb one numeric driver per row by a row-specific scale (the
@@ -82,7 +89,7 @@ def main():
             noise = rng.normal(0.0, 1.0, size=len(df))
             s = scale_fn(df)
             df[driver_col] = pd.to_numeric(df[driver_col], errors="coerce") + noise * s
-            acts = actions_at(df, ref_stress, ref_mom_sig)
+            acts = actions_at(df, ref_stress, ref_sigs)
             ref = ref_acts.reindex(acts.index)
             flips += int((acts != ref).sum())
             n = len(acts)
@@ -91,14 +98,13 @@ def main():
 
     rows = []
     drivers = []
-    if "momentum_score" in base.columns:
-        drivers.append(("momentum_score", lambda d: np.full(len(d), float(d["momentum_score"].std()) / 4.0)))
-    if "factor_composite" in base.columns:
-        drivers.append(("factor_composite", lambda d: np.full(len(d), float(d["factor_composite"].std()) / 4.0)))
-    if "composite" in base.columns:
-        drivers.append(("composite", lambda d: np.full(len(d), float(d["composite"].std()) / 4.0)))
+    for col, key in (("momentum_score", "momentum"), ("factor_composite", "factor"),
+                     ("composite", "composite"), ("resid_mom_63", "resid_mom"),
+                     ("liquidity_score", "liquidity")):
+        if col in base.columns:
+            drivers.append((col, key, lambda d, c=col: np.full(len(d), float(d[c].std()) / 4.0)))
 
-    for name, scale_fn in drivers:
+    for name, key, scale_fn in drivers:
         flip, delta, n = perturb_and_flip(name, scale_fn)
         if flip is None:
             print(f"  {name}: not present in buy_candidates inputs — skipped")
@@ -121,7 +127,7 @@ def main():
             p_pert = float(np.clip(p0 + rng.normal(0.0, 0.10), 0.0, 1.0))
             if abs(p_pert - p0) < 1e-9:
                 continue
-            acts = actions_at(base, p_pert, ref_mom_sig)
+            acts = actions_at(base, p_pert, ref_sigs)
             ref = ref_acts.reindex(acts.index)
             flips += int((acts != ref).sum())
             n_reg += len(acts)

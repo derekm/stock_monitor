@@ -111,8 +111,8 @@ def _load_maps():
     return fragility_map, skew_map
 
 
-def _momentum_est_error(series) -> float:
-    """Estimation error of momentum_score: a loose standard error for a
+def _est_error(series) -> float:
+    """Estimation error of a numeric driver: a loose standard error for a
     rolling-window estimate (cross-sectional std / 4). Shared by build() and
     hidden_optionality_audit.py so the production smoothing width matches the
     audit's perturbation scale exactly."""
@@ -122,55 +122,63 @@ def _momentum_est_error(series) -> float:
     return float(s.std()) / 4.0
 
 
-def _momentum_contribution(mom: float, sig: float) -> float:
-    """Expected momentum contribution under the driver's estimation noise.
+def _step_eval(x, baseline, steps):
+    """Evaluate the exact step function: baseline + Σ Δᵢ·1[x ≥ tᵢ]."""
+    v = baseline
+    for t, d in steps:
+        if x >= t:
+            v += d
+    return v
 
-    American-options fix #2 (the paper's §I-A prescription): instead of the
-    hard threshold function g(mom) evaluated at the point estimate, use
-    E[g(mom + ε)] with ε ~ N(0, sig). g is the ORIGINAL step function
-    (-0.15 below -0.5, 0 in [-0.5,0], +0.10 in [0,0.5], +0.20 above 0.5),
-    written as a -0.15 baseline plus three UP-steps (+0.15 at -0.5,
-    +0.10 at 0.0, +0.10 at 0.5). The expectation is the erf-blend
 
-        E = -0.15 + 0.15·Φ((mom+0.5)/sig) + 0.10·Φ(mom/sig)
-                  + 0.10·Φ((mom-0.5)/sig)
+def _step_expectation(x, sig, baseline, steps):
+    """E[g(x + ε)] for a step function g and ε ~ N(0, sig) — the American-
+    options §I-A prescription: integrate the decision over the driver's noise
+    distribution instead of evaluating it at the point estimate.
 
-    so the asymptotic credit is EXACTLY preserved (mom>>0.5 → +0.20,
-    mom~0.2 → +0.10, mom<<-0.5 → -0.15) while the transitions are smoothed
-    over the true noise width. The decision is made on the de-noised
-    expectation, so small perturbations move it only slightly.
-    """
+    g is defined by (baseline, steps) with steps = [(threshold, delta)...].
+    Its noise-convolved expectation is the closed-form erf blend
+
+        E = baseline + Σ Δᵢ·Φ((x - tᵢ)/sig)
+
+    so the asymptotic credit is EXACTLY preserved while the transitions are
+    smoothed over the true noise width. sig <= 0 falls back to the exact
+    step function (old behavior)."""
     if sig <= 0:
-        # no measured error: exact thresholds (old behavior)
-        if mom > 0.5:
-            return 0.20
-        if mom > 0.0:
-            return 0.10
-        if mom < -0.5:
-            return -0.15
-        return 0.0
+        return _step_eval(x, baseline, steps)
     import math
 
     def Phi(z):
         return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
 
-    return (-0.15
-            + 0.15 * Phi((mom + 0.5) / sig)
-            + 0.10 * Phi(mom / sig)
-            + 0.10 * Phi((mom - 0.5) / sig))
+    return baseline + sum(d * Phi((x - t) / sig) for t, d in steps)
 
 
-def score_row(r, stress_p: float, fragility_map=None, skew_map=None, mom_sig: float = 0.0):
+# Numeric decision drivers as step functions (baseline, steps). This is the
+# config for _step_expectation — the single source of truth for both the
+# exact thresholds (sig=0) and the noise-convolved expectations (sig>0).
+MOMENTUM_STEPS = (-0.15, [(-0.5, 0.15), (0.0, 0.10), (0.5, 0.10)])       # -0.15 / 0 / +0.10 / +0.20
+FACTOR_STEPS = (0.0, [(0.0, 0.05), (0.5, 0.10)])                        # 0 / +0.05 / +0.15
+COMPOSITE_STEPS = (-0.10, [(0.25, 0.10), (0.60, 0.15), (0.75, 0.10)])   # -0.10 / 0 / +0.15 / +0.25
+RESID_MOM_STEPS = (0.0, [(0.05, 0.10)])                                 # 0 / +0.10
+LIQUIDITY_STEPS = (-0.10, [(0.15, 0.10)])                               # -0.10 / 0
+SKEW_STEPS = (0.0, [(0.35, -0.15)])                                     # 0 / -0.15
+
+
+def score_row(r, stress_p: float, fragility_map=None, skew_map=None, sigs: dict | None = None):
     """Score ONE candidate row -> (score, reasons). Single source of truth for
     the decision loop — shared by build() and hidden_optionality_audit.py so
     the audit perturbs the REAL scorer, not a drifted copy.
 
     stress_p: soft HMM posterior p(stress) in [0,1] — scales the stress
     haircut continuously (see regime_stress_prob).
-    mom_sig: momentum_score estimation error — width of the noise-convolved
-    momentum contribution (see _momentum_contribution)."""
+    sigs: dict of estimation errors per driver (momentum, factor, composite,
+    resid_mom, liquidity, skew). Drivers use their noise-convolved expectation
+    when sig > 0; absent keys fall back to the exact thresholds (old
+    behavior)."""
     reasons = []
     score = 0.0
+    sigs = sigs or {}
     # gate pieces
     dec = r.get("decision")
     if dec == "INCLUDE_CORE":
@@ -186,11 +194,11 @@ def score_row(r, stress_p: float, fragility_map=None, skew_map=None, mom_sig: fl
 
     mom = r.get("momentum_score")
     if pd.notna(mom):
-        # Momentum contribution = E[g(mom + ε)], ε~N(0, mom_sig): the noise-
+        # Momentum contribution = E[g(mom + ε)], ε~N(0, sig): the noise-
         # convolved expectation of the original step function (see
-        # _momentum_contribution). De-noised decision; asymptotic credit
-        # identical to the old thresholds.
-        m_contrib = _momentum_contribution(float(mom), mom_sig)
+        # _step_expectation). De-noised decision; asymptotic credit identical
+        # to the old thresholds.
+        m_contrib = _step_expectation(float(mom), sigs.get("momentum", 0.0), *MOMENTUM_STEPS)
         score += m_contrib
         if m_contrib >= 0.15:
             reasons.append("strong_momentum")
@@ -200,25 +208,29 @@ def score_row(r, stress_p: float, fragility_map=None, skew_map=None, mom_sig: fl
             reasons.append("weak_momentum")
 
     rm = r.get("resid_mom_63")
-    if pd.notna(rm) and rm > 0.05:
-        score += 0.10; reasons.append("positive_residual_mom")
+    if pd.notna(rm):
+        score += _step_expectation(float(rm), sigs.get("resid_mom", 0.0), *RESID_MOM_STEPS)
+        if rm > 0.05:
+            reasons.append("positive_residual_mom")
 
     fc = r.get("factor_composite")
     if pd.notna(fc):
-        if fc > 0.5:
-            score += 0.15; reasons.append("high_factor_composite")
-        elif fc > 0.0:
-            score += 0.05
+        f_contrib = _step_expectation(float(fc), sigs.get("factor", 0.0), *FACTOR_STEPS)
+        score += f_contrib
+        if f_contrib >= 0.10:
+            reasons.append("high_factor_composite")
 
     # signal aggregator: OOS IC-weighted composite (top quintile = strong)
     agg_c = r.get("composite")
     if pd.notna(agg_c):
-        if agg_c >= 0.75:
-            score += 0.25; reasons.append("aggregate_top")
-        elif agg_c >= 0.60:
-            score += 0.15; reasons.append("aggregate_strong")
-        elif agg_c <= 0.25:
-            score -= 0.10; reasons.append("aggregate_weak")
+        a_contrib = _step_expectation(float(agg_c), sigs.get("composite", 0.0), *COMPOSITE_STEPS)
+        score += a_contrib
+        if a_contrib >= 0.20:
+            reasons.append("aggregate_top")
+        elif a_contrib >= 0.10:
+            reasons.append("aggregate_strong")
+        elif a_contrib <= -0.05:
+            reasons.append("aggregate_weak")
 
     if r.get("leverage_flag") == "cheap-assets":
         score += 0.08; reasons.append("cheap_assets_flag")
@@ -226,8 +238,10 @@ def score_row(r, stress_p: float, fragility_map=None, skew_map=None, mom_sig: fl
         score -= 0.12; reasons.append("levered_assets_flag")
 
     liq = r.get("liquidity_score")
-    if pd.notna(liq) and liq < 0.15:
-        score -= 0.10; reasons.append("low_liquidity")
+    if pd.notna(liq):
+        score += _step_expectation(float(liq), sigs.get("liquidity", 0.0), *LIQUIDITY_STEPS)
+        if liq < 0.15:
+            reasons.append("low_liquidity")
 
     # Taleb vetoes: fragility (top-10% fragility percentile from the
     # fragility screen) and steep options skew (the market's own fear
@@ -236,9 +250,10 @@ def score_row(r, stress_p: float, fragility_map=None, skew_map=None, mom_sig: fl
     if fragility_map is not None and fragility_map.get(tk):
         score -= 0.30
         reasons.append("fragile_veto")
-    if skew_map is not None and tk in skew_map and skew_map[tk] >= SKEW_STEEP:
-        score -= 0.15
-        reasons.append("skew_steepening")
+    if skew_map is not None and tk in skew_map and pd.notna(skew_map[tk]):
+        score += _step_expectation(float(skew_map[tk]), sigs.get("skew", 0.0), *SKEW_STEPS)
+        if skew_map[tk] >= SKEW_STEEP:
+            reasons.append("skew_steepening")
 
     if r.get("sp500_member"):
         score += 0.05; reasons.append("sp500_member")
@@ -304,10 +319,17 @@ def build() -> pd.DataFrame:
 
     reg = regime()
     stress_p_global = regime_stress_prob()
-    mom_sig = _momentum_est_error(df.get("momentum_score"))
+    sigs = {
+        "momentum": _est_error(df.get("momentum_score")),
+        "factor": _est_error(df.get("factor_composite")),
+        "composite": _est_error(df.get("composite")),
+        "resid_mom": _est_error(df.get("resid_mom_63")),
+        "liquidity": _est_error(df.get("liquidity_score")),
+        "skew": _est_error(pd.Series(list(skew_map.values()))) if skew_map else 0.0,
+    }
     rows = []
     for _, r in df.iterrows():
-        score, reasons = score_row(r, stress_p_global, fragility_map, skew_map, mom_sig)
+        score, reasons = score_row(r, stress_p_global, fragility_map, skew_map, sigs)
         action = action_from_score(score)
 
         rows.append({
