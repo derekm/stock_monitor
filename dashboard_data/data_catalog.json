@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-07T00:19:35.460845",
+  "generated": "2026-08-07T23:03:21.608530",
   "count": 198,
   "files": [
     {
@@ -638,7 +638,7 @@
       "path": "forecasts_granite.parquet",
       "url": "forecasts_granite.parquet",
       "kind": "parquet",
-      "size": 610428,
+      "size": 13120,
       "sql_name": "forecasts_granite"
     },
     {
@@ -1358,7 +1358,7 @@
       "path": "regime_model_best.csv",
       "url": "regime_model_best.csv",
       "kind": "csv",
-      "size": 1156,
+      "size": 210,
       "sql_name": "regime_model_best"
     },
     {
@@ -1367,7 +1367,7 @@
       "path": "regime_model_matrix.csv",
       "url": "regime_model_matrix.csv",
       "kind": "csv",
-      "size": 9304,
+      "size": 18602,
       "sql_name": "regime_model_matrix"
     },
     {
@@ -1376,7 +1376,7 @@
       "path": "regime_model_matrix_summary.csv",
       "url": "regime_model_matrix_summary.csv",
       "kind": "csv",
-      "size": 454,
+      "size": 455,
       "sql_name": "regime_model_matrix_summary"
     },
     {
@@ -1385,7 +1385,7 @@
       "path": "regime_model_oos.csv",
       "url": "regime_model_oos.csv",
       "kind": "csv",
-      "size": 3797,
+      "size": 184,
       "sql_name": "regime_model_oos"
     },
     {
