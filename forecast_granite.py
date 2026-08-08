@@ -320,6 +320,8 @@ def forecast_ttm_univariate(model, kind: str, y: np.ndarray, horizon: int, conte
     hist = y[-min(context, len(y)):]
     try:
         x = torch.tensor(hist).view(1, -1, 1)
+        if next(model.parameters()).is_cuda:
+            x = x.to(next(model.parameters()).device)
         with torch.no_grad():
             out = model(past_values=x) if "past_values" in model.forward.__code__.co_varnames else model(x)
             if hasattr(out, "prediction_outputs"):
@@ -354,6 +356,8 @@ def forecast_ttm_mc_dropout(model, kind: str, y: np.ndarray, horizon: int,
     hist = y[-min(context, len(y)):]
     try:
         x = torch.tensor(hist).view(1, -1, 1)
+        if next(model.parameters()).is_cuda:
+            x = x.to(next(model.parameters()).device)
         # enable dropout stochasticity for the forward passes
         train_state = model.training
         model.eval()
@@ -680,6 +684,9 @@ def cmd_forecast(args):
                 "regime_excess": round(float(reg_cfg["dir_acc"] - reg_cfg["pers_dir"]), 1)
                                  if reg_cfg and reg_cfg.get("dir_acc") is not None and reg_cfg.get("pers_dir") is not None else None,
                 "regime_ckpt_age_days": reg_cfg.get("age_days") if reg_cfg and reg_cfg.get("age_days") is not None else None,
+                **({f"regime_dir_h{s}": reg_cfg.get(f"dir_acc_h{s}")
+                    for s in (10, 21, 42, 63, 96)
+                    if reg_cfg and reg_cfg.get(f"dir_acc_h{s}") is not None}),
                 "multivariate": bool(multivariate),
                 "rolling": bool(use_rolling),
                 "channels": channels_mode,
