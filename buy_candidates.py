@@ -33,6 +33,13 @@ HMM = DATA_DIR / "hmm_regime_states.csv"
 SP500 = DATA_DIR / "sp500_sleeve.csv"
 OUT = DATA_DIR / "buy_candidates.csv"
 OUT_TOP = DATA_DIR / "buy_candidates_top.csv"
+FRAGILITY = DATA_DIR / "fragility_screen.csv"
+SKEW_CSV = DATA_DIR / "options_skew.csv"
+SKEW_STEEP = 0.35  # skew >= this (steep put-side fear) triggers the veto
+
+# Taleb veto maps, loaded once in build(): ticker -> fragile flag, ticker -> skew
+fragility_map: dict[str, bool] | None = None
+skew_map: dict[str, float] | None = None
 
 
 def regime() -> str:
@@ -50,6 +57,18 @@ def regime() -> str:
 
 
 def build() -> pd.DataFrame:
+    global fragility_map, skew_map
+    # Taleb veto maps: fragility flag (top-10% pctile) and latest IV skew.
+    fragility_map = None
+    skew_map = None
+    if FRAGILITY.exists():
+        fs = pd.read_csv(FRAGILITY)
+        fragility_map = dict(zip(fs["ticker"].astype(str).str.upper(), fs["fragile_flag"] == True))
+    if SKEW_CSV.exists():
+        sk = pd.read_csv(SKEW_CSV)
+        sk = sk.sort_values("date") if "date" in sk.columns else sk
+        skew_map = dict(zip(sk["ticker"].astype(str).str.upper(), pd.to_numeric(sk["skew"], errors="coerce")))
+
     pref = pd.read_csv(PREF) if PREF.exists() else pd.DataFrame()
     if pref.empty:
         return pref
@@ -134,6 +153,17 @@ def build() -> pd.DataFrame:
         liq = r.get("liquidity_score")
         if pd.notna(liq) and liq < 0.15:
             score -= 0.10; reasons.append("low_liquidity")
+
+        # Taleb vetoes: fragility (top-10% fragility percentile from the
+        # fragility screen) and steep options skew (the market's own fear
+        # gauge). Cheap + fragile = skip — fragility is a veto, not a score.
+        tk = str(r.get("ticker", "")).upper()
+        if fragility_map is not None and fragility_map.get(tk):
+            score -= 0.30
+            reasons.append("fragile_veto")
+        if skew_map is not None and tk in skew_map and skew_map[tk] >= SKEW_STEEP:
+            score -= 0.15
+            reasons.append("skew_steepening")
 
         if r.get("sp500_member"):
             score += 0.05; reasons.append("sp500_member")

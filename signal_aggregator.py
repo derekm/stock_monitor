@@ -156,8 +156,15 @@ def forward_return_series(cutoff: pd.Timestamp, trailing: int = 504) -> pd.DataF
     return fwd
 
 
-def estimate_ic(scores: pd.DataFrame, fwd: pd.Series) -> pd.DataFrame:
-    """Trailing-window IC (rank corr of each family vs forward 21d return)."""
+def estimate_ic(scores: pd.DataFrame, fwd: pd.Series, lindy: bool = False) -> pd.DataFrame:
+    """Trailing-window IC (rank corr of each family vs forward 21d return).
+
+    lindy=True applies Taleb's Lindy factor: weight = max(IC,0) * survival
+    bonus, where the bonus grows with the family's observation history
+    (age of the signal is its own robustness evidence). Without lindy the
+    weight is pure max(IC,0) — a 2-year-old signal and a 20-year-old signal
+    with equal IC get equal weight.
+    """
     ic_rows = []
     for family in ["preferred", "peer", "cross", "pair", "earnings"]:
         if family not in scores:
@@ -168,8 +175,9 @@ def estimate_ic(scores: pd.DataFrame, fwd: pd.Series) -> pd.DataFrame:
             ic_rows.append({"family": family, "ic": np.nan, "n": 0, "weight": 0.0})
             continue
         ic = float(s.loc[common].corr(fwd.loc[common], method="spearman"))
+        lindy_factor = (len(common) / 504) ** 0.5 if lindy else 1.0  # ~2y history = 1.0
         ic_rows.append({"family": family, "ic": round(ic, 4), "n": len(common),
-                        "weight": round(max(ic, 0.0), 4)})
+                        "weight": round(max(ic, 0.0) * lindy_factor, 4)})
     ic_df = pd.DataFrame(ic_rows)
     wsum = ic_df["weight"].sum()
     if wsum > 0:
@@ -180,7 +188,7 @@ def estimate_ic(scores: pd.DataFrame, fwd: pd.Series) -> pd.DataFrame:
 
 
 def estimate_ic_by_regime(scores: pd.DataFrame, fwd_series: pd.DataFrame,
-                          regime_s: pd.Series) -> pd.DataFrame:
+                          regime_s: pd.Series, lindy: bool = False) -> pd.DataFrame:
     """Per-regime IC: mean rank corr of each family vs forward returns, by the
     HMM regime in force at each measurement date.
 
@@ -189,7 +197,7 @@ def estimate_ic_by_regime(scores: pd.DataFrame, fwd_series: pd.DataFrame,
     Falls back to the global IC when a regime has < 20 observations.
     """
     if fwd_series.empty or regime_s.empty:
-        return estimate_ic(scores, fwd_series.iloc[-1] if len(fwd_series) else pd.Series(dtype=float))
+        return estimate_ic(scores, fwd_series.iloc[-1] if len(fwd_series) else pd.Series(dtype=float), lindy)
 
     # tag each measurement date with the regime in force at-or-before it
     tags: dict[pd.Timestamp, str] = {}
@@ -232,8 +240,9 @@ def estimate_ic_by_regime(scores: pd.DataFrame, fwd_series: pd.DataFrame,
             ic_now = float(np.mean(all_ics)) if all_ics else np.nan
         row["ic"] = round(ic_now, 4) if np.isfinite(ic_now) else np.nan
         row["regime_now"] = cur
-        row["weight"] = round(max(ic_now, 0.0), 4) if np.isfinite(ic_now) else 0.0
         row["n"] = int(sum(len(v) for v in per_regime.values()))
+        lindy_factor = (row["n"] / 504) ** 0.5 if lindy else 1.0
+        row["weight"] = round(max(ic_now, 0.0) * lindy_factor, 4) if np.isfinite(ic_now) else 0.0
         rows.append(row)
     ic_df = pd.DataFrame(rows)
     wsum = ic_df["weight"].sum()
@@ -244,7 +253,7 @@ def estimate_ic_by_regime(scores: pd.DataFrame, fwd_series: pd.DataFrame,
     return ic_df
 
 
-def build(cutoff: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build(cutoff: pd.Timestamp | None = None, lindy: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
     scores = load_scores()
     prices = load_adj_prices_pandas()
     if cutoff is None:
@@ -253,12 +262,13 @@ def build(cutoff: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFram
     regime_s = load_regime_map()
     fwd_series = forward_return_series(cutoff)
     if not fwd_series.empty and not regime_s.empty:
-        ic_df = estimate_ic_by_regime(scores, fwd_series, regime_s)
-        print(f"Per-regime IC weights (regime_now={ic_df['regime_now'].iloc[0] if len(ic_df) else '?'})")
+        ic_df = estimate_ic_by_regime(scores, fwd_series, regime_s, lindy)
+        print(f"Per-regime IC weights (regime_now={ic_df['regime_now'].iloc[0] if len(ic_df) else '?'})"
+              + (" + Lindy survival factor" if lindy else ""))
     else:
         fwd = forward_returns(cutoff)
-        ic_df = estimate_ic(scores, fwd)
-        print("Global IC weights (no HMM regime map available)")
+        ic_df = estimate_ic(scores, fwd, lindy)
+        print("Global IC weights (no HMM regime map available)" + (" + Lindy" if lindy else ""))
 
     # composite = weighted mean of normalized family scores
     normed = scores.copy()
@@ -288,10 +298,13 @@ def build(cutoff: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFram
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cutoff", default=None, help="YYYY-MM-DD (default: last price date)")
+    ap.add_argument("--lindy", action="store_true",
+                    help="Lindy-weight the IC: scale each family weight by its survival "
+                         "history (older signals get more weight — Taleb)")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
-    scores, ic_df = build(cutoff=args.cutoff)
+    scores, ic_df = build(cutoff=args.cutoff, lindy=args.lindy)
     print("=== Trailing-window IC (rank corr vs forward 21d return) ===")
     print(ic_df.to_string(index=False))
     print("\n=== Top 20 composite ===")
