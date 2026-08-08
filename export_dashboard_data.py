@@ -133,10 +133,10 @@ def load(name: str) -> pd.DataFrame | None:
     return None
 
 
-def df_records(df: pd.DataFrame | None, cap: int = 500) -> list:
+def df_records(df: pd.DataFrame | None) -> list:
     if df is None or df.empty:
         return []
-    out = df.head(cap).copy()
+    out = df.copy()
     for c in out.columns:
         if pd.api.types.is_datetime64_any_dtype(out[c]):
             out[c] = out[c].astype(str)
@@ -165,7 +165,7 @@ def build_value_trifecta(fund: pd.DataFrame, pm: pd.DataFrame | None) -> list:
         if "name" not in hits.columns:
             hits["name"] = hits["ticker"]
         cols = ["ticker", "name"] + [c for c in cols if c not in ("ticker",)]
-        return df_records(hits[cols] if cols else hits, 100)
+        return df_records(hits[cols] if cols else hits)
     if fund is None or fund.empty:
         return []
     m = fund.copy()
@@ -178,14 +178,14 @@ def build_value_trifecta(fund: pd.DataFrame, pm: pd.DataFrame | None) -> list:
         & (m["mktcap_to_assets"].notna()) & (m["mktcap_to_assets"] <= 0.5)
     ].copy()
     hits["name"] = hits["ticker"]
-    return df_records(hits, 100)
+    return df_records(hits)
 
 
 def decision_notes(pm: pd.DataFrame | None, holdings: pd.DataFrame | None) -> list:
     notes = []
     if holdings is not None and not holdings.empty:
         n = len(holdings)
-        tickers = ", ".join(holdings["ticker"].astype(str).head(12).tolist())
+        tickers = ", ".join(holdings["ticker"].astype(str).tolist())
         notes.append({
             "title": f"Personal portfolio · {n} positions",
             "detail": f"Current holdings: {tickers}. Weights and P&L from trades.parquet / price marks.",
@@ -203,7 +203,7 @@ def decision_notes(pm: pd.DataFrame | None, holdings: pd.DataFrame | None) -> li
             notes.append({
                 "title": "Value trifecta passers",
                 "detail": "EV/EBITDA≤9, P/B≤1.5, MktCap/Assets≤0.5 → "
-                          + ", ".join(tri["ticker"].astype(str).head(15).tolist()),
+                          + ", ".join(tri["ticker"].astype(str).tolist()),
             })
         port = pm[pm.get("in_portfolio", False) == True] if "in_portfolio" in pm.columns else pd.DataFrame()
         if len(port) and "decision" in port.columns:
@@ -211,7 +211,7 @@ def decision_notes(pm: pd.DataFrame | None, holdings: pd.DataFrame | None) -> li
                 "title": "Held names · screen status",
                 "detail": "; ".join(
                     f"{r.ticker}: {r.decision}" for r in port.itertuples()
-                )[:500],
+                ),
             })
     if not notes:
         notes.append({
@@ -226,7 +226,7 @@ def main():
 
     for name in TABLES:
         df = load(name)
-        recs = df_records(df, 500)
+        recs = df_records(df)
         payload["tables"][name] = recs
         print(f"  {name}: {len(recs)} rows exported (cap 500)")
 
@@ -234,7 +234,7 @@ def main():
     pm = load("preferred_metrics")
     if pm is not None and "decision" in pm.columns:
         dual = pm[pm["decision"].astype(str).str.contains("INCLUDE_CORE", na=False)]
-        payload["tables"]["dual_passers"] = df_records(dual, 50)
+        payload["tables"]["dual_passers"] = df_records(dual)
         print(f"  dual_passers: {len(payload['tables']['dual_passers'])}")
 
     # Top-level objects for Decisions / Portfolio / Value tabs
@@ -266,8 +266,8 @@ def main():
                     axis=1,
                 )
 
-    payload["holdings"] = df_records(holdings, 200)
-    payload["fundamentals"] = df_records(fund, 500)
+    payload["holdings"] = df_records(holdings)
+    payload["fundamentals"] = df_records(fund)
     payload["value_trifecta"] = build_value_trifecta(fund, pm)
     payload["decision_notes"] = decision_notes(pm, holdings)
 
@@ -286,13 +286,13 @@ def main():
                     on="ticker", how="left",
                 )
         low_ev = f2.dropna(subset=["ev_ebitda"])
-        low_ev = low_ev[low_ev["ev_ebitda"] > 0].sort_values("ev_ebitda").head(20)
+        low_ev = low_ev[low_ev["ev_ebitda"] > 0].sort_values("ev_ebitda")
         low_pb = f2.dropna(subset=["pb_ratio"])
-        low_pb = low_pb[low_pb["pb_ratio"] > 0].sort_values("pb_ratio").head(15)
-        payload["low_ev_ebitda"] = df_records(low_ev, 20)
-        payload["low_pb"] = df_records(low_pb, 15)
+        low_pb = low_pb[low_pb["pb_ratio"] > 0].sort_values("pb_ratio")
+        payload["low_ev_ebitda"] = df_records(low_ev)
+        payload["low_pb"] = df_records(low_pb)
         # refresh fundamentals with index_member if we enriched
-        payload["fundamentals"] = df_records(f2, 500)
+        payload["fundamentals"] = df_records(f2)
     else:
         payload["low_ev_ebitda"] = []
         payload["low_pb"] = []
@@ -312,7 +312,7 @@ def main():
                 sort_cols.append("date")
                 ascending.append(False)
             a = a.sort_values(sort_cols, ascending=ascending).drop(columns=["_abs"], errors="ignore")
-        payload["anomalies"] = df_records(a, 150)
+        payload["anomalies"] = df_records(a)
     else:
         payload["anomalies"] = []
 
@@ -320,8 +320,8 @@ def main():
     fc = load("forecasts_granite")
     if fc is not None and not fc.empty and "horizon" in fc.columns:
         hmax = fc["horizon"].max()
-        payload["forecasts_hmax"] = df_records(fc[fc["horizon"] == hmax], 200)
-        payload["forecasts"] = df_records(fc, 500)
+        payload["forecasts_hmax"] = df_records(fc[fc["horizon"] == hmax])
+        payload["forecasts"] = df_records(fc)
     else:
         payload["forecasts_hmax"] = []
         payload["forecasts"] = []
@@ -330,16 +330,16 @@ def main():
     _asc = load("asset_sector_correlations")
     if _asc is None or (hasattr(_asc, "empty") and _asc.empty):
         _asc = load("asset_sector_corr")
-    payload["asset_sector_corr"] = df_records(_asc, 500)
+    payload["asset_sector_corr"] = df_records(_asc)
     # Stability: prefer cross-asset pair stability, then correlation_stability_metrics
     stab = load("cross_asset_stability")
     if stab is None or (hasattr(stab, "empty") and stab.empty):
         stab = load("correlation_stability_metrics")
     if stab is None or (hasattr(stab, "empty") and stab.empty):
         stab = load("corr_stability")
-    payload["corr_stability"] = df_records(stab, 200)
+    payload["corr_stability"] = df_records(stab)
     payload["corr_stability_metrics"] = payload["corr_stability"]
-    payload["hmm_regime_corr"] = df_records(load("hmm_regime_correlations"), 200)
+    payload["hmm_regime_corr"] = df_records(load("hmm_regime_correlations"))
     # Sector corr matrix: normalize index column to "sector"
     sc = load("sector_correlation_matrix_latest")
     if sc is not None and not sc.empty:
@@ -350,7 +350,7 @@ def main():
                     break
             if "sector" not in sc.columns and sc.index.name:
                 sc = sc.reset_index().rename(columns={sc.columns[0]: "sector"})
-        payload["sector_corr"] = df_records(sc, 50)
+        payload["sector_corr"] = df_records(sc)
     else:
         payload["sector_corr"] = []
     # Prefer clean 1y sleeve stats; fall back to growth_tech suite numbers
@@ -359,19 +359,19 @@ def main():
         ib = load("index_backtest")
     if ib is None or (hasattr(ib, "empty") and ib.empty):
         ib = load("growth_tech_backtest_stats")
-    payload["index_backtest"] = df_records(ib, 50)
-    payload["forecast_backtest"] = df_records(load("forecast_backtest_metrics"), 100)
-    payload["factor_rotation_performance"] = df_records(load("factor_rotation_performance"), 50)
-    payload["sharpe_comparison"] = df_records(load("sharpe_comparison"), 50)
+    payload["index_backtest"] = df_records(ib)
+    payload["forecast_backtest"] = df_records(load("forecast_backtest_metrics"))
+    payload["factor_rotation_performance"] = df_records(load("factor_rotation_performance"))
+    payload["sharpe_comparison"] = df_records(load("sharpe_comparison"))
 
     # Fisher indexes + universe membership for dashboard
     fi = load("fisher_indexes")
     if fi is None:
         fi = load("fisher_indexes_duckdb")
-    payload["fisher_indexes"] = df_records(fi, 5000)
-    payload["fisher_rate_decomposition"] = df_records(load("fisher_rate_decomposition"), 5000)
+    payload["fisher_indexes"] = df_records(fi)
+    payload["fisher_rate_decomposition"] = df_records(load("fisher_rate_decomposition"))
     fid = load("fisher_indexes_duckdb")
-    payload["fisher_indexes_duckdb"] = df_records(fid, 5000) if fid is not None else []
+    payload["fisher_indexes_duckdb"] = df_records(fid) if fid is not None else []
     # Universes from membership flags
     stocks = load("monitored_stocks")
     holdings = load("portfolio_holdings")
@@ -393,7 +393,7 @@ def main():
             universes.setdefault(str(u), universes.get(str(u), []))
     payload["fisher_universes"] = universes
     ms = load("monitored_stocks")
-    payload["monitored_stocks"] = df_records(ms, 500)
+    payload["monitored_stocks"] = df_records(ms)
 
     # S&P 500 historical inclusion/exclusion simulation (ours vs actuals, w/ removals)
     try:
@@ -419,7 +419,7 @@ def main():
     # Raw add/remove change log (real events)
     try:
         chg = load("sp500_changes")
-        payload["sp500_changes"] = df_records(chg, 500)
+        payload["sp500_changes"] = df_records(chg)
     except Exception as e:
         payload["sp500_changes"] = []
         print("sp500_changes skip", e)
@@ -441,7 +441,7 @@ def main():
                 [c for c in ["date", "ticker", "close", "volume"] if c in px.columns]
             ].copy()
             panel["date"] = panel["date"].astype(str).str.slice(0, 10)
-            payload["price_qty_panel"] = df_records(panel, 80000)
+            payload["price_qty_panel"] = df_records(panel)
         else:
             payload["price_qty_panel"] = []
     except Exception as e:
