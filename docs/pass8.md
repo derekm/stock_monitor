@@ -22,13 +22,13 @@ patch count is `num_patches + 1`. A model built with `num_patches=8` receives
 9 patches and every layer built for 8 breaks. The fix: **build the model with
 `num_patches = 9`** when RPT is enabled — then the patcher, positional
 encoding, and all mixers are sized for 9 consistently and a forward with
-`freq_token=2` (daily) runs clean (`(2, 96, 1)` verified).
+`freq_token=8` (daily) runs clean (`(2, 96, 1)` verified).
 
 ## Pipeline
 
 ```
 Stage A (--pretrain)    fresh TinyTimeMixer, resolution_prefix_tuning=True,
-                        num_patches=9, freq_token=2 (daily), channel-independent
+                        num_patches=9, freq_token=8 (daily), channel-independent
                         univariate close windows from ALL monitored tickers
                         (paper §3.1 pre-training workflow), MSE objective.
                         Saves checkpoints/rpt_base/ttm_rpt_<steps>.pt + config.

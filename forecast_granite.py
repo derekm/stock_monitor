@@ -358,8 +358,8 @@ def forecast_ttm_univariate(model, kind: str, y: np.ndarray, horizon: int, conte
             x = x.to(next(model.parameters()).device)
         fwd_kw = {}
         if getattr(model, "_rpt", False):
-            # Resolution Prefix Tuning checkpoint: pass the daily freq token (2)
-            fwd_kw["freq_token"] = torch.full((x.shape[0],), 2, dtype=torch.long,
+            # Resolution Prefix Tuning checkpoint: pass the daily freq token (8)
+            fwd_kw["freq_token"] = torch.full((x.shape[0],), 8, dtype=torch.long,
                                               device=x.device)
         with torch.no_grad():
             out = model(past_values=x, **fwd_kw) if "past_values" in model.forward.__code__.co_varnames else model(x, **fwd_kw)

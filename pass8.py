@@ -17,7 +17,7 @@ on OOS dir excess over persistence.
 
 Pipeline:
   Stage A (--pretrain):   train a fresh TinyTimeMixer with
-                          resolution_prefix_tuning=True, freq_token=2 (daily),
+                          resolution_prefix_tuning=True, freq_token=8 (daily),
                           on univariate close series across ALL monitored
                           tickers (channel-independent, MSE objective, the
                           paper's pre-training workflow 3.1). Save base to
@@ -72,7 +72,12 @@ device = pass4.device
 BATCH = pass4.BATCH
 CONTEXT, HORIZON = pass6.CONTEXT, pass6.HORIZON
 DATA_DIR = Path(__file__).resolve().parent
-FREQ_DAILY = 2  # daily resolution token (paper RPT mapping)
+FREQ_DAILY = 8  # daily resolution token per granite-tsfm DEFAULT_FREQUENCY_MAPPING
+# (time_series_preprocessor.py: oov=0, min=1, ..., h=7, d=8, W=9).
+# NOTE: tsfm_public 0.3.8 ships the freq helpers as an unimplemented stub
+# (utils_tinytimemixer.py is referenced but absent), so nothing enforces this
+# locally — we use 8 to match the upstream canonical mapping so a future tsfm
+# upgrade serves RPT checkpoints with the correct daily token.
 
 OUT_OOS_RPT = DATA_DIR / "regime_model_oos_rpt.csv"
 OUT_BEST_RPT = DATA_DIR / "regime_model_best_rpt.csv"
@@ -89,7 +94,7 @@ def _fresh_rpt_model(n_channels: int = 1):
     num_patches MUST be bumped 8->9 when RPT is on: the freq token occupies
     a 9th patch slot, and every TSMixer layer is built from config.num_patches.
     Building with num_patches=9 makes the whole model consistent (verified:
-    forward with freq_token=2 produces (2, 96, 1))."""
+    forward with freq_token=8 produces (2, 96, 1))."""
     from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig, TinyTimeMixerForPrediction
     cfg = TinyTimeMixerConfig.from_pretrained(pass6.gd.DEFAULT_MODEL)
     cfg.resolution_prefix_tuning = True

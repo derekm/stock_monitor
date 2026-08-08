@@ -253,7 +253,7 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
                 try:
                     with torch.no_grad():
                         probe = torch.randn(2, CONTEXT, n_channels, device=device)
-                        tok = torch.full((2,), 2, dtype=torch.long, device=device)
+                        tok = torch.full((2,), 8, dtype=torch.long, device=device)
                         m(past_values=probe, freq_token=tok)
                     print("    [RPT probe OK — resolution prefix active]")
                 except Exception as e:
@@ -284,8 +284,8 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
             xb, yb = xb.to(device, non_blocking=True), yb.to(device, non_blocking=True)
             fwd_kw = {}
             if eff_rpt:
-                # daily resolution token (2); shape [batch]
-                fwd_kw["freq_token"] = torch.full((xb.shape[0],), 2, dtype=torch.long, device=device)
+                # daily resolution token (8); shape [batch]
+                fwd_kw["freq_token"] = torch.full((xb.shape[0],), 8, dtype=torch.long, device=device)
             o = m(past_values=xb, future_values=yb, **fwd_kw)
             loss = o.loss
             if not torch.isfinite(loss):
@@ -323,7 +323,7 @@ def train_regime_model(train_wins, test_wins, steps, tag, lr=None, ckpt_dir=None
                                  batch_size=BATCH, shuffle=False, pin_memory=True):
             fwd_kw = {}
             if eff_rpt:
-                fwd_kw["freq_token"] = torch.full((xb.shape[0],), 2, dtype=torch.long, device=device)
+                fwd_kw["freq_token"] = torch.full((xb.shape[0],), 8, dtype=torch.long, device=device)
             out = m(past_values=xb.to(device), **fwd_kw)
             p = getattr(out, "prediction_outputs", out)
             if not isinstance(p, torch.Tensor):
@@ -504,7 +504,7 @@ def main():
                          "decoder+head (36% of params). Tests whether regime-specific "
                          "skill lives in the head vs full-model fine-tune.")
     ap.add_argument("--rpt", action="store_true",
-                    help="Resolution Prefix Tuning: pass the daily freq token (2) to the "
+                    help="Resolution Prefix Tuning: pass the daily freq token (8) to the "
                          "model so short-context regime windows don't have to infer "
                          "resolution from the data (TTM paper 3.1.1).")
     ap.add_argument("--exog", action="store_true",
