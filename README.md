@@ -15,8 +15,9 @@ Read **[docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md)** for a holistic summa
 **Docs map:**
 - **[docs/SYSTEM_ORCHESTRATION.md](docs/SYSTEM_ORCHESTRATION.md)** — how the programs chain (data spine → analytics → services), what `start_dashboard.sh` launches, and what an agent should know before running analytics.
 - **[docs/SCHEMAS.md](docs/SCHEMAS.md)** — the single catalog of every output file → producing script → schema family.
-- **Per-program docs:** `docs/<script>.md` for all 124 scripts (description, rationale, outputs, cross-links).
+- **Per-program docs:** `docs/<script>.md` for all 123 scripts (description, rationale, outputs, cross-links).
 - **[GLOSSARY.md](../GLOSSARY.md)** — cross-repo acronym dictionary (root of the stockmagic repo, covers both repos).
+- **Diagrams:** `docs/diagrams/*.png` (+ Mermaid sources) — framework architecture, daily-automation DAG, signal stack, regime-selected forecasting pipeline; `render_mermaid.py` re-renders them.
 
 **Documentation architecture (read in this order):**
 
@@ -69,10 +70,10 @@ python forecast_granite.py forecast --index portfolio --from-first-trade --horiz
 
 **Full daily refresh (recommended):** run the master orchestrator, or trigger it from the dashboard
 ```bash
-python run_daily_automation.py                 # preferred → inclusion → stress → rolling → allpairs → fundamentals → dupont → growth-tech → export
+python run_daily_automation.py   # 26 jobs: hmm → rebalance → preferred → inclusion → stress → crisis → factor_rot → risk_enrich → rolling → rolling_corr → tail_hedge → allpairs → fund_snap → screen_bt → dupont → growth → peer → earnings → pairs → cross → aggregate → technical → econ_cal → est_rev → shadow → export
 # or from the dashboard Ops tab: analytics_service POST /run/all-daily
 ```
-Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `preferred, inclusion, stress, rolling, rolling_corr, tail_hedge, allpairs, screen_bt, dupont, growth, export`).
+Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, export`).
 
 **Refresh just the data:**
 ```bash
@@ -141,10 +142,12 @@ Backfilled rows are stamped `source='yfinance'`. We do NOT synthesize history
 | **Indexes** | Fertilizer EW, defensive value EW, **growth/tech (high-risk)**, personal sleeve backtests |
 | **Valuation** | P/B, MktCap/Assets, EV/EBITDA, value trifecta inclusion screen |
 | **Sectors** | Correlation matrices, rolling/stability, HMM regimes, Granger, Kalman |
-| **Forecasting** | Granite TTM (or statistical fallback), multivariate, exogenous, sector EW |
+| **Signals** | Preferred/peer/cross/pairs/earnings families → **OOS-IC-weighted aggregator** + GradientBoosting blend; technical (RSI/MACD/Bollinger), options skew & put/call, estimate revisions, 8-K filings sentiment |
+| **Forecasting** | Granite TTM (or statistical fallback), multivariate, exogenous, sector EW, **regime-selected models** (pass5/6/7), MC-dropout uncertainty bands, per-span direction accuracy (H+10..96) |
 | **Anomalies** | TSPulse-ready + statistical z-score / dispersion shocks |
 | **Fisher indexes** | Chained Laspeyres / Paasche / Fisher P&Q + √(Fp×Fq) nominal |
-| **Dashboard** | Decision memos, SQL Lab, CSV catalog, Chart.js, DuckDB-Wasm Fisher |
+| **Costs & execution** | Cost model (10bps + borrow) in backtests; **shadow book** paper-trading with FIFO lots + kill switches; perf metrics (Sharpe/Sortino/Calmar/capacity) |
+| **Dashboard** | Decision memos, SQL Lab, CSV catalog, Chart.js, DuckDB-Wasm Fisher, Sprint Engines tab |
 
 ### Decision themes (portfolio inclusion)
 
@@ -209,6 +212,28 @@ Detailed usage for each module:
 - [docs/ttm_features.md](docs/ttm_features.md) — multivariate feature panels
 - [docs/ttm_exogenous.md](docs/ttm_exogenous.md) — exogenous market/sector channels
 - [docs/tspulse_anomaly.md](docs/tspulse_anomaly.md) — anomaly scan
+
+### Signals, costs & portfolio execution
+- [docs/signal_aggregator.md](docs/signal_aggregator.md) — **OOS-IC-weighted signal combination (+ per-regime IC)**
+- [docs/signal_model.md](docs/signal_model.md) — supervised GradientBoosting blend (mean IC 0.237 vs composite 0.152)
+- [docs/technical_signals.md](docs/technical_signals.md) — RSI/MACD/Bollinger/Keltner/SMA crossovers
+- [docs/options_skew.md](docs/options_skew.md) — IV skew + put/call volume ratios
+- [docs/estimate_revisions.md](docs/estimate_revisions.md) — consensus EPS/price-target revisions
+- [docs/filings_sentiment.md](docs/filings_sentiment.md) — SEC 8-K lexicon sentiment
+- [docs/cost_model.md](docs/cost_model.md) — 10bps/side + short borrow in backtests
+- [docs/shadow_book.md](docs/shadow_book.md) — **paper trading with FIFO tax lots + kill switches**
+- [docs/perf_metrics.md](docs/perf_metrics.md) — Sharpe/Sortino/Calmar/profit factor/turnover/capacity
+- [docs/economic_calendar.md](docs/economic_calendar.md) — trading days, expiries, FOMC events
+- [docs/update_polygon.md](docs/update_polygon.md) — key-gated Polygon.io ingest
+
+### Regime-selected forecasting research (passes)
+- [docs/pass5.md](docs/pass5.md) — Granite-TTM as direction forecaster (honest OOS)
+- [docs/pass5_sweep.md](docs/pass5_sweep.md) — 648-experiment training-parameter sweep
+- [docs/regime_forecast.md](docs/regime_forecast.md) — regime-conditioned direction accuracy
+- [docs/pass6.md](docs/pass6.md) — per-regime models, per-regime parameters
+- [docs/pass7.md](docs/pass7.md) — experiment-design matrix (boundary/composition/lr/freshness)
+- [docs/regime_serving.md](docs/regime_serving.md) — serving regime checkpoints in production
+- [docs/regime_calibrate.md](docs/regime_calibrate.md) — MC-dropout band calibration + coverage training
 
 ### Fisher indexes
 - [docs/run_fisher_duckdb.md](docs/run_fisher_duckdb.md) — **DuckDB chained Fisher (preferred)**
@@ -288,9 +313,13 @@ python ttm_features.py --index portfolio --save
 python ttm_exogenous.py --save
 python forecast_granite.py forecast --index portfolio --from-first-trade --multivariate --exog --horizon 10
 python forecast_granite.py forecast --index sectors --horizon 10
+# uncertainty band + regime-selected serving:
+python forecast_granite.py forecast --index portfolio --horizon 10 --uncertainty
 ```
 
 Without model weights, scripts use a statistical drift/seasonal **fallback** so the pipeline still runs offline.
+
+**Regime-selected forecasting (pass5 → pass7 → serving):** research validates Granite-TTM as a *direction* forecaster against per-regime persistence baselines (honest OOS, temporally disjoint). `pass6.py` fine-tunes one model per HMM regime and picks the best config per (ticker, regime) by max OOS direction excess (`regime_model_best.csv`); `pass7.py` runs the experiment-design matrix (boundary / composition / lr / freshness arms) to confirm the findings are robust. `regime_serving.py` serves the current regime's checkpoint in `forecast_granite.py` as an **ensemble** (0.5 general + 0.5 regime), with per-span direction accuracy (`regime_dir_h10..h96`), MC-dropout std bands (`--uncertainty`), checkpoint staleness flags, and a calibration check (`regime_calibrate.py`). See [docs/pass5.md](docs/pass5.md), [docs/pass6.md](docs/pass6.md), [docs/pass7.md](docs/pass7.md), [docs/regime_serving.md](docs/regime_serving.md).
 
 ---
 
@@ -334,6 +363,7 @@ python -m ttm_backfill cmp-adj-unadj --tickers AEP,NVR,FICO --steps 150
 - **SQL Lab** — query builder + templates  
 - **CSV Catalog** — SQL reproducing each analysis CSV  
 - **Fisher Indexes** — DuckDB-Wasm port of `run_fisher_duckdb.py` + Chart.js  
+- **Sprint Engines** — inline tab rendering pair/cross/aggregator/earnings views (plus the standalone `sprint_dashboard.html`)
 
 See [docs/dashboard.md](docs/dashboard.md).
 
@@ -359,7 +389,10 @@ duckdb                          # Fisher SQL engine
 yfinance                        # live prices
 granite-tsfm transformers torch # Granite TTM
 hmmlearn statsmodels            # HMM / VAR (analytics)
+scikit-learn                    # signal_model gradient boosting
+requests                        # SEC EDGAR, Polygon
 ```
+Full pinned list: [requirements.txt](requirements.txt) (torch CUDA index documented; pytest is the only install-not-in-venv).
 
 Dashboard: modern browser with WebAssembly (DuckDB-Wasm + Chart.js from CDN).
 
