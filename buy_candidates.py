@@ -56,11 +56,51 @@ def regime() -> str:
     return "normal"
 
 
-def build() -> pd.DataFrame:
-    global fragility_map, skew_map
-    # Taleb veto maps: fragility flag (top-10% pctile) and latest IV skew.
-    fragility_map = None
-    skew_map = None
+def regime_stress_prob() -> float:
+    """Posterior probability of the stress regime (soft stress belief).
+
+    The American-options lesson, fixed: the HMM regime label was used as a
+    hard stress verdict (stress → flat -0.08 haircut), and the hidden-
+    optionality audit showed that cliff flips 28.4% of decisions when the
+    verdict changes. Consuming the posterior p(stress) instead makes the
+    haircut continuous in belief: score -= 0.08 * p(stress). A small
+    perturbation of the posterior now moves decisions proportionally instead
+    of cliff-flipping. Returns p(stress) in [0,1]; 0.0 when unavailable
+    (no file / no stress state / degenerate posterior).
+    """
+    if not HMM.exists():
+        return 0.0
+    h = pd.read_csv(HMM)
+    h["date"] = pd.to_datetime(h.get("date"), errors="coerce")
+    h = h.dropna(subset=["date"]).sort_values("date")
+    if h.empty:
+        return 0.0
+    last = h.iloc[-1]
+    # find the state whose regime label carries "stress" (e.g. high_vol_stress)
+    n_state = int(last.get("state_id", -1))
+    for c in h.columns:
+        if c.startswith("p_state_"):
+            i = int(c.split("_")[-1])
+            reg_col = None
+            for rc in ("regime", "label"):
+                if rc in h.columns:
+                    reg_col = rc
+                    break
+            if reg_col is None:
+                return 0.0
+            # map state index -> its regime label from any row with that state
+            mask = h.get("state_id") == i
+            if mask.any():
+                lab = str(h.loc[mask, reg_col].iloc[0]).lower()
+                if "stress" in lab:
+                    p = float(last.get(c, 0.0))
+                    return float(np.clip(p, 0.0, 1.0))
+    return 0.0
+
+
+def _load_maps():
+    """Taleb veto maps: fragility flag (top-10% pctile) and latest IV skew."""
+    fragility_map, skew_map = None, None
     if FRAGILITY.exists():
         fs = pd.read_csv(FRAGILITY)
         fragility_map = dict(zip(fs["ticker"].astype(str).str.upper(), fs["fragile_flag"] == True))
@@ -68,6 +108,112 @@ def build() -> pd.DataFrame:
         sk = pd.read_csv(SKEW_CSV)
         sk = sk.sort_values("date") if "date" in sk.columns else sk
         skew_map = dict(zip(sk["ticker"].astype(str).str.upper(), pd.to_numeric(sk["skew"], errors="coerce")))
+    return fragility_map, skew_map
+
+
+def score_row(r, stress_p: float, fragility_map=None, skew_map=None):
+    """Score ONE candidate row -> (score, reasons). Single source of truth for
+    the decision loop — shared by build() and hidden_optionality_audit.py so
+    the audit perturbs the REAL scorer, not a drifted copy.
+
+    stress_p: soft HMM posterior p(stress) in [0,1] — scales the stress
+    haircut continuously (see regime_stress_prob)."""
+    reasons = []
+    score = 0.0
+    # gate pieces
+    dec = r.get("decision")
+    if dec == "INCLUDE_CORE":
+        score += 0.35; reasons.append("dual_pass_core")
+    elif dec == "INCLUDE_VALUE":
+        score += 0.20; reasons.append("value_trifecta")
+    elif dec == "INCLUDE_QUALITY":
+        score += 0.20; reasons.append("buffett_quality")
+    elif dec == "SATELLITE":
+        score += 0.08; reasons.append("satellite")
+    elif dec == "AVOID":
+        score -= 0.25; reasons.append("decision_avoid")
+
+    mom = r.get("momentum_score")
+    if pd.notna(mom):
+        if mom > 0.5:
+            score += 0.20; reasons.append("strong_momentum")
+        elif mom > 0.0:
+            score += 0.10; reasons.append("positive_momentum")
+        elif mom < -0.5:
+            score -= 0.15; reasons.append("weak_momentum")
+
+    rm = r.get("resid_mom_63")
+    if pd.notna(rm) and rm > 0.05:
+        score += 0.10; reasons.append("positive_residual_mom")
+
+    fc = r.get("factor_composite")
+    if pd.notna(fc):
+        if fc > 0.5:
+            score += 0.15; reasons.append("high_factor_composite")
+        elif fc > 0.0:
+            score += 0.05
+
+    # signal aggregator: OOS IC-weighted composite (top quintile = strong)
+    agg_c = r.get("composite")
+    if pd.notna(agg_c):
+        if agg_c >= 0.75:
+            score += 0.25; reasons.append("aggregate_top")
+        elif agg_c >= 0.60:
+            score += 0.15; reasons.append("aggregate_strong")
+        elif agg_c <= 0.25:
+            score -= 0.10; reasons.append("aggregate_weak")
+
+    if r.get("leverage_flag") == "cheap-assets":
+        score += 0.08; reasons.append("cheap_assets_flag")
+    elif r.get("leverage_flag") == "levered-assets":
+        score -= 0.12; reasons.append("levered_assets_flag")
+
+    liq = r.get("liquidity_score")
+    if pd.notna(liq) and liq < 0.15:
+        score -= 0.10; reasons.append("low_liquidity")
+
+    # Taleb vetoes: fragility (top-10% fragility percentile from the
+    # fragility screen) and steep options skew (the market's own fear
+    # gauge). Cheap + fragile = skip — fragility is a veto, not a score.
+    tk = str(r.get("ticker", "")).upper()
+    if fragility_map is not None and fragility_map.get(tk):
+        score -= 0.30
+        reasons.append("fragile_veto")
+    if skew_map is not None and tk in skew_map and skew_map[tk] >= SKEW_STEEP:
+        score -= 0.15
+        reasons.append("skew_steepening")
+
+    if r.get("sp500_member"):
+        score += 0.05; reasons.append("sp500_member")
+
+    # Soft stress posture (American-options fix): the HMM posterior
+    # p(stress) scales the haircut continuously instead of the old hard
+    # verdict (flat -0.08 when "stress" in label). p(stress)~1 behaves
+    # like the old stress; p(stress)~0 adds nothing; in between the
+    # decision moves proportionally to belief — the audit showed the hard
+    # cliff flipped 28.4% of decisions on a 0.10 label perturbation.
+    if stress_p > 0.01:
+        score -= 0.08 * stress_p
+        reasons.append(f"stress_regime_haircut_p{stress_p:.0%}")
+        # require stronger momentum in stress for buy (soft too)
+        if pd.isna(mom) or mom < 0.25:
+            score -= 0.05 * stress_p
+    return score, reasons
+
+
+def action_from_score(score) -> str:
+    if score >= 0.55:
+        return "BUY"
+    if score >= 0.35:
+        return "ACCUMULATE"
+    if score >= 0.15:
+        return "WATCH"
+    return "AVOID"
+
+
+def build() -> pd.DataFrame:
+    global fragility_map, skew_map
+    fragility_map, skew_map = _load_maps()
 
     pref = pd.read_csv(PREF) if PREF.exists() else pd.DataFrame()
     if pref.empty:
@@ -97,93 +243,11 @@ def build() -> pd.DataFrame:
         df["sp500_sector"] = df.get("sector")
 
     reg = regime()
-    stress = "stress" in reg.lower()
+    stress_p_global = regime_stress_prob()
     rows = []
     for _, r in df.iterrows():
-        reasons = []
-        score = 0.0
-        # gate pieces
-        dec = r.get("decision")
-        if dec == "INCLUDE_CORE":
-            score += 0.35; reasons.append("dual_pass_core")
-        elif dec == "INCLUDE_VALUE":
-            score += 0.20; reasons.append("value_trifecta")
-        elif dec == "INCLUDE_QUALITY":
-            score += 0.20; reasons.append("buffett_quality")
-        elif dec == "SATELLITE":
-            score += 0.08; reasons.append("satellite")
-        elif dec == "AVOID":
-            score -= 0.25; reasons.append("decision_avoid")
-
-        mom = r.get("momentum_score")
-        if pd.notna(mom):
-            if mom > 0.5:
-                score += 0.20; reasons.append("strong_momentum")
-            elif mom > 0.0:
-                score += 0.10; reasons.append("positive_momentum")
-            elif mom < -0.5:
-                score -= 0.15; reasons.append("weak_momentum")
-
-        rm = r.get("resid_mom_63")
-        if pd.notna(rm) and rm > 0.05:
-            score += 0.10; reasons.append("positive_residual_mom")
-
-        fc = r.get("factor_composite")
-        if pd.notna(fc):
-            if fc > 0.5:
-                score += 0.15; reasons.append("high_factor_composite")
-            elif fc > 0.0:
-                score += 0.05
-
-        # signal aggregator: OOS IC-weighted composite (top quintile = strong)
-        agg_c = r.get("composite")
-        if pd.notna(agg_c):
-            if agg_c >= 0.75:
-                score += 0.25; reasons.append("aggregate_top")
-            elif agg_c >= 0.60:
-                score += 0.15; reasons.append("aggregate_strong")
-            elif agg_c <= 0.25:
-                score -= 0.10; reasons.append("aggregate_weak")
-
-        if r.get("leverage_flag") == "cheap-assets":
-            score += 0.08; reasons.append("cheap_assets_flag")
-        elif r.get("leverage_flag") == "levered-assets":
-            score -= 0.12; reasons.append("levered_assets_flag")
-
-        liq = r.get("liquidity_score")
-        if pd.notna(liq) and liq < 0.15:
-            score -= 0.10; reasons.append("low_liquidity")
-
-        # Taleb vetoes: fragility (top-10% fragility percentile from the
-        # fragility screen) and steep options skew (the market's own fear
-        # gauge). Cheap + fragile = skip — fragility is a veto, not a score.
-        tk = str(r.get("ticker", "")).upper()
-        if fragility_map is not None and fragility_map.get(tk):
-            score -= 0.30
-            reasons.append("fragile_veto")
-        if skew_map is not None and tk in skew_map and skew_map[tk] >= SKEW_STEEP:
-            score -= 0.15
-            reasons.append("skew_steepening")
-
-        if r.get("sp500_member"):
-            score += 0.05; reasons.append("sp500_member")
-
-        if stress:
-            score -= 0.08
-            reasons.append("stress_regime_haircut")
-            # require stronger momentum in stress for buy
-            if pd.isna(mom) or mom < 0.25:
-                score -= 0.05
-
-        # action
-        if score >= 0.55:
-            action = "BUY"
-        elif score >= 0.35:
-            action = "ACCUMULATE"
-        elif score >= 0.15:
-            action = "WATCH"
-        else:
-            action = "AVOID"
+        score, reasons = score_row(r, stress_p_global, fragility_map, skew_map)
+        action = action_from_score(score)
 
         rows.append({
             **{k: r.get(k) for k in (
