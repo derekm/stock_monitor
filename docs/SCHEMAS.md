@@ -431,3 +431,12 @@ auxiliary tables feeding several stages.
 | `signal_model_weights.csv` | `signal_model.py` | Aggregate |
 | `shadow_book.csv` | `shadow_book.py` | Portfolio / risk |
 | `shadow_lots.csv` | `shadow_book.py` | Portfolio / risk |
+| `tail_index.csv` | `tail_index.py` | Taleb / fat tails |
+| `portfolio_tail.csv` | `tail_index.py` | Taleb / fat tails |
+| `tail_dependence.csv` | `tail_index.py` | Taleb / fat tails |
+| `gap_risk.csv` | `gap_risk.py` | Taleb / fat tails |
+| `gap_events.csv` | `gap_risk.py` | Taleb / fat tails |
+| `ergodicity_ruin.csv` | `ergodicity_ruin.py` | Taleb / fat tails |
+| `portfolio_ergodic.csv` | `ergodicity_ruin.py` | Taleb / fat tails |
+| `fragility_screen.csv` | `fragility_screen.py` | Taleb / fat tails |
+| `barbell_check.csv` | `barbell_check.py` | Taleb / fat tails |

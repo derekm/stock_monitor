@@ -73,6 +73,17 @@ def run(save: bool = True, days: int = 504, start_cash: float = 100_000.0):
         print("No buy_candidates.csv — shadow book runs cash-only.")
         targets = {}
 
+    # fragility map: ticker -> fragile flag (top-10% fragility percentile).
+    # Enables the proactive fragility kill switch (exit before the loss).
+    fragility: dict[str, bool] | None = None
+    try:
+        fs = pd.read_csv(DATA_DIR / "fragility_screen.csv")
+        fragility = dict(zip(fs["ticker"], fs["fragile_flag"] == True))
+        n_frag = sum(1 for v in fragility.values() if v)
+        print(f"fragility kill armed: {n_frag} fragile names in screen")
+    except Exception:
+        print("fragility_screen.csv not found — fragility kill disabled")
+
     cash = start_cash
     holdings: dict[str, float] = {}   # ticker -> shares
     lots: list[dict] = []             # FIFO lots: {ticker, qty, cost, date}
@@ -99,6 +110,13 @@ def run(save: bool = True, days: int = 504, start_cash: float = 100_000.0):
                 # portfolio vol proxy: mean of recent cross-sectional vol
                 if vol21 > VOL_KILL:
                     killed = f"vol_spike@{d.date()}"
+            # 2b) fragility kill: if ANY held name is flagged FRAGILE (top 10%
+            # fragility percentile from fragility_screen.csv), exit early — the
+            # Taleb kill is proactive (before the loss), not reactive (drawdown).
+            if killed is None and fragility is not None:
+                fragile_held = [t for t in holdings if t in fragility and fragility[t]]
+                if fragile_held:
+                    killed = f"fragile@{d.date()}({','.join(sorted(fragile_held)[:4])})"
         # 3) execute target weights (only while not killed; fills at prev close)
         if killed is None:
             for tk, w in targets.items():

@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-07T23:17:03.346733",
-  "count": 198,
+  "generated": "2026-08-08T10:27:26.735033",
+  "count": 207,
   "files": [
     {
       "name": "['all']",
@@ -129,6 +129,15 @@
       "sql_name": "backfill_progress"
     },
     {
+      "name": "barbell_check",
+      "filename": "barbell_check.csv",
+      "path": "barbell_check.csv",
+      "url": "barbell_check.csv",
+      "kind": "csv",
+      "size": 228,
+      "sql_name": "barbell_check"
+    },
+    {
       "name": "binding_basket_risk",
       "filename": "binding_basket_risk.csv",
       "path": "binding_basket_risk.csv",
@@ -188,7 +197,7 @@
       "path": "buy_candidates.csv",
       "url": "buy_candidates.csv",
       "kind": "csv",
-      "size": 161246,
+      "size": 162155,
       "sql_name": "buy_candidates"
     },
     {
@@ -197,7 +206,7 @@
       "path": "buy_candidates_top.csv",
       "url": "buy_candidates_top.csv",
       "kind": "csv",
-      "size": 18659,
+      "size": 17775,
       "sql_name": "buy_candidates_top"
     },
     {
@@ -453,6 +462,15 @@
       "sql_name": "erc_gmv_summary"
     },
     {
+      "name": "ergodicity_ruin",
+      "filename": "ergodicity_ruin.csv",
+      "path": "ergodicity_ruin.csv",
+      "url": "ergodicity_ruin.csv",
+      "kind": "csv",
+      "size": 38848,
+      "sql_name": "ergodicity_ruin"
+    },
+    {
       "name": "estimate_revisions",
       "filename": "estimate_revisions.parquet",
       "path": "estimate_revisions.parquet",
@@ -642,6 +660,15 @@
       "sql_name": "forecasts_granite"
     },
     {
+      "name": "fragility_screen",
+      "filename": "fragility_screen.csv",
+      "path": "fragility_screen.csv",
+      "url": "fragility_screen.csv",
+      "kind": "csv",
+      "size": 70539,
+      "sql_name": "fragility_screen"
+    },
+    {
       "name": "fundamental_missingness",
       "filename": "fundamental_missingness.csv",
       "path": "fundamental_missingness.csv",
@@ -676,6 +703,24 @@
       "kind": "parquet",
       "size": 69246,
       "sql_name": "fundamentals_yfinance"
+    },
+    {
+      "name": "gap_events",
+      "filename": "gap_events.csv",
+      "path": "gap_events.csv",
+      "url": "gap_events.csv",
+      "kind": "csv",
+      "size": 1309,
+      "sql_name": "gap_events"
+    },
+    {
+      "name": "gap_risk",
+      "filename": "gap_risk.csv",
+      "path": "gap_risk.csv",
+      "url": "gap_risk.csv",
+      "kind": "csv",
+      "size": 38335,
+      "sql_name": "gap_risk"
     },
     {
       "name": "granger_causality_sectors",
@@ -1200,6 +1245,15 @@
       "sql_name": "portfolio"
     },
     {
+      "name": "portfolio_ergodic",
+      "filename": "portfolio_ergodic.csv",
+      "path": "portfolio_ergodic.csv",
+      "url": "portfolio_ergodic.csv",
+      "kind": "csv",
+      "size": 328,
+      "sql_name": "portfolio_ergodic"
+    },
+    {
       "name": "portfolio_holdings",
       "filename": "portfolio_holdings.parquet",
       "path": "portfolio_holdings.parquet",
@@ -1216,6 +1270,15 @@
       "kind": "csv",
       "size": 165,
       "sql_name": "portfolio_risk_summary"
+    },
+    {
+      "name": "portfolio_tail",
+      "filename": "portfolio_tail.csv",
+      "path": "portfolio_tail.csv",
+      "url": "portfolio_tail.csv",
+      "kind": "csv",
+      "size": 128,
+      "sql_name": "portfolio_tail"
     },
     {
       "name": "posterior_entropy_dynamics",
@@ -1367,7 +1430,7 @@
       "path": "regime_model_matrix.csv",
       "url": "regime_model_matrix.csv",
       "kind": "csv",
-      "size": 18602,
+      "size": 51369,
       "sql_name": "regime_model_matrix"
     },
     {
@@ -1376,7 +1439,7 @@
       "path": "regime_model_matrix_summary.csv",
       "url": "regime_model_matrix_summary.csv",
       "kind": "csv",
-      "size": 455,
+      "size": 454,
       "sql_name": "regime_model_matrix_summary"
     },
     {
@@ -1574,7 +1637,7 @@
       "path": "shadow_book.csv",
       "url": "shadow_book.csv",
       "kind": "csv",
-      "size": 40701,
+      "size": 40662,
       "sql_name": "shadow_book"
     },
     {
@@ -1583,7 +1646,7 @@
       "path": "shadow_lots.csv",
       "url": "shadow_lots.csv",
       "kind": "csv",
-      "size": 170967,
+      "size": 188930,
       "sql_name": "shadow_lots"
     },
     {
@@ -1684,6 +1747,24 @@
       "kind": "csv",
       "size": 583,
       "sql_name": "suspected_splits"
+    },
+    {
+      "name": "tail_dependence",
+      "filename": "tail_dependence.csv",
+      "path": "tail_dependence.csv",
+      "url": "tail_dependence.csv",
+      "kind": "csv",
+      "size": 848,
+      "sql_name": "tail_dependence"
+    },
+    {
+      "name": "tail_index",
+      "filename": "tail_index.csv",
+      "path": "tail_index.csv",
+      "url": "tail_index.csv",
+      "kind": "csv",
+      "size": 33521,
+      "sql_name": "tail_index"
     },
     {
       "name": "tail_risk_hedge_crisis",

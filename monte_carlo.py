@@ -143,6 +143,23 @@ def draw_gaussian(n_paths: int, dim: int, rng: np.random.Generator) -> np.ndarra
     return rng.standard_normal((n_paths, dim))
 
 
+def draw_student_t(n_paths: int, dim: int, rng: np.random.Generator, df: float = 4.0) -> np.ndarray:
+    """Fat-tailed shocks: Student-t with df ~ 4 (tail index ~4 => variance exists
+    but kurtosis is infinite — the Taleb regime). Standardize to unit variance."""
+    z = rng.standard_t(df=df, size=(n_paths, dim))
+    return z / np.sqrt(df / (df - 2.0))
+
+
+def draw_jump_diffusion(n_paths: int, dim: int, rng: np.random.Generator,
+                        df: float = 4.0, jump_p: float = 0.01, jump_size: float = 6.0) -> np.ndarray:
+    """Student-t shocks PLUS rare jumps: with prob jump_p add +/- jump_size.
+    Models gap risk (overnight jumps) that pure diffusion misses."""
+    z = draw_student_t(n_paths, dim, rng, df)
+    jumps = rng.binomial(1, jump_p, size=(n_paths, dim)).astype(float)
+    sign = rng.choice([-1.0, 1.0], size=(n_paths, dim))
+    return z + jumps * sign * jump_size
+
+
 def antithetic_shocks(Z: np.ndarray) -> np.ndarray:
     """Stack Z and -Z → 2n paths."""
     return np.vstack([Z, -Z])
@@ -296,9 +313,11 @@ def run_regime_mc(
     seed: int = 42,
     vr: Iterable[str] | None = None,
     weights: np.ndarray | None = None,
+    dist: str | None = None,
 ) -> dict:
     """
     vr options: antithetic, control, stratified, quasi, all
+    dist options: gaussian (default), student (fat tails), jump (t + rare jumps)
     """
     vr_set = set()
     if vr:
@@ -352,10 +371,28 @@ def run_regime_mc(
         # same regimes for antithetic pair (common random regimes, antithetic shocks)
         regime_paths = np.vstack([regime_paths, regime_paths])
 
-    # Shocks
+    # Shocks — distribution is user-selectable: gaussian (default, the old
+    # behavior), student-t (fat tails, Taleb), or jump (t + rare jumps for
+    # overnight gap risk).
+    dist = dist or "gaussian"
     if use_quasi:
         Z_flat = sobol_gaussian(regime_paths.shape[0] * horizon, n_assets, seed=seed)
         Z = Z_flat.reshape(regime_paths.shape[0], horizon, n_assets)
+        if use_anti:
+            half = regime_paths.shape[0] // 2
+            Z[half:] = -Z[:half]
+    elif dist == "student":
+        Z = rng.standard_t(df=4.0, size=(regime_paths.shape[0], horizon, n_assets))
+        Z = Z / np.sqrt(4.0 / 2.0)  # unit variance
+        if use_anti:
+            half = regime_paths.shape[0] // 2
+            Z[half:] = -Z[:half]
+    elif dist == "jump":
+        Z = rng.standard_t(df=4.0, size=(regime_paths.shape[0], horizon, n_assets))
+        Z = Z / np.sqrt(4.0 / 2.0)
+        jumps = rng.binomial(1, 0.01, size=Z.shape).astype(float)
+        sign = rng.choice([-1.0, 1.0], size=Z.shape)
+        Z = Z + jumps * sign * 6.0
         if use_anti:
             half = regime_paths.shape[0] // 2
             Z[half:] = -Z[:half]
@@ -471,12 +508,18 @@ def main():
         default="antithetic,control",
         help="Variance reduction: antithetic,control,stratified,quasi,all,none",
     )
+    ap.add_argument(
+        "--dist", default="gaussian", choices=["gaussian", "student", "jump"],
+        help="Shock distribution: gaussian (default), student (fat tails, df=4), "
+             "jump (student + rare 6-sigma jumps for gap risk)",
+    )
     args = ap.parse_args()
 
     tickers = resolve_tickers(args)
     if not tickers:
         raise SystemExit("No tickers resolved")
-    print(f"Regime MC  tickers={len(tickers)}  n_paths={args.n_paths}  horizon={args.horizon}  vr={args.vr}")
+    print(f"Regime MC  tickers={len(tickers)}  n_paths={args.n_paths}  horizon={args.horizon}  "
+          f"vr={args.vr}  dist={args.dist}")
 
     vr = None if args.vr.strip().lower() == "none" else args.vr
     result = run_regime_mc(
@@ -485,6 +528,7 @@ def main():
         horizon=args.horizon,
         seed=args.seed,
         vr=vr,
+        dist=args.dist,
     )
     stats = result["stats"]
     print("\n=== Terminal wealth (start=1.0) ===")

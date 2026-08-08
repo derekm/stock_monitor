@@ -112,6 +112,7 @@
     <button type="button" data-tab="pipelines">Pipelines</button>
   <button data-tab="anomalies">Anomalies</button>
   <button data-tab="signals">Signals &amp; Alpha</button>
+  <button data-tab="fragility">Fragility</button>
   <button data-tab="indexes">Index Backtest</button>
   <button data-tab="sql">SQL Lab</button>
   <button data-tab="fisher">Fisher Indexes</button>
@@ -482,6 +483,74 @@
         (one row per ticker — most recent date).
       </p>
       <div class="scroll" style="max-height:480px"><table id="tbl-technical"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- FRAGILITY (Taleb layer) -->
+  <section id="fragility">
+    <h2>Fragility / Fat Tails <span class="live-badge" id="fragility-status">…</span></h2>
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Per-name fragility screen <button id="live-refresh-fragility" class="live-btn">↻</button></h3>
+        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+          Composite fragility index (leverage, asset coverage, interest coverage, IV skew,
+          illiquidity, gap share, tail fatness, kurtosis). <b>fragile_flag = veto</b> for
+          inclusion: cheap + fragile = skip. Feeds buy_candidates (fragile_veto) and the
+          shadow book kill switch.
+        </p>
+        <div class="scroll" style="max-height:420px"><table id="tbl-fragility"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Tail index (Hill α) — variance is nearly meaningless below α≈3</h3>
+        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+          Empirical P(|z|&gt;5σ) vs Gaussian, tail ratio, kurtosis per ticker.
+        </p>
+        <div class="scroll" style="max-height:420px"><table id="tbl-tail"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Portfolio tail vs Gaussian</h3>
+        <div class="scroll"><table id="tbl-port-tail"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Ergodicity / ruin (portfolio)</h3>
+        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+          Arith vs geom return, variance drag, ruin probability, terminal-wealth
+          percentiles from block-bootstrap paths.
+        </p>
+        <div class="scroll"><table id="tbl-port-ergodic"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>Barbell structure / convexity</h3>
+        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+          Safe/middle/convex buckets, barbell score (positive = barbell, negative =
+          Christmas tree), vol &amp; vol-of-vol beta, hedge cost, convexity allocation.
+        </p>
+        <div class="scroll"><table id="tbl-barbell"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Tail dependence (upper/lower)</h3>
+        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+          Crisis-period co-movement that correlation misses (corr → 0 mid-distribution,
+          → 1 in tails).
+        </p>
+        <div class="scroll"><table id="tbl-tail-dep"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Gap risk — the risk that arrives overnight</h3>
+      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
+        Close-to-close backtests can't see gaps. Gap share of variance &gt; 1 means the
+        name's risk is overnight-dominated; these names gap through stops.
+      </p>
+      <div class="scroll" style="max-height:420px"><table id="tbl-gap"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3>Worst gap events</h3>
+      <div class="scroll"><table id="tbl-gap-events"><thead></thead><tbody></tbody></table></div>
     </div>
   </section>
 
@@ -3821,6 +3890,7 @@ async function bindLiveDuckControls() {
   if (typeof renderSignals === "function") renderSignals();
   if (typeof renderRegimeModels === "function") renderRegimeModels();
   if (typeof renderShadow === "function") renderShadow();
+  if (typeof renderFragility === "function") renderFragility();
 })();
 
 
@@ -4449,6 +4519,50 @@ async function renderShadow() {
 
 function initSignalsShadow() {
   document.querySelector("#live-refresh-signals")?.addEventListener("click", renderSignals);
+  document.querySelector("#live-refresh-fragility")?.addEventListener("click", renderFragility);
+}
+
+/* ========== Fragility / fat tails (Taleb layer) ========== */
+
+const FRAGILITY_COLS = ["ticker", "fragility_score", "fragility_pctile", "fragile_flag",
+  "leverage_pct", "asset_coverage_pct", "interest_coverage_pct", "iv_skew_pct",
+  "illiquidity_pct", "gap_share_pct", "tail_fatness_pct", "kurtosis_pct"];
+const TAIL_COLS = ["ticker", "n_obs", "tail_alpha_hill", "emp_p_gt_3sd", "gauss_p_gt_3sd",
+  "tail_ratio_3sd", "emp_p_gt_5sd", "gauss_p_gt_5sd", "tail_ratio_5sd", "kurtosis"];
+const GAP_COLS = ["ticker", "n_obs", "mean_gap", "gap_sd", "ret_sd", "gap_share_of_var",
+  "p_abs_gap_gt_3pct", "p_abs_gap_gt_5pct", "max_gap_pct", "min_gap_pct"];
+
+async function renderFragility() {
+  const status = document.querySelector("#fragility-status");
+  if (status) status.textContent = "Querying DuckDB…";
+  try {
+    const [frag, tail, portTail, ergodic, barbell, dep, gap, gapEvents] = await Promise.all([
+      liveTable("fragility_screen"),
+      liveTable("tail_index"),
+      liveTable("portfolio_tail"),
+      liveTable("portfolio_ergodic"),
+      liveTable("barbell_check"),
+      liveTable("tail_dependence"),
+      liveTable("gap_risk"),
+      liveTable("gap_events"),
+    ]);
+    const fragSorted = (frag || []).slice().sort((a, b) => (+b.fragility_score || 0) - (+a.fragility_score || 0));
+    fillSimple("#tbl-fragility", fragSorted, FRAGILITY_COLS);
+    const tailSorted = (tail || []).slice().sort((a, b) => (+b.tail_ratio_5sd || 0) - (+a.tail_ratio_5sd || 0));
+    fillSimple("#tbl-tail", tailSorted, TAIL_COLS);
+    fillSimple("#tbl-port-tail", portTail, null);
+    fillSimple("#tbl-port-ergodic", ergodic, null);
+    fillSimple("#tbl-barbell", barbell, null);
+    const depSorted = (dep || []).slice().sort((a, b) => (+b.tail_dep_max || 0) - (+a.tail_dep_max || 0));
+    fillSimple("#tbl-tail-dep", depSorted, null);
+    const gapSorted = (gap || []).slice().sort((a, b) => (+b.gap_share_of_var || 0) - (+a.gap_share_of_var || 0));
+    fillSimple("#tbl-gap", gapSorted, GAP_COLS);
+    fillSimple("#tbl-gap-events", gapEvents, null);
+    if (status) status.textContent = `Updated from DuckDB · ${(frag||[]).length + (tail||[]).length + (gap||[]).length} rows`;
+  } catch (e) {
+    if (status) status.textContent = e.message || String(e);
+    console.error("renderFragility", e);
+  }
 }
 
 initSignalsShadow();

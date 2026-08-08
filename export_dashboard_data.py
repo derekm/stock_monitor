@@ -118,6 +118,16 @@ TABLES = [
     "regime_model_best",
     "regime_model_oos",
     "regime_calibration",
+    # Taleb layer: fat tails, gaps, ergodicity, fragility, barbell
+    "tail_index",
+    "portfolio_tail",
+    "tail_dependence",
+    "gap_risk",
+    "gap_events",
+    "ergodicity_ruin",
+    "portfolio_ergodic",
+    "fragility_screen",
+    "barbell_check",
 ]
 
 
