@@ -59,6 +59,7 @@ JOBS = {
     "taleb_gap": (["gap_risk.py"], 600),
     "taleb_ergodic": (["ergodicity_ruin.py"], 900),
     "taleb_fragility": (["fragility_screen.py"], 600),
+    "taleb_minsky": (["macro_fragility.py", "--save"], 300),
     "taleb_barbell": (["barbell_check.py"], 600),
     "taleb_optionality": (["hidden_optionality_audit.py"], 600),
     "export": (["export_dashboard_data.py"], 600),
@@ -90,10 +91,11 @@ DEPS = {
     "taleb_gap": {"preferred"},
     "taleb_ergodic": {"taleb_tail"},
     "taleb_fragility": {"taleb_tail", "taleb_gap"},
+    "taleb_minsky": {"hmm", "taleb_fragility"},
     "taleb_barbell": {"taleb_fragility", "taleb_ergodic"},
     "taleb_optionality": {"aggregate", "preferred"},
     "export": {"aggregate", "technical", "econ_cal", "est_rev", "shadow",
-               "taleb_tail", "taleb_gap", "taleb_ergodic", "taleb_fragility", "taleb_barbell",
+               "taleb_tail", "taleb_gap", "taleb_ergodic", "taleb_fragility", "taleb_minsky", "taleb_barbell",
                "taleb_optionality"},
 }
 

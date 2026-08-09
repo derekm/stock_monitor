@@ -127,6 +127,7 @@ TABLES = [
     "ergodicity_ruin",
     "portfolio_ergodic",
     "fragility_screen",
+    "macro_fragility",
     "barbell_check",
     "hidden_optionality",
 ]

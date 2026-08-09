@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-08T18:16:03.766571",
-  "count": 209,
+  "generated": "2026-08-08T23:11:21.420594",
+  "count": 218,
   "files": [
     {
       "name": "['all']",
@@ -498,6 +498,24 @@
       "sql_name": "exogenous_panel"
     },
     {
+      "name": "factor_group_members",
+      "filename": "factor_group_members.csv",
+      "path": "factor_group_members.csv",
+      "url": "factor_group_members.csv",
+      "kind": "csv",
+      "size": 74984,
+      "sql_name": "factor_group_members"
+    },
+    {
+      "name": "factor_groups",
+      "filename": "factor_groups.csv",
+      "path": "factor_groups.csv",
+      "url": "factor_groups.csv",
+      "kind": "csv",
+      "size": 2636,
+      "sql_name": "factor_groups"
+    },
+    {
       "name": "factor_panel",
       "filename": "factor_panel.csv",
       "path": "factor_panel.csv",
@@ -521,7 +539,7 @@
       "path": "factor_rotation_performance.csv",
       "url": "factor_rotation_performance.csv",
       "kind": "csv",
-      "size": 1105,
+      "size": 10257,
       "sql_name": "factor_rotation_performance"
     },
     {
@@ -530,7 +548,7 @@
       "path": "factor_rotation_weights.csv",
       "url": "factor_rotation_weights.csv",
       "kind": "csv",
-      "size": 1023156,
+      "size": 1154570,
       "sql_name": "factor_rotation_weights"
     },
     {
@@ -539,7 +557,7 @@
       "path": "factor_sleeve_returns.csv",
       "url": "factor_sleeve_returns.csv",
       "kind": "csv",
-      "size": 1926570,
+      "size": 19170504,
       "sql_name": "factor_sleeve_returns"
     },
     {
@@ -723,6 +741,15 @@
       "sql_name": "gap_risk"
     },
     {
+      "name": "gdp",
+      "filename": "gdp.csv",
+      "path": "macro_data/gdp.csv",
+      "url": "macro_data/gdp.csv",
+      "kind": "csv",
+      "size": 6664,
+      "sql_name": "gdp"
+    },
+    {
       "name": "granger_causality_sectors",
       "filename": "granger_causality_sectors.csv",
       "path": "granger_causality_sectors.csv",
@@ -863,7 +890,7 @@
       "path": "hidden_optionality.csv",
       "url": "hidden_optionality.csv",
       "kind": "csv",
-      "size": 210,
+      "size": 289,
       "sql_name": "hidden_optionality"
     },
     {
@@ -1063,6 +1090,15 @@
       "kind": "parquet",
       "size": 8373,
       "sql_name": "kelly_parameters"
+    },
+    {
+      "name": "macro_fragility",
+      "filename": "macro_fragility.csv",
+      "path": "macro_fragility.csv",
+      "url": "macro_fragility.csv",
+      "kind": "csv",
+      "size": 10312,
+      "sql_name": "macro_fragility"
     },
     {
       "name": "mcmc_regime_means",
@@ -1358,7 +1394,7 @@
       "path": "rebalance_calendar.csv",
       "url": "rebalance_calendar.csv",
       "kind": "csv",
-      "size": 1415,
+      "size": 849,
       "sql_name": "rebalance_calendar"
     },
     {
@@ -1434,6 +1470,15 @@
       "sql_name": "regime_model_best"
     },
     {
+      "name": "regime_model_best_rpt",
+      "filename": "regime_model_best_rpt.csv",
+      "path": "regime_model_best_rpt.csv",
+      "url": "regime_model_best_rpt.csv",
+      "kind": "csv",
+      "size": 1738,
+      "sql_name": "regime_model_best_rpt"
+    },
+    {
       "name": "regime_model_matrix",
       "filename": "regime_model_matrix.csv",
       "path": "regime_model_matrix.csv",
@@ -1457,8 +1502,17 @@
       "path": "regime_model_oos.csv",
       "url": "regime_model_oos.csv",
       "kind": "csv",
-      "size": 318,
+      "size": 2447,
       "sql_name": "regime_model_oos"
+    },
+    {
+      "name": "regime_model_oos_rpt",
+      "filename": "regime_model_oos_rpt.csv",
+      "path": "regime_model_oos_rpt.csv",
+      "url": "regime_model_oos_rpt.csv",
+      "kind": "csv",
+      "size": 6004,
+      "sql_name": "regime_model_oos_rpt"
     },
     {
       "name": "regime_pass1_results",
@@ -1567,6 +1621,15 @@
       "kind": "csv",
       "size": 1150,
       "sql_name": "rolling_window_metrics"
+    },
+    {
+      "name": "rpt_vs_ibm_compare",
+      "filename": "rpt_vs_ibm_compare.csv",
+      "path": "rpt_vs_ibm_compare.csv",
+      "url": "rpt_vs_ibm_compare.csv",
+      "kind": "csv",
+      "size": 4947,
+      "sql_name": "rpt_vs_ibm_compare"
     },
     {
       "name": "schema_check_report",
@@ -1830,6 +1893,15 @@
       "sql_name": "ticker_jump_rates"
     },
     {
+      "name": "total_credit_market_debt",
+      "filename": "total_credit_market_debt.csv",
+      "path": "macro_data/total_credit_market_debt.csv",
+      "url": "macro_data/total_credit_market_debt.csv",
+      "kind": "csv",
+      "size": 7062,
+      "sql_name": "total_credit_market_debt"
+    },
+    {
       "name": "trades",
       "filename": "trades.parquet",
       "path": "trades.parquet",
@@ -1846,6 +1918,15 @@
       "kind": "json",
       "size": 3160,
       "sql_name": "ttm_rpt_400_config"
+    },
+    {
+      "name": "ttm_rpt_8000_config",
+      "filename": "ttm_rpt_8000_config.json",
+      "path": "checkpoints/rpt_base/ttm_rpt_8000_config.json",
+      "url": "checkpoints/rpt_base/ttm_rpt_8000_config.json",
+      "kind": "json",
+      "size": 3161,
+      "sql_name": "ttm_rpt_8000_config"
     },
     {
       "name": "vix_term_structure",
