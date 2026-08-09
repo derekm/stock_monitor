@@ -1,78 +1,51 @@
 # factor_rotation_defense.py
 
-Defensive factor-rotation strategies across quality / value / low-vol /
-momentum / dividend / dual-pass / annotation-group sleeves, rotated by a
-risk-on/off signal + a value-momentum overlay.
+Defensive factor rotation — rotate into the currently defensive factor
+sleeve (quality/value/low_vol/dividend) based on regime + momentum signals,
+and defend against regime transitions.
 
 ## Why it exists (rationale)
 
-Rather than a static book, rotate factor sleeves with the regime: overweight
-quality/dual in risk-on, low-vol + dividend ETFs in risk-off (high vol or
-crisis flag), and hold a momentum sleeve when 12-1 momentum is strong — the
-Value-and-Momentum-Everywhere finding (Asness/Moskowitz/Pedersen 2013) that
-value and momentum are strongly negatively correlated (~-0.55) and are the
-diversification halves of the factor pair.
+The macro layer (`macro_fragility.py`, `macro_shock.py`) gives a high-level
+regime view. The factor layer translates that into **sleeve-level** allocation:
+rotate the defensive allocation into the sleeve that is currently both
+defensive *and* showing positive momentum, while shrinking exposure when
+the regime is `high_vol_stress`.
 
-## The two-table group system (2026-08)
+## Formulas
 
-Named groups are NOT hardcoded ticker lists. They live in two CSV tables
-seeded from the per-stock annotations + the S&P 500 change history; adding a
-group = appending rows, no code change:
+**Factor sleeve returns (equal-weight, monthly):**
 
-- `factor_groups.csv` — **catalog**: (group, group_type); types are
-  `sector`, `industry`, `index`, `sleeve`, `dynamic`, `custom`. Seeded from
-  monitored_stocks `sector`/`industry`/`value_sleeve`/`defensive_value_index`/
-  `growth_tech_index`/`dual_pass_member` + GICS for SP500 names.
-- `factor_group_members.csv` — **join with as-of dates**:
-  (group, ticker, valid_from, valid_to). Membership is point-in-time: a
-  ticker belongs on date d iff `valid_from <= d` and (`valid_to` null or
-  `valid_to > d`). S&P 500 memberships are temporal windows built from the
-  `sp500_changes.parquet` event timeline (a member iff the latest event at or
-  before d is an ADD) — so the `sp500` sleeve's composition evolves with real
-  additions/removals.
+For each factor group $g$ (from `factor_group_members.csv`), monthly
+equal-weight return:
 
-Every group in the members table becomes a sleeve automatically.
+$$
+r_{g,t} = \frac{1}{|G_t|} \sum_{i \in G_t} \ln\left(\frac{P_{i,t}}{P_{i,t-1}}\right)
+$$
 
-## The temporal model — removals in every time frame
+**Rotation score (per sleeve, monthly):**
 
-`valid_to` is universal: ANY group can carry removal dates, not just sp500.
-A membership is active on date d iff `valid_from <= d` and (`valid_to` null
-or `valid_to > d`). Groups that don't need history just leave both dates
-blank (always-valid) — evict by deleting the row or setting `valid_to`.
+$$
+\text{score}_g(t) = \text{mom}_{12,g}(t) \cdot \mathbb{1}[\text{regime} \neq \text{high\_vol\_stress}]
+$$
 
-The sp500 group is fully temporal from `sp500_changes.parquet`: contiguous
-windows walked from the sorted add/remove timeline (a ticker is a member on
-d iff the latest event at or before d is an ADD). Verified with real
-removals: GM [1957→2009] then [2013→open] (bankruptcy + return), DELL
-[1996→2013] then [2024→open] (private + re-IPO), and the index size evolves
-437 (2000) → 484 (2010) → 508 (2026).
+Only rotate into a sleeve if it has positive 12m momentum AND the current
+regime is NOT `high_vol_stress` (regime from `hmm_regime_states.csv`).
 
-## Group editor CLI
+**Defensive allocation weight:**
 
-Groups grow without code changes; the CLI edits the two tables:
+$$
+w_g(t) = \frac{\text{score}_g(t)_+}{\sum_h \text{score}_h(t)_+} \times (1 - \alpha \cdot p\_stress)
+$$
 
-```bash
-python factor_rotation_defense.py add-group --group my_basket --type custom
-python factor_rotation_defense.py add --group my_basket --ticker AEP --from 2020-01-01
-python factor_rotation_defense.py add --group my_basket --ticker AEP --to 2024-06-30
-python factor_rotation_defense.py evict --group my_basket --ticker AEP            # delete rows
-python factor_rotation_defense.py evict --group my_basket --ticker AEP --on 2024-06-30  # dated eviction
-python factor_rotation_defense.py show --group sp500 --as-of 2010-06-30          # PIT view
-python factor_rotation_defense.py timeline --ticker GM                           # all windows
-```
+where $p\_stress$ = HMM stress posterior (from `hmm_regime_states.csv`);
+$\alpha = 0.5$ scales the allocation down as stress rises.
 
-The `run` subcommand (default: `python factor_rotation_defense.py run --save`)
-executes the rotation with current group tables.
+## Outputs
 
-## Universe honesty (2026-08 audit)
-
-- quality/value/dual are rebuilt **point-in-time** from `fundamentals.parquet`
-  as-of each month-end (was: latest-fundamentals membership applied to all
-  history — a look-ahead bias).
-- low_vol + momentum are computed over ALL price tickers (not the
-  fundamentals subset).
-- Coverage: 142 monitored tickers carry full annotations, 503 SP500 carry
-  GICS, 549 carry fundamentals, 551 carry prices.
+- `factor_rotation_weights.csv` — per sleeve per month: `date, sleeve, weight, score, mom12, regime, p_stress`
+- `factor_rotation_performance.csv` — backtest: `sleeve, total_return, max_dd, sharpe, n_months`
+- `factor_sleeve_returns.csv` — monthly return series per sleeve
 
 ## Usage
 
@@ -80,18 +53,14 @@ executes the rotation with current group tables.
 python factor_rotation_defense.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices.parquet`, `monitored_stocks.parquet`,
-`fundamentals.parquet`, `sp500_constituents.parquet`, `sp500_changes.parquet`;
-writes `factor_groups.csv` + `factor_group_members.csv` on first run.
-
-## Outputs
-
-- `factor_rotation_weights.csv` — target sleeve weights
-- `factor_rotation_performance.csv` — backtest performance per sleeve
-- `factor_sleeve_returns.csv` — sleeve return series (PIT membership)
-- `factor_groups.csv` / `factor_group_members.csv` — the group catalog + join
-  table (seeded on first run; editable)
+Wired into `run_daily_automation.py` as `taleb_factor_rot`; feeds export.
 
 (Schema families: weights_performance / base_table — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
+
+- [macro_fragility.md](macro_fragility.md) — p_stress input
+- [hmm_regime_detection.md](hmm_regime_detection.md) — regime input
+- [factor_panel.md](factor_panel.md) — sleeve construction
+- [portfolio_optimization.md](portfolio_optimization.md) — weight consumer
+- [vol_target.md](vol_target.md) — vol target consumer

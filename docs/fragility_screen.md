@@ -1,32 +1,73 @@
-# fragility_screen.py — Per-name fragility index
+# fragility_screen.py
 
-## Description
-Combines eight fragility inputs (leverage, asset coverage, interest coverage,
-IV skew, illiquidity, gap share, tail fatness, kurtosis) into a composite
-fragility score and percentile, with a FRAGILE veto flag (top 10%).
+Per-name fragility screening — the micro half of the Taleb layer (macro
+half is `macro_fragility.py`). Every monitored ticker gets a composite
+fragility score composed of independent drivers, each noise-robust.
 
-## Why it exists (rationale)
-Cheap is not enough: a name can be cheap AND fragile, and fragile names get
-destroyed in the tails regardless of valuation. Fragility = sensitivity to
-volatility and vol-of-vol. The flag is a VETO for inclusion — cheap + fragile
-= skip. The market's own fragility gauge (IV skew) is a component.
+## Formulas
+
+**Driver z-scores (cross-sectional, per date):**
+
+For each driver $d \in \{\text{leverage}, \text{tail\_alpha}, \text{gap\_share},
+\text{illiquidity}, \text{iv\_skew}, \text{kurtosis}\}$:
+
+$$
+z_d(i,t) = \frac{x_d(i,t) - \mu_d(t)}{\sigma_d(t)}
+$$
+
+where $\mu_d(t), \sigma_d(t)$ are cross-sectional mean/std across the
+monitored universe at date $t$.
+
+**Composite fragility score (noise-robust):**
+
+$$
+\text{fragility}(i,t) = \sum_{d} \text{contribution}_d(i,t)
+$$
+
+where each driver's contribution is the **noise-convolved expectation** (from
+[hidden_optionality_audit.md](hidden_optionality_audit.md)):
+
+$$
+\text{contribution}_d = \mathbb{E}_{z \sim \mathcal{N}(0, \sigma_d)}[f_d(x_d + z)]
+$$
+
+with $\sigma_d = \sigma_{x_d} / 4$ (cross-sectional std / 4).
+
+**Fragile flag:**
+
+$$
+\text{fragile\_flag}(i,t) = \mathbb{1}[\text{fragility}(i,t) > \text{pctile}_{95}(t)]
+$$
+
+Top 5% most fragile names flagged.
+
+**Skew steepening penalty (for buy_candidates):**
+
+Names with high IV skew get an additional `-0.15` to their composite score
+in `buy_candidates.py` (the `skew_steepening` driver).
+
+## Outputs
+
+`fragility_screen.csv` — `ticker, date, fragility_score, fragility_pctile,
+fragile_flag, leverage_pct, asset_coverage_pct, interest_coverage_pct,
+iv_skew_pct, illiquidity_pct, gap_share_pct, tail_fatness_pct, kurtosis_pct`
 
 ## Usage
+
+```bash
+python fragility_screen.py --save
 ```
-python fragility_screen.py
-```
 
-## Outputs (see SCHEMAS → `taleb` family)
-- `fragility_screen.csv` — per-ticker component percentiles, composite score,
-  fragility percentile, fragile_flag (True = top 10% = veto).
+Registered as the `taleb_fragility` daily job (after `taleb_tail` +
+`taleb_gap`; feeds `export` and `buy_candidates.py`).
 
-## Consumed by
-- buy_candidates.py — fragile names get `fragile_veto` (−0.30 score) and
-  skew-steep names get `skew_steepening` (−0.15).
-- shadow_book.py — a held name flagged fragile triggers the proactive
-  `fragile@<date>(<names>)` kill switch (exit before the loss).
-- barbell_check.py — average fragility scales the convexity allocation.
+(Schema family: Taleb / fat tails — see [SCHEMAS.md](SCHEMAS.md).)
 
-## Related
-tail_index.py, gap_risk.py (inputs), options_skew.csv (input). Registered as
-the `taleb_fragility` daily job (after taleb_tail + taleb_gap).
+## Related programs
+
+- [tail_index.md](tail_index.md) — tail alpha input
+- [gap_risk.md](gap_risk.md) — gap share input
+- [options_skew.md](options_skew.md) — IV skew input
+- [buy_candidates.md](buy_candidates.md) — consumes fragility + skew steepening
+- [shadow_book.md](shadow_book.md) — fragile names trigger kill switch
+- [barbell_check.md](barbell_check.md) — average fragility scales convexity allocation

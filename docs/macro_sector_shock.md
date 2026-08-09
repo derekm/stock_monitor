@@ -28,6 +28,58 @@ Commodity legs attach by **name pattern** (`COMMODITY_MAP` regexes against
 the basket id), not by ticker list — e.g. any basket matching `copper` gets
 PCOPPUSDM.
 
+## Formulas
+
+**Monthly basket momentum (12m):**
+
+$$
+\text{mom}_{12}(t) = \frac{C(t)}{C(t-12)} - 1
+\quad\text{where}\quad
+C(t) = \prod_{\tau=1}^t \left(1 + \bar{r}_\tau\right)
+\quad\text{and}\quad
+\bar{r}_\tau = \frac{1}{|B_\tau|} \sum_{i \in B_\tau} r_{i,\tau}
+$$
+
+$B_\tau$ = available basket members at month $\tau$; $r_{i,\tau}$ = monthly log return of member $i$.
+
+**Shock score (z-standardized composite):**
+
+$$
+\text{shock\_score} = 
+\begin{cases}
+\frac{z(\text{mom}_{12,\text{basket}}) + z(\text{mom}_{12,\text{commodity}})}{2} & \text{if commodity mapped} \\
+z(\text{mom}_{12,\text{basket}}) & \text{otherwise}
+\end{cases}
+$$
+
+where $z(x) = \frac{x - \mu_x}{\sigma_x}$ over the full history of the basket.
+
+**Shock zones (calibrated on verified explosions — oil 1973/1979/2008/2022, fertilizer 2007/2021):**
+
+| Zone | Condition |
+|---|---|
+| `shock` | $\text{mom}_{12,\text{basket}} \geq 0.80$ |
+| `elevated` | $0.40 \leq \text{mom}_{12,\text{basket}} < 0.80$ |
+| `benign` | $\text{mom}_{12,\text{basket}} < 0.40$ |
+
+**Commodity mapping** (`COMMODITY_MAP` regexes against basket id, first match wins):
+- `copper|sub_copper|industry_copper` → PCOPPUSDM
+- `nickel` → PNICKUSDM
+- `zinc|industrial.?metal` → PZINCUSDM
+- `wheat|grain|farming_output|agricultural product` → PWHEAMTUSDM
+- `corn|maize` → PMAIZMTUSDM
+- `soy` → PSOYBUSDM
+- `sugar` → PSUGAISAUSDM
+- `cotton` → PCOTTINDUSDM
+- `cocoa` → PCOCOUSDM
+- `coffee` → PCOFFOTMUSDM
+- `rubber` → PRUBBUSDM
+- `coal|thermal` → PCOALAUUSDM
+- `uranium` → PURANUSDM
+- `gas|natural.?gas|midstream|oil.?gas storage` → PNGASUSUSDM
+- `^gics_energy$|sector_energy|energy_equit` → PNGASUSUSDM
+- `^gics_materials$|sector_materials|^materials$` → PALLFNFINDEXM
+
 ## Outputs
 
 - `macro_sector_shock.csv` — monthly long: `basket, basket_kind, label,
@@ -35,9 +87,6 @@ PCOPPUSDM.
   shock_zone`
 - `basket_members.csv` — point-in-time membership: `basket, basket_kind,
   label, ticker, commodity`
-
-Zones: basket 12m mom ≥ 0.80 = `shock`, ≥ 0.40 = `elevated`. Score =
-z(basket mom) [+ z(commodity mom)].
 
 ## Usage
 
@@ -50,3 +99,10 @@ Wired into `run_daily_automation.py` as `taleb_sector_shock`; feeds export.
 (Schema family: Taleb / fat tails — see [SCHEMAS.md](SCHEMAS.md).)
 
 ## Related programs
+
+- [macro_shock.md](macro_shock.md) — supply-shock twin (oil-only)
+- [macro_fragility.md](macro_fragility.md) — debt-fragility twin (demand side)
+- [shock_ride.md](shock_ride.md) — rides the explosions this layer labels
+- [subindustry_regime.md](subindustry_regime.md) — per-basket HMM stress posteriors
+- [hmm_regime_detection.md](hmm_regime_detection.md) — stress posterior source
+- [export_dashboard_data.md](export_dashboard_data.md) — catalog + dashboard wiring

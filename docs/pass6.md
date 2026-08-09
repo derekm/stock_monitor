@@ -27,13 +27,54 @@ regime-*selected* models.
 6. **Test context may overlap the boundary** — that mirrors live use, where
    recent context is always available; only TARGETS must be disjoint.
 
-## Per-regime parameter sweep
+## Formulas
 
-Sweeps `steps` × window `cap` × `lr` for each regime independently, so a
-regime with few windows (high_vol_stress) can get a smaller step count / cap
-than a data-rich regime (low_vol, normal). Selection objective: **max OOS
-direction excess over the regime's persistence baseline** — the honest
-"does this model add skill in this regime" measure.
+**Global temporal split:**
+
+```
+boundary = split_frac * T  (T = total history length)
+train targets end < boundary
+test forecast points > boundary + GAP_DAYS (96 days = HORIZON)
+```
+
+**Per-regime persistence baseline:**
+
+$$
+\text{pers\_dir} = \frac{1}{N_{\text{test}}} \sum_{i \in \text{test}} \mathbb{1}[y_i \cdot y_{i-1} > 0]
+$$
+
+**OOS direction accuracy per cell:**
+
+$$
+\text{dir\_acc} = \frac{1}{N_{\text{test}}} \sum_{i \in \text{test}} \mathbb{1}[\hat{y}_i \cdot y_i > 0]
+$$
+
+**Direction excess over persistence (selection objective):**
+
+$$
+\text{excess} = \text{dir\_acc} - \text{pers\_dir}
+$$
+
+**Per-regime best config selection:**
+
+$$
+\text{best\_config} = \arg\max_{\text{steps, cap, lr}} \text{excess}(\text{steps, cap, lr})
+$$
+
+evaluated independently per (ticker, regime).
+
+**Per-regime parameter sweep grid:**
+
+| Parameter | Values |
+|---|---|
+| steps | 3000, 6000 |
+| cap | 100, 200 |
+| lr | gd.LR (1e-4), 5e-5 |
+| head_only | True, False |
+| exog | True, False |
+
+Selection objective: **max OOS direction excess over the regime's persistence
+baseline** — the honest "does this model add skill in this regime" measure.
 
 ## Outputs
 
@@ -49,9 +90,16 @@ python pass6.py --tickers AEP --regimes high_vol_stress
 python pass6.py --tickers AEP --resume --max-experiments 20
 ```
 
+(Schema family: Forecast / anomaly — see [SCHEMAS.md](SCHEMAS.md).)
+
 ## Related programs
 
-- `pass5.py` — the base honest-OOS harness (trainlast protocol)
-- `regime_forecast.py` — per-regime baseline measurement that motivated this
-- `hmm_regime_detection.py` — produces the regime labels consumed here
-- `pass5_sweep.py` — the global param sweep this complements (per-regime)
+- [pass5.md](pass5.md) — the base honest-OOS harness (trainlast protocol)
+- [regime_forecast.md](regime_forecast.md) — per-regime baseline measurement that motivated this
+- [hmm_regime_detection.md](hmm_regime_detection.md) — produces the regime labels consumed here
+- [pass5_sweep.md](pass5_sweep.md) — the global param sweep this complements (per-regime)
+- [pass7.md](pass7.md) — design-matrix robustness on pass6's best configs
+- [pass8.md](pass8.md) — RPT base pre-training (uses `_CUSTOM_BASE_CKPT` hook)
+- [regime_serving.md](regime_serving.md) — serving from `regime_model_best.csv`
+- [forecast_granite.md](forecast_granite.md) — serves the checkpoints
+- [regime_serving.md](regime_serving.md) — reads `regime_model_best.csv`

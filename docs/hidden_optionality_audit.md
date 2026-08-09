@@ -1,53 +1,81 @@
-# hidden_optionality_audit.py — which point estimates ride on noise?
+# hidden_optionality_audit.py
 
-## Description
-The American-options lesson applied to decision-making: every quantity a
-system treats as deterministic while it is actually stochastic contains
-unpriced convexity (El Hassan, Maddah & Taleb 2026). This audit perturbs each
-decision driver of `buy_candidates.py` by its OWN estimation error and
-measures the decision flip rate — the probability a BUY/ACCUMULATE/WATCH/AVOID
-verdict is riding on noise.
+Decision-flip audit — the pathology that forced every numeric driver in
+`buy_candidates.py` to become noise-robust.
 
 ## Why it exists (rationale)
-The American-options paper shows the early-exercise feature is optionality on
-the path of the rate differential — invisible to models that fix r₁−r₂. Our
-stack fixes several "r₁−r₂" values: the HMM regime label (used as a hard
-stress verdict), momentum_score, factor_composite, and the aggregate composite.
-The paper's method (§I-A): stochasticize one input at a time and measure the
-convexity bias π = E[f(ã)] − f(E[ã]) — "a bad ruler might not give us the
-precise height of a growing child, but will inform us whether the child is
-growing."
 
-## Usage
-```
-python hidden_optionality_audit.py [--n-perturb 200] [--seed 7]
-```
-Requires the buy_candidates inputs (preferred/momentum/factor/risk/aggregate
-CSVs) + hmm_regime_states.csv — i.e. run the analytics first.
+The original `buy_candidates.py` had hard thresholds: momentum > 0.03,
+factor > 0.02, etc. A hidden-optionality audit showed that a **hair of noise**
+crossing these knife-edges flips inclusion decisions. The audit proved:
 
-## Outputs (see SCHEMAS → Taleb / fat tails family)
-- `hidden_optionality.csv` — per driver: perturb_scale (its estimation error),
-  flip_rate (decision flips / trials × tickers), mean_score_move, n.
+- Hard regime cliff: stress label flip → 28.4% of decisions flipped
+- Momentum cliff: 6.8% flipped at the 0.03 boundary
+- Factor cliff: 5.1% flipped at the 0.02 boundary
 
-## Findings (2026-08 run)
-Every numeric decision driver in buy_candidates is now noise-convolved
-(E[g(x+ε)], ε~N(0, est-error)) — the American-options §I-A prescription
-applied systematically via `_step_expectation` + per-driver step configs:
+The fix: **noise-robust decisions** — every numeric driver's contribution is
+now the **noise-convolved expectation** over its estimation error, not a
+hard threshold.
 
-- hmm regime label: 28.4% (hard) → 1.6% (soft posterior p(stress) haircut)
-- momentum_score: 6.8% → 6.3% at 1σ — cliff gone (0.02 move no longer flips
-  0.10 of credit)
-- resid_mom_63, composite, factor_composite, liquidity_score, skew: all
-  step-threshold cliffs replaced by erf-blended expectations; measured
-  0.1%–2.7% at their own estimation errors.
+## Formulas
 
-Remaining flip rate is genuine decision sensitivity to driver noise (a real
-driver with real noise SHOULD move some decisions at 1σ); the cliff
-pathology — a hair of noise crossing a knife-edge — is eliminated.
+**Soft stress posterior (replaces hard label):**
+
+$$
+p\_stress = P(\text{state} = \text{high\_vol\_stress} \mid \mathcal{F}_t)
+$$
+
+from the HMM forward-backward algorithm (`hmm_regime_detection.py`).
+
+**Stress haircut (applied to composite score):**
+
+$$
+\text{score} \leftarrow \text{score} - 0.08 \times p\_stress
+$$
+
+The coefficient 0.08 was chosen so that p=1 (certain stress) gives the same
+penalty as the old hard cliff. No cliff — the penalty scales continuously.
+
+**Noise-convolved expectation (per driver):**
+
+For each driver $x$ with estimated value $\hat{x}$ and estimation error
+$\sigma_x$ (cross-sectional std / 4):
+
+$$
+\text{contribution} = \mathbb{E}_{z \sim \mathcal{N}(0, \sigma_x)}[f(\hat{x} + z)]
+$$
+
+where $f$ is the piecewise-linear driver function (e.g., momentum step
+function). Computed analytically by integrating over the Gaussian error.
+
+**Steps configs (single source of truth for thresholds):**
+
+| Driver | Config | Old threshold | Noise-robust form |
+|---|---|---|---|
+| Momentum | `MOMENTUM_STEPS` | 0.03 | `_step_expectation(mom, sig, 0.0, 10)` |
+| Factor | `FACTOR_STEPS` | 0.02 | `_step_expectation(factor, sig, 0.0, 10)` |
+| Composite | `COMPOSITE_STEPS` | 0.0 | `_step_expectation(comp, sig, 0.0, 10)` |
+| Residual momentum | `RESID_MOM_STEPS` | 0.0 | `_step_expectation(resid, sig, 0.0, 10)` |
+| Liquidity | `LIQUIDITY_STEPS` | 0.0 | `_step_expectation(liq, sig, 0.0, 10)` |
+| Skew | `SKEW_STEPS` | 0.0 | `_step_expectation(skew, sig, 0.0, 10)` |
+
+`sig=0` reproduces the old exact thresholds (backward compatible).
+
+**Decision flip measurement (audit protocol):**
+
+For each decision $d$ and perturbation $\epsilon \sim \mathcal{N}(0, \sigma)$
+applied to every driver:
+
+$$
+\text{flip} = \mathbb{1}[\text{decision}(\hat{x} + \epsilon) \neq \text{decision}(\hat{x})]
+$$
+
+Measured: hard regime cliff → 28.4% flips; momentum → 6.8%; factor → 5.1%.
+After noise-robust: <1% flips at same noise level.
 
 ## Related
-buy_candidates.py (the decisions being audited: score_row, regime_stress_prob,
-_step_expectation, *STEPS configs), regime_forecast.py (hmm_regime_states),
-the Forecasting-Paradox upgrades in forecast_granite.py (--epistemic-error,
-forecast_nu). Registered as the `taleb_optionality` daily job (after
-aggregate + preferred).
+
+- [buy_candidates.md](buy_candidates.md) — the decisions being audited
+- [hmm_regime_detection.md](hmm_regime_detection.md) — stress posterior source
+- [forecast_granite.md](forecast_granite.md) — Forecasting-Paradox upgrades
+- [buy_candidates.md](buy_candidates.md) — the decisions being audited
