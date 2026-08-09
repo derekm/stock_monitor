@@ -49,38 +49,100 @@ from macro_fragility import _fetch_fred
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "macro_sector_shock.csv"
 
-# sector -> (equity basket, optional FRED commodity). Baskets are OUR
-# annotated names; commodity series are IMF global prices when they exist.
+# sector -> config. Baskets come from ONE of:
+#   gics:     "Energy" | "Materials" | "Consumer Staples" — full S&P 500
+#             GICS membership loaded dynamically from sp500_constituents
+#             (complete coverage, no hand-picked thin lists — the steering
+#             fix: expand tickers to cover new sectors from S&P members)
+#   tickers:  explicit basket (fallback/override for non-S&P or bespoke)
+#   commodity: optional IMF global price series (FRED).
 SECTORS = {
     "farming_inputs": {
-        "tickers": ["CF", "MOS", "NTR", "UAN", "IPI", "LXU", "CTVA"],
+        "tickers": ["CF", "MOS", "NTR", "UAN", "IPI", "LXU", "CTVA"],  # focused
+        # fertilizer basket: NOT diluted by the full Materials GICS — the
+        # focused names carry the explosion signal (+232% 2007, +213% 2021);
+        # a broad basket smears it (measured: peak drops to +91%).
         "commodity": None,  # no global fertilizer price on FRED; basket carries it
     },
     "farming_outputs": {
-        "tickers": ["ADM", "BG", "SYY"],  # grain merchants / food processors
-        "commodity": "PWHEAMTUSDM",       # global wheat
+        "gics": "Consumer Staples",     # ADM/BG/GIS/HSY... full S&P staples
+        "commodity": "PWHEAMTUSDM",     # global wheat
     },
     "materials": {
-        "tickers": ["SECT_MATERIALS"],    # sector_prices synthetic
-        "commodity": "PALLFNFINDEXM",     # IMF all-commodities index
+        "gics": "Materials",
+        "commodity": "PALLFNFINDEXM",   # IMF all-commodities index
+    },
+    "copper": {
+        "gics": "Materials",            # FCX/NEM/ALB are all S&P Materials
+        "commodity": "PCOPPUSDM",       # global copper (1992-)
+    },
+    "industrial_metals": {
+        "gics": "Materials",
+        "commodity": "PZINCUSDM",       # global zinc
+    },
+    "nickel": {
+        "gics": "Materials",
+        "commodity": "PNICKUSDM",       # global nickel (commodity carries it)
+    },
+    "energy_equities": {
+        "gics": "Energy",               # full S&P energy: XOM/CVX/COP/SLB...
+        "commodity": "PNGASUSUSDM",     # Henry Hub nat gas (1992-)
+    },
+    "thermal_coal": {
+        "gics": "Energy",
+        "commodity": "PCOALAUUSDM",     # Australia thermal coal (1992-)
+    },
+    "uranium": {
+        "gics": "Energy",
+        "tickers": ["CCJ", "UUUU", "EU", "NEXG"],  # non-S&P uranium names
+        "commodity": "PURANUSDM",       # global uranium (1992-)
+    },
+    "softs_sugar": {
+        "gics": "Consumer Staples",
+        "commodity": "PSUGAISAUSDM",
+    },
+    "softs_cotton": {
+        "gics": "Consumer Staples",
+        "commodity": "PCOTTINDUSDM",
+    },
+    "softs_cocoa": {
+        "gics": "Consumer Staples",
+        "commodity": "PCOCOUSDM",       # +249% 2024
+    },
+    "softs_coffee": {
+        "gics": "Consumer Staples",
+        "commodity": "PCOFFOTMUSDM",    # arabica +186% 1994
+    },
+    "rubber": {
+        "gics": "Materials",
+        "commodity": "PRUBBUSDM",
     },
 }
 
 
-def _monthly_returns(tickers: list[str]) -> pd.Series:
-    """Equal-weight monthly log returns of a ticker basket (daily_prices
-    or sector_prices), best available history per ticker."""
+def _monthly_returns(tickers: list[str] | None = None, gics: str | None = None) -> pd.Series:
+    """Equal-weight monthly log returns of a basket: explicit tickers +
+    (optionally) the full S&P 500 GICS sector membership, loaded from
+    sp500_constituents.parquet. Returns best-available-history series."""
+    members = list(tickers or [])
+    if gics:
+        try:
+            sp = pd.read_parquet(DATA_DIR / "sp500_constituents.parquet")
+            g = sp.loc[sp["gics_sector"] == gics, "ticker"].astype(str).str.upper().tolist()
+            members = list(dict.fromkeys(members + [str(t).upper() for t in g]))
+        except Exception as e:
+            print(f"  gics {gics} load failed ({e}); using explicit tickers only")
     p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
     p["date"] = pd.to_datetime(p["date"])
     w = p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
-    avail = [t for t in tickers if t in w.columns]
+    avail = [t for t in members if t in w.columns]
     if not avail:
-        # try sector_prices (SECT_* synthetic tickers)
+        # fall back to sector_prices synthetic tickers (SECT_*)
         sp = pd.read_parquet(DATA_DIR / "sector_prices.parquet", columns=["date", "ticker", "close"])
         sp["date"] = pd.to_datetime(sp["date"])
         w = sp.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
         w = w[w > 0]
-        avail = [t for t in tickers if t in w.columns]
+        avail = [t for t in members if t in w.columns]
     if not avail:
         return pd.Series(dtype=float)
     r = np.log(w[avail] / w[avail].shift(1)).mean(axis=1)
@@ -90,7 +152,7 @@ def _monthly_returns(tickers: list[str]) -> pd.Series:
 def main(save: bool = True):
     rows = []
     for sector, cfg in SECTORS.items():
-        rets = _monthly_returns(cfg["tickers"])
+        rets = _monthly_returns(tickers=cfg.get("tickers"), gics=cfg.get("gics"))
         if rets.empty:
             print(f"{sector}: no basket data, skipped")
             continue
@@ -106,9 +168,10 @@ def main(save: bool = True):
             com = com.dropna().set_index("observation_date")
             c = com[cfg["commodity"]]
             c_mom = c / c.shift(12) - 1
-            c_mom.index.name = "com_date"
-            df = df.merge(c_mom.rename("commodity_mom_12m"), left_on="date", right_index=True, how="left")
-            df["commodity_mom_12m"] = df["commodity_mom_12m"].ffill()  # IMF lags ~1 month
+            # basket index is month-END (ME), commodity is month-START —
+            # reindex with ffill onto the basket dates (also covers the
+            # ~1-month IMF publication lag).
+            df["commodity_mom_12m"] = c_mom.reindex(df["date"], method="ffill").to_numpy()
         else:
             df["commodity_mom_12m"] = np.nan
 

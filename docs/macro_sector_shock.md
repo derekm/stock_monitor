@@ -21,21 +21,32 @@ data before building:
 
 ## Design
 
-Table-driven: each sector = (equity basket from daily_prices or
-sector_prices) + (optional IMF global commodity price). Sector shock score
+Table-driven: each sector = (equity basket from daily_prices, loaded from
+**full S&P 500 GICS membership** when `gics` is set — sp500_constituents,
+so coverage never depends on hand-picked thin lists — plus optional extra
+tickers) + (optional IMF global commodity price). Sector shock score
 = z(basket 12m momentum) + z(commodity 12m momentum) — the macro_shock
 recipe, minus the inflation/real-rate legs (those are macro-wide and stay
 in macro_shock.py). Zones calibrated on the verified events: basket 12m
 momentum ≥ +80% = `shock` (fertilizer 2007/2021 both exceeded +200%),
 ≥ +40% = `elevated`.
 
+Basket sourcing (2026-08): GICS sectors (Energy, Materials, Consumer
+Staples) load the full S&P membership dynamically. `farming_inputs` uses
+its FOCUSED basket (CF/MOS/NTR/UAN/IPI/LXU/CTVA) — measured: the broad
+Materials GICS smears the fertilizer explosion signal (peak drops from
++232% focused to +91% broad), so concentrated sub-sectors keep explicit
+baskets.
+
 Sectors (add more by appending to the SECTORS table — no code change):
 
 | Sector | Basket | Commodity |
 |---|---|---|
-| `farming_inputs` | CF/MOS/NTR/UAN/IPI/LXU/CTVA | none on FRED (basket carries it) |
-| `farming_outputs` | ADM/BG/SYY | PWHEAMTUSDM (global wheat) |
-| `materials` | SECT_MATERIALS (sector_prices) | PALLFNFINDEXM (all commodities) |
+| `farming_inputs` | focused fertilizer names | none on FRED (basket carries it) |
+| `farming_outputs` | Consumer Staples GICS | PWHEAMTUSDM (wheat) |
+| `materials` / `copper` / `industrial_metals` / `nickel` / `rubber` | Materials GICS | PALLFNFINDEXM / PCOPPUSDM / PZINCUSDM / PNICKUSDM / PRUBBUSDM |
+| `energy_equities` / `thermal_coal` / `uranium` | Energy GICS | PNGASUSUSDM / PCOALAUUSDM / PURANUSDM |
+| `softs_sugar` / `softs_cotton` / `softs_cocoa` / `softs_coffee` | Consumer Staples GICS | PSUGAISAUSDM / PCOTTINDUSDM / PCOCOUSDM / PCOFFOTMUSDM |
 
 ## Outputs
 

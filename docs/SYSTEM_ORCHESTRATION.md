@@ -53,7 +53,7 @@ flowchart TB
   GS --> WEB
   AS --> WEB
   WEB --> BROWSER
-  RUN["run_daily_automation.py (master orchestrator, 35 jobs)"] --> LOOPS
+  RUN["run_daily_automation.py (master orchestrator, 36 jobs)"] --> LOOPS
 ```
 
 > Two equivalent entry points drive the analytics loops: `run_daily_automation.py`
@@ -108,7 +108,7 @@ Almost every program reads from a small set of canonical parquet/CSV tables in `
               └─────────────────────────────────────┘
 ```
 
-`run_daily_automation.py` is the master orchestrator — 35 jobs in dependency waves (hmm → rebalance; preferred → inclusion/stress/risk_enrich/rolling/rolling_corr/allpairs/screen_bt/dupont/growth/peer/taleb_tail/taleb_gap; growth+peer → earnings → pairs → cross → aggregate → technical → taleb_optionality; taleb_tail → taleb_ergodic → taleb_fragility (with taleb_gap) → taleb_minsky → taleb_shock → taleb_sector_shock → taleb_barbell; econ_cal/est_rev independent; shadow after preferred+aggregate; export last). Use it instead of calling steps by hand.
+`run_daily_automation.py` is the master orchestrator — 36 jobs in dependency waves (hmm → rebalance; preferred → inclusion/stress/risk_enrich/rolling/rolling_corr/allpairs/screen_bt/dupont/growth/peer/taleb_tail/taleb_gap; growth+peer → earnings → pairs → cross → aggregate → technical → taleb_optionality; taleb_tail → taleb_ergodic → taleb_fragility (with taleb_gap) → taleb_minsky → taleb_shock → taleb_sector_shock → taleb_shock_ride → taleb_barbell; econ_cal/est_rev independent; shadow after preferred+aggregate; export last). Use it instead of calling steps by hand.
 
 ## 3. Services (started by `start_dashboard.sh`)
 
@@ -152,7 +152,7 @@ Independent reimplementation of S&P 500 inclusion/exclusion, scored against actu
 
 ## 6. What an agent should know before "running analytics"
 
-- Always start from `run_daily_automation.py` (or the dashboard's `analytics_service` → `/run/all-daily`), not individual scripts. Valid job names (35): `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_minsky, taleb_shock, taleb_sector_shock, taleb_barbell, taleb_optionality, export`.
+- Always start from `run_daily_automation.py` (or the dashboard's `analytics_service` → `/run/all-daily`), not individual scripts. Valid job names (36): `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride, taleb_barbell, taleb_optionality, export`.
 - Data must be fresh: if `daily_prices.parquet` is stale, run `update_prices.py --fetch --days N` first.
 - The dashboard reads `dashboard_data/data.json`; if tables look empty, re-run `export_dashboard_data.py`. The dashboard exposes 198 resources (catalog in `data_catalog.json`).
 - Don't hand-edit the base parquet tables; use the dedicated writer scripts (`manage_stocks`, `update_fundamentals`, `update_prices`).

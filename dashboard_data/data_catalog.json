@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-09T07:27:59.415097",
-  "count": 227,
+  "generated": "2026-08-09T07:45:45.426305",
+  "count": 239,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -12,6 +12,96 @@
       "sql_name": "PALLFNFINDEXM"
     },
     {
+      "name": "PCOALAUUSDM",
+      "filename": "PCOALAUUSDM.csv",
+      "path": "macro_data/PCOALAUUSDM.csv",
+      "url": "macro_data/PCOALAUUSDM.csv",
+      "kind": "csv",
+      "size": 9984,
+      "sql_name": "PCOALAUUSDM"
+    },
+    {
+      "name": "PCOCOUSDM",
+      "filename": "PCOCOUSDM.csv",
+      "path": "macro_data/PCOCOUSDM.csv",
+      "url": "macro_data/PCOCOUSDM.csv",
+      "kind": "csv",
+      "size": 12247,
+      "sql_name": "PCOCOUSDM"
+    },
+    {
+      "name": "PCOFFOTMUSDM",
+      "filename": "PCOFFOTMUSDM.csv",
+      "path": "macro_data/PCOFFOTMUSDM.csv",
+      "url": "macro_data/PCOFFOTMUSDM.csv",
+      "kind": "csv",
+      "size": 11841,
+      "sql_name": "PCOFFOTMUSDM"
+    },
+    {
+      "name": "PCOPPUSDM",
+      "filename": "PCOPPUSDM.csv",
+      "path": "macro_data/PCOPPUSDM.csv",
+      "url": "macro_data/PCOPPUSDM.csv",
+      "kind": "csv",
+      "size": 11483,
+      "sql_name": "PCOPPUSDM"
+    },
+    {
+      "name": "PCOTTINDUSDM",
+      "filename": "PCOTTINDUSDM.csv",
+      "path": "macro_data/PCOTTINDUSDM.csv",
+      "url": "macro_data/PCOTTINDUSDM.csv",
+      "kind": "csv",
+      "size": 11114,
+      "sql_name": "PCOTTINDUSDM"
+    },
+    {
+      "name": "PNGASUSUSDM",
+      "filename": "PNGASUSUSDM.csv",
+      "path": "macro_data/PNGASUSUSDM.csv",
+      "url": "macro_data/PNGASUSUSDM.csv",
+      "kind": "csv",
+      "size": 10507,
+      "sql_name": "PNGASUSUSDM"
+    },
+    {
+      "name": "PNICKUSDM",
+      "filename": "PNICKUSDM.csv",
+      "path": "macro_data/PNICKUSDM.csv",
+      "url": "macro_data/PNICKUSDM.csv",
+      "kind": "csv",
+      "size": 11274,
+      "sql_name": "PNICKUSDM"
+    },
+    {
+      "name": "PRUBBUSDM",
+      "filename": "PRUBBUSDM.csv",
+      "path": "macro_data/PRUBBUSDM.csv",
+      "url": "macro_data/PRUBBUSDM.csv",
+      "kind": "csv",
+      "size": 12270,
+      "sql_name": "PRUBBUSDM"
+    },
+    {
+      "name": "PSUGAISAUSDM",
+      "filename": "PSUGAISAUSDM.csv",
+      "path": "macro_data/PSUGAISAUSDM.csv",
+      "url": "macro_data/PSUGAISAUSDM.csv",
+      "kind": "csv",
+      "size": 11294,
+      "sql_name": "PSUGAISAUSDM"
+    },
+    {
+      "name": "PURANUSDM",
+      "filename": "PURANUSDM.csv",
+      "path": "macro_data/PURANUSDM.csv",
+      "url": "macro_data/PURANUSDM.csv",
+      "kind": "csv",
+      "size": 9869,
+      "sql_name": "PURANUSDM"
+    },
+    {
       "name": "PWHEAMTUSDM",
       "filename": "PWHEAMTUSDM.csv",
       "path": "macro_data/PWHEAMTUSDM.csv",
@@ -19,6 +109,15 @@
       "kind": "csv",
       "size": 12066,
       "sql_name": "PWHEAMTUSDM"
+    },
+    {
+      "name": "PZINCUSDM",
+      "filename": "PZINCUSDM.csv",
+      "path": "macro_data/PZINCUSDM.csv",
+      "url": "macro_data/PZINCUSDM.csv",
+      "kind": "csv",
+      "size": 11420,
+      "sql_name": "PZINCUSDM"
     },
     {
       "name": "['all']",
@@ -1151,7 +1250,7 @@
       "path": "macro_sector_shock.csv",
       "url": "macro_sector_shock.csv",
       "kind": "csv",
-      "size": 104073,
+      "size": 477073,
       "sql_name": "macro_sector_shock"
     },
     {
@@ -1801,6 +1900,15 @@
       "kind": "csv",
       "size": 255,
       "sql_name": "sharpe_comparison"
+    },
+    {
+      "name": "shock_ride",
+      "filename": "shock_ride.csv",
+      "path": "shock_ride.csv",
+      "url": "shock_ride.csv",
+      "kind": "csv",
+      "size": 930,
+      "sql_name": "shock_ride"
     },
     {
       "name": "signal_aggregator_ic",
