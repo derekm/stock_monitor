@@ -157,6 +157,7 @@
     <span class="meta-chip">status <b id="hdr-status">loading…</b></span>
     <span class="meta-chip">catalog <b id="hdr-catalog">—</b></span>
     <span class="meta-chip">macro <b id="hdr-macro">—</b></span>
+    <span class="meta-chip">universe <b id="hdr-universe">—</b></span>
   </div>
 </header>
 <nav id="nav">
@@ -340,10 +341,8 @@
         <div>
           <label>Tickers (custom)</label>
           <select id="fc-tickers" multiple size="4" title="Ctrl/Cmd+click for multiple">
-            <option value="MOS">MOS</option>
-            <option value="CF">CF</option>
-            <option value="SHEL">SHEL</option>
-          </select>
+            <!-- populated from full universe at runtime -->
+</select>
         </div>
         <div>
           <label>Horizon</label>
@@ -393,12 +392,8 @@
         <div>
           <label>Peer tickers</label>
           <select id="fc-peer-tickers" multiple size="4" title="Ctrl/Cmd+click for multiple">
-            <option value="SPY">SPY</option>
-            <option value="XLP">XLP</option>
-            <option value="XLU">XLU</option>
-            <option value="XLK">XLK</option>
-            <option value="XLE">XLE</option>
-          </select>
+            <!-- populated from full universe at runtime -->
+</select>
         </div>
         <div>
           <label>Peer top N</label>
@@ -605,6 +600,17 @@
         <div class="scroll"><table id="tbl-sub-lead"><thead></thead><tbody></tbody></table></div>
       </div>
     </div>
+    
+    <div class="card" style="margin-bottom:0.85rem" id="basket-explorer-card">
+      <h3>Dynamic baskets (GICS · sub-industry · factor groups) <span class="live-badge" id="basket-explorer-status">…</span></h3>
+      <p class="hint">Every basket is built at run time from sp500_constituents + factor_group_members — not a fixed research list. Filter by kind; members column shows who is in the basket.</p>
+      <div style="margin:0.4rem 0 0.6rem">
+        <label style="font-size:0.75rem;color:var(--muted)">Kind filter </label>
+        <select id="basket-kind-filter" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:0.25rem 0.4rem;font-size:0.8rem"></select>
+      </div>
+      <div class="scroll tall" id="basket-explorer"><table id="tbl-basket-explorer"><thead></thead><tbody></tbody></table></div>
+    </div>
+
     <h3 style="margin:0.25rem 0 0.55rem;color:#c5d0e0;font-size:0.9rem">Micro fragility (per-name)</h3>
     <div class="grid2" style="margin-bottom:1rem">
       <div class="card">
@@ -2598,7 +2604,6 @@ function arrowDateToISO(v) {
 }
 
 async function duckQuery(sql, tableId, limit) {
-  window.__q = duckQuery; window.__fmtDate = fmtDate; window.__dateKey = dateKey; window.__arrowDateToISO = arrowDateToISO;
   if (!CONN) throw new Error("DuckDB not ready");
   let q = (sql || "").trim();
   if (!q) return [];
@@ -3729,7 +3734,8 @@ ORDER BY date;
 function fiInitTickers() {
   const host = $("#fi-tickers");
   if (!host || !DATA.price_qty_panel) return;
-  const tickers = [...new Set(DATA.price_qty_panel.map(r => r.ticker))].sort();
+  let tickers = [...new Set((DATA.price_qty_panel || []).map(r => r.ticker).filter(Boolean))].sort();
+  if (!tickers.length && window.__UNIVERSE_TICKERS) tickers = window.__UNIVERSE_TICKERS.slice();
   const preset = (DATA.fisher_universes && DATA.fisher_universes.portfolio) || [];
   host.innerHTML = tickers.map(t => {
     const checked = preset.includes(t) ? "checked" : "";
@@ -4350,7 +4356,8 @@ async function bindLiveDuckControls() {
       } catch (e) { console.warn("live auto-refresh", sectionId, e); }
     }
   }
-  if (typeof populateStockTickers === "function") await populateStockTickers();
+  if (typeof populateAllTickerPickers === "function") await populateAllTickerPickers();
+  else if (typeof populateStockTickers === "function") await populateStockTickers();
   if (typeof renderSprint === "function") renderSprint();
   if (typeof renderSignals === "function") renderSignals();
   if (typeof renderRegimeModels === "function") renderRegimeModels();
@@ -4816,18 +4823,154 @@ async function renderSprint() {
 }
 
 /* Single-stock: populate ticker select from DuckDB (monitored_stocks), render peer tables live. */
-async function populateStockTickers() {
-  const sel = document.querySelector("#stock-ticker");
-  if (!sel) return;
+
+/** Full investable universe for every picker — NOT a fixed research list.
+ *  Prefer: all tickers in daily_prices (via DuckDB), else sp500_constituents
+ *  ∪ monitored_stocks ∪ basket_members.
+ */
+async function loadUniverseTickers() {
+  if (window.__UNIVERSE_TICKERS && window.__UNIVERSE_TICKERS.length) {
+    return window.__UNIVERSE_TICKERS;
+  }
+  const set = new Set();
+  // 1) live prices universe
   try {
-    const rows = await liveTable("monitored_stocks");
-    const tickers = [...new Set((rows || []).map(r => r.ticker).filter(Boolean))].sort();
-    sel.innerHTML = '<option value="">Select a ticker…</option>' +
-      tickers.map(t => `<option value="${t}">${t}</option>`).join("");
-  } catch (e) {
-    console.warn("populateStockTickers", e);
+    if (CONN) {
+      const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === "daily_prices");
+      if (meta) {
+        try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind, true); } catch (e) {}
+      }
+      if (window.SQL_LOADED && window.SQL_LOADED.has("daily_prices")) {
+        const rows = await duckQuery('SELECT DISTINCT ticker FROM daily_prices ORDER BY ticker', null, null);
+        (rows || []).forEach(r => { if (r.ticker) set.add(String(r.ticker).toUpperCase()); });
+      }
+    }
+  } catch (e) { console.warn("universe daily_prices", e); }
+  // 2) S&P + monitored + basket members
+  for (const table of ["sp500_constituents", "monitored_stocks", "basket_members", "buy_candidates", "signal_aggregator_scores"]) {
+    try {
+      const rows = await liveTable(table);
+      (rows || []).forEach(r => {
+        const t = r.ticker || r.Ticker;
+        if (t) set.add(String(t).toUpperCase());
+      });
+    } catch (e) {}
+  }
+  // 3) data.json fallbacks
+  if (DATA) {
+    for (const key of ["holdings", "fundamentals", "buy_candidates", "monitored_stocks"]) {
+      const rows = DATA[key] || (DATA.tables && DATA.tables[key]) || [];
+      (rows || []).forEach(r => { if (r && r.ticker) set.add(String(r.ticker).toUpperCase()); });
+    }
+  }
+  window.__UNIVERSE_TICKERS = [...set].filter(Boolean).sort();
+  return window.__UNIVERSE_TICKERS;
+}
+
+async function loadDynamicBaskets() {
+  if (window.__DYNAMIC_BASKETS && window.__DYNAMIC_BASKETS.length) return window.__DYNAMIC_BASKETS;
+  const rows = await liveTable("macro_sector_shock");
+  // latest per basket
+  const latest = {};
+  for (const r of (rows || [])) {
+    const b = r.basket || r.sector;
+    if (!b) continue;
+    if (!latest[b] || dateKey(r.date) > dateKey(latest[b].date)) latest[b] = { ...r, basket: b };
+  }
+  window.__DYNAMIC_BASKETS = Object.values(latest).sort((a, b) =>
+    String(a.basket_kind || "").localeCompare(String(b.basket_kind || "")) ||
+    String(a.basket).localeCompare(String(b.basket))
+  );
+  return window.__DYNAMIC_BASKETS;
+}
+
+function fillSelectWithTickers(sel, tickers, opts) {
+  if (!sel) return;
+  const keep = opts && opts.keepValue ? sel.value : "";
+  const blank = (opts && opts.blankLabel) || "Select a ticker…";
+  const multi = sel.multiple;
+  sel.innerHTML = (multi ? "" : `<option value="">${blank}</option>`) +
+    tickers.map(t => `<option value="${t}">${t}</option>`).join("");
+  if (keep) {
+    if (multi) {
+      [...sel.options].forEach(o => { o.selected = keep.split(",").includes(o.value); });
+    } else {
+      sel.value = keep;
+    }
   }
 }
+
+async function populateAllTickerPickers() {
+  const tickers = await loadUniverseTickers();
+  const n = tickers.length;
+  // Single-stock picker
+  fillSelectWithTickers(document.querySelector("#stock-ticker"), tickers);
+  // Forecast custom tickers + peers
+  fillSelectWithTickers(document.querySelector("#fc-tickers"), tickers, { blankLabel: "" });
+  fillSelectWithTickers(document.querySelector("#fc-peer-tickers"), tickers, { blankLabel: "" });
+  // Any other select[data-universe]
+  document.querySelectorAll("select[data-universe]").forEach(sel => {
+    fillSelectWithTickers(sel, tickers, { blankLabel: sel.getAttribute("data-blank") || "Select…" });
+  });
+  // header chip
+  const hc = document.querySelector("#hdr-universe");
+  if (hc) hc.textContent = n.toLocaleString() + " tickers";
+  // status lines
+  const ss = document.querySelector("#stock-status");
+  if (ss && (!ss.textContent || ss.textContent.includes("…") || ss.textContent.includes("Select"))) {
+    ss.textContent = `${n} tickers in universe`;
+  }
+  return n;
+}
+
+async function populateBasketExplorer() {
+  const host = document.querySelector("#basket-explorer");
+  if (!host) return;
+  const baskets = await loadDynamicBaskets();
+  const members = await liveTable("basket_members");
+  const byBasket = {};
+  for (const r of (members || [])) {
+    const b = r.basket;
+    if (!b) continue;
+    (byBasket[b] = byBasket[b] || []).push(String(r.ticker || "").toUpperCase());
+  }
+  const kinds = [...new Set(baskets.map(b => b.basket_kind || "other"))].sort();
+  const kindFilter = document.querySelector("#basket-kind-filter");
+  if (kindFilter && !kindFilter.dataset.ready) {
+    kindFilter.innerHTML = `<option value="">All kinds (${baskets.length})</option>` +
+      kinds.map(k => `<option value="${k}">${k}</option>`).join("");
+    kindFilter.dataset.ready = "1";
+    kindFilter.addEventListener("change", () => populateBasketExplorer());
+  }
+  const kf = kindFilter?.value || "";
+  const filtered = kf ? baskets.filter(b => b.basket_kind === kf) : baskets;
+  // sort shock first
+  filtered.sort((a, b) => {
+    const za = String(a.shock_zone), zb = String(b.shock_zone);
+    const rank = z => z === "shock" ? 0 : z === "elevated" ? 1 : 2;
+    return rank(za) - rank(zb) || (+b.basket_mom_12m || 0) - (+a.basket_mom_12m || 0);
+  });
+  fillSimple("#tbl-basket-explorer", filtered.map(b => ({
+    basket: b.basket,
+    kind: b.basket_kind,
+    label: b.label || b.basket,
+    n: b.n_members || (byBasket[b.basket] || []).length,
+    date: b.date,
+    mom_12m: b.basket_mom_12m,
+    commodity_12m: b.commodity_mom_12m,
+    shock_score: b.shock_score,
+    shock_zone: b.shock_zone,
+    members: (byBasket[b.basket] || []).slice(0, 12).join(" ") +
+      ((byBasket[b.basket] || []).length > 12 ? " …" : ""),
+  })), ["basket", "kind", "label", "n", "date", "mom_12m", "commodity_12m", "shock_score", "shock_zone", "members"]);
+  const st = document.querySelector("#basket-explorer-status");
+  if (st) st.textContent = `${filtered.length} baskets · universe filter: ${kf || "all"}`;
+}
+
+async function populateStockTickers() {
+  return populateAllTickerPickers();
+}
+
 
 const STOCK_METRIC_COLS = ["roe", "roic", "debt_to_equity", "ev_ebitda", "pb_ratio", "earnings_stability", "mktcap_to_assets"];
 
@@ -5005,12 +5148,12 @@ const MACRO_FRAG_COLS = ["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse
   "danger_zone", "regime_ctx"];
 const MACRO_SHOCK_COLS = ["date", "oil_mom_12m", "inflation_surprise", "real_rate",
   "energy_divergence", "shock_score", "shock_zone"];
-const SECTOR_SHOCK_COLS = ["sector", "date", "basket_mom_12m", "commodity_mom_12m",
+const SECTOR_SHOCK_COLS = ["basket", "basket_kind", "label", "n_members", "date", "basket_mom_12m", "commodity_mom_12m",
   "shock_score", "shock_zone"];
-const SHOCK_RIDE_COLS = ["sector", "n_trades", "in_market_share", "buy_hold_return",
+const SHOCK_RIDE_COLS = ["basket", "basket_kind", "label", "n_members", "n_trades", "in_market_share", "buy_hold_return",
   "ride_return", "excess", "max_dd_ride", "max_dd_buyhold"];
-const SUB_REGIME_COLS = ["basket", "date", "vol21", "avg_corr", "p_stress", "regime", "ride_pos"];
-const SUB_LEAD_COLS = ["basket", "n_exits", "lead_10d", "lead_20d", "lead_30d"];
+const SUB_REGIME_COLS = ["basket", "basket_kind", "label", "n_members", "date", "vol21", "avg_corr", "p_stress", "regime", "ride_pos"];
+const SUB_LEAD_COLS = ["basket", "basket_kind", "label", "n_members", "n_exits", "lead_10d", "lead_20d", "lead_30d"];
 
 function _fmtPct(x, digits=1) {
   if (x === null || x === undefined || x === "" || Number.isNaN(+x)) return "—";
@@ -5079,9 +5222,10 @@ async function renderMacroPulse() {
     // sector shock: latest row per sector from macro_sector_shock
     const secLatest = {};
     for (const r of (sec || [])) {
-      const k = r.sector;
+      const k = r.basket || r.sector;
       if (!k) continue;
-      if (!secLatest[k] || dateKey(r.date) > dateKey(secLatest[k].date)) secLatest[k] = r;
+      const row = { ...r, basket: k, sector: k };
+      if (!secLatest[k] || dateKey(r.date) > dateKey(secLatest[k].date)) secLatest[k] = row;
     }
     const secVals = Object.values(secLatest);
     const inShock = secVals.filter(r => String(r.shock_zone).toLowerCase() === "shock")
@@ -5113,7 +5257,7 @@ async function renderMacroPulse() {
     _setKpi("#d-kpi-impulse", lastF ? _fmtPct(impulse,1) : "—", lastF ? `accel ${_fmtNum(lastF.debt_acceleration,3)}` : "", impulse >= 0.20 ? "bad" : impulse >= 0.13 ? "warn" : "");
     _setKpi("#d-kpi-oil", secValue, shockList, secKind);
     _setKpi("#d-kpi-stressed", String(stressed.length), stressed.slice(0,4).map(r => String(r.basket).replace(/^sub_/,"")).join(", ") || "none", stressed.length ? "warn" : "good");
-    _setKpi("#d-kpi-ride", bestRide ? _fmtPct(bestRide.excess,0) : "—", bestRide ? bestRide.sector : "", bestRide && +bestRide.excess > 0 ? "good" : "warn");
+    _setKpi("#d-kpi-ride", bestRide ? _fmtPct(bestRide.excess,0) : "—", bestRide ? (bestRide.basket || bestRide.sector || bestRide.label) : "", bestRide && +bestRide.excess > 0 ? "good" : "warn");
 
     const hdr = document.querySelector("#hdr-macro");
     if (hdr) hdr.textContent = `${zone} · impulse ${lastF ? _fmtPct(impulse,0) : "—"} · ${stressed.length} stressed`;
@@ -5159,9 +5303,10 @@ async function renderFragility() {
 
     const secLatest = {};
     for (const r of (sec || [])) {
-      const k = r.sector;
+      const k = r.basket || r.sector;
       if (!k) continue;
-      if (!secLatest[k] || dateKey(r.date) > dateKey(secLatest[k].date)) secLatest[k] = r;
+      const row = { ...r, basket: k, sector: k };
+      if (!secLatest[k] || dateKey(r.date) > dateKey(secLatest[k].date)) secLatest[k] = row;
     }
     const secRows = Object.values(secLatest).sort((a,b) => (+b.basket_mom_12m||0) - (+a.basket_mom_12m||0));
     fillSimple("#tbl-sector-shock", _decorateZoneRows(secRows, "shock_zone"), SECTOR_SHOCK_COLS);
@@ -5198,6 +5343,7 @@ async function renderFragility() {
     const nMacro = (mf||[]).length + (ms||[]).length + (sec||[]).length;
     const nMicro = (frag||[]).length + (tail||[]).length + (gap||[]).length;
     if (status) status.textContent = `DuckDB · macro ${nMacro.toLocaleString()} · micro ${nMicro.toLocaleString()} · sub ${(sub||[]).length.toLocaleString()}`;
+    if (typeof populateBasketExplorer === "function") { try { await populateBasketExplorer(); } catch (e) { console.warn(e); } }
   } catch (e) {
     if (status) status.textContent = e.message || String(e);
     console.error("renderFragility", e);

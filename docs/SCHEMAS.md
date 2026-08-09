@@ -446,7 +446,8 @@ auxiliary tables feeding several stages.
 | `fragility_screen.csv` | `fragility_screen.py` | Taleb / fat tails |
 | `macro_fragility.csv` | `macro_fragility.py` | Taleb / fat tails |
 | `macro_shock.csv` | `macro_shock.py` | Taleb / fat tails |
-| `macro_sector_shock.csv` | `macro_sector_shock.py` | Taleb / fat tails |
+| `macro_sector_shock.csv` | `macro_sector_shock.py` | Taleb / fat tails (DYNAMIC baskets) |
+| `basket_members.csv` | `macro_sector_shock.py` | Taleb / fat tails |
 | `shock_ride.csv` | `shock_ride.py` | Taleb / fat tails |
 | `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails |
 | `subindustry_regime_lead.csv` | `subindustry_regime.py` | Taleb / fat tails |

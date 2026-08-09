@@ -1,36 +1,18 @@
 #!/usr/bin/env python3
-"""subindustry_regime.py — per-sub-industry correlation & crisis regimes,
-plus an early-collapse warning that fires BEFORE the shock_ride momentum
-exit bleeds.
+"""subindustry_regime.py — per-basket correlation & crisis regimes (DYNAMIC).
 
-Why it exists: shock_ride.py exits on 3m momentum rollover — a LAGGING
-signal (the collapse is typically weeks old by then). The market-wide HMM
-(hmm_regime_detection.py) is aggregate; sub-industries collapse
-independently. This script runs the SAME 3-state HMM recipe per
-sub-industry basket — features = basket vol21 + intra-basket avg pairwise
-correlation — so each subsector gets its own stress posterior (the
-"correlation & crisis regime per sub industry" ask), and measures whether
-that subsector stress leads the ride rule's momentum exit.
+Runs the market HMM recipe (vol21 + intra-basket avg corr → 3-state stress)
+on every dynamic basket from macro_sector_shock (GICS sub-industries +
+sectors + factor_groups). Not a fixed research list.
 
-Method (per basket, from hmm_regime_detection — same code, no fork):
-  build_features(rets) -> vol21, avg_corr (21d rolling pairwise corr
-  within the basket), mkt_ret
-  fit_hmm(...) 3 states -> label_states: the high-vol/high-corr state is
-  the subsector crisis regime (same labeling rule as the market HMM).
-  p_stress = posterior prob of the crisis state.
-
-Early-collapse test (the "before the ride rule takes losses" ask):
-  At every shock_ride EXIT (3m mom rollover), what did the subsector
-  p_stress read 10/20/30 days BEFORE the exit? If the subsector stress
-  flips > 0.8 ahead of the momentum exit, the stress posterior is the
-  leading signal and can replace/augment the ride exit.
+Also measures whether p_stress > 0.8 LEADS the shock_ride momentum exit
+(honest result historically: mostly coincident, not leading).
 
 Outputs:
-  subindustry_regime.csv — per basket: date, vol21, avg_corr, p_stress,
-                           regime, ride_pos (1 when ride rule is long)
-  subindustry_regime_lead.csv — per basket: n_exits, exits with stress
-                                already > 0.8 at -10/-20/-30d, mean lead
-Usage: python subindustry_regime.py [--save]
+  subindustry_regime.csv — basket, basket_kind, label, date, vol21, avg_corr,
+                           p_stress, regime, ride_pos
+  subindustry_regime_lead.csv — basket, n_exits, lead_10d/20d/30d
+Usage: python subindustry_regime.py [--save] [--max-baskets N]
 """
 from __future__ import annotations
 
@@ -41,131 +23,145 @@ import numpy as np
 import pandas as pd
 
 from hmm_regime_detection import build_features, fit_hmm, label_states
-from macro_sector_shock import SECTORS, _monthly_returns
+from macro_sector_shock import _build_baskets, _monthly_returns, _price_universe
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "subindustry_regime.csv"
 OUT_LEAD = DATA_DIR / "subindustry_regime_lead.csv"
 
-# only the focused subsector baskets (sub_*) + the flagship fertilizer
-BASKETS = {k: v for k, v in SECTORS.items() if k.startswith("sub_")}
 
-
-def basket_daily_rets(cfg: dict) -> pd.DataFrame:
-    """Daily (not monthly) equal-weight basket returns for the HMM
-    features (vol21/corr are daily-frequency signals)."""
-    import pandas as pd
-    members = list(cfg.get("tickers") or [])
-    try:
-        sp = pd.read_parquet(DATA_DIR / "sp500_constituents.parquet")
-        if cfg.get("gics"):
-            members += sp.loc[sp["gics_sector"] == cfg["gics"], "ticker"].astype(str).str.upper().tolist()
-        if cfg.get("subindustry"):
-            members += sp.loc[sp["gics_sub_industry"] == cfg["subindustry"], "ticker"].astype(str).str.upper().tolist()
-        members = list(dict.fromkeys(members))
-    except Exception:
-        pass
+def basket_daily_rets(tickers: list[str]) -> pd.DataFrame:
+    """Daily equal-weight member returns (columns = tickers) for HMM features."""
     p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
     p["date"] = pd.to_datetime(p["date"])
+    p = p[p["ticker"].isin(tickers)]
+    if p.empty:
+        return pd.DataFrame()
     w = p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
-    avail = [t for t in members if t in w.columns and w[t].notna().sum() > 500]
+    avail = [t for t in w.columns if w[t].notna().sum() > 500]
     if len(avail) < 2:
         return pd.DataFrame()
     rets = np.log(w[avail] / w[avail].shift(1))
     return rets.replace([np.inf, -np.inf], np.nan).dropna(how="all")
 
 
-def ride_positions(cfg: dict) -> pd.Series:
-    """Monthly ride-rule position (1 long / 0 flat) — same rule as
-    shock_ride.py, monthly resample, 1-month shift."""
-    m = _monthly_returns(tickers=cfg.get("tickers"), gics=cfg.get("gics"),
-                         subindustry=cfg.get("subindustry"))
+def ride_positions(tickers: list[str], entry_thresh: float = 0.40) -> pd.Series:
+    m = _monthly_returns(tickers)
     if m.empty:
         return pd.Series(dtype=float)
     cum = (1 + m).cumprod()
     mom12 = cum / cum.shift(12) - 1
     mom3 = cum / cum.shift(3) - 1
-    pos = ((mom12 > 0.40) & (mom3 > 0)).astype(int)
+    pos = ((mom12 > entry_thresh) & (mom3 > 0)).astype(int)
     return pos.shift(1).fillna(0)
 
 
-def main(save: bool = True):
+def main(save: bool = True, max_baskets: int | None = None):
+    have = _price_universe()
+    baskets = _build_baskets(have)
+    # Prefer thinner baskets for regime (sub-industries + factor groups); still
+    # include GICS sectors so the dashboard has full coverage.
+    items = sorted(baskets.items())
+    if max_baskets:
+        items = items[:max_baskets]
+    print(f"=== basket regimes (HMM vol21 + intra-basket corr) · {len(items)} baskets ===")
+
     rows, lead_rows = [], []
-    print("=== sub-industry regimes (HMM vol21 + intra-basket corr) ===")
-    for name, cfg in BASKETS.items():
-        rets = basket_daily_rets(cfg)
+    for bid, cfg in items:
+        tickers = cfg["tickers"]
+        rets = basket_daily_rets(tickers)
         if rets.shape[1] < 2:
-            print(f"  {name}: <2 members, skipped")
             continue
         feat = build_features(rets, corr_window=21)
         if len(feat) < 300:
-            print(f"  {name}: short history ({len(feat)}), skipped")
             continue
         try:
             _, states, post, _, _ = fit_hmm(feat, n_states=3)
         except Exception as e:
-            print(f"  {name}: HMM fail {str(e)[:50]}, skipped")
+            print(f"  {bid}: HMM fail {str(e)[:50]}")
             continue
         labels, _ = label_states(feat, states)
         stress_state = [s for s, l in labels.items() if "stress" in l or "high" in l]
-        stress_state = stress_state[0] if stress_state else labels[max(labels, key=lambda s: labels[s].count("high"))]
+        if not stress_state:
+            # highest-vol state
+            stress_state = [max(labels, key=lambda s: 0 if "low" in labels[s] else 1)]
+        stress_state = stress_state[0]
         p_stress = post[:, stress_state]
 
         d = pd.DataFrame({
-            "date": feat.index, "vol21": feat["vol21"].values,
+            "date": feat.index,
+            "vol21": feat["vol21"].values,
             "avg_corr": feat["avg_corr"].values,
-            "p_stress": p_stress, "state": states,
+            "p_stress": p_stress,
+            "state": states,
         })
         d["regime"] = [labels[s] for s in states]
-        # ride position at each date (monthly pos carried forward to daily)
-        rp = ride_positions(cfg)
-        rp_daily = rp.asof(d["date"]) if not rp.empty else pd.Series(0, index=d.index)
-        d["ride_pos"] = rp_daily.to_numpy()
-        d["basket"] = name
+        rp = ride_positions(tickers)
+        if not rp.empty:
+            # carry monthly position onto daily dates
+            rp_daily = rp.reindex(d["date"]).ffill()
+            # monthly index may not align — asof via merge_asof style
+            if rp_daily.isna().all():
+                tmp = pd.DataFrame({"date": d["date"]})
+                rpdf = rp.rename("ride_pos").reset_index()
+                rpdf.columns = ["date", "ride_pos"]
+                rpdf["date"] = pd.to_datetime(rpdf["date"])
+                tmp = pd.merge_asof(tmp.sort_values("date"), rpdf.sort_values("date"), on="date")
+                d["ride_pos"] = tmp["ride_pos"].fillna(0).to_numpy()
+            else:
+                d["ride_pos"] = rp_daily.fillna(0).to_numpy()
+        else:
+            d["ride_pos"] = 0
+        d["basket"] = bid
+        d["basket_kind"] = cfg["kind"]
+        d["label"] = cfg["label"]
+        d["n_members"] = len(tickers)
         rows.append(d)
 
-        # lead analysis: at each ride EXIT (1 -> 0), stress 10/20/30d before
         exits = d[d["ride_pos"].diff() == -1]
         n_exits = len(exits)
         pre = {}
         for lag in (10, 20, 30):
             n_lead = 0
-            for _, ex in exits.iterrows():
-                i = d.index.get_loc(ex.name)
-                if i - lag >= 0:
-                    if d.iloc[i - lag]["p_stress"] > 0.8:
-                        n_lead += 1
+            for idx in exits.index:
+                i = d.index.get_loc(idx)
+                if isinstance(i, slice):
+                    continue
+                if i - lag >= 0 and d.iloc[i - lag]["p_stress"] > 0.8:
+                    n_lead += 1
             pre[f"lead_{lag}d"] = n_lead
-        lead_rows.append({"basket": name, "n_exits": n_exits, **pre})
-
+        lead_rows.append({
+            "basket": bid, "basket_kind": cfg["kind"], "label": cfg["label"],
+            "n_members": len(tickers), "n_exits": n_exits, **pre,
+        })
         last = d.iloc[-1]
-        print(f"  {name:22s} stress {last['p_stress']:.2f} "
-              f"({last['regime']}) | vol {last['vol21']:.2f} corr {last['avg_corr']:.2f} "
-              f"| exits {n_exits} lead10/20/30 {pre['lead_10d']}/{pre['lead_20d']}/{pre['lead_30d']}")
+        print(f"  {bid[:34]:34s} stress {last['p_stress']:.2f} ({last['regime']}) "
+              f"vol {last['vol21']:.2f} corr {last['avg_corr']:.2f} n={len(tickers)}")
 
     if not rows:
         print("nothing computed")
         return
     out = pd.concat(rows, ignore_index=True)
-    out = out[["basket", "date", "vol21", "avg_corr", "p_stress", "regime", "ride_pos"]]
+    out = out[["basket", "basket_kind", "label", "n_members", "date",
+               "vol21", "avg_corr", "p_stress", "regime", "ride_pos"]]
     lead = pd.DataFrame(lead_rows)
 
     if save:
         out.to_csv(OUT, index=False)
         lead.to_csv(OUT_LEAD, index=False)
 
-    # aggregate lead stats
-    tot_exits = int(lead["n_exits"].sum())
+    tot_exits = int(lead["n_exits"].sum()) if len(lead) else 0
     for lag in ("lead_10d", "lead_20d", "lead_30d"):
-        tot = int(lead[lag].sum())
+        tot = int(lead[lag].sum()) if len(lead) else 0
         pct = tot / tot_exits if tot_exits else 0
-        print(f"\n  stress>0.8 BEFORE ride exit: {lag}: {tot}/{tot_exits} ({pct:.0%})")
+        print(f"  stress>0.8 BEFORE ride exit {lag}: {tot}/{tot_exits} ({pct:.0%})")
     if save:
-        print(f"\nWrote {OUT}\nWrote {OUT_LEAD}")
+        print(f"\nWrote {OUT} ({len(out)} rows)\nWrote {OUT_LEAD}")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--save", action="store_true")
+    ap.add_argument("--max-baskets", type=int, default=None)
     args = ap.parse_args()
-    main(save=True)
+    main(save=True, max_baskets=args.max_baskets)

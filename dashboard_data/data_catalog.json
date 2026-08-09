@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-09T09:06:47.611044",
-  "count": 241,
+  "generated": "2026-08-09T13:08:10.943086",
+  "count": 242,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -253,6 +253,15 @@
       "kind": "csv",
       "size": 228,
       "sql_name": "barbell_check"
+    },
+    {
+      "name": "basket_members",
+      "filename": "basket_members.csv",
+      "path": "basket_members.csv",
+      "url": "basket_members.csv",
+      "kind": "csv",
+      "size": 142361,
+      "sql_name": "basket_members"
     },
     {
       "name": "binding_basket_risk",
@@ -1250,7 +1259,7 @@
       "path": "macro_sector_shock.csv",
       "url": "macro_sector_shock.csv",
       "kind": "csv",
-      "size": 1328294,
+      "size": 9623760,
       "sql_name": "macro_sector_shock"
     },
     {
@@ -1907,7 +1916,7 @@
       "path": "shock_ride.csv",
       "url": "shock_ride.csv",
       "kind": "csv",
-      "size": 2047,
+      "size": 19075,
       "sql_name": "shock_ride"
     },
     {
@@ -1997,7 +2006,7 @@
       "path": "subindustry_regime.csv",
       "url": "subindustry_regime.csv",
       "kind": "csv",
-      "size": 23361587,
+      "size": 249736636,
       "sql_name": "subindustry_regime"
     },
     {
@@ -2006,7 +2015,7 @@
       "path": "subindustry_regime_lead.csv",
       "url": "subindustry_regime_lead.csv",
       "kind": "csv",
-      "size": 641,
+      "size": 12959,
       "sql_name": "subindustry_regime_lead"
     },
     {
