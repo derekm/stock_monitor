@@ -28,16 +28,32 @@ Two findings implemented:
    stress posterior: p(stress) says where we ARE; the Minsky signal says
    how much fragility has been stacked up while we were calm.
 
+3. VELOCITY-SCALED IMPULSE (Keen 2014 §9) — debt_impulse_v = impulse × M2V
+   (measured velocity of M2, ~1.5-2.2). Keen's effective-demand equation is
+   E = Y + v·ΔD: the numerical impact of a debt change on demand is
+   velocity × Δdebt, LARGER than the bare change. The bare impulse
+   understates demand impact by the velocity factor.
+
+4. CREDIT ACCELERATOR (Keen 2014 §13 / Biggs-Mayer-Pick 2010) —
+   debt_acceleration = Δ²(debt)/GDP, the SECOND difference of the debt
+   stock. Distinct fragility channel: the acceleration of credit, not its
+   level. Historical r = +0.79 vs changes in house prices (1988-2013).
+   "Impulse" implies transient/exogenous; acceleration is the permanent
+   endogenous feature of the flow.
+
 Data: FRED public CSV endpoints (no API key; fredgraph.csv?id=...). 
-  TCMDO — total credit market debt owed by domestic nonfinancial sectors
-          (quarterly, 1945-)
-  GDP   — nominal gross domestic product (quarterly, 1947-)
+  TCMDO — total credit market debt, ALL sectors (quarterly, 1945-)
+          UNITS: millions of dollars → /1000 to billions.
+  GDP   — nominal gross domestic product (quarterly, 1947-). UNITS:
+          billions AND already at annual rate (do NOT re-annualize).
+  M2V   — velocity of M2 money stock (quarterly, 1959-).
 Cached under macro_data/; refetch only when the last cached quarter is
 stale (FRED publishes with ~1 quarter lag).
 
 Outputs:
   macro_fragility.csv — quarterly: date, debt_gdp_ratio, debt_impulse,
-                        minsky_signal, p_stress, minsky_pctile, regime_ctx
+                        debt_impulse_v, debt_acceleration, velocity,
+                        p_stress, minsky_signal, minsky_pctile, regime_ctx
 Reads: FRED CSV (network), hmm_regime_states.csv (via buy_candidates).
 Usage: python macro_fragility.py [--save]
 """
@@ -57,8 +73,9 @@ OUT = DATA_DIR / "macro_fragility.csv"
 
 FRED_BASE = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 SERIES = {
-    "TCMDO": "total_credit_market_debt.csv",  # total credit market debt, nonfinancial
-    "GDP": "gdp.csv",                          # nominal GDP
+    "TCMDO": "total_credit_market_debt.csv",  # total credit market debt, all sectors
+    "GDP": "gdp.csv",                          # nominal GDP (already annual rate)
+    "M2V": "m2_velocity.csv",                  # velocity of M2 money stock
 }
 CACHE_TTL_DAYS = 35  # FRED quarterly with ~1 quarter publication lag
 
@@ -149,12 +166,14 @@ def load_p_stress(quarters: pd.DatetimeIndex) -> pd.Series:
 
 
 def main(save: bool = True):
-    print("macro_fragility: fetching FRED (TCMDO, GDP)...")
+    print("macro_fragility: fetching FRED (TCMDO, GDP, M2V)...")
     tcmdo = _fetch_fred("TCMDO", CACHE_DIR / SERIES["TCMDO"])
     gdp = _fetch_fred("GDP", CACHE_DIR / SERIES["GDP"])
+    m2v = _fetch_fred("M2V", CACHE_DIR / SERIES["M2V"])
 
     # align on common quarterly dates
     m = tcmdo.merge(gdp, on="observation_date", suffixes=("_debt", "_gdp"))
+    m = m.merge(m2v, on="observation_date", how="left")
     m = m.dropna(subset=["TCMDO", "GDP"])
     # UNITS: TCMDO is millions of dollars; GDP is billions AND already at
     # annual rate (FRED reports the annualized quarter, e.g. 2026Q1 = $31.9T).
@@ -168,6 +187,14 @@ def main(save: bool = True):
         "debt_gdp_ratio": m["TCMDO_bn"] / m["GDP"],
     })
     df["debt_impulse"] = debt_impulse(m["TCMDO_bn"], m["GDP"])
+    # M2 velocity (measured, ~1.5-2.2): Keen §9 — the numerical impact of
+    # Δdebt on demand is velocity × Δdebt, larger than the bare change.
+    df["velocity"] = m["M2V"].ffill()
+    df["debt_impulse_v"] = df["debt_impulse"] * df["velocity"]
+    # Credit Accelerator (Keen §13 / Biggs-Mayer-Pick): Δ²(debt)/GDP — the
+    # acceleration of debt, distinct fragility channel (r=+0.79 vs asset
+    # prices historically). Second difference of the debt stock / GDP.
+    df["debt_acceleration"] = m["TCMDO_bn"].diff(4).diff(4) / m["GDP"]
 
     # HMM stress posterior (soft stress belief) forward-filled quarterly
     p_stress = load_p_stress(df["date"])
@@ -191,11 +218,15 @@ def main(save: bool = True):
     df["regime_ctx"] = ctx
 
     df = df.dropna(subset=["debt_impulse"]).tail(240)  # 60y window
-    out_cols = ["date", "debt_gdp_ratio", "debt_impulse", "p_stress",
+    out_cols = ["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v",
+                "debt_acceleration", "velocity", "p_stress",
                 "minsky_signal", "minsky_pctile", "regime_ctx"]
     df = df[out_cols]
     df["debt_gdp_ratio"] = df["debt_gdp_ratio"].round(3)
     df["debt_impulse"] = df["debt_impulse"].round(4)
+    df["debt_impulse_v"] = df["debt_impulse_v"].round(4)
+    df["debt_acceleration"] = df["debt_acceleration"].round(4)
+    df["velocity"] = df["velocity"].round(3)
     df["p_stress"] = df["p_stress"].round(4)
     df["minsky_signal"] = df["minsky_signal"].round(4)
 
@@ -206,15 +237,16 @@ def main(save: bool = True):
     last = df.iloc[-1]
     print("\n=== macro fragility (Keen layer) ===")
     print(f"latest: {last['date'].date()} | debt/GDP {last['debt_gdp_ratio']:.2f} | "
-          f"debt impulse {last['debt_impulse']:.4f} | p(stress) {last['p_stress']:.3f}")
+          f"debt impulse {last['debt_impulse']:.4f} (v-scaled {last['debt_impulse_v']:.4f}) | "
+          f"accel {last['debt_acceleration']:.4f} | p(stress) {last['p_stress']:.3f}")
     print(f"Minsky signal {last['minsky_signal']:.4f} "
           f"(pctile {last['minsky_pctile']:.0%} of 1945-{date.today().year})")
     # extremes
     hi = df.nlargest(5, "minsky_signal")
     print("\nHighest Minsky signal quarters (debt building during calm):")
-    print(hi[["date", "debt_gdp_ratio", "debt_impulse", "p_stress", "minsky_signal"]].to_string(index=False))
+    print(hi[["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v", "debt_acceleration", "velocity", "p_stress", "minsky_signal"]].to_string(index=False))
     print("\nMost recent 8 quarters:")
-    print(df.tail(8)[["date", "debt_gdp_ratio", "debt_impulse", "p_stress", "minsky_signal"]].to_string(index=False))
+    print(df.tail(8)[["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v", "debt_acceleration", "velocity", "p_stress", "minsky_signal"]].to_string(index=False))
     if save:
         print(f"\nWrote {OUT}")
 

@@ -30,6 +30,16 @@ Two findings implemented:
    WITH high p(stress) is the crisis phase (deleveraging pressure), and the
    signal correctly collapses.
 
+3. **Velocity-scaled impulse** — debt_impulse_v = impulse × M2 velocity.
+   Keen 2014 §9: effective demand = income + velocity × Δdebt; the demand
+   impact of a debt change is LARGER than the bare change (velocity ~1.4-2).
+   Measured: 2007 peak bare impulse 0.369 → v-scaled 0.729 (~2×).
+
+4. **Credit Accelerator** — debt_acceleration = Δ²(debt)/GDP (Keen §13 /
+   Biggs-Mayer-Pick). The acceleration channel is distinct from the level:
+   historical r = +0.79 vs house-price changes. Currently re-accelerating
+   (0.05-0.07 after 2023-24 near zero).
+
 ## Data
 
 FRED public CSV endpoints (`fredgraph.csv?id=...`, no API key):
@@ -39,6 +49,8 @@ FRED public CSV endpoints (`fredgraph.csv?id=...`, no API key):
 - `GDP` — nominal GDP (quarterly, 1947-). UNITS: billions AND already at
   annual rate — do NOT re-annualize (rolling-sum inflates the ratio ~4×;
   caught against the known all-sectors credit-debt/GDP ≈ 3.6×).
+- `M2V` — velocity of M2 money stock (quarterly, 1959-) for the
+  velocity-scaled impulse.
 
 Cached under `macro_data/`; refetched only when the last cached quarter is
 stale (TTL 35d; FRED publishes with ~1 quarter lag).
@@ -46,11 +58,17 @@ stale (TTL 35d; FRED publishes with ~1 quarter lag).
 ## Outputs
 
 `macro_fragility.csv` — quarterly (60y window):
-`date, debt_gdp_ratio, debt_impulse, p_stress, minsky_signal,
- minsky_pctile, regime_ctx`
+`date, debt_gdp_ratio, debt_impulse, debt_impulse_v, debt_acceleration,
+ velocity, p_stress, minsky_signal, minsky_pctile, regime_ctx`
 
 - `debt_gdp_ratio` — TCMDO / GDP (≈3.6 now, all-sectors)
-- `debt_impulse` — YoY Δdebt / GDP
+- `debt_impulse` — YoY Δdebt / GDP (Keen's ΔD)
+- `debt_impulse_v` — impulse × M2 velocity (Keen 2014 §9: E = Y + v·ΔD —
+  the true demand impact of a debt change; velocity ~1.4-2.0 makes it
+  larger than the bare change)
+- `debt_acceleration` — Δ²(debt)/GDP (Keen §13 / Biggs-Mayer-Pick Credit
+  Accelerator; r=+0.79 vs house-price changes historically)
+- `velocity` — M2 velocity (FRED M2V)
 - `p_stress` — HMM stress posterior (same soft-stress belief as
   `buy_candidates.regime_stress_prob`), forward-filled quarterly
 - `minsky_signal` — impulse × (1 − p_stress)
