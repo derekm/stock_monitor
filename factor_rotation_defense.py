@@ -207,8 +207,11 @@ def ensure_groups(ann: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
                 cur = set()
             # walk the timeline per ticker -> (valid_from, valid_to) windows
             per_ticker: dict[str, list] = {}
+            has_any_add: set[str] = set()
             for d, act, tk in events:
                 per_ticker.setdefault(tk, []).append((d, act))
+                if act == "add":
+                    has_any_add.add(tk)
             sp_mem = []
             for tk, evs in per_ticker.items():
                 evs.sort()
@@ -219,6 +222,19 @@ def ensure_groups(ann: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
                     elif act == "remove" and opened is not None:
                         sp_mem.append((tk, opened, d))
                         opened = None
+                    elif act == "remove" and opened is None and tk not in has_any_add:
+                        # REMOVE WITH NO PRECEDING ADD AND NO ADD ANYWHERE:
+                        # the name was an original (pre-log) member whose add
+                        # was never recorded — the remove closes a window
+                        # that opened before the log began. Without this,
+                        # original 1957 members that were later removed
+                        # vanish from every historical view (the 2000 as-of
+                        # showed 437/500). Only the EARLIEST such remove
+                        # opens the pre-log window — a second consecutive
+                        # remove (unlogged re-add+remove cycle) must not
+                        # claim another from-inception membership.
+                        if not any(v[1] == "remove" for v in evs[:evs.index((d, act))]):
+                            sp_mem.append((tk, pd.NaT, d))
                 if opened is not None:
                     # still a member at the end of the event history
                     sp_mem.append((tk, opened, pd.NaT))
