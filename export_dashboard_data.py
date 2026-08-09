@@ -135,6 +135,7 @@ TABLES = [
     "factor_group_members",
     "sp500_constituents",
     "shock_ride",
+    "ride_now",
     "subindustry_regime",
     "barbell_check",
     "hidden_optionality",

@@ -63,6 +63,7 @@ JOBS = {
     "taleb_shock": (["macro_shock.py", "--save"], None),
     "taleb_sector_shock": (["macro_sector_shock.py", "--save"], None),
     "taleb_shock_ride": (["shock_ride.py", "--save"], None),
+    "taleb_ride_now": (["ride_now.py", "--save"], None),
     "taleb_subindustry_regime": (["subindustry_regime.py", "--save"], None),
     "taleb_barbell": (["barbell_check.py"], None),
     "taleb_optionality": (["hidden_optionality_audit.py"], None),

@@ -4,6 +4,212 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Portfolio Decision Dashboard · DuckDB-Wasm</title>
+<script>
+
+/* ── technical glossary (i) popovers ── */
+const TECH_GLOSSARY = {
+  "momentum12": {
+    t: "12-month momentum (mom12)",
+    d: "Equal-weight basket return over the trailing 12 months. The ride rule's ENTRY gate: a basket must show >40% (elevated) to be a candidate. Also feeds the macro shock zone (≥80% = shock).",
+    f: "mom12(t) = [C(t) / C(t−12)] − 1    where C = cumulative basket level (product of 1 + monthly log-returns)\nRide entry: mom12 > 0.40 AND mom3 > 0",
+  },
+  "momentum3": {
+    t: "3-month momentum (mom3)",
+    d: "Trailing 3-month basket return. The ride rule's EXIT gate: when mom3 ≤ 0 the position exits (rollover precedes collapse). Coincident with the HMM stress flip, not leading.",
+    f: "mom3(t) = [C(t) / C(t−3)] − 1\nExit signal: mom3 ≤ 0 → go flat 1 month later (no lookahead)",
+  },
+  "momentum1": {
+    t: "1-month momentum (mom1)",
+    d: "Trailing 1-month basket return. NOT a gate in the ride rule — a diagnostic: a negative mom1 while mom3 is still positive is the earliest rollover warning.",
+    f: "mom1(t) = [C(t) / C(t−1)] − 1",
+  },
+  "pstress": {
+    t: "Stress posterior p(stress)",
+    d: "HMM posterior probability that the basket is currently in its high-vol/high-corr crisis state. Fitted per basket (vol21 + intra-basket avg pairwise corr, 3 states). p(stress) ≥ 0.8 gates NEW ride entries AWAY — measured coincident with (not leading) the momentum exit.",
+    f: "p(stress | features_t) via forward-backward on a 3-state Gaussian HMM\nfeatures = [vol21, avg_corr21, mkt_ret]",
+  },
+  "rideLong": {
+    t: "Ride-long flag",
+    d: "Current ride-rule position. Long only when BOTH gates pass; position is lagged 1 month so there is no same-month lookahead.",
+    f: "long(t) = 1 if mom12(t−1) > 0.40 AND mom3(t−1) > 0 else 0",
+  },
+  "shockZone": {
+    t: "Shock zone",
+    d: "Calibrated on verified price explosions (oil 1973/79/2008/2022, fertilizer 2007/2021, cocoa 2024). mom12 ≥ 80% = shock; ≥ 40% = elevated; else benign.",
+    f: "zone = shock if mom12 ≥ 0.80; elevated if ≥ 0.40; else benign",
+  },
+  "debtGdp": {
+    t: "Debt / GDP (all sectors)",
+    d: "FRED TCMDO (all-sectors credit market debt, millions) / FRED GDP (already annualized). The level of economy-wide leverage — Keen's leverage driver. 2026: 3.63×.",
+    f: "debt_gdp = Σ all-sector credit market debt ÷ annualized nominal GDP",
+  },
+  "debtImpulse": {
+    t: "Debt impulse (ΔD/GDP)",
+    d: "4-quarter change in total credit-market debt scaled by annual GDP — the Keynesian demand contribution of new borrowing. Keen 2009: debt-financed demand ≥20% of GDP = crisis band. 2026: 20.9%.",
+    f: "impulse = [D(t) − D(t−4)] / GDP(t)\ncrisis_band: impulse ≥ 0.20  (danger 0.13–0.20, elevated 0.05–0.13)",
+  },
+  "minsky": {
+    t: "Minsky signal",
+    d: "Debt impulse scaled by (1 − p_stress). Collapses toward 0 in the crisis phase — the market's calm is exactly when fragility is maxed (FIH). 2007: 0.729 peak; 2026: 0.00.",
+    f: "minsky = impulse × (1 − p_stress)\npctile vs history since 1962",
+  },
+  "velocity": {
+    t: "Money velocity (M2V)",
+    d: "FRED M2V — measured velocity of M2. Scales the raw debt impulse into demand impact: impulse_v = impulse × M2V. 'Comfortably exceeds unity' (Keen) → the impulse understates demand when velocity > 1.",
+    f: "impulse_v = ΔD/GDP × M2V\n2026: 0.209 × 1.41 ≈ 0.295",
+  },
+  "accel": {
+    t: "Credit accelerator (Δ²D/GDP)",
+    d: "Second difference of debt scaled by GDP — the Biggs-Mayer-Pick channel: it's the CHANGE in debt growth that predicts unemployment, not the level. Peaked 0.11 in 2004, 0.054 in 2026Q1.",
+    f: "accel(t) = [D(t) − 2·D(t−1) + D(t−2)] / GDP(t)",
+  },
+  "vol21": {
+    t: "Volatility (vol21)",
+    d: "21-day rolling annualized volatility of the basket's equal-weight daily log returns. One of the two HMM features that define the crisis regime.",
+    f: "vol21(t) = std(ln returns, last 21d) × √252",
+  },
+  "avgcorr": {
+    t: "Intra-basket correlation (avg_corr21)",
+    d: "Average pairwise correlation of member returns over the trailing 21 days. Spikes toward 1 in a basket-wide crisis — the second HMM feature. Correlation IS the contagion channel.",
+    f: "avg_corr(t) = mean over pairs (i<j) of corr21(r_i, r_j)",
+  },
+  "shockScore": {
+    t: "Shock score (z-basket + z-commodity)",
+    d: "Standardized composite of basket 12m momentum and (when mapped) the commodity's 12m momentum. Same recipe as macro_shock.py, minus the inflation/real-rate legs (those are macro-wide).",
+    f: "score = [z(mom12_basket) + z(mom12_commodity)] / 2",
+  },
+  "roe": {
+    t: "ROE (DuPont)",
+    d: "Return on equity — net income / shareholder equity. Quality screen (Buffett): requires ROE > 15%.",
+    f: "ROE = Net Income / Avg Shareholders' Equity\nDuPont: ROE = margin × turnover × equity multiplier",
+  },
+  "roic": {
+    t: "ROIC",
+    d: "Return on invested capital — operating profit after tax divided by debt + equity. The truest measure of value creation (Buffett's preferred quality gauge).",
+    f: "ROIC = NOPAT / (Debt + Equity)",
+  },
+  "evEbitda": {
+    t: "EV/EBITDA",
+    d: "Enterprise value / EBITDA. Trifecta cheapness gate: EV/EBITDA ≤ 9. Low = cheap relative to cash earnings power.",
+    f: "EV/EBITDA = (MktCap + Debt − Cash) / EBITDA",
+  },
+  "pb": {
+    t: "P/B",
+    d: "Price / book value. Trifecta gate: P/B ≤ 1.5. Value screen: lowest quintile.",
+    f: "P/B = Market Cap / Book Equity",
+  },
+  "mktcapAssets": {
+    t: "MktCap/Assets",
+    d: "Market capitalization / total assets. Trifecta gate: ≤ 0.5. A hard-asset-backed cheapness measure — the 'net-nets' cousin.",
+    f: "MktCap/Assets = Market Cap / Total Assets",
+  },
+  "hmm": {
+    t: "HMM regime",
+    d: "3-state Gaussian hidden Markov model on market features (vol, avg corr, returns). States labeled low_vol / normal / high_vol_stress by their feature means. The stress state is the crisis regime.",
+    f: "P(states | features) via Baum-Welch EM + Viterbi decoding",
+  },
+  "fisherIdx": {
+    t: "Fisher index",
+    d: "Geometric mean of Laspeyres and Paasche index numbers — the ideal price/quantity index (no substitution bias). Used for holdings-level index construction.",
+    f: "Fisher = √(Laspeyres × Paasche)\nLaspeyres: p1·q0 / p0·q0   Paasche: p1·q1 / p0·q1",
+  },
+  "tailIdx": {
+    t: "Tail index (α)",
+    d: "Power-law tail exponent of daily returns. α < 3 means fat tails (variance still finite but kurtosis heavy); α → 2 is Cauchy territory. Lower = fatter tail = more fragility.",
+    f: "P(|r| > x) ~ x^(−α),  fitted via Hill estimator on the upper quantile",
+  },
+  "gapRisk": {
+    t: "Gap risk",
+    d: "Probability/size of overnight gaps (close-to-open jumps). Gaps are the tail events stop-losses can't catch — the reason hard stop-losses are fragile.",
+    f: "gap = (open(t) − close(t−1)) / close(t−1)\nP(|gap| > 3σ) tracked historically",
+  },
+  "skew": {
+    t: "Options skew",
+    d: "Implied vol slope between OTM puts and ATM — fear premium. Put/call ratio and ATM IV round out the options reading. High skew = market paying up for downside protection.",
+    f: "skew = IV(25Δ put) − IV(ATM)",
+  },
+  "kalman": {
+    t: "Kalman gain",
+    d: "Adaptive regression coefficient updating — how much weight the state estimate puts on new observations. Rising gain = regime shifting fast; falling = stable.",
+    f: "K(t) = P(t|t−1) H' [H P(t|t−1) H' + R]⁻¹",
+  },
+  "sharpe": {
+    t: "Sharpe ratio",
+    d: "Annualized excess return per unit of volatility. The headline risk-adjusted performance metric across indexes/sleeves.",
+    f: "Sharpe = (ann_return − rf) / ann_vol",
+  },
+  "maxdd": {
+    t: "Max drawdown",
+    d: "Worst peak-to-trough decline in the equity curve. The ride rule's consistent win: mean maxDD −40% vs buy-hold −78%.",
+    f: "maxDD = min_t [C(t) / max_{s≤t} C(s) − 1]",
+  },
+  "oosc": {
+    t: "Out-of-sample IC",
+    d: "Spearman rank correlation between predicted and realized scores on held-out data (pass-5 rule: 5-fold temporal walk-forward). Weights signals by their OOS IC — never in-sample.",
+    f: "IC = corr(rank(pred), rank(realized)) on OOS folds only",
+  },
+  "trifecta": {
+    t: "Value trifecta",
+    d: "The three cheapness gates taken together: EV/EBITDA ≤ 9 AND P/B ≤ 1.5 AND MktCap/Assets ≤ 0.5. All three must pass — cheapness is conjunctive, not a single ratio.",
+    f: "pass = (EV/EBITDA ≤ 9) ∧ (P/B ≤ 1.5) ∧ (MktCap/Assets ≤ 0.5)",
+  },
+  "dualp": {
+    t: "Dual-pass stress",
+    d: "Two-pass portfolio stress: pass 1 drops the weakest leg, pass 2 re-checks. The INCLUDE_CORE set survives both passes — the names that stay through regime stress.",
+    f: "pass1: drop worst-quality leg → recompute; pass2: drop next → recompute\nINCLUDE_CORE = survives both",
+  },
+  "fih": {
+    t: "Financial Instability Hypothesis",
+    d: "Minsky: stability breeds instability. The economy's calmest moment is when leverage is most fragile. Our macro layer operationalizes this: Minsky signal = impulse × (1 − p_stress), and danger zones are calibrated on Keen 2009's own thresholds.",
+    f: "minsky = debt_impulse × (1 − p_stress)\ndanger_zone bands: <5% benign · 5–13% elevated · 13–20% danger · ≥20% crisis_band",
+  },
+  "rideRec": {
+    t: "Ride recommendation",
+    d: "Combines the momentum gates, the shock zone, and the stress posterior into one honest verdict. The tension (momentum says long, stress says stand down) is surfaced, not hidden.",
+    f: "BUY: long ∧ hot ∧ p_stress<0.8\nSTAND DOWN: long ∧ p_stress≥0.8\nAVOID: hot ∧ rolled over (mom3≤0)\nFLAT: no signal",
+  },
+};
+
+function infoKey(key) {
+  const g = TECH_GLOSSARY[key];
+  if (!g) return "";
+  return `<span class="info-ic" title="${g.t}" data-gloss="${key}">i</span>`;
+}
+
+function attachPopovers() {
+  document.querySelectorAll(".info-ic[data-gloss]").forEach((el) => {
+    if (el.dataset.bound) return;
+    el.dataset.bound = "1";
+    el.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const key = el.dataset.gloss;
+      const g = TECH_GLOSSARY[key];
+      if (!g) return;
+      let pop = document.getElementById("info-pop");
+      if (!pop) {
+        pop = document.createElement("div");
+        pop.id = "info-pop";
+        pop.className = "pop";
+        document.body.appendChild(pop);
+        document.addEventListener("click", () => { pop.style.display = "none"; });
+      }
+      pop.innerHTML = `<h4>${g.t}</h4><p>${g.d}</p><div class="formula">${g.f}</div><span class="tag">click anywhere to dismiss</span>`;
+      pop.style.display = "block";
+      const r = el.getBoundingClientRect();
+      const pw = pop.offsetWidth, ph = pop.offsetHeight;
+      let x = r.left + r.width / 2 - pw / 2;
+      let y = r.bottom + 8;
+      if (x < 8) x = 8;
+      if (x + pw > window.innerWidth - 8) x = window.innerWidth - pw - 8;
+      if (y + ph > window.innerHeight - 8) y = r.top - ph - 8;
+      pop.style.left = x + "px";
+      pop.style.top = y + "px";
+    });
+  });
+}
+document.addEventListener("DOMContentLoaded", attachPopovers);
+
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root {
@@ -146,6 +352,41 @@
   th { white-space: nowrap; }
   .section-intro b { color: var(--text); font-weight: 600; }
 
+
+
+/* ── info icon + popover ── */
+.info-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  border: 1.2px solid var(--muted, #7a87a0);
+  color: var(--muted, #7a87a0);
+  font-size: 10px; font-weight: 700; line-height: 1;
+  cursor: help; vertical-align: middle; margin: 0 3px;
+  background: transparent; user-select: none;
+}
+.info-ic:hover, .info-ic.open { border-color: #59a7ff; color: #59a7ff; }
+.pop {
+  position: fixed; z-index: 9000; max-width: 430px; min-width: 280px;
+  background: #101623; border: 1px solid #2a3045; border-radius: 8px;
+  padding: 0.6rem 0.7rem; font-size: 0.78rem; line-height: 1.45;
+  color: #c9d4e4; box-shadow: 0 6px 24px rgba(0,0,0,.55);
+  display: none;
+}
+.pop h4 { margin: 0 0 4px; color: #59a7ff; font-size: 0.8rem; }
+.pop p { margin: 3px 0; }
+.pop .formula {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  background: #0a0f18; border: 1px solid #22304a; border-radius: 5px;
+  padding: 3px 6px; margin: 4px 0; font-size: 0.74rem; color: #9fd0ff;
+  white-space: pre-wrap; word-break: break-word;
+}
+.pop .tag { font-size: 0.68rem; color: #7a87a0; }
+
+
+.rec-buy { color: #37d67a; border: 1px solid #2c7a4e; }
+.rec-stand-down { color: #ffc64d; border: 1px solid #7a6420; }
+.rec-avoid { color: #ff5d5d; border: 1px solid #7a2a2a; }
+.rec-flat { color: #7a87a0; border: 1px solid #33405c; }
 
 </style>
 </head>
@@ -566,36 +807,47 @@
     </div>
     <div class="grid2" style="margin-bottom:0.85rem">
       <div class="card">
-        <h3>Macro debt fragility (Keen) <button id="live-refresh-macro" class="live-btn" type="button">↻</button></h3>
+        
+    <div class="card" id="ride-now-card" style="margin-bottom:0.85rem">
+      <h3>Ride NOW — current recommendations <span class="info-ic" data-gloss="rideRec">i</span>
+        <span class="live-badge" id="ride-now-status">…</span></h3>
+      <p class="hint">Ride rule gates (mom12 &gt; 40% ∧ mom3 &gt; 0) × shock zone × HMM stress posterior → one honest verdict per dynamic basket.
+        The tension is surfaced: <b>STAND DOWN</b> means momentum says long but the basket's own crisis regime is maxed.</p>
+      <div class="scroll tall">
+        <table id="tbl-ride-now"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+<h3>Macro debt fragility (Keen) <button id="live-refresh-macro" class="live-btn" type="button">↻</button></h3>
         <p class="hint">Quarterly TCMDO/GDP, debt impulse, velocity-scaled impulse, Credit Accelerator, Minsky signal, danger zone. Latest first.</p>
         <div class="scroll tall"><table id="tbl-macro-fragility"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
-        <h3>Macro supply shock (oil / inflation)</h3>
+        <h3>Macro supply shock (oil / inflation)</h3> <span class="info-ic" data-gloss="shockScore">i</span>
         <p class="hint">Oil momentum, inflation surprise, real rate, shock score/zone — the 1973-74 complement to the debt layer.</p>
         <div class="scroll tall"><table id="tbl-macro-shock"><thead></thead><tbody></tbody></table></div>
       </div>
     </div>
     <div class="grid2" style="margin-bottom:0.85rem">
       <div class="card">
-        <h3>Sector / subsector shocks (latest)</h3>
+        <h3>Sector / subsector shocks (latest)</h3> <span class="info-ic" data-gloss="shockZone">i</span>
         <p class="hint">Focused baskets + GICS + IMF commodities. Shock = basket 12m mom ≥ 80%; elevated ≥ 40%.</p>
         <div class="scroll tall"><table id="tbl-sector-shock"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
-        <h3>Shock ride (enter explosion / exit rollover)</h3>
+        <h3>Shock ride (enter explosion / exit rollover)</h3> <span class="info-ic" data-gloss="rideLong">i</span>
         <p class="hint">Measured ride vs buy-hold per sector. Positive excess = ride wins; maxDD ride vs buy-hold is the drawdown story.</p>
         <div class="scroll tall"><table id="tbl-shock-ride"><thead></thead><tbody></tbody></table></div>
       </div>
     </div>
     <div class="grid2" style="margin-bottom:0.85rem">
       <div class="card">
-        <h3>Sub-industry crisis regimes (latest)</h3>
+        <h3>Sub-industry crisis regimes (latest)</h3> <span class="info-ic" data-gloss="pstress">i</span>
         <p class="hint">Per-basket HMM: vol21 + intra-basket corr → p_stress. Gate new ride entries away from high_vol_stress — does not lead the momentum exit.</p>
         <div class="scroll tall"><table id="tbl-sub-regime"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
-        <h3>Regime lead vs ride exits</h3>
+        <h3>Regime lead vs ride exits</h3> <span class="info-ic" data-gloss="pstress">i</span>
         <p class="hint">Count of ride exits where p_stress was already &gt; 0.8 at −10/−20/−30d. Low lead rate = coincident, not predictive.</p>
         <div class="scroll"><table id="tbl-sub-lead"><thead></thead><tbody></tbody></table></div>
       </div>
@@ -1660,6 +1912,18 @@ function tagSignal(pct) {
 
 /* ===== investor presentation layer (audit 2026-08) ===== */
 const HEADER_LABELS = {
+  "recommendation": "Recommendation",
+  "label": "Basket",
+  "basket_kind": "Kind",
+  "n_members": "N",
+  "mom1": "Mom 1m",
+  "mom3": "Mom 3m",
+  "mom12": "Mom 12m",
+  "shock_zone": "Zone",
+  "p_stress": "p(stress)",
+  "regime": "Regime",
+  "interpretation": "Why (interpretation)",
+
   ticker: "Ticker", name: "Name", sector: "Sector", basket: "Basket",
   date: "Date", forecast_date: "Forecast date", first_trade_date: "First trade",
   next_earnings_date: "Next earnings", buy_date: "Buy date", sell_date: "Sell date",
@@ -3111,7 +3375,7 @@ function plotFisherBaskets() {
   });
 }
 
-async function initDuckDB(data) {
+async function initDuckDB() {
   const status = $("#sql-status");
   const setStatus = (t) => { if (status) status.textContent = t; };
   window.SQL_TABLES = window.SQL_TABLES || [];
@@ -3140,40 +3404,40 @@ async function initDuckDB(data) {
     await DB.instantiate(bundle.mainModule, bundle.pthreadWorker);
     CONN = await DB.connect();
 
-    // 1) In-memory tables from data.json (top-level arrays + tables.*)
-    const catalogMem = {};
-    for (const [name, rows] of Object.entries(data || {})) {
-      if (name === "tables" && rows && typeof rows === "object" && !Array.isArray(rows)) {
-        for (const [tname, trows] of Object.entries(rows)) {
-          if (Array.isArray(trows) && trows.length) catalogMem[tname] = trows;
-        }
-      } else if (Array.isArray(rows) && rows.length) {
-        catalogMem[name] = rows;
-      }
-    }
-    const loaded = [];
-    for (const [name, rows] of Object.entries(catalogMem)) {
-      const safe = String(name).replace(/[^A-Za-z0-9_]/g, "_");
-      if (!safe) continue;
-      try {
-        await DB.registerFileText(`${safe}.json`, JSON.stringify(rows));
-        await CONN.query(`CREATE OR REPLACE TABLE "${safe}" AS SELECT * FROM read_json_auto('${safe}.json')`);
-        loaded.push(safe);
-        window.SQL_LOADED.add(safe);
-      } catch (err) {
-        console.warn("mem table fail", name, err);
-      }
-    }
-    window.SQL_TABLES = loaded.sort();
-
-    // 2) Local file catalog (CSV/Parquet) — lazy load on demand
+    // PRIMARY PATH: load local CSV/Parquet catalog immediately — NO data.json
     await refreshDataCatalog();
-    setStatus(`DuckDB ready · ${loaded.length} in-memory · ${window.SQL_CATALOG.length} local files`);
+    setStatus(`DuckDB ready · ${window.SQL_CATALOG.length} local files`);
     renderSqlCatalog();
     if (typeof qbPopulateTables === "function") qbPopulateTables(window.SQL_TABLES);
+
+    // 3) Compute INITIAL dashboard state from LIVE parquet/CSV via DuckDB
+    //    Run the same queries the "Live: DuckDB" buttons run — this is the
+    //    authoritative initial paint. data.json is now ONLY a fallback.
+    if (typeof LIVE_TAB_WIDGETS !== "undefined") {
+      for (const [sectionId, spec] of Object.entries(LIVE_TAB_WIDGETS)) {
+        try {
+          const queries = (spec && spec.queries) || [];
+          for (const q of queries) {
+            if (CONN) {
+              // Force re-register every referenced table from its real file
+              const names = (q.sql.match(/\bfrom\s+([a-z_][a-z0-9_]*)/gi) || [])
+                .map(m => m.split(/\s+/)[1]);
+              for (const n of names) {
+                const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === n);
+                if (meta) {
+                  try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind, true); } catch (e) {}
+                }
+              }
+              await duckQuery(q.sql, q.tableId);
+            }
+          }
+        } catch (e) { console.warn("live auto-refresh init", sectionId, e); }
+      }
+    }
   } catch (e) {
     console.error(e);
     setStatus("DuckDB init failed: " + e.message);
+    showFallbackButton();
   }
 }
 
@@ -4307,63 +4571,9 @@ async function bindLiveDuckControls() {
 }
 
 
-(async function main() {
-  const res = await fetch(DATA_URL);
-  DATA = await res.json();
-  renderDecisions();
-  renderPortfolio();
-  renderValue();
-  renderSectors();
-  renderForecasts();
-  if (typeof bindPipelines === "function") bindPipelines();
-  renderAnomalies();
-  renderIndexes();
-  qbInit();
-  if (typeof refreshDataCatalog === "function") {
-    refreshDataCatalog().then(() => {
-    renderCsvCatalog();
-    const hc = document.querySelector("#hdr-catalog");
-    if (hc) hc.textContent = String((window.SQL_CATALOG || []).length) + " files";
-  }).catch(() => renderCsvCatalog());
-  } else {
-    renderCsvCatalog();
-  }
-
-  fiInit();
-  await initDuckDB(DATA);
-  bindLiveDuckControls();
-  // Primary data path: re-render the main tabs from LIVE parquet/csv via
-  // DuckDB (the same queries the per-tab 'Live: DuckDB' buttons run). data.json
-  // is only the initial paint / offline fallback now.
-  if (typeof LIVE_TAB_WIDGETS !== "undefined") {
-    for (const [sectionId, spec] of Object.entries(LIVE_TAB_WIDGETS)) {
-      try {
-        const queries = (spec && spec.queries) || [];
-        for (const q of queries) {
-          if (CONN) {
-            // Force re-register every referenced table from its real file so the
-            // live query hits the full parquet/csv, not the export-truncated
-            // data.json snapshot that initDuckDB pre-loaded.
-            const names = (q.sql.match(/\bfrom\s+([a-z_][a-z0-9_]*)/gi) || [])
-              .map(m => m.split(/\s+/)[1]);
-            for (const n of names) {
-              const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === n);
-              if (meta) { try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind, true); } catch (e) {} }
-            }
-            await duckQuery(q.sql, q.tableId);
-          }
-        }
-      } catch (e) { console.warn("live auto-refresh", sectionId, e); }
-    }
-  }
-  if (typeof populateAllTickerPickers === "function") await populateAllTickerPickers();
-  else if (typeof populateStockTickers === "function") await populateStockTickers();
-  if (typeof renderSprint === "function") renderSprint();
-  if (typeof renderSignals === "function") renderSignals();
-  if (typeof renderRegimeModels === "function") renderRegimeModels();
-  if (typeof renderShadow === "function") renderShadow();
-  if (typeof renderFragility === "function") renderFragility();
-})();
+(
+/* Fallback UI — shows when DuckDB fails or user forces data.json load */
+// Also add a manual fallback button in the header (small, unobtrusive)
 
 
 
@@ -4376,19 +4586,8 @@ async function loadAllLateTabs() {
     // Buy candidates on decisions
     const buys = (T.buy_candidates || DATA.buy_candidates || []).filter(r => ["BUY","ACCUMULATE"].includes(r.action));
     fillSimple("#tbl-buys", buys.length ? buys : (T.buy_candidates || []),
-      ["ticker","action","buy_score","decision","momentum_score","factor_composite","sp500_sector","reasons"]);
-    // Quality / Dual tab — store universe then live-score with thresholds
-    window._qualityPreferred = T.preferred_metrics || [];
-    // load benchmarks from inclusion_rules if present later
-    if (typeof applyQualityThresholds === "function") applyQualityThresholds();
-    const dup = (T.dupont_analysis || []).slice().sort((a,b)=>(b.roe||0)-(a.roe||0));
-    fillSimple("#tbl-dupont", dup.map(r => {
-      const de = +r.debt_to_equity;
-      const em = Number.isFinite(de) ? +(1 + Math.max(de,0)).toFixed(3) : r.equity_multiplier;
-      const da = Number.isFinite(de) && de > -0.999 ? +(de/(1+de)).toFixed(3) : null;
-      return {...r, equity_multiplier: em, debt_to_assets: da};
-    }),
-      ["ticker","roe","roic","debt_to_equity","debt_to_assets","equity_multiplier","pm_x_at","leverage_share_of_roe","roe_quality","leverage_flag"], 60);
+      ["ticker","action","buy_score","decision","momentum","factor","sector","reasons"],
+      ["ticker","roe","roic","debt_to_equity","debt_to_assets","equity_multiplier","pm_x_at","leverage_share_of_roe","roe_quality","leverage_flag"]);
     const sbt = (T.screen_backtest || []).slice().sort((a,b)=>String(b.as_of_date||"").localeCompare(String(a.as_of_date||"")));
     fillSimple("#tbl-screen-bt", sbt,
       ["as_of_date","n","buffett","trifecta","dual","value","quality","median_composite"]);
@@ -4537,8 +4736,8 @@ async function loadAllLateTabs() {
     console.warn("loadAllLateTabs", e);
   }
 }
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadAllLateTabs);
-else loadAllLateTabs();
+// Auto-run loadAllLateTabs
+(function() { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadAllLateTabs); else loadAllLateTabs(); })()
 
 
 
@@ -5270,6 +5469,47 @@ async function renderMacroPulse() {
   }
 }
 
+
+async function renderRideNow() {
+  const tbl = document.querySelector("#tbl-ride-now");
+  const st = document.querySelector("#ride-now-status");
+  if (!tbl) return;
+  try {
+    const rows = await liveTable("ride_now");
+    if (!rows || !rows.length) { if (st) st.textContent = "no data"; return; }
+    // rec ranking: BUY > STAND DOWN > AVOID > FLAT
+    const rank = { "BUY": 0, "STAND DOWN": 1, "AVOID": 2, "FLAT": 3 };
+    const sorted = rows.slice().sort((a, b) => {
+      const ra = rank[a.recommendation] ?? 9, rb = rank[b.recommendation] ?? 9;
+      if (ra !== rb) return ra - rb;
+      return (b.mom12 || 0) - (a.mom12 || 0);
+    });
+    const visible = sorted.filter(r => (rank[r.recommendation] ?? 9) < 3).concat(
+      sorted.filter(r => (rank[r.recommendation] ?? 9) === 3).slice(0, 8));
+    const cols = ["recommendation", "label", "n_members", "mom1", "mom3", "mom12",
+                  "shock_zone", "p_stress", "regime", "interpretation"];
+    fillSimple("#tbl-ride-now", visible.map(r => ({
+      recommendation: `<span class="zone-tag rec-${(r.recommendation||"FLAT").toLowerCase().replace(/ /g,"-")}">${r.recommendation || "FLAT"}</span>`,
+      label: (r.label || r.basket || "") + ` <span class="info-ic" data-gloss="rideLong">i</span>`,
+      n_members: r.n_members,
+      mom1: r.mom1, mom3: r.mom3, mom12: r.mom12,
+      shock_zone: r.shock_zone,
+      p_stress: r.p_stress,
+      regime: r.regime,
+      interpretation: r.interpretation,
+    })), cols);
+    // status line
+    const nBuy = sorted.filter(r => r.recommendation === "BUY").length;
+    const nStand = sorted.filter(r => r.recommendation === "STAND DOWN").length;
+    const nAvoid = sorted.filter(r => r.recommendation === "AVOID").length;
+    if (st) st.textContent = `${nBuy} buy · ${nStand} stand down · ${nAvoid} avoid · ${sorted.length} baskets`;
+    attachPopovers();
+  } catch (e) {
+    console.warn("renderRideNow", e);
+    if (st) st.textContent = "error";
+  }
+}
+
 async function renderFragility() {
   const status = document.querySelector("#fragility-status");
   if (status) status.textContent = "Querying DuckDB…";
@@ -5344,6 +5584,7 @@ async function renderFragility() {
     const nMicro = (frag||[]).length + (tail||[]).length + (gap||[]).length;
     if (status) status.textContent = `DuckDB · macro ${nMacro.toLocaleString()} · micro ${nMicro.toLocaleString()} · sub ${(sub||[]).length.toLocaleString()}`;
     if (typeof populateBasketExplorer === "function") { try { await populateBasketExplorer(); } catch (e) { console.warn(e); } }
+    if (typeof renderRideNow === "function") { try { await renderRideNow(); } catch (e) { console.warn(e); } }
   } catch (e) {
     if (status) status.textContent = e.message || String(e);
     console.error("renderFragility", e);
@@ -5355,7 +5596,69 @@ async function renderFragility() {
 document.getElementById("live-refresh-fragility")?.addEventListener("click", () => renderFragility());
 document.getElementById("live-refresh-macro")?.addEventListener("click", () => renderFragility());
 
-initSignalsShadow();
+initSignalsSh
+
+async function main() {
+  if (typeof attachPopovers === "function") attachPopovers();
+  DATA = null;
+  renderDecisions();
+  renderPortfolio();
+  renderValue();
+  renderSectors();
+  renderForecasts();
+  if (typeof bindPipelines === "function") bindPipelines();
+  renderAnomalies();
+  renderIndexes();
+  qbInit();
+  if (typeof refreshDataCatalog === "function") {
+    refreshDataCatalog().then(() => {
+    renderCsvCatalog();
+    const hc = document.querySelector("#hdr-catalog");
+    if (hc) hc.textContent = String((window.SQL_CATALOG || []).length) + " files";
+  }).catch(() => renderCsvCatalog());
+  } else {
+    renderCsvCatalog();
+  }
+
+  fiInit();
+  await initDuckDB();
+  bindLiveDuckControls();
+  if (typeof LIVE_TAB_WIDGETS !== "undefined") {
+    for (const [sectionId, spec] of Object.entries(LIVE_TAB_WIDGETS)) {
+      try {
+        const queries = (spec && spec.queries) || [];
+        for (const q of queries) {
+          if (CONN) {
+            const names = (q.sql.match(/from\s+([a-z_][a-z0-9_]*)/gi) || [])
+              .map(m => m.split(/\s+/)[1]);
+            for (const n of names) {
+              const meta = (window.SQL_CATALOG || []).find(f => f.sql_name === n);
+              if (meta) {
+                try { await ensureLocalTable(meta.sql_name, meta.url, meta.kind, true); } catch (e) {}
+              }
+            }
+            await duckQuery(q.sql, q.tableId);
+          }
+        }
+      } catch (e) { console.warn("live auto-refresh", sectionId, e); }
+    }
+  }
+  if (typeof populateAllTickerPickers === "function") await populateAllTickerPickers();
+  else if (typeof populateStockTickers === "function") await populateStockTickers();
+  if (typeof renderSprint === "function") renderSprint();
+  if (typeof renderSignals === "function") renderSignals();
+  if (typeof renderRegimeModels === "function") renderRegimeModels();
+  if (typeof renderShadow === "function") renderShadow();
+  if (typeof renderFragility === "function") renderFragility();
+  if (typeof addManualFallbackButton === "function") addManualFallbackButton();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", main);
+} else {
+  main();
+}
+adow();
 
 </script>
 </body>
