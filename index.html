@@ -1862,12 +1862,12 @@ const LIVE_TAB_WIDGETS = {
     extraButtons: null, // filled at runtime
   },
   sectors: {
-    duckLabel: "Live: sector tables",
-    queries: [
-      { sql: "SELECT * FROM corr_stability", tableId: "tbl-stability", limit: 40 },
-      { sql: "SELECT * FROM hmm_regime_corr", tableId: "tbl-hmm", limit: 40 },
-    ],
-  },
+        duckLabel: "Live: sector tables",
+        queries: [
+          { sql: "SELECT * FROM correlation_stability_metrics", tableId: "tbl-stability", limit: 40 },
+          { sql: "SELECT * FROM hmm_regime_correlations", tableId: "tbl-hmm", limit: 40 },
+        ],
+      },
   manage: {
     duckLabel: "Live: monitored_stocks",
     queries: [
@@ -4012,7 +4012,7 @@ ORDER BY date;
 
 function fiInitTickers() {
   const host = $("#fi-tickers");
-  if (!host || !DATA.price_qty_panel) return;
+  if (!host || !DATA || !DATA.price_qty_panel) return;
   let tickers = [...new Set((DATA.price_qty_panel || []).map(r => r.ticker).filter(Boolean))].sort();
   if (!tickers.length && window.__UNIVERSE_TICKERS) tickers = window.__UNIVERSE_TICKERS.slice();
   const preset = (DATA.fisher_universes && DATA.fisher_universes.portfolio) || [];
@@ -4023,12 +4023,12 @@ function fiInitTickers() {
 }
 
 function fiSelectedTickers() {
-  const uni = $("#fi-universe").value;
-  if (uni !== "custom" && DATA.fisher_universes && DATA.fisher_universes[uni]) {
-    return DATA.fisher_universes[uni];
+    const uni = $("#fi-universe").value;
+    if (uni !== "custom" && DATA && DATA.fisher_universes && DATA.fisher_universes[uni]) {
+      return DATA.fisher_universes[uni];
+    }
+    return [...document.querySelectorAll("#fi-tickers input:checked")].map(i => i.value);
   }
-  return [...document.querySelectorAll("#fi-tickers input:checked")].map(i => i.value);
-}
 
 
 let fisherDecompChart = null;
@@ -4127,6 +4127,7 @@ function fiRebaseRows(rows, refDate) {
 function fiLoadPrecomputed() {
   const uniRaw = $("#fi-universe")?.value || "portfolio";
   const uni = uniRaw === "custom" ? "portfolio" : uniRaw;
+  if (!DATA) return;
   const src =
     (DATA.fisher_indexes_duckdb && DATA.fisher_indexes_duckdb.length ? DATA.fisher_indexes_duckdb : null) ||
     (DATA.fisher_indexes && DATA.fisher_indexes.length ? DATA.fisher_indexes : null) ||
@@ -4162,9 +4163,10 @@ function fiLoadPrecomputed() {
 
 /** Port of fisher_index.py — pure JS fallback */
 function fiRecompute() {
-  const tickers = fiSelectedTickers();
-  if (!tickers.length) { $("#fi-status").textContent = "Select tickers"; return; }
-  const panel = (DATA.price_qty_panel || []).filter(r => tickers.includes(r.ticker));
+    if (!DATA) return;
+    const tickers = fiSelectedTickers();
+    if (!tickers.length) { $("#fi-status").textContent = "Select tickers"; return; }
+    const panel = (DATA.price_qty_panel || []).filter(r => tickers.includes(r.ticker));
   if (!panel.length) { $("#fi-status").textContent = "No price/qty panel rows"; return; }
   const byDate = {};
   panel.forEach(r => {
@@ -4226,7 +4228,7 @@ async function fiComputeDuckDB() {
   if (!tickers.length) { status.textContent = "Select tickers"; return; }
   status.textContent = "Running Fisher SQL in DuckDB-Wasm…";
   try {
-    const panel = (DATA.price_qty_panel || []).filter(r => tickers.includes(r.ticker));
+    const panel = ((DATA && DATA.price_qty_panel) || []).filter(r => tickers.includes(r.ticker));
     if (!panel.length) throw new Error("No price_qty_panel rows for selection");
 
     const rows = panel.map(r => ({
@@ -4586,10 +4588,8 @@ async function bindLiveDuckControls() {
 }
 
 
-(
 /* Fallback UI — shows when DuckDB fails or user forces data.json load */
 // Also add a manual fallback button in the header (small, unobtrusive)
-
 
 
 
@@ -4752,7 +4752,10 @@ async function loadAllLateTabs() {
   }
 }
 // Auto-run loadAllLateTabs
-(function() { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadAllLateTabs); else loadAllLateTabs(); })()
+// data.json is ONLY a fallback — auto-run only when DuckDB failed or user forced failover
+if (window.__FORCE_FALLBACK) {
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadAllLateTabs); else loadAllLateTabs();
+}
 
 
 
@@ -5651,8 +5654,6 @@ async function renderFragility() {
 document.getElementById("live-refresh-fragility")?.addEventListener("click", () => renderFragility());
 document.getElementById("live-refresh-macro")?.addEventListener("click", () => renderFragility());
 
-initSignalsSh
-
 async function main() {
   if (typeof attachPopovers === "function") attachPopovers();
   DATA = null;
@@ -5708,13 +5709,55 @@ async function main() {
   if (typeof addManualFallbackButton === "function") addManualFallbackButton();
 }
 
+// ── Fallback UI (data.json ONLY on DuckDB failure or manual failover) ──
+window.__FORCE_FALLBACK = false;
+
+function showFallbackButton() {
+  window.__FORCE_FALLBACK = true;
+  setStatus("DuckDB init failed — using data.json fallback");
+  let btn = document.getElementById("fallback-btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.id = "fallback-btn";
+    btn.className = "chip-btn";
+    btn.style.cssText = "border-color:#ef4444;color:#ef4444;margin-left:0.5rem;";
+    btn.textContent = "⚠ data.json fallback active";
+    const nav = document.querySelector("nav") || document.body;
+    nav.appendChild(btn);
+  }
+  btn.style.display = "inline-block";
+  loadAllLateTabs();
+}
+
+function addManualFallbackButton() {
+  const nav = document.querySelector("nav");
+  if (!nav || document.getElementById("manual-fallback-btn")) return;
+  const btn = document.createElement("button");
+  btn.id = "manual-fallback-btn";
+  btn.className = "chip-btn";
+  btn.style.cssText = "border-color:#8b5cf6;color:#a78bfa;margin-left:0.5rem;font-size:0.72rem;";
+  btn.textContent = "⇩ data.json (fallback)";
+  btn.title = "Purposely fail over to dashboard_data/data.json (large) instead of DuckDB";
+  btn.addEventListener("click", async () => {
+    if (window.__FORCE_FALLBACK) return;
+    window.__FORCE_FALLBACK = true;
+    setStatus("Forced data.json fallback…");
+    try { await loadAllLateTabs(); setStatus("data.json fallback loaded"); }
+    catch (e) { setStatus("data.json fallback failed: " + e.message); }
+  });
+  nav.appendChild(btn);
+}
+
+function initDuckDBWithData() {
+  window.__FORCE_FALLBACK = true;
+  return loadAllLateTabs();
+}
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", main);
 } else {
   main();
 }
-adow();
-
 </script>
 </body>
 </html>
