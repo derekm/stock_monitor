@@ -33,6 +33,37 @@ group = appending rows, no code change:
 
 Every group in the members table becomes a sleeve automatically.
 
+## The temporal model — removals in every time frame
+
+`valid_to` is universal: ANY group can carry removal dates, not just sp500.
+A membership is active on date d iff `valid_from <= d` and (`valid_to` null
+or `valid_to > d`). Groups that don't need history just leave both dates
+blank (always-valid) — evict by deleting the row or setting `valid_to`.
+
+The sp500 group is fully temporal from `sp500_changes.parquet`: contiguous
+windows walked from the sorted add/remove timeline (a ticker is a member on
+d iff the latest event at or before d is an ADD). Verified with real
+removals: GM [1957→2009] then [2013→open] (bankruptcy + return), DELL
+[1996→2013] then [2024→open] (private + re-IPO), and the index size evolves
+437 (2000) → 484 (2010) → 508 (2026).
+
+## Group editor CLI
+
+Groups grow without code changes; the CLI edits the two tables:
+
+```bash
+python factor_rotation_defense.py add-group --group my_basket --type custom
+python factor_rotation_defense.py add --group my_basket --ticker AEP --from 2020-01-01
+python factor_rotation_defense.py add --group my_basket --ticker AEP --to 2024-06-30
+python factor_rotation_defense.py evict --group my_basket --ticker AEP            # delete rows
+python factor_rotation_defense.py evict --group my_basket --ticker AEP --on 2024-06-30  # dated eviction
+python factor_rotation_defense.py show --group sp500 --as-of 2010-06-30          # PIT view
+python factor_rotation_defense.py timeline --ticker GM                           # all windows
+```
+
+The `run` subcommand (default: `python factor_rotation_defense.py run --save`)
+executes the rotation with current group tables.
+
 ## Universe honesty (2026-08 audit)
 
 - quality/value/dual are rebuilt **point-in-time** from `fundamentals.parquet`

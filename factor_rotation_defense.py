@@ -476,11 +476,130 @@ def run(save: bool = True):
     return perf_df
 
 
+def load_group_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load the two group tables (seeding if absent via annotations)."""
+    rets, vol21, mkt, cum, mom_score, vol63, ann = load_panels()
+    return ensure_groups(ann)
+
+
+def manage_group_members(args):
+    """Edit the group tables: add/evict/date memberships, create typed
+    groups. The temporal schema (valid_from/valid_to) is universal — every
+    group supports removal dates; a membership without dates is simply
+    always-valid (evict by deleting the row or setting valid_to).
+
+    Commands:
+      add-group    GROUP [--type TYPE]          create a typed group
+      add          GROUP TICKER [--from D] [--to D]   add a membership
+      evict        GROUP TICKER [--on D]        evict (delete row, or set
+                                                valid_to=D if --on)
+      show         [--group G] [--as-of D]      list memberships (PIT when
+                                                --as-of given)
+      timeline     TICKER                       all windows for a ticker
+    """
+    cat, mem = load_group_tables()
+    if not GROUPS.exists():
+        GROUPS.write_text(cat.to_csv(index=False), encoding="utf-8")
+    if not MEMBERS.exists():
+        MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+
+    g = getattr(args, "group", None)
+    g = g.upper() if g else None
+    tk = getattr(args, "ticker", None)
+    tk = tk.upper() if tk else None
+
+    if args.cmd == "add-group":
+        if g in set(cat["group"]):
+            print(f"group {g} already exists (type {cat.loc[cat['group']==g,'group_type'].iloc[0]})")
+            return
+        cat = pd.concat([cat, pd.DataFrame([{"group": g, "group_type": args.type or "custom"}])], ignore_index=True)
+        GROUPS.write_text(cat.to_csv(index=False), encoding="utf-8")
+        print(f"group {g} (type={args.type or 'custom'}) created")
+    elif args.cmd == "add":
+        if g not in set(cat["group"].str.upper()):
+            print(f"group {g} not in catalog — run add-group first")
+            return
+        row = {"group": g, "ticker": tk, "valid_from": args.frm, "valid_to": args.to}
+        mem = pd.concat([mem, pd.DataFrame([row])], ignore_index=True)
+        MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+        print(f"{tk} added to {g} [{args.frm or 'open'} -> {args.to or 'open'}]")
+    elif args.cmd == "evict":
+        m = mem[(mem["group"].str.upper() == g) & (mem["ticker"].str.upper() == tk)]
+        if m.empty:
+            print(f"no membership {tk} in {g}")
+            return
+        if args.on:
+            # set valid_to on the open-ended window(s); rows already closed stay
+            idx = m[m["valid_to"].isna() | (m["valid_to"] == "")].index
+            mem.loc[idx, "valid_to"] = args.on
+            MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+            print(f"{tk} evicted from {g} effective {args.on}")
+        else:
+            mem = mem.drop(m.index)
+            MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+            print(f"{tk} evicted from {g} (rows removed)")
+    elif args.cmd == "show":
+        m = mem
+        if g:
+            m = m[m["group"].str.upper() == g]
+        if args.asof:
+            m = m.copy()
+            m["valid_from"] = pd.to_datetime(m.get("valid_from"), errors="coerce")
+            m["valid_to"] = pd.to_datetime(m.get("valid_to"), errors="coerce")
+            d = pd.Timestamp(args.asof)
+            m = m[m["valid_from"].isna() | (m["valid_from"] <= d)]
+            m = m[m["valid_to"].isna() | (m["valid_to"] > d)]
+            print(f"members of {g or 'all groups'} as-of {args.asof}: {len(m)}")
+        print(m.to_string(index=False) if len(m) else "(none)")
+    elif args.cmd == "timeline":
+        m = mem[mem["ticker"] == tk]
+        if m.empty:
+            print(f"no memberships for {tk}")
+            return
+        for _, r in m.iterrows():
+            print(f"{tk} in {r['group']}: [{r['valid_from'] or 'open'} -> {r['valid_to'] or 'open'}]")
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--save", action="store_true")
+    ap = argparse.ArgumentParser(description="Defensive factor rotation + group-table editor")
+    sub = ap.add_subparsers(dest="cmd")
+
+    ap_run = sub.add_parser("run")
+    ap_run.add_argument("--save", action="store_true")
+    ap_run.set_defaults(func=lambda a: run(save=a.save))
+
+    mg = sub.add_parser("add-group")
+    mg.add_argument("--group", required=True)
+    mg.add_argument("--type", default="custom", choices=["sector", "industry", "index", "sleeve", "dynamic", "custom"])
+    mg.set_defaults(func=manage_group_members)
+
+    ma = sub.add_parser("add")
+    ma.add_argument("--group", required=True)
+    ma.add_argument("--ticker", required=True)
+    ma.add_argument("--from", dest="frm", default=None)
+    ma.add_argument("--to", dest="to", default=None)
+    ma.set_defaults(func=manage_group_members)
+
+    me = sub.add_parser("evict")
+    me.add_argument("--group", required=True)
+    me.add_argument("--ticker", required=True)
+    me.add_argument("--on", default=None)
+    me.set_defaults(func=manage_group_members)
+
+    ms = sub.add_parser("show")
+    ms.add_argument("--group", default=None)
+    ms.add_argument("--as-of", dest="asof", default=None)
+    ms.set_defaults(func=manage_group_members)
+
+    mt = sub.add_parser("timeline")
+    mt.add_argument("--ticker", required=True)
+    mt.set_defaults(func=manage_group_members)
+
     args = ap.parse_args()
-    run(save=True)
+    if args.cmd is None:
+        ap.print_help()
+        return
+    args.func(args)
 
 
 if __name__ == "__main__":
