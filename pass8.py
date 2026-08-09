@@ -98,7 +98,10 @@ def _fresh_rpt_model(n_channels: int = 1):
     from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig, TinyTimeMixerForPrediction
     cfg = TinyTimeMixerConfig.from_pretrained(pass6.gd.DEFAULT_MODEL)
     cfg.resolution_prefix_tuning = True
-    cfg.frequency_token_vocab_size = 5
+    # vocab must cover the FULL canonical mapping (0..9: oov, min, 2/5/10/15/30min,
+    # h/H=7, d/D=8, W=9). The IBM base ships vocab=5 (only intraday tokens) —
+    # that's why the freq embedding assertion fired at token 8 (daily).
+    cfg.frequency_token_vocab_size = 10
     cfg.num_patches = 9  # freq token occupies the 9th patch slot
     cfg.num_input_channels = n_channels
     return TinyTimeMixerForPrediction(cfg).to(device), cfg
