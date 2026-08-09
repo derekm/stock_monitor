@@ -108,6 +108,7 @@ def main(save: bool = True):
             c_mom = c / c.shift(12) - 1
             c_mom.index.name = "com_date"
             df = df.merge(c_mom.rename("commodity_mom_12m"), left_on="date", right_index=True, how="left")
+            df["commodity_mom_12m"] = df["commodity_mom_12m"].ffill()  # IMF lags ~1 month
         else:
             df["commodity_mom_12m"] = np.nan
 
