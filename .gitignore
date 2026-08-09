@@ -39,3 +39,5 @@ venv_cuda_test/
 dashboard_data/data.json
 *.csv
 !docs/*.csv
+*.csv
+!docs/*.csv
