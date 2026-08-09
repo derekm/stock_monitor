@@ -17,11 +17,14 @@ from OUR data, verified before building:
     supercycle).
 
 Design: table-driven. Each sector is (equity basket from daily_prices or
-sector_prices) + (optional FRED commodity). A sector shock score =
-z(equity 12m momentum) + z(commodity 12m momentum), exactly the
-macro_shock recipe (inflation/real-rate legs are macro-wide, not sector-
-specific, so they stay in macro_shock.py). Shock zones calibrated on the
-verified events above: basket 12m momentum >= +80% = shock, >= +40% =
+sector_prices) + (optional FRED commodity). Baskets load GICS SECTOR
+membership, GICS SUB-INDUSTRY membership (focused subsectors — the
+fertilizer lesson: thin subsectors carry the explosion signal), and/or
+explicit tickers (non-S&P amplifiers, history via fetch_amplifier_history.py).
+A sector shock score = z(basket 12m momentum) + z(commodity 12m momentum),
+exactly the macro_shock recipe (inflation/real-rate legs are macro-wide,
+not sector-specific, so they stay in macro_shock.py). Shock zones calibrated
+on the verified events above: basket 12m momentum >= +80% = shock, >= +40% =
 elevated (the fertilizer 2007/2021 events both exceeded +200%).
 
 Data:
@@ -117,21 +120,148 @@ SECTORS = {
         "gics": "Materials",
         "commodity": "PRUBBUSDM",
     },
+    # --- focused subsector baskets (2026-08) ---
+    # GICS sub-industry membership + only-existing non-S&P amplifiers. Thin
+    # subsectors carry the explosion signal (fertilizer lesson: +232% 2007
+    # focused vs +91% broad). Only tickers present in daily_prices are used
+    # (verified: TSM/ASML/SCCO/TECK/VALE/X/CLF etc. NOT in our data).
+    "sub_fertilizers": {
+        "subindustry": "Fertilizers & Agricultural Chemicals",
+        "tickers": ["NTR", "UAN", "IPI", "LXU"],  # non-S&P amplifiers
+        "commodity": None,
+    },
+    "sub_eandp": {
+        "subindustry": "Oil & Gas Exploration & Production",
+        "tickers": ["MRO", "HES"],  # present in our data
+        "commodity": None,  # oil handled by macro_shock
+    },
+    "sub_oil_services": {
+        "subindustry": "Oil & Gas Equipment & Services",
+        "tickers": ["FTI"],
+        "commodity": None,
+    },
+    "sub_refining": {
+        "subindustry": "Oil & Gas Refining & Marketing",
+        "tickers": ["CLNE"],
+        "commodity": None,
+    },
+    "sub_midstream": {
+        "subindustry": "Oil & Gas Storage & Transportation",
+        "tickers": ["ENB", "PBA"],
+        "commodity": None,
+    },
+    "sub_copper": {
+        "subindustry": "Copper",
+        "tickers": ["SCCO", "TECK", "HBM", "VALE"],  # non-S&P copper names
+        "commodity": "PCOPPUSDM",
+    },
+    "sub_gold": {
+        "subindustry": "Gold",
+        "tickers": ["AEM", "KGC", "RGLD", "GOLD", "AGI"],
+        "commodity": None,  # no global gold price on FRED (verified)
+    },
+    "sub_steel": {
+        "subindustry": "Steel",
+        "tickers": ["X", "CLF", "RS", "CMC", "WOR"],
+        "commodity": None,
+    },
+    "sub_commodity_chem": {
+        "subindustry": "Commodity Chemicals",
+        "tickers": ["OLN", "LYB"],
+        "commodity": None,
+    },
+    "sub_industrial_gases": {
+        "subindustry": "Industrial Gases",
+        "commodity": None,
+    },
+    "sub_construction_materials": {
+        "subindustry": "Construction Materials",
+        "tickers": ["SUM", "EXP"],
+        "commodity": None,
+    },
+    "sub_tobacco": {
+        "subindustry": "Tobacco",
+        "tickers": ["BTI"],
+        "commodity": None,
+    },
+    "sub_aerospace_defense": {
+        "subindustry": "Aerospace & Defense",
+        "commodity": None,
+    },
+    "sub_rail": {
+        "subindustry": "Rail Transportation",
+        "commodity": None,
+    },
+    "sub_airlines": {
+        "subindustry": "Passenger Airlines",
+        "tickers": ["AAL"],
+        "commodity": None,
+    },
+    "sub_construction_machinery": {
+        "subindustry": "Construction Machinery & Heavy Transportation Equipment",
+        "tickers": ["OSK", "PCAR"],
+        "commodity": None,
+    },
+    "sub_regional_banks": {
+        "subindustry": "Regional Banks",
+        "tickers": ["CMA", "WAL"],  # present; 2023 mini-crisis names
+        "commodity": None,
+    },
+    "sub_asset_mgmt": {
+        "subindustry": "Asset Management & Custody Banks",
+        "tickers": ["OWL", "BAM"],
+        "commodity": None,
+    },
+    "sub_semis": {
+        "subindustry": "Semiconductors",
+        "tickers": ["MU", "MRVL", "ON", "SWKS"],  # present
+        "commodity": None,
+    },
+    "sub_semi_equip": {
+        "subindustry": "Semiconductor Materials & Equipment",
+        "commodity": None,
+    },
+    "sub_software": {
+        "subindustry": "Application Software",
+        "tickers": ["SNOW", "DDOG"],
+        "commodity": None,
+    },
+    "sub_biotech": {
+        "subindustry": "Biotechnology",
+        "tickers": ["MRNA", "INCY"],
+        "commodity": None,
+    },
+    "sub_med_devices": {
+        "subindustry": "Health Care Equipment",
+        "commodity": None,
+    },
+    "sub_power": {
+        "subindustry": "Independent Power Producers & Energy Traders",
+        "tickers": ["CEG", "VST"],
+        "commodity": None,
+    },
 }
 
 
-def _monthly_returns(tickers: list[str] | None = None, gics: str | None = None) -> pd.Series:
+def _monthly_returns(tickers: list[str] | None = None, gics: str | None = None,
+                     subindustry: str | None = None) -> pd.Series:
     """Equal-weight monthly log returns of a basket: explicit tickers +
-    (optionally) the full S&P 500 GICS sector membership, loaded from
-    sp500_constituents.parquet. Returns best-available-history series."""
+    (optionally) full S&P 500 GICS sector membership and/or GICS
+    SUB-INDUSTRY membership (the focused-subsector source — thin subsectors
+    carry the explosion signal, e.g. fertilizer). Loaded from
+    sp500_constituents.parquet; returns best-available-history series."""
     members = list(tickers or [])
-    if gics:
-        try:
-            sp = pd.read_parquet(DATA_DIR / "sp500_constituents.parquet")
+    try:
+        sp = pd.read_parquet(DATA_DIR / "sp500_constituents.parquet")
+        if gics:
             g = sp.loc[sp["gics_sector"] == gics, "ticker"].astype(str).str.upper().tolist()
-            members = list(dict.fromkeys(members + [str(t).upper() for t in g]))
-        except Exception as e:
-            print(f"  gics {gics} load failed ({e}); using explicit tickers only")
+            members += g
+        if subindustry:
+            si = sp.loc[sp["gics_sub_industry"] == subindustry, "ticker"].astype(str).str.upper().tolist()
+            members += si
+        members = list(dict.fromkeys(members))
+    except Exception as e:
+        print(f"  gics/subindustry load failed ({e}); using explicit tickers only")
     p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
     p["date"] = pd.to_datetime(p["date"])
     w = p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
@@ -152,7 +282,8 @@ def _monthly_returns(tickers: list[str] | None = None, gics: str | None = None) 
 def main(save: bool = True):
     rows = []
     for sector, cfg in SECTORS.items():
-        rets = _monthly_returns(tickers=cfg.get("tickers"), gics=cfg.get("gics"))
+        rets = _monthly_returns(tickers=cfg.get("tickers"), gics=cfg.get("gics"),
+                                subindustry=cfg.get("subindustry"))
         if rets.empty:
             print(f"{sector}: no basket data, skipped")
             continue

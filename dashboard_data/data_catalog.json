@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-09T07:45:45.426305",
+  "generated": "2026-08-09T08:11:02.097682",
   "count": 239,
   "files": [
     {
@@ -422,7 +422,7 @@
       "path": "daily_prices.parquet",
       "url": "daily_prices.parquet",
       "kind": "parquet",
-      "size": 138603745,
+      "size": 117301248,
       "sql_name": "daily_prices"
     },
     {
@@ -1250,7 +1250,7 @@
       "path": "macro_sector_shock.csv",
       "url": "macro_sector_shock.csv",
       "kind": "csv",
-      "size": 477073,
+      "size": 1328294,
       "sql_name": "macro_sector_shock"
     },
     {
@@ -1907,7 +1907,7 @@
       "path": "shock_ride.csv",
       "url": "shock_ride.csv",
       "kind": "csv",
-      "size": 930,
+      "size": 2047,
       "sql_name": "shock_ride"
     },
     {

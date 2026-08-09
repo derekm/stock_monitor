@@ -53,12 +53,25 @@ Sectors (add more by appending to the SECTORS table — no code change):
 `macro_sector_shock.csv` — monthly (60y window):
 `sector, date, basket_mom_12m, commodity_mom_12m, shock_score, shock_zone`
 
-Reads: daily_prices.parquet / sector_prices.parquet, FRED CSV (cached
-under macro_data/, shared with the other macro scripts).
+Reads: daily_prices.parquet / sector_prices.parquet,
+sp500_constituents.parquet (GICS sector + sub-industry membership),
+FRED CSV (cached under macro_data/, shared with the other macro scripts).
+
+## Amplifier history (fetch_amplifier_history.py, 2026-08)
+
+The focused subsector baskets name non-S&P amplifiers (TSM, ASML, SCCO,
+AEM, BTI, ...). Their full OHLCV history is fetched from yfinance by
+`fetch_amplifier_history.py` and appended to daily_prices.parquet
+(+192,990 rows, 32 amplifiers, 1996-2026). Delisted names verified
+unavailable: MRO/HES/CMA/SUM/CHX (HES acquired by CVX 2024, CHX delisted
+2023) — the SECTORS table keeps them declared but they contribute nothing
+until relisted; X (US Steel) delisted. The fetch script is the
+single source of the amplifier set — re-runnable after a price refetch.
 
 ## Usage
 
 ```bash
+python fetch_amplifier_history.py --max-years 30   # one-time amplifier add
 python macro_sector_shock.py --save
 ```
 
