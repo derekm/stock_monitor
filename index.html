@@ -141,7 +141,11 @@
   .grid3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:0.75rem; }
   .grid2 { gap: 0.75rem; }
   .grid { gap: 0.75rem; }
-  footer { font-size:0.72rem; padding:0.75rem 1.25rem 1.5rem; }
+  footer { font-size:0.72rem; padding:0.75rem 1.5rem 1.5rem; }
+  td.num, .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+  th { white-space: nowrap; }
+  .section-intro b { color: var(--text); font-weight: 600; }
+
 
 </style>
 </head>
@@ -193,10 +197,11 @@
 <main>
   <!-- DECISIONS -->
   <section id="decisions" class="active">
+    <p class="section-intro">Capital allocation desk: macro pulse → memos → trifecta cheapness → gated buy candidates. Start with macro zone and fragile vetoes before sizing any BUY.</p>
     <div class="kpi-strip" id="decisions-macro-pulse" style="margin-top:0.15rem;margin-bottom:0.75rem">
       <div class="kpi-card" id="d-kpi-zone"><div class="k">Macro zone</div><div class="v">—</div><div class="s">Keen danger band</div></div>
       <div class="kpi-card" id="d-kpi-impulse"><div class="k">Debt impulse</div><div class="v">—</div><div class="s">latest quarter</div></div>
-      <div class="kpi-card" id="d-kpi-oil"><div class="k">Oil shock zone</div><div class="v">—</div><div class="s">supply layer</div></div>
+      <div class="kpi-card" id="d-kpi-oil"><div class="k">Sector shock</div><div class="v">—</div><div class="s">shock + elevated</div></div>
       <div class="kpi-card" id="d-kpi-stressed"><div class="k">Stressed subsectors</div><div class="v">—</div><div class="s">p_stress &gt; 0.8</div></div>
       <div class="kpi-card" id="d-kpi-ride"><div class="k">Best ride excess</div><div class="v">—</div><div class="s">shock_ride top</div></div>
     </div>
@@ -503,11 +508,7 @@
   <!-- SIGNALS & ALPHA -->
   <section id="signals">
     <h2>Signals &amp; Alpha — technicals, options, revisions, filings, blended model</h2>
-    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
-      Alpha-engine outputs: technical signals (RSI/MACD/Bollinger/Keltner), options IV skew,
-      consensus estimate revisions, 8-K filings sentiment, the supervised signal blend (GBM)
-      and its OOS IC, plus the economic/earnings calendar. Live from DuckDB via catalog CSVs.
-    </p>
+    <p class="section-intro">Alpha stack: per-family OOS skill → regime-weighted blend → technicals/options/revisions. Trust columns with OOS evidence; treat raw z-scores as inputs, not answers.</p>
     <div class="sql-actions" style="margin-bottom:0.75rem">
       <button type="button" class="chip-btn" id="live-refresh-signals">Live: signals tables (DuckDB)</button>
       <span id="signals-status" style="color:var(--muted);font-size:0.78rem"></span>
@@ -565,7 +566,7 @@
       <div class="kpi-card" id="kpi-impulse"><div class="k">Debt impulse</div><div class="v">—</div><div class="s">ΔD / GDP</div></div>
       <div class="kpi-card" id="kpi-minsky"><div class="k">Minsky signal</div><div class="v">—</div><div class="s">impulse × calm</div></div>
       <div class="kpi-card" id="kpi-zone"><div class="k">Danger zone</div><div class="v">—</div><div class="s">Keen 2009 bands</div></div>
-      <div class="kpi-card" id="kpi-oil"><div class="k">Oil shock</div><div class="v">—</div><div class="s">supply layer</div></div>
+      <div class="kpi-card" id="kpi-sector-shock"><div class="k">Sector shock</div><div class="v">—</div><div class="s">shock + elevated baskets</div></div>
       <div class="kpi-card" id="kpi-stress-sub"><div class="k">Subsectors stressed</div><div class="v">—</div><div class="s">p_stress &gt; 0.8</div></div>
     </div>
     <div class="grid2" style="margin-bottom:0.85rem">
@@ -980,10 +981,7 @@ ORDER BY ev_ebitda;</textarea>
   
   <section id="regime">
     <h2>Regime / Kalman / VIX</h2>
-    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
-      HMM regime correlations, Kalman filter path, VIX-style term structure proxy,
-      regime-aware dual-pass thresholds, and transition triggers.
-    </p>
+    <p class="section-intro">Regime state is a portfolio risk dial, not a trade signal. HMM stress posterior feeds buy gates; Kalman/VIX are path context. Prefer current regime + transition risk over point forecasts.</p>
     <div class="sql-actions" style="margin-bottom:0.75rem">
       <button type="button" class="chip-btn" id="live-refresh-regime">Live: regime tables (DuckDB)</button>
       <button type="button" class="chip-btn" id="live-refresh-regime-json">Reload from data.json</button>
@@ -1095,7 +1093,7 @@ ORDER BY ev_ebitda;</textarea>
 
   <section id="inclusion">
     <h2>Inclusion / exclusion criteria</h2>
-    <div id="rules-box" class="card" style="white-space:pre-wrap;font-size:0.85rem;padding:12px;border-radius:8px"></div>
+    <p class="section-intro">Rules that put names in the book. If a decision looks wrong, the bug is usually here (or in a gate these rules call).</p><div id="rules-box" class="card" style="white-space:pre-wrap;font-size:0.85rem;padding:12px;border-radius:8px"></div>
     <div class="grid2">
       <div>
         <h3>Inclusion candidates</h3>
@@ -1118,10 +1116,7 @@ ORDER BY ev_ebitda;</textarea>
 
   <section id="quality">
     <h2>Quality / Dual (Buffett + trifecta)</h2>
-    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
-      Dual-pass = Buffett quality (ROE/ROIC/leverage) <strong>and</strong> value trifecta (EV/EBITDA, P/B, MktCap/Assets).
-      Low MktCap/Assets can mean cheap assets <em>or</em> a leveraged balance sheet — use D/E, coverage, and equity multiplier together.
-    </p>
+    <p class="section-intro">Quality ∩ value: Buffett ROE/ROIC/leverage gates AND trifecta cheapness. A name that is cheap but low-quality is a value trap candidate — dual-pass exists to stop that.</p>
     <div class="card" style="margin-bottom:1rem">
       <h3>Live dual-pass thresholds (defaults = benchmarks)</h3>
       <div class="qb">
@@ -1181,9 +1176,7 @@ ORDER BY ev_ebitda;</textarea>
 
   <section id="rolling">
     <h2>Rolling windows</h2>
-    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
-      Risk stats over rolling return windows, and how often each name clears Buffett / trifecta / dual screens across history.
-    </p>
+    <p class="section-intro">Path-dependent risk: rolling vol/Sharpe/drawdown and how often each name clears quality/value gates. Use to see who only looks good on a lucky window.</p>
     <div class="sql-actions" style="margin-bottom:0.75rem">
       <button type="button" class="chip-btn" id="live-refresh-rolling">Live: rolling tables (DuckDB)</button>
       <button type="button" class="chip-btn" id="live-refresh-rolling-json">Reload from data.json</button>
@@ -1205,10 +1198,7 @@ ORDER BY ev_ebitda;</textarea>
 
   <section id="sleeves">
     <h2>Sleeves / Groups explorer</h2>
-    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
-      Aerospace / Starlink was a thematic <strong>growth sleeve</strong> (not a GICS sector).
-      This page is a reusable browser for <em>any</em> sector, index membership flag, or growth_sleeve / value_sleeve grouping.
-    </p>
+    <p class="section-intro">Thematic sleeves and factor groups are exposure buckets, not destinies. Check concentration and whether the sleeve is driving portfolio risk.</p>
     <div class="widget-toolbar card" style="margin-bottom:1rem">
       <div class="qb">
         <div>
@@ -1255,10 +1245,7 @@ ORDER BY ev_ebitda;</textarea>
 
   <section id="manage">
     <h2>Manage stocks · indexes · sectors</h2>
-    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem">
-      Client-side draft editor for membership flags. Persist via pipeline
-      <code>manage_stocks.py</code> / analytics jobs (POST body not written to disk from the browser alone).
-    </p>
+    <p class="section-intro">Membership drafts (stocks/indexes/sectors). Nothing persists until a pipeline write — treat as a staging UI.</p>
     <div class="widget-toolbar card" style="margin-bottom:1rem">
       <div class="qb">
         <div><label>Ticker</label><input id="mg-ticker" placeholder="TICK" /></div>
@@ -1296,12 +1283,7 @@ ORDER BY ev_ebitda;</textarea>
 
   <section id="ops">
     <h2>Microservices / daily ops</h2>
-    <p style="color:var(--muted);font-size:0.85rem">
-      Analytics API: <code id="ops-api-label">http://127.0.0.1:8767</code>
-      · Granite forecasts: <code>:5055</code>
-      · Pipeline jobs: <code>:5056</code>
-      · Static UI: <code>:8765</code>
-    </p>
+    <p class="section-intro">Service health and daily run controls. If data looks stale, start here before rewriting a screen.</p>
     <div class="qb"><div><label>Analytics API</label><input id="ops-api" value="http://127.0.0.1:8767" /></div></div>
     <div class="ops-btns" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0">
       <button type="button" class="ops" data-job="/run/preferred-metrics">Preferred metrics</button>
@@ -1333,7 +1315,7 @@ ORDER BY ev_ebitda;</textarea>
   </section>
   <section id="sprint">
     <h2>Sprint Engines — signal aggregation, pairs, cross-section, earnings</h2>
-    <p style="color:var(--muted);font-size:0.85rem">Live from DuckDB: reads the signal/pair/cross/earnings CSVs directly (no data.json snapshot). Click a refresh to re-query.</p>
+    <p class="section-intro">Research engines in one place: blended IC, pair cointegration, cross-section ranks, earnings catalysts. Highest composite with usable pairs/catalysts is the shortlist.</p>
     <div class="widget-live-bar" id="sprint-live-bar"></div>
 
     <h3 style="margin-top:1.2rem">Signal Aggregator — OOS IC weights</h3>
@@ -1389,7 +1371,7 @@ ORDER BY ev_ebitda;</textarea>
 
   <section id="stock">
     <h2>Single Stock Analytics — peer signals, trends, recovery</h2>
-    <p style="color:var(--muted);font-size:0.85rem">Live from DuckDB: pick a ticker (populated from <code>monitored_stocks.parquet</code>), the peer tables are queried live from their CSVs.</p>
+    <p class="section-intro">Single-name deep dive from peer analytics: trend/recovery vs sector peers. Use after a Decision or Fragility flag, not as a browsing toy.</p>
     <div class="widget-live-bar" id="stock-live-bar"></div>
     <div class="stock-picker">
       <label for="stock-ticker">Ticker</label>
@@ -1668,22 +1650,305 @@ function tagSignal(pct) {
   return '<span class="tag tag-neutral">NEUTRAL</span>';
 }
 
+
+
+/* ===== investor presentation layer (audit 2026-08) ===== */
+const HEADER_LABELS = {
+  ticker: "Ticker", name: "Name", sector: "Sector", basket: "Basket",
+  date: "Date", forecast_date: "Forecast date", first_trade_date: "First trade",
+  next_earnings_date: "Next earnings", buy_date: "Buy date", sell_date: "Sell date",
+  as_of: "As of", start: "Start", end: "End", rebalance_date: "Rebalance",
+  decision: "Decision", action: "Action", buy_score: "Buy score",
+  composite_score: "Composite", composite: "Composite", rank: "Rank",
+  debt_gdp_ratio: "Debt/GDP", debt_impulse: "Debt impulse", debt_impulse_v: "Impulse × v",
+  debt_acceleration: "Debt accel", velocity: "Velocity", p_stress: "P(stress)",
+  minsky_signal: "Minsky", minsky_pctile: "Minsky %ile", danger_zone: "Danger zone",
+  regime_ctx: "Regime ctx", regime: "Regime", shock_zone: "Shock zone",
+  shock_score: "Shock score", oil_mom_12m: "Oil 12m", inflation_surprise: "Infl. surprise",
+  real_rate: "Real rate", energy_divergence: "Energy div.",
+  basket_mom_12m: "Basket 12m", commodity_mom_12m: "Commodity 12m",
+  n_trades: "Trades", in_market_share: "Time in mkt", buy_hold_return: "Buy-hold",
+  ride_return: "Ride ret", excess: "Excess", max_dd_ride: "MaxDD ride",
+  max_dd_buyhold: "MaxDD BH", vol21: "Vol 21d", avg_corr: "Avg corr",
+  ride_pos: "Ride pos", n_exits: "Exits", lead_10d: "Lead 10d", lead_20d: "Lead 20d",
+  lead_30d: "Lead 30d", fragility_score: "Fragility", fragility_pctile: "Frag %ile",
+  fragile_flag: "Fragile?", tail_alpha_hill: "Hill α", tail_ratio_5sd: "Tail ratio 5σ",
+  gap_share_of_var: "Gap share var", ev_ebitda: "EV/EBITDA", pb_ratio: "P/B",
+  mktcap_to_assets: "Mkt/Assets", market_cap_b: "Mkt cap $B", in_portfolio: "In book",
+  index_member: "Index", shares: "Shares", avg_cost: "Avg cost", last_close: "Last",
+  market_value: "Mkt value", unrealized_pl_pct: "Unreal P/L", weight: "Weight",
+  momentum_score: "Momentum", factor_composite: "Factor", reasons: "Reasons",
+  pct_change: "Forecast %", forecast_close: "Fcst close", history_n: "Hist n",
+  backend: "Backend", model: "Model", score: "Score", ret_z: "Ret z", resid_z: "Resid z",
+  vol_z: "Vol z", close: "Close", sharpe: "Sharpe", max_dd_pct: "Max DD %",
+  ann_return_pct: "Ann ret %", ann_vol_pct: "Ann vol %", total_return_pct: "Total ret %",
+  calmar: "Calmar", final_level: "Final lvl", n_members: "Members", sharpe_rank: "Rank",
+  equity: "Equity", cash: "Cash", drawdown: "Drawdown", n_holdings: "Holdings",
+  kill_switch: "Kill?", ann_ret: "Ann ret", cost_basis: "Cost", status: "Status",
+  realized_pl: "Realized P/L", window: "Window", vol: "Vol", beta: "Beta",
+  preferred: "Preferred", peer: "Peer", cross: "Cross", earnings: "Earnings",
+  half_life: "Half-life", p_value: "p-value", usable: "Usable", pair_id: "Pair",
+  asset_a: "A", asset_b: "B", group: "Group", surprise_pct: "Surprise %",
+  pre_mom_flag: "Pre-mom", iv_rich: "IV rich", atm_iv: "ATM IV",
+  driver: "Driver", flip_rate: "Flip rate", mean_score_move: "Δ score", n: "N",
+  metric: "Metric", value: "Value", mode: "Mode", param: "Param", n_pass: "N pass",
+  delta_vs_base: "Δ vs base", tickers: "Tickers", port_vol: "Port vol",
+  port_max_dd: "Port maxDD", dir_acc: "Dir acc", excess_ret: "Excess",
+  n_train: "N train", n_test: "N test", steps: "Steps", cap: "Cap", lr: "LR",
+  roe: "ROE", roic: "ROIC", mean: "Mean", std: "Std", min: "Min", max: "Max",
+  stability: "Stability", pair: "Pair", corr_home: "Corr home", corr_mkt: "Corr mkt",
+  home_sector: "Home sector", index: "Index", last_close: "Last",
+};
+
+function prettyHeader(k) {
+  if (HEADER_LABELS[k]) return HEADER_LABELS[k];
+  return String(k || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function isDateKey(k) {
+  const s = String(k || "").toLowerCase();
+  if (s === "date" || s.endsWith("_date") || s === "as_of" || s === "asof") return true;
+  if (s === "start" || s === "end" || s === "first_fill" || s === "last_fill") return true;
+  if (s.includes("timestamp")) return true;
+  // avoid treating "update" / "candidate" etc as dates via endsWith("date")
+  if (s.includes("date") && !s.includes("candidate") && !s.includes("update")) return true;
+  return false;
+}
+
+/** Comparable YYYY-MM-DD key from any date-like value (Date, ISO, excel). */
+function dateKey(v) {
+  const s = fmtDate(v);
+  return s === "—" ? "" : s;
+}
+
+function isPctKey(k) {
+  const s = String(k || "").toLowerCase();
+  // multiples / levels — NEVER percent
+  if (s === "debt_gdp_ratio" || s === "velocity" || s === "minsky_signal" || s === "shock_score") return false;
+  if (s === "ev_ebitda" || s === "pb_ratio" || s === "mktcap_to_assets" || s.includes("coverage")) return false;
+  if (s.includes("pct") || s.includes("percent") || s === "weight") return true;
+  if (s.includes("flip_rate") || s.includes("dir_acc") || s.includes("share_of") || s === "in_market_share") return true;
+  if (s.includes("return") || s === "excess" || s === "ann_ret" || s.includes("drawdown") || s.includes("max_dd")) return true;
+  if (s === "debt_impulse" || s === "debt_impulse_v" || s === "debt_acceleration") return true;
+  if (s === "oil_mom_12m" || s === "basket_mom_12m" || s === "commodity_mom_12m") return true;
+  if (s === "inflation_surprise" || s === "real_rate" || s === "energy_divergence") return true;
+  if (s === "p_stress" || s === "minsky_pctile" || s === "avg_corr") return true;
+  if (s === "vol21" || (s === "vol" || s.endsWith("_vol")) && !s.includes("volume")) return true;
+  if (s.includes("corr") && !s.includes("score")) return true;
+  return false;
+}
+
+function isZoneKey(k) {
+  const s = String(k || "").toLowerCase();
+  return s.includes("zone") || s === "regime" || s === "decision" || s === "action" || s === "status" || s === "fragile_flag";
+}
+
+/** Normalize any date-like value to YYYY-MM-DD (no time, no locale noise). */
+function fmtDate(v) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "object" && v) {
+    if (Object.prototype.toString.call(v) === "[object Date]" && !Number.isNaN(v.getTime())) {
+      return v.toISOString().slice(0, 10);
+    }
+    if (typeof v.days === "number") {
+      const d = new Date(Date.UTC(1970, 0, 1 + v.days));
+      return d.toISOString().slice(0, 10);
+    }
+    if (typeof v.ms === "number") return fmtDate(v.ms);
+    if (v.value != null && v.value !== v) return fmtDate(v.value);
+  }
+  if (typeof v === "number" && Number.isFinite(v)) {
+    const abs = Math.abs(v);
+    let d = null;
+    // epoch unit detection (DuckDB/Arrow):
+    // ns ~1e18, us ~1e15, ms ~1e12, s ~1e9, DATE32 days ~2e4
+    if (abs >= 1e18) d = new Date(v / 1e6);            // ns → ms
+    else if (abs >= 1e15) d = new Date(v / 1e3);       // us → ms
+    else if (abs >= 1e12) d = new Date(v);             // ms
+    else if (abs >= 1e9) d = new Date(v * 1000);       // s → ms
+    else if (abs >= 15000 && abs < 40000) d = new Date(Date.UTC(1970, 0, 1 + Math.round(v))); // days
+    else return "—";
+    if (d && !Number.isNaN(d.getTime())) {
+      const y = d.getUTCFullYear();
+      if (y >= 1950 && y <= 2100) return d.toISOString().slice(0, 10);
+    }
+    return "—";
+  }
+  let s = String(v).trim();
+  if (!s || s === "NaT" || s === "nat" || s === "None" || s === "nan" || s === "[object Object]") return "—";
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    const n = +s;
+    const abs = Math.abs(n);
+    let d = null;
+    if (abs >= 1e18) d = new Date(n / 1e6);
+    else if (abs >= 1e15) d = new Date(n / 1e3);
+    else if (abs >= 1e12) d = new Date(n);
+    else if (abs >= 1e9) d = new Date(n * 1000);
+    else if (abs >= 15000 && abs < 40000) d = new Date(Date.UTC(1970, 0, 1 + Math.round(n)));
+    if (d && !Number.isNaN(d.getTime())) {
+      const y = d.getUTCFullYear();
+      if (y >= 1950 && y <= 2100) return d.toISOString().slice(0, 10);
+    }
+    return "—";
+  }
+  let m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  m = s.match(/^(\d{4})[\/\.](\d{1,2})[\/\.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m) return `${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getUTCFullYear();
+    if (y >= 1950 && y <= 2100) return d.toISOString().slice(0, 10);
+  }
+  return "—";
+}
+
+function fmtNum(v, digits=2) {
+  if (v === null || v === undefined || v === "" || Number.isNaN(+v)) return "—";
+  const n = +v;
+  if (!Number.isFinite(n)) return "—";
+  if (Math.abs(n) >= 1e6) return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return n.toFixed(digits);
+}
+
+function fmtPctFrac(v, digits=1) {
+  if (v === null || v === undefined || v === "" || Number.isNaN(+v)) return "—";
+  const n = +v;
+  if (!Number.isFinite(n)) return "—";
+  // if already looks like percent (>3 abs and not a tiny frac), don't *100
+  if (Math.abs(n) > 3 && Math.abs(n) <= 1000 && !String(v).includes("e")) {
+    // could be percent points already (e.g. 23.5 meaning 23.5%) — show as-is with %
+    // Heuristic: values in (-3,3) are fractions; outside often already %
+    // Exception: cumulative returns can be >3 (300%). Treat |n|>3 as fraction still if key says return.
+  }
+  return (n * 100).toFixed(digits) + "%";
+}
+
+function fmtPctSmart(v, key, digits=1) {
+  if (v === null || v === undefined || v === "" || Number.isNaN(+v)) return "—";
+  const n = +v;
+  if (!Number.isFinite(n)) return "—";
+  const k = String(key || "").toLowerCase();
+  // columns already in percent units from exporters
+  if (k.includes("pct") || k.endsWith("_pl_pct") || k === "unrealized_pl_pct" || k.endsWith("_percent")) {
+    return n.toFixed(digits) + "%";
+  }
+  // weight often 0-1 fraction
+  if (k === "weight" || k === "in_market_share" || k.includes("flip_rate") || k.includes("dir_acc") || k === "minsky_pctile" || k === "p_stress" || k.includes("corr") || k === "avg_corr") {
+    return (Math.abs(n) <= 1.5 ? n * 100 : n).toFixed(digits) + "%";
+  }
+  // returns / impulse / mom — store as fraction
+  if (k.includes("return") || k.includes("impulse") || k.includes("mom") || k === "excess" || k.includes("drawdown") || k.includes("max_dd") || k.includes("surprise") || k === "real_rate" || k.includes("divergence") || k === "debt_acceleration" || k === "inflation_surprise") {
+    return (n * 100).toFixed(digits) + "%";
+  }
+  if (k === "vol21" || k === "vol" || k === "ann_vol" || k.includes("vol_pct")) {
+    // vol21 is annualized decimal
+    if (k.includes("pct")) return n.toFixed(digits) + "%";
+    return (n * 100).toFixed(digits) + "%";
+  }
+  return (n * 100).toFixed(digits) + "%";
+}
+
+function zoneTag(v) {
+  const s = String(v ?? "");
+  const cls = _zoneClass(s);
+  return `<span class="${cls}">${s || "—"}</span>`;
+}
+
+function fmtCell(key, v) {
+  if (v === null || v === undefined || v === "") return "—";
+  // already HTML (zone tags we inject)
+  if (typeof v === "string" && v.includes("<span")) return v;
+  if (isDateKey(key)) return fmtDate(v);
+  if (isZoneKey(key)) {
+    if (key === "fragile_flag") {
+      const on = v === true || v === 1 || v === "1" || String(v).toLowerCase() === "true" || String(v).toLowerCase() === "yes";
+      return on ? `<span class="tag tag-crisis">fragile</span>` : `<span class="tag tag-benign">ok</span>`;
+    }
+    if (key === "ride_pos") {
+      const on = +v === 1;
+      return on ? `<span class="tag tag-elevated">long</span>` : `<span class="tag tag-neutral">flat</span>`;
+    }
+    if (key === "kill_switch") {
+      const on = v === true || v === 1 || String(v) === "1" || String(v).toLowerCase() === "true";
+      return on ? `<span class="tag tag-crisis">ON</span>` : `<span class="tag tag-benign">off</span>`;
+    }
+    if (key === "usable") {
+      const on = v === true || v === 1 || String(v).toLowerCase() === "true";
+      return on ? `<span class="tag tag-benign">yes</span>` : `<span class="tag tag-neutral">no</span>`;
+    }
+    return zoneTag(v);
+  }
+  if (typeof v === "boolean") return v ? "yes" : "";
+  if (typeof v === "number" || (typeof v === "string" && v.trim() !== "" && !Number.isNaN(+v) && /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(String(v).trim()))) {
+    const k = String(key || "").toLowerCase();
+    if (isPctKey(key)) return `<span class="num">${fmtPctSmart(v, key)}</span>`;
+    if (k.includes("score") || k.includes("ratio") || k === "debt_gdp_ratio" || k === "minsky_signal" || k === "shock_score" || k === "beta" || k === "sharpe" || k === "calmar" || k.includes("p_value") || k.includes("half_life")) {
+      return `<span class="num">${fmtNum(v, k.includes("p_value") ? 3 : 2)}</span>`;
+    }
+    if (k.includes("shares") || k.includes("market_value") || k.includes("cost") || k.includes("close") || k.includes("equity") || k.includes("cash") || k.includes("price")) {
+      return `<span class="num">${fmtNum(v, 2)}</span>`;
+    }
+    if (k === "n" || k.startsWith("n_") || k.includes("count") || k === "trades" || k === "steps") {
+      return `<span class="num">${fmtNum(v, 0)}</span>`;
+    }
+    return `<span class="num">${fmtNum(v, 2)}</span>`;
+  }
+  // string that looks like a date
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)) return fmtDate(v);
+  return String(v);
+}
+
+function sortRowsInvestor(rows, cols) {
+  if (!rows || !rows.length) return rows || [];
+  const keys = cols || Object.keys(rows[0] || {});
+  const dateCol = keys.find(isDateKey);
+  let out = rows.slice();
+  if (dateCol) {
+    out.sort((a, b) => dateKey(b[dateCol]).localeCompare(dateKey(a[dateCol])));
+  }
+  return out;
+}
+
+function fillSimple(id, rows, cols) {
+  const el = document.querySelector(id);
+  if (!el) return;
+  if (!rows || !rows.length) {
+    if (el.querySelector("thead")) el.querySelector("thead").innerHTML = "";
+    if (el.querySelector("tbody")) el.querySelector("tbody").innerHTML =
+      "<tr><td style='color:var(--muted)'>No rows — run analytics / export</td></tr>";
+    return;
+  }
+  const keys = cols || Object.keys(rows[0]);
+  const sorted = sortRowsInvestor(rows, keys);
+  el.querySelector("thead").innerHTML = "<tr>" + keys.map(k => "<th title=\"" + k + "\">" + prettyHeader(k) + "</th>").join("") + "</tr>";
+  el.querySelector("tbody").innerHTML = sorted.map(r =>
+    "<tr>" + keys.map(k => "<td>" + fmtCell(k, r[k]) + "</td>").join("") + "</tr>"
+  ).join("");
+}
+
 function fillTable(tableId, rows, columns) {
   const table = document.getElementById(tableId);
   if (!table || !rows) return;
   const cols = columns || (rows[0] ? Object.keys(rows[0]) : []);
-  table.querySelector("thead").innerHTML = "<tr>" + cols.map(c => `<th>${c}</th>`).join("") + "</tr>";
-  table.querySelector("tbody").innerHTML = rows.map(r => {
+  const sorted = sortRowsInvestor(rows, cols);
+  table.querySelector("thead").innerHTML = "<tr>" + cols.map(c => `<th title="${c}">${prettyHeader(c)}</th>`).join("") + "</tr>";
+  table.querySelector("tbody").innerHTML = sorted.map(r => {
     const hl = r.in_portfolio || r.is_home_sector ? ' class="hl"' : '';
     return "<tr" + hl + ">" + cols.map(c => {
       let v = r[c];
-      if (c === "in_portfolio" || c === "index_member" || c === "defensive_value_index") return `<td>${tagPortfolio(!!v)}</td>`;
-      if (c === "pct_change") return `<td>${fmt(v,2)}% ${tagSignal(v)}</td>`;
-      if (typeof v === "number") return `<td>${fmt(v, c.includes("pct") || c.includes("corr") || c.includes("ratio") ? 2 : 2)}</td>`;
-      return `<td>${v ?? "—"}</td>`;
+      if (c === "in_portfolio" || c === "index_member" || c === "defensive_value_index") return `<td>${typeof tagPortfolio === "function" ? tagPortfolio(!!v) : (v ? "yes" : "")}</td>`;
+      if (c === "pct_change") {
+        const t = typeof tagSignal === "function" ? tagSignal(v) : "";
+        return `<td class="num">${fmtPctSmart(v, c)} ${t}</td>`;
+      }
+      return `<td>${fmtCell(c, v)}</td>`;
     }).join("") + "</tr>";
   }).join("");
 }
+
 
 function renderDecisions() {
   if (!DATA) return;
@@ -1830,7 +2095,7 @@ function fcConfigFromForm() {
 function renderForecasts() {
   if (!DATA) return;
   const rows = DATA.forecasts_hmax || [];
-  const cols = ["ticker","last_close","forecast_close","pct_change","history_n","backend"];
+  const cols = ["ticker","as_of","forecast_date","last_close","forecast_close","pct_change","history_n","backend"];
   // include backend from model field if needed
   const norm = rows.map(r => ({
     ...r,
@@ -2105,7 +2370,6 @@ function renderAnomalies() {
   // normalize date strings for display
   rows = rows.map(r => ({
     ...r,
-    date: (r.date || "").toString().slice(0, 10),
     mkt_dispersion_shock: r.mkt_dispersion_shock ? "yes" : "",
   }));
   fillTable("tbl-anom", rows, [
@@ -2286,11 +2550,58 @@ function bindBacktestStudio() {
 }
 
 
+function arrowDateToISO(v) {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "string") {
+    const m = v.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+    if (v === "—" || v === "NaT") return null;
+  }
+  if (Object.prototype.toString.call(v) === "[object Date]" && !Number.isNaN(v.getTime())) {
+    return v.toISOString().slice(0, 10);
+  }
+  if (typeof v === "object" && v) {
+    if (typeof v.valueOf === "function") {
+      const n = v.valueOf();
+      if (typeof n === "number" && Number.isFinite(n)) {
+        if (Math.abs(n) < 40000) {
+          return new Date(Date.UTC(1970, 0, 1 + Math.round(n))).toISOString().slice(0, 10);
+        }
+        if (Math.abs(n) >= 1e11) {
+          return new Date(n).toISOString().slice(0, 10);
+        }
+      }
+    }
+    if (typeof v.days === "number") {
+      return new Date(Date.UTC(1970, 0, 1 + v.days)).toISOString().slice(0, 10);
+    }
+  }
+  if (typeof v === "number" && Number.isFinite(v)) {
+    const abs = Math.abs(v);
+    let d = null;
+    if (abs >= 1e18) d = new Date(v / 1e6);
+    else if (abs >= 1e15) d = new Date(v / 1e3);
+    else if (abs >= 1e12) d = new Date(v);
+    else if (abs >= 1e9) d = new Date(v * 1000);
+    else if (abs >= 10000 && abs < 40000) d = new Date(Date.UTC(1970, 0, 1 + Math.round(v)));
+    if (d && !Number.isNaN(d.getTime())) {
+      const y = d.getUTCFullYear();
+      if (y >= 1950 && y <= 2100) return d.toISOString().slice(0, 10);
+    }
+  }
+  const s = String(v);
+  if (s && s !== "[object Object]" && s !== "—") {
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 async function duckQuery(sql, tableId, limit) {
+  window.__q = duckQuery; window.__fmtDate = fmtDate; window.__dateKey = dateKey; window.__arrowDateToISO = arrowDateToISO;
   if (!CONN) throw new Error("DuckDB not ready");
   let q = (sql || "").trim();
   if (!q) return [];
-  // trigger same autoload path as runSQL by parsing identifiers
   const names = (q.match(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g) || []);
   for (const n of names) {
     if (window.SQL_LOADED && window.SQL_LOADED.has(n)) continue;
@@ -2301,19 +2612,48 @@ async function duckQuery(sql, tableId, limit) {
   }
   if (!q.endsWith(";")) q += ";";
   const result = await CONN.query(q);
-  const fields = result.schema.fields.map(f => f.name);
-  const rows = result.toArray().map(r => {
+  const fieldMeta = result.schema.fields.map(f => ({ name: f.name, type: String(f.type) }));
+  const fields = fieldMeta.map(f => f.name);
+
+  // Prefer Arrow column vectors — DATE often arrives as day-count ints.
+  const colData = {};
+  for (let i = 0; i < fieldMeta.length; i++) {
+    const f = fieldMeta[i];
+    try {
+      const child = typeof result.getChild === "function" ? result.getChild(f.name)
+                  : (typeof result.getChildAt === "function" ? result.getChildAt(i) : null);
+      if (child && typeof child.toArray === "function") {
+        colData[f.name] = child.toArray();
+      }
+    } catch (e) {}
+  }
+
+  let rowObjs = [];
+  try { rowObjs = result.toArray(); } catch (e) { rowObjs = []; }
+  const N = rowObjs.length || (result.numRows || 0);
+  const rows = [];
+  for (let i = 0; i < N; i++) {
     const o = {};
-    for (const k of fields) {
-      let v = r[k];
+    for (const f of fieldMeta) {
+      let v = colData[f.name] ? colData[f.name][i]
+            : (rowObjs[i] ? rowObjs[i][f.name] : null);
       if (typeof v === "bigint") v = Number(v);
-      o[k] = v;
+      const isDate = isDateKey(f.name)
+        || String(f.type).toLowerCase().includes("date")
+        || String(f.type).toLowerCase().includes("timestamp");
+      if (isDate) {
+        o[f.name] = arrowDateToISO(v) || fmtDate(v);
+      } else {
+        o[f.name] = v;
+      }
     }
-    return o;
-  });
+    rows.push(o);
+  }
   if (tableId) fillTable(tableId, rows, fields);
   return rows;
 }
+
+
 
 
 const QUALITY_BENCH = {
@@ -4020,21 +4360,6 @@ async function bindLiveDuckControls() {
 
 
 
-function fillSimple(id, rows, cols) {
-  const el = document.querySelector(id);
-  if (!el) return;
-  if (!rows || !rows.length) {
-    if (el.querySelector("thead")) el.querySelector("thead").innerHTML = "";
-    if (el.querySelector("tbody")) el.querySelector("tbody").innerHTML =
-      "<tr><td style='color:var(--muted)'>No rows — run analytics / export</td></tr>";
-    return;
-  }
-  const keys = cols || Object.keys(rows[0]);
-  el.querySelector("thead").innerHTML = "<tr>" + keys.map(k => "<th>" + k + "</th>").join("") + "</tr>";
-  el.querySelector("tbody").innerHTML = rows.map(r =>
-    "<tr>" + keys.map(k => "<td>" + (r[k] ?? "") + "</td>").join("") + "</tr>"
-  ).join("");
-}
 
 async function loadAllLateTabs() {
   try {
@@ -4369,15 +4694,33 @@ async function liveTable(name) {
         await ensureLocalTable(meta.sql_name, meta.url, meta.kind, true /* force re-register */);
       } catch (e) { console.warn("liveTable", name, e); }
     }
+    const tname = meta ? meta.sql_name : name;
     if (window.SQL_LOADED.has(name) || (meta && window.SQL_LOADED.has(meta.sql_name))) {
       try {
-        const rows = await duckQuery(`SELECT * FROM "${meta ? meta.sql_name : name}"`, null, null);
+        // Cast DATE/TIMESTAMP columns to VARCHAR so JS never sees Arrow day-counts.
+        let rows;
+        try {
+          const schema = await duckQuery(`DESCRIBE "${tname}"`, null, null);
+          const dateCols = (schema || [])
+            .filter(c => {
+              const t = String(c.column_type || c.Type || c.type || "").toUpperCase();
+              return t.includes("DATE") || t.includes("TIMESTAMP") || t.includes("TIME");
+            })
+            .map(c => c.column_name || c.name || c.column)
+            .filter(Boolean);
+          if (dateCols.length) {
+            const reps = dateCols.map(c => `CAST("${c}" AS VARCHAR) AS "${c}"`).join(", ");
+            rows = await duckQuery(`SELECT * REPLACE (${reps}) FROM "${tname}"`, null, null);
+          }
+        } catch (e) { /* describe/replace unsupported — fall through */ }
+        if (!rows) rows = await duckQuery(`SELECT * FROM "${tname}"`, null, null);
         return rows;
       } catch (e) { console.warn("liveTable duck", name, e); }
     }
   }
   return (DATA && DATA[name]) || [];
 }
+
 
 /** Like liveTable but filters at the SQL level (avoids the duckQuery row cap).
  *  where = SQL predicate for DuckDB; matchFn = row->bool for the DATA fallback. */
@@ -4402,14 +4745,14 @@ async function liveTableWhere(name, where, matchFn) {
 }
 
 const SPRINT_COLS = {
-  ic: ["family", "ic", "n", "weight_norm"],
-  comp: ["ticker", "composite", "rank", "peer", "cross", "earnings"],
-  pairs: ["pair_id", "group", "coint_t", "p_value", "half_life", "usable"],
-  pstats: ["pair_id", "n_trades", "win_rate", "avg_pnl", "total_pnl", "avg_gross_pnl", "sharpe"],
-  cspicks: ["bucket", "ticker"],
-  drift: ["bucket", "n_events", "drift_5d", "drift_20d", "drift_63d"],
-  cat: ["ticker", "catalyst_score", "pre_mom_flag", "expected_drift_20d", "iv_rich"],
+  ic: ["family", "ic_oos", "n", "regime"],
+  comp: ["ticker", "composite", "rank", "preferred", "peer", "cross", "earnings"],
+  pairs: ["pair_id", "group", "asset_a", "asset_b", "p_value", "half_life", "beta", "usable"],
+  pstats: ["group", "n_pairs", "avg_pnl", "total_pnl", "avg_gross_pnl"],
+  drift: ["ticker", "drift_ic", "n", "horizon"],
+  cat: ["ticker", "next_earnings_date", "surprise_pct", "pre_mom_flag", "iv_rich", "atm_iv"],
 };
+
 
 async function renderSprint() {
   const status = document.querySelector("#sprint-live-bar .widget-status");
@@ -4560,14 +4903,15 @@ function initSprintStock() {
 /* ========== Signals & Alpha tab (DuckDB-backed) ========== */
 
 const SIGNALS_COLS = {
-  oos: ["fold", "n_train", "n_val", "model_ic", "composite_ic", "ic_delta"],
-  weights: ["family", "importance"],
-  skew: ["ticker", "date", "atm_iv", "skew", "put_call_vol", "expiry", "spot"],
-  est: ["ticker", "period", "mean_eps", "mean_eps_rev_pct", "mean_pt", "prev_pt", "snapshot_date"],
-  filings: ["ticker", "filing_date", "form", "n_pos", "n_neg", "n_fwd", "score_per_1k"],
-  econ: ["date", "event_type", "label", "days_until", "is_trading_day", "source"],
-  technical: ["ticker", "date", "close", "rsi14", "macd_hist", "bb_pct", "sma20", "sma50", "sma_cross", "above_sma20", "above_sma50"],
+  oos: ["family", "regime", "ic", "n", "t_stat"],
+  weights: ["family", "regime", "weight", "ic"],
+  skew: ["ticker", "skew", "iv_atm", "iv_put", "iv_call"],
+  est: ["ticker", "mean_eps_rev_pct", "n_up", "n_down", "as_of"],
+  filings: ["ticker", "sent_score", "form", "filed_at"],
+  econ: ["date", "event", "importance", "actual", "forecast", "previous"],
+  tech: ["ticker", "signal", "strength", "as_of"],
 };
+
 
 async function renderSignals() {
   const status = document.querySelector("#signals-status");
@@ -4634,9 +4978,9 @@ async function renderShadow() {
       liveTable("shadow_book"),
       liveTable("shadow_lots"),
     ]);
-    const bookSorted = (book || []).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).slice(-250);
+    const bookSorted = (book || []).slice().sort((a, b) => dateKey(a.date).localeCompare(dateKey(b.date))).slice(-250);
     fillSimple("#tbl-shadow", bookSorted, SHADOW_COLS);
-    fillSimple("#tbl-shadow-lots", lots, ["ticker", "buy_date", "shares", "cost_basis", "status", "sell_date", "realized_pl"]);
+    fillSimple("#tbl-shadow-lots", lots, ["ticker", "status", "buy_date", "sell_date", "shares", "cost_basis", "realized_pl"]);
   } catch (e) {
     console.warn("renderShadow", e);
   }
@@ -4694,9 +5038,9 @@ function _setKpi(id, value, sub, kind) {
   if (v) v.innerHTML = value;
   if (s && sub !== undefined) s.textContent = sub;
 }
-function _latestByDate(rows, dateKey="date") {
+function _latestByDate(rows, col="date") {
   if (!rows || !rows.length) return null;
-  return rows.slice().sort((a, b) => String(b[dateKey]||"").localeCompare(String(a[dateKey]||"")))[0];
+  return rows.slice().sort((a, b) => dateKey(b[col]).localeCompare(dateKey(a[col])))[0];
 }
 function _decorateZoneRows(rows, zoneKey) {
   return (rows || []).map(r => {
@@ -4709,10 +5053,12 @@ function _decorateZoneRows(rows, zoneKey) {
 }
 
 async function renderMacroPulse() {
+
   try {
-    const [mf, ms, ride, sub] = await Promise.all([
+    const [mf, ms, sec, ride, sub] = await Promise.all([
       liveTable("macro_fragility"),
       liveTable("macro_shock"),
+      liveTable("macro_sector_shock"),
       liveTable("shock_ride"),
       liveTable("subindustry_regime"),
     ]);
@@ -4722,7 +5068,7 @@ async function renderMacroPulse() {
     for (const r of (sub || [])) {
       const b = r.basket;
       if (!b) continue;
-      if (!latestSub[b] || String(r.date) > String(latestSub[b].date)) latestSub[b] = r;
+      if (!latestSub[b] || dateKey(r.date) > dateKey(latestSub[b].date)) latestSub[b] = r;
     }
     const stressed = Object.values(latestSub).filter(r => (+r.p_stress || 0) > 0.8);
     const bestRide = (ride || []).slice().sort((a, b) => (+b.excess || 0) - (+a.excess || 0))[0];
@@ -4730,19 +5076,42 @@ async function renderMacroPulse() {
     const zone = lastF ? lastF.danger_zone : "—";
     const zKind = String(zone).includes("crisis") ? "bad" : String(zone).includes("danger") ? "warn" : String(zone).includes("elevat") ? "warn" : "good";
     const impulse = lastF ? +lastF.debt_impulse : NaN;
-    const oilZone = lastS ? lastS.shock_zone : "—";
-    const oilKind = String(oilZone) === "shock" ? "bad" : String(oilZone) === "elevated" ? "warn" : "good";
+    // sector shock: latest row per sector from macro_sector_shock
+    const secLatest = {};
+    for (const r of (sec || [])) {
+      const k = r.sector;
+      if (!k) continue;
+      if (!secLatest[k] || dateKey(r.date) > dateKey(secLatest[k].date)) secLatest[k] = r;
+    }
+    const secVals = Object.values(secLatest);
+    const inShock = secVals.filter(r => String(r.shock_zone).toLowerCase() === "shock")
+      .sort((a,b) => (+b.basket_mom_12m||0) - (+a.basket_mom_12m||0));
+    const inElev = secVals.filter(r => String(r.shock_zone).toLowerCase() === "elevated")
+      .sort((a,b) => (+b.basket_mom_12m||0) - (+a.basket_mom_12m||0));
+    const affected = [...inShock, ...inElev];
+    const shortName = (s) => String(s||"").replace(/^sub_/, "").replace(/_/g, " ");
+    const shockList = affected.length
+      ? affected.slice(0, 8).map(r => `${shortName(r.sector)} (${_fmtPct(r.basket_mom_12m,0)})`).join(" · ") + (affected.length > 8 ? ` · +${affected.length-8} more` : "")
+      : "none in shock/elevated";
+    const shockCount = inShock.length;
+    const elevCount = inElev.length;
+    const secKind = shockCount >= 1 ? "bad" : elevCount >= 1 ? "warn" : "good";
+    const secValue = (shockCount + elevCount) > 0
+      ? `<span class="${_zoneClass(shockCount ? "shock" : "elevated")}">${shockCount} shock · ${elevCount} elev</span>`
+      : `<span class="${_zoneClass("benign")}">clear</span>`;
 
-    _setKpi("#kpi-debt", lastF ? _fmtNum(lastF.debt_gdp_ratio, 2) + "×" : "—", lastF ? String(lastF.date).slice(0,10) : "no data");
+    _setKpi("#kpi-debt", lastF ? _fmtNum(lastF.debt_gdp_ratio, 2) + "×" : "—", lastF ? fmtDate(lastF.date) : "no data");
     _setKpi("#kpi-impulse", lastF ? _fmtPct(impulse, 1) : "—", lastF ? `v-scaled ${_fmtPct(lastF.debt_impulse_v,1)}` : "", impulse >= 0.20 ? "bad" : impulse >= 0.13 ? "warn" : "good");
     _setKpi("#kpi-minsky", lastF ? _fmtNum(lastF.minsky_signal, 3) : "—", lastF ? `pctile ${_fmtPct(lastF.minsky_pctile,0)} · p(stress) ${_fmtNum(lastF.p_stress,2)}` : "");
     _setKpi("#kpi-zone", lastF ? `<span class="${_zoneClass(zone)}">${zone}</span>` : "—", "Keen debt-financed demand", zKind);
-    _setKpi("#kpi-oil", lastS ? `<span class="${_zoneClass(oilZone)}">${oilZone}</span>` : "—", lastS ? `oil 12m ${_fmtPct(lastS.oil_mom_12m,0)} · score ${_fmtNum(lastS.shock_score,2)}` : "no data", oilKind);
+    _setKpi("#kpi-sector-shock", secValue, shockList, secKind);
+    // legacy id if present
+    _setKpi("#kpi-oil", secValue, shockList, secKind);
     _setKpi("#kpi-stress-sub", String(stressed.length), `${Object.keys(latestSub).length} baskets tracked`, stressed.length >= 3 ? "bad" : stressed.length >= 1 ? "warn" : "good");
 
-    _setKpi("#d-kpi-zone", lastF ? `<span class="${_zoneClass(zone)}">${zone}</span>` : "—", lastF ? String(lastF.date).slice(0,10) : "", zKind);
+    _setKpi("#d-kpi-zone", lastF ? `<span class="${_zoneClass(zone)}">${zone}</span>` : "—", lastF ? fmtDate(lastF.date) : "", zKind);
     _setKpi("#d-kpi-impulse", lastF ? _fmtPct(impulse,1) : "—", lastF ? `accel ${_fmtNum(lastF.debt_acceleration,3)}` : "", impulse >= 0.20 ? "bad" : impulse >= 0.13 ? "warn" : "");
-    _setKpi("#d-kpi-oil", lastS ? `<span class="${_zoneClass(oilZone)}">${oilZone}</span>` : "—", lastS ? String(lastS.date).slice(0,10) : "", oilKind);
+    _setKpi("#d-kpi-oil", secValue, shockList, secKind);
     _setKpi("#d-kpi-stressed", String(stressed.length), stressed.slice(0,4).map(r => String(r.basket).replace(/^sub_/,"")).join(", ") || "none", stressed.length ? "warn" : "good");
     _setKpi("#d-kpi-ride", bestRide ? _fmtPct(bestRide.excess,0) : "—", bestRide ? bestRide.sector : "", bestRide && +bestRide.excess > 0 ? "good" : "warn");
 
@@ -4782,17 +5151,17 @@ async function renderFragility() {
 
     await renderMacroPulse();
 
-    const mfSorted = (mf || []).slice().sort((a,b) => String(b.date).localeCompare(String(a.date)));
+    const mfSorted = (mf || []).slice().sort((a,b) => dateKey(b.date).localeCompare(dateKey(a.date)));
     fillSimple("#tbl-macro-fragility", _decorateZoneRows(mfSorted, "danger_zone"), MACRO_FRAG_COLS);
 
-    const msSorted = (ms || []).slice().sort((a,b) => String(b.date).localeCompare(String(a.date)));
+    const msSorted = (ms || []).slice().sort((a,b) => dateKey(b.date).localeCompare(dateKey(a.date)));
     fillSimple("#tbl-macro-shock", _decorateZoneRows(msSorted, "shock_zone"), MACRO_SHOCK_COLS);
 
     const secLatest = {};
     for (const r of (sec || [])) {
       const k = r.sector;
       if (!k) continue;
-      if (!secLatest[k] || String(r.date) > String(secLatest[k].date)) secLatest[k] = r;
+      if (!secLatest[k] || dateKey(r.date) > dateKey(secLatest[k].date)) secLatest[k] = r;
     }
     const secRows = Object.values(secLatest).sort((a,b) => (+b.basket_mom_12m||0) - (+a.basket_mom_12m||0));
     fillSimple("#tbl-sector-shock", _decorateZoneRows(secRows, "shock_zone"), SECTOR_SHOCK_COLS);
@@ -4804,7 +5173,7 @@ async function renderFragility() {
     for (const r of (sub || [])) {
       const k = r.basket;
       if (!k) continue;
-      if (!subLatest[k] || String(r.date) > String(subLatest[k].date)) subLatest[k] = r;
+      if (!subLatest[k] || dateKey(r.date) > dateKey(subLatest[k].date)) subLatest[k] = r;
     }
     const subRows = Object.values(subLatest).sort((a,b) => (+b.p_stress||0) - (+a.p_stress||0));
     fillSimple("#tbl-sub-regime", _decorateZoneRows(subRows, "regime"), SUB_REGIME_COLS);
