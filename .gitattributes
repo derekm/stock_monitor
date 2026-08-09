@@ -1,3 +1,2 @@
 *.parquet filter=lfs diff=lfs merge=lfs -text
-dashboard_data/data.json filter=lfs diff=lfs merge=lfs -text
 arista_metrics.parquet filter=lfs diff=lfs merge=lfs -text

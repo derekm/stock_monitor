@@ -36,3 +36,4 @@ granite_ckpts/
 
 # stray test virtualenv
 venv_cuda_test/
+dashboard_data/data.json
