@@ -96,41 +96,111 @@
   .qb-preview { font-family: ui-monospace, monospace; font-size: 0.78rem; color: #9ec1ff; background: #0c1017;
     border: 1px dashed var(--border); border-radius: 8px; padding: 0.6rem 0.75rem; white-space: pre-wrap; margin: 0.5rem 0; }
 
+
+  /* denser / cleaner 2026-08 polish */
+  body { font-size: 14px; letter-spacing: 0.01em; }
+  header { padding: 0.9rem 1.25rem 0.75rem; }
+  header h1 { font-size: 1.2rem; letter-spacing: -0.01em; }
+  header p { font-size: 0.82rem; }
+  header .meta-row { display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.45rem; align-items:center; }
+  header .meta-chip { background:var(--chip); border:1px solid var(--border); border-radius:999px; padding:0.15rem 0.55rem; font-size:0.72rem; color:var(--muted); }
+  header .meta-chip b { color:var(--text); font-weight:600; }
+  nav { gap: 0.3rem; padding: 0.55rem 1.25rem; }
+  nav .nav-group { display:inline-flex; flex-wrap:wrap; gap:0.3rem; align-items:center; margin-right:0.55rem; padding-right:0.55rem; border-right:1px solid var(--border); }
+  nav .nav-group:last-child { border-right:none; margin-right:0; padding-right:0; }
+  nav .nav-label { font-size:0.65rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-right:0.15rem; font-weight:700; }
+  nav button { padding: 0.28rem 0.7rem; font-size: 0.78rem; }
+  main { padding: 0.85rem 1.25rem 2.5rem; max-width: 1600px; }
+  section h2 { font-size: 1.05rem; margin: 0 0 0.6rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; }
+  .live-badge { font-size:0.72rem; font-weight:500; color:var(--muted); background:var(--chip); border:1px solid var(--border); border-radius:999px; padding:0.12rem 0.5rem; }
+  .card { padding: 0.75rem 0.85rem; border-radius: 10px; }
+  .card h3 { margin: 0 0 0.45rem; font-size: 0.88rem; display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; }
+  .card p.hint { color:var(--muted); font-size:0.75rem; margin:0 0 0.55rem; line-height:1.35; }
+  table { font-size: 0.75rem; }
+  th, td { padding: 0.28rem 0.4rem; white-space: nowrap; }
+  th { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .scroll { max-height: 360px; }
+  .scroll.tall { max-height: 480px; }
+  .kpi-strip { display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.55rem; margin:0 0 0.85rem; }
+  .kpi-card { background: var(--panel); border:1px solid var(--border); border-radius:10px; padding:0.55rem 0.7rem; min-height:72px; }
+  .kpi-card .k { font-size:0.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; font-weight:600; }
+  .kpi-card .v { font-size:1.25rem; font-weight:700; margin-top:0.15rem; line-height:1.15; font-variant-numeric: tabular-nums; }
+  .kpi-card .s { font-size:0.7rem; color:var(--muted); margin-top:0.15rem; }
+  .kpi-card.warn { border-color: rgba(245,158,11,0.45); }
+  .kpi-card.bad { border-color: rgba(239,68,68,0.45); }
+  .kpi-card.good { border-color: rgba(34,197,94,0.4); }
+  .tag-crisis { background: rgba(239,68,68,0.18); color: var(--bad); }
+  .tag-danger { background: rgba(245,158,11,0.18); color: var(--warn); }
+  .tag-elevated { background: rgba(59,130,246,0.15); color: #93c5fd; }
+  .tag-benign { background: rgba(34,197,94,0.12); color: var(--good); }
+  .tag-shock { background: rgba(239,68,68,0.18); color: var(--bad); }
+  .section-intro { color:var(--muted); font-size:0.8rem; margin:-0.25rem 0 0.75rem; max-width: 70ch; line-height:1.4; }
+  .pos { color: var(--good); }
+  .neg { color: var(--bad); }
+  .num { font-variant-numeric: tabular-nums; text-align:right; }
+  .grid3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:0.75rem; }
+  .grid2 { gap: 0.75rem; }
+  .grid { gap: 0.75rem; }
+  footer { font-size:0.72rem; padding:0.75rem 1.25rem 1.5rem; }
+
 </style>
 </head>
 <body>
 <header>
   <h1>Portfolio Decision Dashboard</h1>
-  <p>DuckDB-Wasm · value screens · sector structure · forecasts · anomalies · inclusion rationale</p>
+  <p>DuckDB-Wasm live parquet/CSV · decisions · macro fragility · sector shocks · forecasts</p>
+  <div class="meta-row" id="header-meta">
+    <span class="meta-chip">status <b id="hdr-status">loading…</b></span>
+    <span class="meta-chip">catalog <b id="hdr-catalog">—</b></span>
+    <span class="meta-chip">macro <b id="hdr-macro">—</b></span>
+  </div>
 </header>
 <nav id="nav">
-  <button data-tab="decisions" class="active">Decisions</button>
-  <button data-tab="portfolio">Portfolio</button>
-  <button data-tab="value">Value Screens</button>
-  <button data-tab="sectors">Sectors</button>
-  <button data-tab="forecasts">Forecasts</button>
+  <span class="nav-group"><span class="nav-label">Core</span>
+    <button data-tab="decisions" class="active">Decisions</button>
+    <button data-tab="portfolio">Portfolio</button>
+    <button data-tab="value">Value</button>
+    <button data-tab="sectors">Sectors</button>
+    <button data-tab="stock">Stock</button>
+  </span>
+  <span class="nav-group"><span class="nav-label">Risk</span>
+    <button data-tab="fragility">Fragility / Macro</button>
+    <button data-tab="stress">Stress / ETFs</button>
+    <button data-tab="regime">Regime</button>
+    <button data-tab="anomalies">Anomalies</button>
+    <button data-tab="rolling">Rolling</button>
+  </span>
+  <span class="nav-group"><span class="nav-label">Alpha</span>
+    <button data-tab="signals">Signals</button>
+    <button data-tab="sprint">Sprint</button>
+    <button data-tab="forecasts">Forecasts</button>
+    <button data-tab="quality">Quality / Dual</button>
+    <button data-tab="sleeves">Sleeves</button>
+  </span>
+  <span class="nav-group"><span class="nav-label">Structure</span>
+    <button data-tab="indexes">Indexes</button>
+    <button data-tab="fisher">Fisher</button>
+    <button data-tab="inclusion">Inclusion</button>
+  </span>
+  <span class="nav-group"><span class="nav-label">Ops</span>
     <button type="button" data-tab="pipelines">Pipelines</button>
-  <button data-tab="anomalies">Anomalies</button>
-  <button data-tab="signals">Signals &amp; Alpha</button>
-  <button data-tab="fragility">Fragility</button>
-  <button data-tab="indexes">Index Backtest</button>
-  <button data-tab="sql">SQL Lab</button>
-  <button data-tab="fisher">Fisher Indexes</button>
-  <button data-tab="inclusion">Inclusion Rules</button>
-  <button data-tab="stress">Stress / ETFs</button>
-  <button data-tab="regime">Regime / KF</button>
-  <button data-tab="quality">Quality / Dual</button>
-  <button data-tab="rolling">Rolling</button>
-  <button data-tab="sleeves">Sleeves / Groups</button>
-  <button data-tab="manage">Manage</button>
-  <button data-tab="ops">Ops / Services</button>
-  <button data-tab="csvcat">CSV Catalog</button>
-  <button data-tab="stock">Single Stock</button>
-  <button data-tab="sprint">Sprint Engines</button>
+    <button data-tab="sql">SQL Lab</button>
+    <button data-tab="csvcat">Catalog</button>
+    <button data-tab="manage">Manage</button>
+    <button data-tab="ops">Ops</button>
+  </span>
 </nav>
 <main>
   <!-- DECISIONS -->
   <section id="decisions" class="active">
+    <div class="kpi-strip" id="decisions-macro-pulse" style="margin-top:0.15rem;margin-bottom:0.75rem">
+      <div class="kpi-card" id="d-kpi-zone"><div class="k">Macro zone</div><div class="v">—</div><div class="s">Keen danger band</div></div>
+      <div class="kpi-card" id="d-kpi-impulse"><div class="k">Debt impulse</div><div class="v">—</div><div class="s">latest quarter</div></div>
+      <div class="kpi-card" id="d-kpi-oil"><div class="k">Oil shock zone</div><div class="v">—</div><div class="s">supply layer</div></div>
+      <div class="kpi-card" id="d-kpi-stressed"><div class="k">Stressed subsectors</div><div class="v">—</div><div class="s">p_stress &gt; 0.8</div></div>
+      <div class="kpi-card" id="d-kpi-ride"><div class="k">Best ride excess</div><div class="v">—</div><div class="s">shock_ride top</div></div>
+    </div>
+
     <div class="sql-actions" style="margin-bottom:0.75rem">
       <button type="button" class="chip-btn" id="live-refresh-decisions">Live: trifecta via DuckDB</button>
       <button type="button" class="chip-btn" id="live-refresh-holdings">Live: holdings</button>
@@ -488,12 +558,57 @@
 
   <!-- FRAGILITY (Taleb layer) -->
   <section id="fragility">
-    <h2>Fragility / Fat Tails <span class="live-badge" id="fragility-status">…</span></h2>
+    <h2>Fragility / Macro <span class="live-badge" id="fragility-status">…</span></h2>
+    <p class="section-intro">Micro fragility (per-name veto) + macro debt/supply shocks + sector ride stats + sub-industry crisis regimes. KPIs are latest point-in-time from DuckDB live files.</p>
+    <div class="kpi-strip" id="kpi-macro">
+      <div class="kpi-card" id="kpi-debt"><div class="k">Debt / GDP</div><div class="v">—</div><div class="s">all-sectors TCMDO</div></div>
+      <div class="kpi-card" id="kpi-impulse"><div class="k">Debt impulse</div><div class="v">—</div><div class="s">ΔD / GDP</div></div>
+      <div class="kpi-card" id="kpi-minsky"><div class="k">Minsky signal</div><div class="v">—</div><div class="s">impulse × calm</div></div>
+      <div class="kpi-card" id="kpi-zone"><div class="k">Danger zone</div><div class="v">—</div><div class="s">Keen 2009 bands</div></div>
+      <div class="kpi-card" id="kpi-oil"><div class="k">Oil shock</div><div class="v">—</div><div class="s">supply layer</div></div>
+      <div class="kpi-card" id="kpi-stress-sub"><div class="k">Subsectors stressed</div><div class="v">—</div><div class="s">p_stress &gt; 0.8</div></div>
+    </div>
+    <div class="grid2" style="margin-bottom:0.85rem">
+      <div class="card">
+        <h3>Macro debt fragility (Keen) <button id="live-refresh-macro" class="live-btn" type="button">↻</button></h3>
+        <p class="hint">Quarterly TCMDO/GDP, debt impulse, velocity-scaled impulse, Credit Accelerator, Minsky signal, danger zone. Latest first.</p>
+        <div class="scroll tall"><table id="tbl-macro-fragility"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Macro supply shock (oil / inflation)</h3>
+        <p class="hint">Oil momentum, inflation surprise, real rate, shock score/zone — the 1973-74 complement to the debt layer.</p>
+        <div class="scroll tall"><table id="tbl-macro-shock"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:0.85rem">
+      <div class="card">
+        <h3>Sector / subsector shocks (latest)</h3>
+        <p class="hint">Focused baskets + GICS + IMF commodities. Shock = basket 12m mom ≥ 80%; elevated ≥ 40%.</p>
+        <div class="scroll tall"><table id="tbl-sector-shock"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Shock ride (enter explosion / exit rollover)</h3>
+        <p class="hint">Measured ride vs buy-hold per sector. Positive excess = ride wins; maxDD ride vs buy-hold is the drawdown story.</p>
+        <div class="scroll tall"><table id="tbl-shock-ride"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:0.85rem">
+      <div class="card">
+        <h3>Sub-industry crisis regimes (latest)</h3>
+        <p class="hint">Per-basket HMM: vol21 + intra-basket corr → p_stress. Gate new ride entries away from high_vol_stress — does not lead the momentum exit.</p>
+        <div class="scroll tall"><table id="tbl-sub-regime"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>Regime lead vs ride exits</h3>
+        <p class="hint">Count of ride exits where p_stress was already &gt; 0.8 at −10/−20/−30d. Low lead rate = coincident, not predictive.</p>
+        <div class="scroll"><table id="tbl-sub-lead"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <h3 style="margin:0.25rem 0 0.55rem;color:#c5d0e0;font-size:0.9rem">Micro fragility (per-name)</h3>
     <div class="grid2" style="margin-bottom:1rem">
       <div class="card">
         <h3>Per-name fragility screen <button id="live-refresh-fragility" class="live-btn">↻</button></h3>
-        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
-          Composite fragility index (leverage, asset coverage, interest coverage, IV skew,
+        <p class="hint">Composite fragility index (leverage, asset coverage, interest coverage, IV skew,
           illiquidity, gap share, tail fatness, kurtosis). <b>fragile_flag = veto</b> for
           inclusion: cheap + fragile = skip. Feeds buy_candidates (fragile_veto) and the
           shadow book kill switch.
@@ -502,8 +617,7 @@
       </div>
       <div class="card">
         <h3>Tail index (Hill α) — variance is nearly meaningless below α≈3</h3>
-        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
-          Empirical P(|z|&gt;5σ) vs Gaussian, tail ratio, kurtosis per ticker.
+        <p class="hint">Empirical P(|z|&gt;5σ) vs Gaussian, tail ratio, kurtosis per ticker.
         </p>
         <div class="scroll" style="max-height:420px"><table id="tbl-tail"><thead></thead><tbody></tbody></table></div>
       </div>
@@ -515,8 +629,7 @@
       </div>
       <div class="card">
         <h3>Ergodicity / ruin (portfolio)</h3>
-        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
-          Arith vs geom return, variance drag, ruin probability, terminal-wealth
+        <p class="hint">Arith vs geom return, variance drag, ruin probability, terminal-wealth
           percentiles from block-bootstrap paths.
         </p>
         <div class="scroll"><table id="tbl-port-ergodic"><thead></thead><tbody></tbody></table></div>
@@ -525,16 +638,14 @@
     <div class="grid2" style="margin-bottom:1rem">
       <div class="card">
         <h3>Barbell structure / convexity</h3>
-        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
-          Safe/middle/convex buckets, barbell score (positive = barbell, negative =
+        <p class="hint">Safe/middle/convex buckets, barbell score (positive = barbell, negative =
           Christmas tree), vol &amp; vol-of-vol beta, hedge cost, convexity allocation.
         </p>
         <div class="scroll"><table id="tbl-barbell"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
         <h3>Tail dependence (upper/lower)</h3>
-        <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
-          Crisis-period co-movement that correlation misses (corr → 0 mid-distribution,
+        <p class="hint">Crisis-period co-movement that correlation misses (corr → 0 mid-distribution,
           → 1 in tails).
         </p>
         <div class="scroll"><table id="tbl-tail-dep"><thead></thead><tbody></tbody></table></div>
@@ -542,8 +653,7 @@
     </div>
     <div class="card">
       <h3>Gap risk — the risk that arrives overnight</h3>
-      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
-        Close-to-close backtests can't see gaps. Gap share of variance &gt; 1 means the
+      <p class="hint">Close-to-close backtests can't see gaps. Gap share of variance &gt; 1 means the
         name's risk is overnight-dominated; these names gap through stops.
       </p>
       <div class="scroll" style="max-height:420px"><table id="tbl-gap"><thead></thead><tbody></tbody></table></div>
@@ -554,8 +664,7 @@
     </div>
     <div class="card">
       <h3>Hidden optionality audit — which point estimates ride on noise?</h3>
-      <p style="color:var(--muted);font-size:0.82rem;margin:0 0 0.75rem">
-        The American-options lesson: every quantity we treat as deterministic while it is
+      <p class="hint">The American-options lesson: every quantity we treat as deterministic while it is
         stochastic contains unpriced convexity. This audit perturbs each decision driver
         (momentum, factor composite, aggregate composite, the HMM regime label) by its own
         estimation error and measures the decision flip rate — the probability our
@@ -3865,7 +3974,11 @@ async function bindLiveDuckControls() {
   renderIndexes();
   qbInit();
   if (typeof refreshDataCatalog === "function") {
-    refreshDataCatalog().then(() => renderCsvCatalog()).catch(() => renderCsvCatalog());
+    refreshDataCatalog().then(() => {
+    renderCsvCatalog();
+    const hc = document.querySelector("#hdr-catalog");
+    if (hc) hc.textContent = String((window.SQL_CATALOG || []).length) + " files";
+  }).catch(() => renderCsvCatalog());
   } else {
     renderCsvCatalog();
   }
@@ -4543,12 +4656,113 @@ const TAIL_COLS = ["ticker", "n_obs", "tail_alpha_hill", "emp_p_gt_3sd", "gauss_
   "tail_ratio_3sd", "emp_p_gt_5sd", "gauss_p_gt_5sd", "tail_ratio_5sd", "kurtosis"];
 const GAP_COLS = ["ticker", "n_obs", "mean_gap", "gap_sd", "ret_sd", "gap_share_of_var",
   "p_abs_gap_gt_3pct", "p_abs_gap_gt_5pct", "max_gap_pct", "min_gap_pct"];
+const MACRO_FRAG_COLS = ["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v",
+  "debt_acceleration", "velocity", "p_stress", "minsky_signal", "minsky_pctile",
+  "danger_zone", "regime_ctx"];
+const MACRO_SHOCK_COLS = ["date", "oil_mom_12m", "inflation_surprise", "real_rate",
+  "energy_divergence", "shock_score", "shock_zone"];
+const SECTOR_SHOCK_COLS = ["sector", "date", "basket_mom_12m", "commodity_mom_12m",
+  "shock_score", "shock_zone"];
+const SHOCK_RIDE_COLS = ["sector", "n_trades", "in_market_share", "buy_hold_return",
+  "ride_return", "excess", "max_dd_ride", "max_dd_buyhold"];
+const SUB_REGIME_COLS = ["basket", "date", "vol21", "avg_corr", "p_stress", "regime", "ride_pos"];
+const SUB_LEAD_COLS = ["basket", "n_exits", "lead_10d", "lead_20d", "lead_30d"];
+
+function _fmtPct(x, digits=1) {
+  if (x === null || x === undefined || x === "" || Number.isNaN(+x)) return "—";
+  return (+x * 100).toFixed(digits) + "%";
+}
+function _fmtNum(x, digits=2) {
+  if (x === null || x === undefined || x === "" || Number.isNaN(+x)) return "—";
+  return (+x).toFixed(digits);
+}
+function _zoneClass(z) {
+  const s = String(z || "").toLowerCase();
+  if (s.includes("crisis") || s === "shock") return "tag tag-crisis";
+  if (s.includes("danger") || s.includes("high_vol")) return "tag tag-danger";
+  if (s.includes("elevat")) return "tag tag-elevated";
+  if (s.includes("benign") || s.includes("low_vol") || s === "normal") return "tag tag-benign";
+  return "tag tag-neutral";
+}
+function _setKpi(id, value, sub, kind) {
+  const el = document.querySelector(id);
+  if (!el) return;
+  el.classList.remove("warn", "bad", "good");
+  if (kind) el.classList.add(kind);
+  const v = el.querySelector(".v");
+  const s = el.querySelector(".s");
+  if (v) v.innerHTML = value;
+  if (s && sub !== undefined) s.textContent = sub;
+}
+function _latestByDate(rows, dateKey="date") {
+  if (!rows || !rows.length) return null;
+  return rows.slice().sort((a, b) => String(b[dateKey]||"").localeCompare(String(a[dateKey]||"")))[0];
+}
+function _decorateZoneRows(rows, zoneKey) {
+  return (rows || []).map(r => {
+    const o = { ...r };
+    if (zoneKey && o[zoneKey] != null) {
+      o[zoneKey] = `<span class="${_zoneClass(o[zoneKey])}">${o[zoneKey]}</span>`;
+    }
+    return o;
+  });
+}
+
+async function renderMacroPulse() {
+  try {
+    const [mf, ms, ride, sub] = await Promise.all([
+      liveTable("macro_fragility"),
+      liveTable("macro_shock"),
+      liveTable("shock_ride"),
+      liveTable("subindustry_regime"),
+    ]);
+    const lastF = _latestByDate(mf);
+    const lastS = _latestByDate(ms);
+    const latestSub = {};
+    for (const r of (sub || [])) {
+      const b = r.basket;
+      if (!b) continue;
+      if (!latestSub[b] || String(r.date) > String(latestSub[b].date)) latestSub[b] = r;
+    }
+    const stressed = Object.values(latestSub).filter(r => (+r.p_stress || 0) > 0.8);
+    const bestRide = (ride || []).slice().sort((a, b) => (+b.excess || 0) - (+a.excess || 0))[0];
+
+    const zone = lastF ? lastF.danger_zone : "—";
+    const zKind = String(zone).includes("crisis") ? "bad" : String(zone).includes("danger") ? "warn" : String(zone).includes("elevat") ? "warn" : "good";
+    const impulse = lastF ? +lastF.debt_impulse : NaN;
+    const oilZone = lastS ? lastS.shock_zone : "—";
+    const oilKind = String(oilZone) === "shock" ? "bad" : String(oilZone) === "elevated" ? "warn" : "good";
+
+    _setKpi("#kpi-debt", lastF ? _fmtNum(lastF.debt_gdp_ratio, 2) + "×" : "—", lastF ? String(lastF.date).slice(0,10) : "no data");
+    _setKpi("#kpi-impulse", lastF ? _fmtPct(impulse, 1) : "—", lastF ? `v-scaled ${_fmtPct(lastF.debt_impulse_v,1)}` : "", impulse >= 0.20 ? "bad" : impulse >= 0.13 ? "warn" : "good");
+    _setKpi("#kpi-minsky", lastF ? _fmtNum(lastF.minsky_signal, 3) : "—", lastF ? `pctile ${_fmtPct(lastF.minsky_pctile,0)} · p(stress) ${_fmtNum(lastF.p_stress,2)}` : "");
+    _setKpi("#kpi-zone", lastF ? `<span class="${_zoneClass(zone)}">${zone}</span>` : "—", "Keen debt-financed demand", zKind);
+    _setKpi("#kpi-oil", lastS ? `<span class="${_zoneClass(oilZone)}">${oilZone}</span>` : "—", lastS ? `oil 12m ${_fmtPct(lastS.oil_mom_12m,0)} · score ${_fmtNum(lastS.shock_score,2)}` : "no data", oilKind);
+    _setKpi("#kpi-stress-sub", String(stressed.length), `${Object.keys(latestSub).length} baskets tracked`, stressed.length >= 3 ? "bad" : stressed.length >= 1 ? "warn" : "good");
+
+    _setKpi("#d-kpi-zone", lastF ? `<span class="${_zoneClass(zone)}">${zone}</span>` : "—", lastF ? String(lastF.date).slice(0,10) : "", zKind);
+    _setKpi("#d-kpi-impulse", lastF ? _fmtPct(impulse,1) : "—", lastF ? `accel ${_fmtNum(lastF.debt_acceleration,3)}` : "", impulse >= 0.20 ? "bad" : impulse >= 0.13 ? "warn" : "");
+    _setKpi("#d-kpi-oil", lastS ? `<span class="${_zoneClass(oilZone)}">${oilZone}</span>` : "—", lastS ? String(lastS.date).slice(0,10) : "", oilKind);
+    _setKpi("#d-kpi-stressed", String(stressed.length), stressed.slice(0,4).map(r => String(r.basket).replace(/^sub_/,"")).join(", ") || "none", stressed.length ? "warn" : "good");
+    _setKpi("#d-kpi-ride", bestRide ? _fmtPct(bestRide.excess,0) : "—", bestRide ? bestRide.sector : "", bestRide && +bestRide.excess > 0 ? "good" : "warn");
+
+    const hdr = document.querySelector("#hdr-macro");
+    if (hdr) hdr.textContent = `${zone} · impulse ${lastF ? _fmtPct(impulse,0) : "—"} · ${stressed.length} stressed`;
+    const hs = document.querySelector("#hdr-status");
+    if (hs) hs.textContent = "live";
+  } catch (e) {
+    console.warn("renderMacroPulse", e);
+    const hs = document.querySelector("#hdr-status");
+    if (hs) hs.textContent = "partial";
+  }
+}
 
 async function renderFragility() {
   const status = document.querySelector("#fragility-status");
   if (status) status.textContent = "Querying DuckDB…";
   try {
-    const [frag, tail, portTail, ergodic, barbell, dep, gap, gapEvents, optionality] = await Promise.all([
+    const [frag, tail, portTail, ergodic, barbell, dep, gap, gapEvents, optionality,
+           mf, ms, sec, ride, sub, lead] = await Promise.all([
       liveTable("fragility_screen"),
       liveTable("tail_index"),
       liveTable("portfolio_tail"),
@@ -4558,7 +4772,46 @@ async function renderFragility() {
       liveTable("gap_risk"),
       liveTable("gap_events"),
       liveTable("hidden_optionality"),
+      liveTable("macro_fragility"),
+      liveTable("macro_shock"),
+      liveTable("macro_sector_shock"),
+      liveTable("shock_ride"),
+      liveTable("subindustry_regime"),
+      liveTable("subindustry_regime_lead"),
     ]);
+
+    await renderMacroPulse();
+
+    const mfSorted = (mf || []).slice().sort((a,b) => String(b.date).localeCompare(String(a.date)));
+    fillSimple("#tbl-macro-fragility", _decorateZoneRows(mfSorted, "danger_zone"), MACRO_FRAG_COLS);
+
+    const msSorted = (ms || []).slice().sort((a,b) => String(b.date).localeCompare(String(a.date)));
+    fillSimple("#tbl-macro-shock", _decorateZoneRows(msSorted, "shock_zone"), MACRO_SHOCK_COLS);
+
+    const secLatest = {};
+    for (const r of (sec || [])) {
+      const k = r.sector;
+      if (!k) continue;
+      if (!secLatest[k] || String(r.date) > String(secLatest[k].date)) secLatest[k] = r;
+    }
+    const secRows = Object.values(secLatest).sort((a,b) => (+b.basket_mom_12m||0) - (+a.basket_mom_12m||0));
+    fillSimple("#tbl-sector-shock", _decorateZoneRows(secRows, "shock_zone"), SECTOR_SHOCK_COLS);
+
+    const rideSorted = (ride || []).slice().sort((a,b) => (+b.excess||0) - (+a.excess||0));
+    fillSimple("#tbl-shock-ride", rideSorted, SHOCK_RIDE_COLS);
+
+    const subLatest = {};
+    for (const r of (sub || [])) {
+      const k = r.basket;
+      if (!k) continue;
+      if (!subLatest[k] || String(r.date) > String(subLatest[k].date)) subLatest[k] = r;
+    }
+    const subRows = Object.values(subLatest).sort((a,b) => (+b.p_stress||0) - (+a.p_stress||0));
+    fillSimple("#tbl-sub-regime", _decorateZoneRows(subRows, "regime"), SUB_REGIME_COLS);
+
+    const leadSorted = (lead || []).slice().sort((a,b) => (+b.n_exits||0) - (+a.n_exits||0));
+    fillSimple("#tbl-sub-lead", leadSorted, SUB_LEAD_COLS);
+
     const fragSorted = (frag || []).slice().sort((a, b) => (+b.fragility_score || 0) - (+a.fragility_score || 0));
     fillSimple("#tbl-fragility", fragSorted, FRAGILITY_COLS);
     const tailSorted = (tail || []).slice().sort((a, b) => (+b.tail_ratio_5sd || 0) - (+a.tail_ratio_5sd || 0));
@@ -4572,12 +4825,20 @@ async function renderFragility() {
     fillSimple("#tbl-gap", gapSorted, GAP_COLS);
     fillSimple("#tbl-gap-events", gapEvents, null);
     fillSimple("#tbl-optionality", optionality, null);
-    if (status) status.textContent = `Updated from DuckDB · ${(frag||[]).length + (tail||[]).length + (gap||[]).length} rows`;
+
+    const nMacro = (mf||[]).length + (ms||[]).length + (sec||[]).length;
+    const nMicro = (frag||[]).length + (tail||[]).length + (gap||[]).length;
+    if (status) status.textContent = `DuckDB · macro ${nMacro.toLocaleString()} · micro ${nMicro.toLocaleString()} · sub ${(sub||[]).length.toLocaleString()}`;
   } catch (e) {
     if (status) status.textContent = e.message || String(e);
     console.error("renderFragility", e);
   }
 }
+
+
+
+document.getElementById("live-refresh-fragility")?.addEventListener("click", () => renderFragility());
+document.getElementById("live-refresh-macro")?.addEventListener("click", () => renderFragility());
 
 initSignalsShadow();
 
