@@ -70,10 +70,10 @@ python forecast_granite.py forecast --index portfolio --from-first-trade --horiz
 
 **Full daily refresh (recommended):** run the master orchestrator, or trigger it from the dashboard
 ```bash
-python run_daily_automation.py   # 34 jobs: hmm → rebalance → preferred → inclusion → stress → crisis → factor_rot → risk_enrich → rolling → rolling_corr → tail_hedge → allpairs → fund_snap → screen_bt → dupont → growth → peer → earnings → pairs → cross → aggregate → technical → econ_cal → est_rev → shadow → taleb_tail → taleb_gap → taleb_ergodic → taleb_fragility → taleb_minsky → taleb_shock → taleb_barbell → taleb_optionality → export
+python run_daily_automation.py   # 35 jobs: hmm → rebalance → preferred → inclusion → stress → crisis → factor_rot → risk_enrich → rolling → rolling_corr → tail_hedge → allpairs → fund_snap → screen_bt → dupont → growth → peer → earnings → pairs → cross → aggregate → technical → econ_cal → est_rev → shadow → taleb_tail → taleb_gap → taleb_ergodic → taleb_fragility → taleb_minsky → taleb_shock → taleb_sector_shock → taleb_barbell → taleb_optionality → export
 # or from the dashboard Ops tab: analytics_service POST /run/all-daily
 ```
-Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_minsky, taleb_shock, taleb_barbell, taleb_optionality, export`).
+Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_minsky, taleb_shock, taleb_sector_shock, taleb_barbell, taleb_optionality, export`).
 
 **Refresh just the data:**
 ```bash
@@ -243,6 +243,7 @@ Detailed usage for each module:
 - [docs/fragility_screen.md](docs/fragility_screen.md) — fragility veto (feeds buy_candidates)
 - [docs/macro_fragility.md](docs/macro_fragility.md) — macro debt fragility (Keen/Minsky)
 - [docs/macro_shock.md](docs/macro_shock.md) — macro supply-shock layer (oil/inflation; the 1973-74 complement)
+- [docs/macro_sector_shock.md](docs/macro_sector_shock.md) — sector shock signals (farming inputs/outputs, materials)
 - [docs/ergodicity_ruin.md](docs/ergodicity_ruin.md) — ergodicity / ruin probability
 - [docs/barbell_check.md](docs/barbell_check.md) — barbell portfolio check
 - [docs/hidden_optionality_audit.md](docs/hidden_optionality_audit.md) — decision-flip audit (American-options method); drove the soft-stress + noise-convolved decision fixes

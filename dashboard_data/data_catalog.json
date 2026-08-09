@@ -1,7 +1,25 @@
 {
-  "generated": "2026-08-09T07:18:56.016485",
-  "count": 224,
+  "generated": "2026-08-09T07:27:59.415097",
+  "count": 227,
   "files": [
+    {
+      "name": "PALLFNFINDEXM",
+      "filename": "PALLFNFINDEXM.csv",
+      "path": "macro_data/PALLFNFINDEXM.csv",
+      "url": "macro_data/PALLFNFINDEXM.csv",
+      "kind": "csv",
+      "size": 12439,
+      "sql_name": "PALLFNFINDEXM"
+    },
+    {
+      "name": "PWHEAMTUSDM",
+      "filename": "PWHEAMTUSDM.csv",
+      "path": "macro_data/PWHEAMTUSDM.csv",
+      "url": "macro_data/PWHEAMTUSDM.csv",
+      "kind": "csv",
+      "size": 12066,
+      "sql_name": "PWHEAMTUSDM"
+    },
     {
       "name": "['all']",
       "filename": "['all'].parquet",
@@ -1126,6 +1144,15 @@
       "kind": "csv",
       "size": 17339,
       "sql_name": "macro_fragility"
+    },
+    {
+      "name": "macro_sector_shock",
+      "filename": "macro_sector_shock.csv",
+      "path": "macro_sector_shock.csv",
+      "url": "macro_sector_shock.csv",
+      "kind": "csv",
+      "size": 104073,
+      "sql_name": "macro_sector_shock"
     },
     {
       "name": "macro_shock",

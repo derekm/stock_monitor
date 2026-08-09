@@ -129,6 +129,7 @@ TABLES = [
     "fragility_screen",
     "macro_fragility",
     "macro_shock",
+    "macro_sector_shock",
     "barbell_check",
     "hidden_optionality",
 ]

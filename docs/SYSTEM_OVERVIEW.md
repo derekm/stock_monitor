@@ -19,8 +19,8 @@ A **modular, offline-capable investment operating system** around a real Robinho
 | **Indexes** | Fertilizer, defensive value, personal, growth/tech |
 | **Allocation** | Factor rotation (quality/value/dual/low-vol/dividend), tail hedges, Black–Litterman |
 | **Execution** | Cost model (10bps + borrow), shadow book (FIFO lots + kill switches), perf metrics (Calmar/capacity) |
-| **Taleb layer** | Fat-tail index, gap risk, fragility screen (micro) + **macro debt fragility (Keen/Minsky)** + **macro supply shock (oil/inflation)**, ergodicity/ruin, barbell check, **hidden-optionality audit** (decision-flip rates), Forecasting-Paradox uncertainty (Student-t predictive + dials of doubt) |
-| **Ops** | Alerts (price + fundamentals), daily automation (34 jobs), DuckDB-Wasm dashboard, analytics API |
+| **Taleb layer** | Fat-tail index, gap risk, fragility screen (micro) + **macro debt fragility (Keen/Minsky)** + **macro supply shock (oil/inflation) + sector shocks (farming/materials)**, ergodicity/ruin, barbell check, **hidden-optionality audit** (decision-flip rates), Forecasting-Paradox uncertainty (Student-t predictive + dials of doubt) |
+| **Ops** | Alerts (price + fundamentals), daily automation (35 jobs), DuckDB-Wasm dashboard, analytics API |
 
 It is designed so **screens, risk budgets, and regime signals** can change weights over time—not a static “buy the trifecta and forget.”
 
@@ -208,7 +208,7 @@ python run_daily_automation.py
 python run_daily_automation.py --only inclusion,stress,rolling_corr,tail_hedge,export
 ```
 
-34 jobs in dependency waves: hmm → rebalance; preferred → inclusion/stress/risk_enrich/rolling/rolling_corr/allpairs/screen_bt/dupont/growth/peer/taleb_tail/taleb_gap; growth+peer → earnings → pairs → cross → aggregate → technical → taleb_optionality → export; taleb_tail → taleb_ergodic → taleb_fragility (with taleb_gap) → taleb_minsky → taleb_shock → taleb_barbell → export; econ_cal/est_rev independent; shadow after preferred+aggregate. Full list in [run_daily_automation.py](../run_daily_automation.py) or `--help`.
+35 jobs in dependency waves: hmm → rebalance; preferred → inclusion/stress/risk_enrich/rolling/rolling_corr/allpairs/screen_bt/dupont/growth/peer/taleb_tail/taleb_gap; growth+peer → earnings → pairs → cross → aggregate → technical → taleb_optionality → export; taleb_tail → taleb_ergodic → taleb_fragility (with taleb_gap) → taleb_minsky → taleb_shock → taleb_sector_shock → taleb_barbell → export; econ_cal/est_rev independent; shadow after preferred+aggregate. Full list in [run_daily_automation.py](../run_daily_automation.py) or `--help`.
 
 Dashboard: `index.html` + `dashboard_data/data.json` (198 resources)
 Services: `analytics_service.py`, `granite_service.py`, `pipeline_service.py`
