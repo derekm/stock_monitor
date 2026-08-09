@@ -1777,12 +1777,13 @@ function widgetEnsureCardTable(sectionId, tableId, title) {
 /** Registry of per-tab live query packs — single place to maintain */
 const LIVE_TAB_WIDGETS = {
   decisions: {
-    duckLabel: "Live: buys + trifecta",
-    queries: [
-      { sql: "SELECT ticker, action, buy_score, decision, momentum_score, factor_composite, sp500_sector, reasons FROM buy_candidates WHERE action IN ('BUY','ACCUMULATE') ORDER BY buy_score DESC", tableId: "tbl-buys", limit: 30 },
-      { sql: "SELECT ticker, name, sector, ev_ebitda, pb_ratio, mktcap_to_assets, in_portfolio FROM value_trifecta ORDER BY ev_ebitda", tableId: "tbl-trifecta", limit: 50 },
-    ],
-  },
+          duckLabel: "Live: buys + trifecta + portfolio valuation",
+          queries: [
+            { sql: "SELECT ticker, action, buy_score, decision, momentum_score, factor_composite, sp500_sector, reasons FROM buy_candidates WHERE action IN ('BUY','ACCUMULATE') ORDER BY buy_score DESC", tableId: "tbl-buys", limit: 30 },
+            { sql: "SELECT ticker, name, sector, ev_ebitda, pb_ratio, mktcap_to_assets, in_portfolio FROM value_trifecta ORDER BY ev_ebitda", tableId: "tbl-trifecta", limit: 50 },
+            { sql: "SELECT f.ticker, h.sector, f.pb_ratio, f.mktcap_to_assets, f.ev_ebitda, f.market_cap_b FROM fundamentals f INNER JOIN holdings h ON f.ticker = h.ticker ORDER BY f.pb_ratio", tableId: "tbl-port-val", limit: 50 },
+          ],
+        },
   portfolio: {
     duckLabel: "Live: holdings",
     queries: [
