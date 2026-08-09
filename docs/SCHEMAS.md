@@ -204,6 +204,8 @@ auxiliary tables feeding several stages.
 | `factor_rotation_performance.csv` | `factor_rotation_defense.py` | Weights / performance |
 | `factor_rotation_weights.csv` | `factor_rotation_defense.py` | Weights / performance |
 | `factor_sleeve_returns.csv` | `factor_rotation_defense.py` | Weights / performance |
+| `factor_groups.csv` | `factor_rotation_defense.py` | Groups (catalog: group → type) |
+| `factor_group_members.csv` | `factor_rotation_defense.py` | Groups (join: group, ticker, valid_from, valid_to) |
 | `growth_tech_sleeve_performance.csv` | `growth_tech_analytics.py` | Weights / performance |
 | `tail_risk_hedge_performance.csv` | `tail_risk_hedging.py` | Weights / performance |
 | `anomalies_tspulse.csv` | `tspulse_anomaly.py` | Forecast / anomaly |
