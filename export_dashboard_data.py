@@ -131,6 +131,7 @@ TABLES = [
     "macro_shock",
     "macro_sector_shock",
     "shock_ride",
+    "subindustry_regime",
     "barbell_check",
     "hidden_optionality",
 ]

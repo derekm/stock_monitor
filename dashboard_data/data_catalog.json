@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-09T08:11:02.097682",
-  "count": 239,
+  "generated": "2026-08-09T09:06:47.611044",
+  "count": 241,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -1990,6 +1990,24 @@
       "kind": "parquet",
       "size": 45015,
       "sql_name": "sp500_universe_tracking"
+    },
+    {
+      "name": "subindustry_regime",
+      "filename": "subindustry_regime.csv",
+      "path": "subindustry_regime.csv",
+      "url": "subindustry_regime.csv",
+      "kind": "csv",
+      "size": 23361587,
+      "sql_name": "subindustry_regime"
+    },
+    {
+      "name": "subindustry_regime_lead",
+      "filename": "subindustry_regime_lead.csv",
+      "path": "subindustry_regime_lead.csv",
+      "url": "subindustry_regime_lead.csv",
+      "kind": "csv",
+      "size": 641,
+      "sql_name": "subindustry_regime_lead"
     },
     {
       "name": "suspected_splits",

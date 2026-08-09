@@ -63,6 +63,7 @@ JOBS = {
     "taleb_shock": (["macro_shock.py", "--save"], 300),
     "taleb_sector_shock": (["macro_sector_shock.py", "--save"], 300),
     "taleb_shock_ride": (["shock_ride.py", "--save"], 300),
+    "taleb_subindustry_regime": (["subindustry_regime.py", "--save"], 900),
     "taleb_barbell": (["barbell_check.py"], 600),
     "taleb_optionality": (["hidden_optionality_audit.py"], 600),
     "export": (["export_dashboard_data.py"], 600),
@@ -98,10 +99,11 @@ DEPS = {
     "taleb_shock": {"hmm"},
     "taleb_sector_shock": {"hmm"},
     "taleb_shock_ride": {"taleb_sector_shock"},
+    "taleb_subindustry_regime": {"taleb_sector_shock"},
     "taleb_barbell": {"taleb_fragility", "taleb_ergodic"},
     "taleb_optionality": {"aggregate", "preferred"},
     "export": {"aggregate", "technical", "econ_cal", "est_rev", "shadow",
-               "taleb_tail", "taleb_gap", "taleb_ergodic", "taleb_fragility", "taleb_minsky", "taleb_shock", "taleb_sector_shock", "taleb_shock_ride", "taleb_barbell",
+               "taleb_tail", "taleb_gap", "taleb_ergodic", "taleb_fragility", "taleb_minsky", "taleb_shock", "taleb_sector_shock", "taleb_shock_ride", "taleb_subindustry_regime", "taleb_barbell",
                "taleb_optionality"},
 }
 

@@ -448,5 +448,7 @@ auxiliary tables feeding several stages.
 | `macro_shock.csv` | `macro_shock.py` | Taleb / fat tails |
 | `macro_sector_shock.csv` | `macro_sector_shock.py` | Taleb / fat tails |
 | `shock_ride.csv` | `shock_ride.py` | Taleb / fat tails |
+| `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails |
+| `subindustry_regime_lead.csv` | `subindustry_regime.py` | Taleb / fat tails |
 | `barbell_check.csv` | `barbell_check.py` | Taleb / fat tails |
 | `hidden_optionality.csv` | `hidden_optionality_audit.py` | Taleb / fat tails |
