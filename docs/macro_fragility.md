@@ -40,6 +40,14 @@ Two findings implemented:
    historical r = +0.79 vs house-price changes. Currently re-accelerating
    (0.05-0.07 after 2023-24 near zero).
 
+5. **Danger zone** — debt impulse labelled by Keen's 2009 thresholds:
+   <5% benign (pre-1970), 5-13% elevated (1987 near-miss), 13-20% danger,
+   ≥20% crisis_band (2008 trigger zone). Current reading: **crisis_band**
+   (2025Q4 crossed from danger; the 2007 precursor peaks sat ~0.37, well
+   above the 0.20 threshold). Since 1980 the US has spent 77 quarters in
+   crisis_band, 69 in danger, 32 elevated, 1 benign — the structural rise
+   of debt-financed demand is Keen's central empirical claim.
+
 ## Data
 
 FRED public CSV endpoints (`fredgraph.csv?id=...`, no API key):
@@ -73,6 +81,10 @@ stale (TTL 35d; FRED publishes with ~1 quarter lag).
   `buy_candidates.regime_stress_prob`), forward-filled quarterly
 - `minsky_signal` — impulse × (1 − p_stress)
 - `minsky_pctile` — rank of the signal over the full history
+- `danger_zone` — Keen 2009 band label: <5% `benign` (pre-1970 normal),
+  5-13% `elevated` (1987 counterfactual zone), 13-20% `danger`,
+  ≥20% `crisis_band` (the 2008 trigger zone; deleveraging reduces demand
+  and forces unemployment). Current reading: crisis_band.
 
 ## Usage
 

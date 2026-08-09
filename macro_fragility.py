@@ -53,7 +53,8 @@ stale (FRED publishes with ~1 quarter lag).
 Outputs:
   macro_fragility.csv — quarterly: date, debt_gdp_ratio, debt_impulse,
                         debt_impulse_v, debt_acceleration, velocity,
-                        p_stress, minsky_signal, minsky_pctile, regime_ctx
+                        p_stress, minsky_signal, minsky_pctile, danger_zone,
+                        regime_ctx
 Reads: FRED CSV (network), hmm_regime_states.csv (via buy_candidates).
 Usage: python macro_fragility.py [--save]
 """
@@ -133,6 +134,24 @@ def minsky_signal(impulse: pd.Series, p_stress: pd.Series) -> pd.Series:
     return impulse * calm
 
 
+# Keen's danger thresholds (2009 AER, §3 + Figure 5): debt-financed demand
+# as a share of aggregate demand was <5% before 1970 (benign), reached
+# ~13% by 1987 (the near-miss counterfactual), and ~20% by 2008 (the
+# crisis zone where deleveraging reduces demand and forces unemployment).
+DANGER_BANDS = [
+    (0.00, 0.05, "benign"),      # pre-1970 normal: <5% of demand from debt
+    (0.05, 0.13, "elevated"),    # 1987 counterfactual zone: 5-13%
+    (0.13, 0.20, "danger"),      # approaching the 2008 crisis level
+    (0.20, float("inf"), "crisis_band"),  # ≥2008 peak: deleveraging triggers
+]
+
+
+def danger_zone(impulse: pd.Series) -> pd.Series:
+    """Label each quarter by Keen's debt-financed-demand danger bands."""
+    return pd.cut(impulse, bins=[b[0] for b in DANGER_BANDS] + [float("inf")],
+                  labels=[b[2] for b in DANGER_BANDS], right=False).astype(str)
+
+
 def load_p_stress(quarters: pd.DatetimeIndex) -> pd.Series:
     """HMM stress posterior, forward-filled onto the quarterly index.
     Uses the same soft-stress belief the buy_candidates gate consumes."""
@@ -200,6 +219,10 @@ def main(save: bool = True):
     p_stress = load_p_stress(df["date"])
     df["p_stress"] = p_stress.to_numpy()
     df["minsky_signal"] = minsky_signal(df["debt_impulse"], df["p_stress"])
+    # Keen danger band: debt-financed demand as share of GDP, labelled by
+    # his 2009 thresholds (<5% benign, 5-13% elevated, 13-20% danger,
+    # >=20% crisis_band).
+    df["danger_zone"] = danger_zone(df["debt_impulse"])
 
     # percentile of the Minsky signal over the FULL history (what "high" means)
     df["minsky_pctile"] = df["minsky_signal"].rank(pct=True).round(3)
@@ -220,7 +243,7 @@ def main(save: bool = True):
     df = df.dropna(subset=["debt_impulse"]).tail(240)  # 60y window
     out_cols = ["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v",
                 "debt_acceleration", "velocity", "p_stress",
-                "minsky_signal", "minsky_pctile", "regime_ctx"]
+                "minsky_signal", "minsky_pctile", "danger_zone", "regime_ctx"]
     df = df[out_cols]
     df["debt_gdp_ratio"] = df["debt_gdp_ratio"].round(3)
     df["debt_impulse"] = df["debt_impulse"].round(4)
@@ -241,12 +264,18 @@ def main(save: bool = True):
           f"accel {last['debt_acceleration']:.4f} | p(stress) {last['p_stress']:.3f}")
     print(f"Minsky signal {last['minsky_signal']:.4f} "
           f"(pctile {last['minsky_pctile']:.0%} of 1945-{date.today().year})")
+    print(f"Danger zone: {last['danger_zone']} "
+          f"(Keen 2009 bands: <5% benign | 5-13% elevated | 13-20% danger | >=20% crisis_band)")
+    # how often each band has appeared since 1980 (the debt era)
+    recent = df[df["date"] >= pd.Timestamp("1980-01-01")]
+    band_counts = recent["danger_zone"].value_counts()
+    print("Band distribution since 1980:", dict(band_counts))
     # extremes
     hi = df.nlargest(5, "minsky_signal")
     print("\nHighest Minsky signal quarters (debt building during calm):")
     print(hi[["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v", "debt_acceleration", "velocity", "p_stress", "minsky_signal"]].to_string(index=False))
     print("\nMost recent 8 quarters:")
-    print(df.tail(8)[["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v", "debt_acceleration", "velocity", "p_stress", "minsky_signal"]].to_string(index=False))
+    print(df.tail(8)[["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v", "debt_acceleration", "velocity", "p_stress", "minsky_signal", "danger_zone"]].to_string(index=False))
     if save:
         print(f"\nWrote {OUT}")
 
