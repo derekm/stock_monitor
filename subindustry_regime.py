@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from hmm_regime_detection import build_features, fit_hmm, label_states
-from macro_sector_shock import _build_baskets, _monthly_returns, _price_universe
+from macro_sector_shock import _build_baskets, _load_price_matrix, _monthly_returns, _price_universe
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "subindustry_regime.csv"
@@ -31,17 +31,19 @@ OUT_LEAD = DATA_DIR / "subindustry_regime_lead.csv"
 
 
 def basket_daily_rets(tickers: list[str]) -> pd.DataFrame:
-    """Daily equal-weight member returns (columns = tickers) for HMM features."""
-    p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
-    p["date"] = pd.to_datetime(p["date"])
-    p = p[p["ticker"].isin(tickers)]
-    if p.empty:
-        return pd.DataFrame()
-    w = p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
-    avail = [t for t in w.columns if w[t].notna().sum() > 500]
+    """Daily equal-weight member returns (columns = tickers) for HMM features.
+
+    Uses the process-wide cached price matrix (single parquet read).
+    """
+    w = _load_price_matrix()
+    avail = [t for t in tickers if t in w.columns]
     if len(avail) < 2:
         return pd.DataFrame()
-    rets = np.log(w[avail] / w[avail].shift(1))
+    ww = w[avail]
+    ww = ww[[c for c in ww.columns if ww[c].notna().sum() > 500]]
+    if len(ww.columns) < 2:
+        return pd.DataFrame()
+    rets = np.log(ww / ww.shift(1))
     return rets.replace([np.inf, -np.inf], np.nan).dropna(how="all")
 
 

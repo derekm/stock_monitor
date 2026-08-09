@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-09T14:39:36.941799",
-  "count": 243,
+  "generated": "2026-08-09T15:59:16.924949",
+  "count": 244,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -8,7 +8,7 @@
       "path": "macro_data/PALLFNFINDEXM.csv",
       "url": "macro_data/PALLFNFINDEXM.csv",
       "kind": "csv",
-      "size": 12024,
+      "size": 12439,
       "sql_name": "PALLFNFINDEXM"
     },
     {
@@ -62,7 +62,7 @@
       "path": "macro_data/PNGASUSUSDM.csv",
       "url": "macro_data/PNGASUSUSDM.csv",
       "kind": "csv",
-      "size": 10092,
+      "size": 10507,
       "sql_name": "PNGASUSUSDM"
     },
     {
@@ -107,7 +107,7 @@
       "path": "macro_data/PWHEAMTUSDM.csv",
       "url": "macro_data/PWHEAMTUSDM.csv",
       "kind": "csv",
-      "size": 11651,
+      "size": 12066,
       "sql_name": "PWHEAMTUSDM"
     },
     {
@@ -1925,8 +1925,17 @@
       "path": "shock_ride.csv",
       "url": "shock_ride.csv",
       "kind": "csv",
-      "size": 19075,
+      "size": 26959,
       "sql_name": "shock_ride"
+    },
+    {
+      "name": "shock_ride_tickers",
+      "filename": "shock_ride_tickers.csv",
+      "path": "shock_ride_tickers.csv",
+      "url": "shock_ride_tickers.csv",
+      "kind": "csv",
+      "size": 86996,
+      "sql_name": "shock_ride_tickers"
     },
     {
       "name": "signal_aggregator_ic",
@@ -2024,7 +2033,7 @@
       "path": "subindustry_regime_lead.csv",
       "url": "subindustry_regime_lead.csv",
       "kind": "csv",
-      "size": 12959,
+      "size": 12899,
       "sql_name": "subindustry_regime_lead"
     },
     {

@@ -154,19 +154,28 @@ def _build_baskets(have: set[str]) -> dict[str, dict]:
     return baskets
 
 
+_PRICE_CACHE: dict | None = None
+
+
+def _load_price_matrix() -> pd.DataFrame:
+    """Load + pivot daily_prices ONCE per process; reuse across baskets."""
+    global _PRICE_CACHE
+    if _PRICE_CACHE is None:
+        p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
+        p["date"] = pd.to_datetime(p["date"])
+        _PRICE_CACHE = p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
+    return _PRICE_CACHE
+
+
 def _monthly_returns(tickers: list[str]) -> pd.Series:
-    """Equal-weight monthly log returns for a ticker list."""
-    p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
-    p["date"] = pd.to_datetime(p["date"])
-    # restrict early
-    p = p[p["ticker"].isin(tickers)]
-    if p.empty:
+    """Equal-weight monthly log returns of a basket (cached price matrix)."""
+    w = _load_price_matrix()
+    avail = [t for t in tickers if t in w.columns]
+    if not avail:
         return pd.Series(dtype=float)
-    w = p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
-    # drop tickers with thin history
-    keep = [c for c in w.columns if w[c].notna().sum() >= MIN_OBS_PER_TICKER]
+    keep = [c for c in avail if w[c].notna().sum() >= MIN_OBS_PER_TICKER]
     if len(keep) < MIN_SUB_N:
-        keep = list(w.columns)
+        keep = avail
     if not keep:
         return pd.Series(dtype=float)
     r = np.log(w[keep] / w[keep].shift(1)).mean(axis=1)

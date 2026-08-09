@@ -27,21 +27,36 @@ OUT_TRANS = DATA_DIR / "hmm_transition_matrix.csv"
 
 
 def build_features(rets: pd.DataFrame, corr_window: int = 21) -> pd.DataFrame:
+    """Vectorized HMM features: mkt_ret, vol21, avg pairwise corr.
+
+    avg_corr computed via pandas C-level rolling().corr() in chunks
+    to avoid large intermediate arrays on wide/long baskets.
+    """
     mkt = rets.mean(axis=1)
     vol21 = mkt.rolling(21).std() * np.sqrt(252)
-    # rolling avg pairwise corr (subsample columns for speed)
-    cols = list(rets.columns[:40])
-    avg_corr = []
-    idx = []
-    for i in range(corr_window, len(rets)):
-        block = rets[cols].iloc[i - corr_window : i]
-        c = block.corr().values
-        mask = np.triu(np.ones(c.shape, dtype=bool), 1)
-        avg_corr.append(float(np.nanmean(c[mask])))
-        idx.append(rets.index[i])
-    feat = pd.DataFrame({"mkt_ret": mkt, "vol21": vol21}, index=rets.index)
-    feat["avg_corr"] = pd.Series(avg_corr, index=idx)
+    k = rets.shape[1]
+    if k >= 2:
+        # Process in chunks to avoid massive intermediate corr matrix
+        # (N, k, k) can be huge: 16k × 161 × 161 = 415M floats
+        chunk_size = min(2000, len(rets))
+        avg_corr = np.full(len(rets), np.nan)
+        for start in range(0, len(rets), chunk_size):
+            end = min(start + chunk_size, len(rets))
+            chunk = rets.iloc[start:end]
+            if len(chunk) >= corr_window:
+                rc = chunk.rolling(corr_window).corr()
+                rc_np = rc.values.reshape(len(chunk), k, k)
+                tri = np.triu(np.ones((k, k), dtype=bool), 1)
+                avg_corr[start:end] = rc_np[:, tri].mean(axis=1)
+        # Fill leading NaNs where window not yet filled
+        avg_corr[:corr_window-1] = np.nan
+    else:
+        avg_corr = np.full(len(rets), np.nan)
+    feat = pd.DataFrame(
+        {"mkt_ret": mkt, "vol21": vol21, "avg_corr": avg_corr}, index=rets.index
+    )
     return feat.dropna()
+
 
 
 def fit_hmm(feat: pd.DataFrame, n_states: int = 3, seed: int = 7):

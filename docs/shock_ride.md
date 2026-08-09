@@ -26,6 +26,12 @@ see macro_sector_shock.py), measures a simple ride rule against buy-hold:
 n_trades, in_market_share, buy_hold_return, ride_return, excess,
 max_dd_ride, max_dd_buyhold`
 
+`shock_ride_tickers.csv` — **per-ticker** ride pass over the full price
+universe (min 36mo history): `ticker, name, sector, n_trades,
+in_market_share, buy_hold_return, ride_return, excess, max_dd_ride,
+max_dd_buyhold, mom1, mom3, mom12, ride_long, recommendation,
+interpretation, as_of`
+
 ## Usage
 
 ```bash

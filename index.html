@@ -818,6 +818,16 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
       </div>
     </div>
 
+
+
+    <div class="card" id="ride-tickers-card" style="margin-bottom:0.85rem">
+      <h3>Ride NOW — per-ticker <span class="info-ic" data-gloss="rideRec">i</span>
+        <span class="live-badge" id="ride-tickers-status">…</span></h3>
+      <p class="hint">Same ride rule, applied to every ticker in the price universe (12m mom &gt; 40% ∧ 3m mom &gt; 0 = long; 3m rollover = exit). BUY = still accelerating. STAND DOWN = momentum says long but 1m rolling over. AVOID = exploded but rolled over.</p>
+      <div class="scroll tall">
+        <table id="tbl-ride-tickers"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
 <h3>Macro debt fragility (Keen) <button id="live-refresh-macro" class="live-btn" type="button">↻</button></h3>
         <p class="hint">Quarterly TCMDO/GDP, debt impulse, velocity-scaled impulse, Credit Accelerator, Minsky signal, danger zone. Latest first.</p>
         <div class="scroll tall"><table id="tbl-macro-fragility"><thead></thead><tbody></tbody></table></div>
@@ -1912,6 +1922,11 @@ function tagSignal(pct) {
 
 /* ===== investor presentation layer (audit 2026-08) ===== */
 const HEADER_LABELS = {
+  "interpretation": "Why",
+  "max_dd_ride": "MaxDD ride",
+  "excess": "Excess",
+  "sector": "Sector",
+  "recommendation": "Rec",
   "recommendation": "Recommendation",
   "label": "Basket",
   "basket_kind": "Kind",
@@ -5470,6 +5485,45 @@ async function renderMacroPulse() {
 }
 
 
+
+async function renderRideTickers() {
+  const tbl = document.querySelector("#tbl-ride-tickers");
+  const st = document.querySelector("#ride-tickers-status");
+  if (!tbl) return;
+  try {
+    const rows = await liveTable("shock_ride_tickers");
+    if (!rows || !rows.length) { if (st) st.textContent = "no data"; return; }
+    const rank = { "BUY": 0, "STAND DOWN": 1, "AVOID": 2, "WATCH": 3, "FLAT": 4 };
+    const sorted = rows.slice().sort((a, b) => {
+      const ra = rank[a.recommendation] ?? 9, rb = rank[b.recommendation] ?? 9;
+      if (ra !== rb) return ra - rb;
+      return (b.mom12 || 0) - (a.mom12 || 0);
+    });
+    const visible = sorted.filter(r => (rank[r.recommendation] ?? 9) < 4).concat(
+      sorted.filter(r => (rank[r.recommendation] ?? 9) === 4).slice(0, 10));
+    const cols = ["ticker", "name", "sector", "recommendation", "mom1", "mom3", "mom12",
+                  "excess", "max_dd_ride", "interpretation"];
+    fillSimple("#tbl-ride-tickers", visible.map(r => ({
+      ticker: (r.ticker || ""),
+      name: r.name || "",
+      sector: r.sector || "",
+      recommendation: `<span class="zone-tag rec-${(r.recommendation||"FLAT").toLowerCase().replace(/ /g,"-")}">${r.recommendation || "FLAT"}</span>`,
+      mom1: r.mom1, mom3: r.mom3, mom12: r.mom12,
+      excess: r.excess,
+      max_dd_ride: r.max_dd_ride,
+      interpretation: r.interpretation,
+    })), cols);
+    const nBuy = sorted.filter(r => r.recommendation === "BUY").length;
+    const nStand = sorted.filter(r => r.recommendation === "STAND DOWN").length;
+    const nAvoid = sorted.filter(r => r.recommendation === "AVOID").length;
+    if (st) st.textContent = `${nBuy} buy · ${nStand} stand down · ${nAvoid} avoid · ${sorted.length} tickers`;
+    attachPopovers();
+  } catch (e) {
+    console.warn("renderRideTickers", e);
+    if (st) st.textContent = "error";
+  }
+}
+
 async function renderRideNow() {
   const tbl = document.querySelector("#tbl-ride-now");
   const st = document.querySelector("#ride-now-status");
@@ -5585,6 +5639,7 @@ async function renderFragility() {
     if (status) status.textContent = `DuckDB · macro ${nMacro.toLocaleString()} · micro ${nMicro.toLocaleString()} · sub ${(sub||[]).length.toLocaleString()}`;
     if (typeof populateBasketExplorer === "function") { try { await populateBasketExplorer(); } catch (e) { console.warn(e); } }
     if (typeof renderRideNow === "function") { try { await renderRideNow(); } catch (e) { console.warn(e); } }
+    if (typeof renderRideTickers === "function") { try { await renderRideTickers(); } catch (e) { console.warn(e); } }
   } catch (e) {
     if (status) status.textContent = e.message || String(e);
     console.error("renderFragility", e);
