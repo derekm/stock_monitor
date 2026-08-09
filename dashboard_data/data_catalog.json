@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-09T17:26:57.741947",
+  "generated": "2026-08-09T18:46:29.317843",
   "count": 249,
   "files": [
     {
@@ -469,6 +469,15 @@
       "kind": "json",
       "size": 463,
       "sql_name": "data_integrity_deep_summary"
+    },
+    {
+      "name": "decision_notes",
+      "filename": "decision_notes.csv",
+      "path": "decision_notes.csv",
+      "url": "decision_notes.csv",
+      "kind": "csv",
+      "size": 517,
+      "sql_name": "decision_notes"
     },
     {
       "name": "defensive",
@@ -1259,7 +1268,7 @@
       "path": "low_ev_ebitda.csv",
       "url": "low_ev_ebitda.csv",
       "kind": "csv",
-      "size": 122947,
+      "size": 122950,
       "sql_name": "low_ev_ebitda"
     },
     {
@@ -1268,7 +1277,7 @@
       "path": "low_pb.csv",
       "url": "low_pb.csv",
       "kind": "csv",
-      "size": 143929,
+      "size": 143932,
       "sql_name": "low_pb"
     },
     {
@@ -1495,15 +1504,6 @@
       "kind": "csv",
       "size": 300213,
       "sql_name": "peer_recovery_signals"
-    },
-    {
-      "name": "portfolio",
-      "filename": "portfolio.parquet",
-      "path": "ttm_panels/portfolio.parquet",
-      "url": "ttm_panels/portfolio.parquet",
-      "kind": "parquet",
-      "size": 0,
-      "sql_name": "portfolio"
     },
     {
       "name": "portfolio_ergodic",

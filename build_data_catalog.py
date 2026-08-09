@@ -28,6 +28,10 @@ def main():
             size = p.stat().st_size
         except OSError:
             continue
+        if size <= 0:
+            # 0-byte parquet/csv would break DuckDB registration ("too small to be a parquet file")
+            print(f"skip {rel} (0 bytes)")
+            continue
         files.append({
             "name": p.stem,
             "filename": p.name,

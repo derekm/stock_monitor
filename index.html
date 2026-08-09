@@ -1781,7 +1781,13 @@ const LIVE_TAB_WIDGETS = {
           queries: [
             { sql: "SELECT ticker, action, buy_score, decision, momentum_score, factor_composite, sp500_sector, reasons FROM buy_candidates WHERE action IN ('BUY','ACCUMULATE') ORDER BY buy_score DESC", tableId: "tbl-buys", limit: 30 },
             { sql: "SELECT ticker, name, sector, ev_ebitda, pb_ratio, mktcap_to_assets, in_portfolio FROM value_trifecta ORDER BY ev_ebitda", tableId: "tbl-trifecta", limit: 50 },
-            { sql: "SELECT f.ticker, h.sector, f.pb_ratio, f.mktcap_to_assets, f.ev_ebitda, f.market_cap_b FROM fundamentals f INNER JOIN holdings h ON f.ticker = h.ticker ORDER BY f.pb_ratio", tableId: "tbl-port-val", limit: 50 },
+            { sql: "SELECT f.ticker, h.sector, f.pb_ratio, f.mktcap_to_assets, f.ev_ebitda, f.market_cap_b FROM (SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY as_of_date DESC) AS rn FROM fundamentals) WHERE rn = 1) f INNER JOIN holdings h ON f.ticker = h.ticker ORDER BY f.pb_ratio", tableId: "tbl-port-val", limit: 50 },
+            // KPI counts & decision memos
+            { sql: "SELECT COUNT(*) as cnt FROM holdings", tableId: "kpi-holdings", limit: 1 },
+            { sql: "SELECT COUNT(*) as cnt FROM value_trifecta", tableId: "kpi-trifecta", limit: 1 },
+            { sql: "SELECT COUNT(DISTINCT ticker) as cnt FROM monitored_stocks WHERE status = 'active'", tableId: "kpi-univ", limit: 1 },
+            { sql: "SELECT COUNT(*) as cnt FROM anomalies", tableId: "kpi-anom", limit: 1 },
+            { sql: "SELECT title, detail FROM decision_notes ORDER BY CASE WHEN title LIKE '%portfolio%' THEN 0 WHEN title LIKE '%Dual-pass%' THEN 1 WHEN title LIKE '%Value trifecta%' THEN 2 ELSE 3 END", tableId: "decision-list", limit: 20 },
           ],
         },
   portfolio: {
@@ -2141,6 +2147,10 @@ function zoneTag(v) {
   const s = String(v ?? "");
   const cls = _zoneClass(s);
   return `<span class="${cls}">${s || "—"}</span>`;
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function fmtCell(key, v) {
@@ -2934,7 +2944,24 @@ async function duckQuery(sql, tableId, limit) {
     }
     rows.push(o);
   }
-  if (tableId) fillTable(tableId, rows, fields);
+  if (tableId) {
+    // Special handling for KPI count cards (div.kpi) vs tables
+    const kpiEl = document.getElementById(tableId);
+    if (kpiEl && kpiEl.classList && kpiEl.classList.contains("kpi")) {
+      const val = rows.length > 0 ? (rows[0].cnt ?? rows[0].cnt ?? "—") : "—";
+      kpiEl.innerHTML = `${val}<br><small>${kpiEl.querySelector("small")?.textContent || ""}</small>`;
+    } else if (tableId === "decision-list") {
+      // Decision memos render as styled cards, not a table
+      kpiEl.innerHTML = rows.length
+        ? rows.map(n => `<div class="decision"><h4>${esc(n.title || "")}</h4><p>${esc(n.detail || "")}</p></div>`).join("")
+        : '<div class="decision"><h4>No decision notes</h4><p>Re-run export_dashboard_data.py after analytics.</p></div>';
+    } else if (kpiEl && kpiEl.tagName !== "TABLE") {
+      // Non-table targets: fill as plain text list
+      kpiEl.innerHTML = rows.length ? rows.map(r => `<div>${fmtCell(Object.keys(r)[0] || "", Object.values(r)[0])}</div>`).join("") : "";
+    } else {
+      fillTable(tableId, rows, fields);
+    }
+  }
   return rows;
 }
 

@@ -378,9 +378,10 @@ def main():
         "low_ev_ebitda": pd.DataFrame(payload.get("low_ev_ebitda", [])) if payload.get("low_ev_ebitda") else pd.DataFrame(),
         "low_pb": pd.DataFrame(payload.get("low_pb", [])) if payload.get("low_pb") else pd.DataFrame(),
         "anomalies": pd.DataFrame(payload.get("anomalies", [])) if payload.get("anomalies") else pd.DataFrame(),
+        "decision_notes": pd.DataFrame(payload.get("decision_notes", [])),
     }
     for tname, tdf in computed_dash_tables.items():
-        if tdf is not None and not tdf.empty:
+        if tdf is not None and len(tdf) > 0:
             tdf.to_csv(DATA_DIR / f"{tname}.csv", index=False)
             print(f"  wrote {tname}.csv ({len(tdf)} rows)")
 
