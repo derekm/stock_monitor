@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-08T23:11:21.420594",
-  "count": 218,
+  "generated": "2026-08-09T07:18:56.016485",
+  "count": 224,
   "files": [
     {
       "name": "['all']",
@@ -226,6 +226,15 @@
       "kind": "csv",
       "size": 1283,
       "sql_name": "cov_ledoit_wolf_portfolio"
+    },
+    {
+      "name": "cpi",
+      "filename": "cpi.csv",
+      "path": "macro_data/cpi.csv",
+      "url": "macro_data/cpi.csv",
+      "kind": "csv",
+      "size": 17420,
+      "sql_name": "cpi"
     },
     {
       "name": "crisis_avg_corr_timeseries",
@@ -559,6 +568,15 @@
       "kind": "csv",
       "size": 19170504,
       "sql_name": "factor_sleeve_returns"
+    },
+    {
+      "name": "fedfunds",
+      "filename": "fedfunds.csv",
+      "path": "macro_data/fedfunds.csv",
+      "url": "macro_data/fedfunds.csv",
+      "kind": "csv",
+      "size": 14682,
+      "sql_name": "fedfunds"
     },
     {
       "name": "fertilizer",
@@ -1092,13 +1110,31 @@
       "sql_name": "kelly_parameters"
     },
     {
+      "name": "m2_velocity",
+      "filename": "m2_velocity.csv",
+      "path": "macro_data/m2_velocity.csv",
+      "url": "macro_data/m2_velocity.csv",
+      "kind": "csv",
+      "size": 4851,
+      "sql_name": "m2_velocity"
+    },
+    {
       "name": "macro_fragility",
       "filename": "macro_fragility.csv",
       "path": "macro_fragility.csv",
       "url": "macro_fragility.csv",
       "kind": "csv",
-      "size": 10312,
+      "size": 17339,
       "sql_name": "macro_fragility"
+    },
+    {
+      "name": "macro_shock",
+      "filename": "macro_shock.csv",
+      "path": "macro_shock.csv",
+      "url": "macro_shock.csv",
+      "kind": "csv",
+      "size": 35622,
+      "sql_name": "macro_shock"
     },
     {
       "name": "mcmc_regime_means",
@@ -1198,6 +1234,15 @@
       "kind": "csv",
       "size": 1423,
       "sql_name": "near_dual_candidates"
+    },
+    {
+      "name": "oilprice",
+      "filename": "oilprice.csv",
+      "path": "macro_data/oilprice.csv",
+      "url": "macro_data/oilprice.csv",
+      "kind": "csv",
+      "size": 14332,
+      "sql_name": "oilprice"
     },
     {
       "name": "options_skew",
@@ -1963,6 +2008,15 @@
       "kind": "parquet",
       "size": 4147,
       "sql_name": "vol_targets"
+    },
+    {
+      "name": "wti",
+      "filename": "wti.csv",
+      "path": "macro_data/wti.csv",
+      "url": "macro_data/wti.csv",
+      "kind": "csv",
+      "size": 8776,
+      "sql_name": "wti"
     }
   ]
 }

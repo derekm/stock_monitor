@@ -70,10 +70,10 @@ python forecast_granite.py forecast --index portfolio --from-first-trade --horiz
 
 **Full daily refresh (recommended):** run the master orchestrator, or trigger it from the dashboard
 ```bash
-python run_daily_automation.py   # 33 jobs: hmm → rebalance → preferred → inclusion → stress → crisis → factor_rot → risk_enrich → rolling → rolling_corr → tail_hedge → allpairs → fund_snap → screen_bt → dupont → growth → peer → earnings → pairs → cross → aggregate → technical → econ_cal → est_rev → shadow → taleb_tail → taleb_gap → taleb_ergodic → taleb_fragility → taleb_minsky → taleb_barbell → taleb_optionality → export
+python run_daily_automation.py   # 34 jobs: hmm → rebalance → preferred → inclusion → stress → crisis → factor_rot → risk_enrich → rolling → rolling_corr → tail_hedge → allpairs → fund_snap → screen_bt → dupont → growth → peer → earnings → pairs → cross → aggregate → technical → econ_cal → est_rev → shadow → taleb_tail → taleb_gap → taleb_ergodic → taleb_fragility → taleb_minsky → taleb_shock → taleb_barbell → taleb_optionality → export
 # or from the dashboard Ops tab: analytics_service POST /run/all-daily
 ```
-Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_minsky, taleb_barbell, taleb_optionality, export`).
+Selective: `python run_daily_automation.py --only inclusion,stress,export` (valid job names: `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_minsky, taleb_shock, taleb_barbell, taleb_optionality, export`).
 
 **Refresh just the data:**
 ```bash
@@ -145,7 +145,7 @@ Backfilled rows are stamped `source='yfinance'`. We do NOT synthesize history
 | **Signals** | Preferred/peer/cross/pairs/earnings families → **OOS-IC-weighted aggregator** + GradientBoosting blend; technical (RSI/MACD/Bollinger), options skew & put/call, estimate revisions, 8-K filings sentiment |
 | **Forecasting** | Granite TTM (or statistical fallback), multivariate, exogenous, sector EW, **regime-selected models** (pass5/6/7/8), **Student-t MC-dropout uncertainty** (`forecast_nu`), **dials of doubt** (`--epistemic-error`), per-span direction accuracy (H+10..96) |
 | **Anomalies** | TSPulse-ready + statistical z-score / dispersion shocks |
-| **Taleb layer** | Fat-tail index (`tail_index`), gap risk (`gap_risk`), fragility veto (`fragility_screen`) + macro debt fragility (`macro_fragility`), ergodicity/ruin (`ergodicity_ruin`), barbell check (`barbell_check`), **hidden-optionality audit** (`hidden_optionality_audit` — decision flip rates); soft-stress posterior + noise-convolved decisions in `buy_candidates` |
+| **Taleb layer** | Fat-tail index (`tail_index`), gap risk (`gap_risk`), fragility veto (`fragility_screen`) + macro debt fragility (`macro_fragility`) + macro supply-shock layer (`macro_shock`), ergodicity/ruin (`ergodicity_ruin`), barbell check (`barbell_check`), **hidden-optionality audit** (`hidden_optionality_audit` — decision flip rates); soft-stress posterior + noise-convolved decisions in `buy_candidates` |
 | **Fisher indexes** | Chained Laspeyres / Paasche / Fisher P&Q + √(Fp×Fq) nominal |
 | **Costs & execution** | Cost model (10bps + borrow) in backtests; **shadow book** paper-trading with FIFO lots + kill switches; perf metrics (Sharpe/Sortino/Calmar/capacity) |
 | **Dashboard** | Decision memos, SQL Lab, CSV catalog, Chart.js, DuckDB-Wasm Fisher, Sprint Engines tab |
@@ -242,6 +242,7 @@ Detailed usage for each module:
 - [docs/gap_risk.md](docs/gap_risk.md) — gap risk screen
 - [docs/fragility_screen.md](docs/fragility_screen.md) — fragility veto (feeds buy_candidates)
 - [docs/macro_fragility.md](docs/macro_fragility.md) — macro debt fragility (Keen/Minsky)
+- [docs/macro_shock.md](docs/macro_shock.md) — macro supply-shock layer (oil/inflation; the 1973-74 complement)
 - [docs/ergodicity_ruin.md](docs/ergodicity_ruin.md) — ergodicity / ruin probability
 - [docs/barbell_check.md](docs/barbell_check.md) — barbell portfolio check
 - [docs/hidden_optionality_audit.md](docs/hidden_optionality_audit.md) — decision-flip audit (American-options method); drove the soft-stress + noise-convolved decision fixes
