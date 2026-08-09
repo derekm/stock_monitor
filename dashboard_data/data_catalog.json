@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-09T17:18:42.589603",
-  "count": 244,
+  "generated": "2026-08-09T17:26:57.741947",
+  "count": 249,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -208,6 +208,15 @@
       "kind": "parquet",
       "size": 4184,
       "sql_name": "analysis_snapshot"
+    },
+    {
+      "name": "anomalies",
+      "filename": "anomalies.csv",
+      "path": "anomalies.csv",
+      "url": "anomalies.csv",
+      "kind": "csv",
+      "size": 14657,
+      "sql_name": "anomalies"
     },
     {
       "name": "anomalies_tspulse",
@@ -1137,6 +1146,15 @@
       "sql_name": "hmm_uncertain_days"
     },
     {
+      "name": "holdings",
+      "filename": "holdings.csv",
+      "path": "holdings.csv",
+      "url": "holdings.csv",
+      "kind": "csv",
+      "size": 1672,
+      "sql_name": "holdings"
+    },
+    {
       "name": "inclusion_candidates",
       "filename": "inclusion_candidates.csv",
       "path": "inclusion_candidates.csv",
@@ -1234,6 +1252,24 @@
       "kind": "parquet",
       "size": 8373,
       "sql_name": "kelly_parameters"
+    },
+    {
+      "name": "low_ev_ebitda",
+      "filename": "low_ev_ebitda.csv",
+      "path": "low_ev_ebitda.csv",
+      "url": "low_ev_ebitda.csv",
+      "kind": "csv",
+      "size": 122947,
+      "sql_name": "low_ev_ebitda"
+    },
+    {
+      "name": "low_pb",
+      "filename": "low_pb.csv",
+      "path": "low_pb.csv",
+      "url": "low_pb.csv",
+      "kind": "csv",
+      "size": 143929,
+      "sql_name": "low_pb"
     },
     {
       "name": "m2_velocity",
@@ -2152,6 +2188,15 @@
       "kind": "json",
       "size": 3161,
       "sql_name": "ttm_rpt_8000_config"
+    },
+    {
+      "name": "value_trifecta",
+      "filename": "value_trifecta.csv",
+      "path": "value_trifecta.csv",
+      "url": "value_trifecta.csv",
+      "kind": "csv",
+      "size": 718,
+      "sql_name": "value_trifecta"
     },
     {
       "name": "vix_term_structure",

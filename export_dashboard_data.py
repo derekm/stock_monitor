@@ -369,6 +369,21 @@ def main():
     else:
         payload["anomalies"] = []
 
+    # ── Persist computed dashboard tables as CSV so DuckDB-Wasm can register them ──
+    # (these are computed payload keys — not producer files — so the catalog only
+    #  knows them if we write them to disk here)
+    computed_dash_tables = {
+        "holdings": holdings,
+        "value_trifecta": pd.DataFrame(payload["value_trifecta"]) if payload.get("value_trifecta") else pd.DataFrame(),
+        "low_ev_ebitda": pd.DataFrame(payload.get("low_ev_ebitda", [])) if payload.get("low_ev_ebitda") else pd.DataFrame(),
+        "low_pb": pd.DataFrame(payload.get("low_pb", [])) if payload.get("low_pb") else pd.DataFrame(),
+        "anomalies": pd.DataFrame(payload.get("anomalies", [])) if payload.get("anomalies") else pd.DataFrame(),
+    }
+    for tname, tdf in computed_dash_tables.items():
+        if tdf is not None and not tdf.empty:
+            tdf.to_csv(DATA_DIR / f"{tname}.csv", index=False)
+            print(f"  wrote {tname}.csv ({len(tdf)} rows)")
+
     # Forecasts snapshot if present
     fc = load("forecasts_granite")
     if fc is not None and not fc.empty and "horizon" in fc.columns:
