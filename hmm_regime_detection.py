@@ -24,6 +24,19 @@ PRICES = DATA_DIR / "daily_prices.parquet"
 OUT_STATES = DATA_DIR / "hmm_regime_states.csv"
 OUT_SUM = DATA_DIR / "hmm_regime_summary.csv"
 OUT_TRANS = DATA_DIR / "hmm_transition_matrix.csv"
+OUT_TRIGGERS = DATA_DIR / "hmm_transition_triggers.csv"
+
+# Window policy (adaptive, not a fixed default):
+#   - Fit only on the current regime episode: data since the last detected
+#     transition (from the previous run's triggers file), plus a context
+#     floor so EM never starves.
+#   - Floor: at least 2 full regime cycles of median dwell (empirically
+#     252d floor / 756d cap). A fixed 504d default is wrong: after a fresh
+#     transition it dilutes the new regime with the old one; late in a
+#     long regime it throws away usable history.
+WINDOW_MIN = 252
+WINDOW_CAP = 756
+WINDOW_FALLBACK = 504  # no prior triggers file (first run)
 
 
 def build_features(rets: pd.DataFrame, corr_window: int = 21) -> pd.DataFrame:
@@ -47,7 +60,9 @@ def build_features(rets: pd.DataFrame, corr_window: int = 21) -> pd.DataFrame:
                 rc = chunk.rolling(corr_window).corr()
                 rc_np = rc.values.reshape(len(chunk), k, k)
                 tri = np.triu(np.ones((k, k), dtype=bool), 1)
-                avg_corr[start:end] = rc_np[:, tri].mean(axis=1)
+                # NaN pairs (short-history tickers) must not poison the mean:
+                # any NaN in a date's corr matrix used to kill the whole row.
+                avg_corr[start:end] = np.nanmean(rc_np[:, tri], axis=1)
         # Fill leading NaNs where window not yet filled
         avg_corr[:corr_window-1] = np.nan
     else:
@@ -102,12 +117,37 @@ def label_states(feat: pd.DataFrame, states: np.ndarray) -> dict[int, str]:
     return labels, g
 
 
-def run(n_states: int = 3, save: bool = True, window_days: int | None = None):
+def adaptive_window(wide: pd.DataFrame) -> int | None:
+    """Pick fit window from the last regime transition (previous run's triggers).
+
+    Returns None for full history when no prior triggers exist.
+    """
+    if not OUT_TRIGGERS.exists():
+        return WINDOW_FALLBACK
+    try:
+        trig = pd.read_csv(OUT_TRIGGERS, parse_dates=["date"])
+        if trig.empty:
+            return WINDOW_FALLBACK
+        last = pd.Timestamp(trig["date"].max())
+        since = (wide.index[-1] - last).days
+        # Fit from the transition itself, but never below the floor.
+        return int(min(WINDOW_CAP, max(WINDOW_MIN, since)))
+    except Exception:
+        return WINDOW_FALLBACK
+
+
+def run(n_states: int = 3, save: bool = True, window_days: int | None = "auto"):
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
     prices["date"] = pd.to_datetime(prices["date"])
     wide = prices.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
+    if window_days == "auto":
+        window_days = adaptive_window(wide)
+        if window_days is not None:
+            print(f"[hmm] adaptive window: {window_days} trading days (last transition policy)")
+    elif window_days is not None and window_days <= 0:
+        window_days = None  # explicit 0 = full history
     # Rolling window: fit only on recent history (older regimes pollute EM).
-    # Regime dynamics change — 2y default keeps the fit focused and fast.
+    # Regime dynamics change — the adaptive window focuses on the current episode.
     if window_days is not None and len(wide) > window_days:
         wide = wide.iloc[-window_days:]
     rets = np.log(wide / wide.shift(1)).dropna(how="all")
@@ -163,11 +203,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-states", type=int, default=3)
     ap.add_argument("--save", action="store_true")
-    ap.add_argument("--window-days", type=int, default=504,
-                    help="Fit only on recent N trading days (default 504 ≈ 2y). "
-                         "Pass 0 for full history.")
+    ap.add_argument("--window-days", default="auto",
+                    help="Fit window in trading days. 'auto' (default) anchors to "
+                         "the last regime transition (floor 252 / cap 756). "
+                         "Pass a number for a fixed window, 0 for full history.")
     args = ap.parse_args()
-    wd = None if args.window_days <= 0 else args.window_days
+    wd: int | str | None
+    if args.window_days == "auto":
+        wd = "auto"
+    else:
+        wd = int(args.window_days)
     run(n_states=args.n_states, save=True, window_days=wd)
 
 

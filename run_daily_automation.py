@@ -30,7 +30,7 @@ DATA_DIR = Path(__file__).parent
 
 # name -> (cmd, timeout_s)
 JOBS = {
-    "hmm": (["hmm_regime_detection.py", "--n-states", "3", "--save", "--window-days", "504"], None),
+    "hmm": (["hmm_regime_detection.py", "--n-states", "3", "--save"], None),
     "rebalance": (["rebalance_calendar.py", "--months", "18", "--save"], None),
     "preferred": (["preferred_metrics.py", "--save"], None),
     "inclusion": (["inclusion_criteria.py", "--explore-defensive", "--save"], None),
