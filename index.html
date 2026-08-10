@@ -527,6 +527,11 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
       </div>
     </div>
     <div class="card" style="margin-top:1rem">
+      <h3>Implied cost of capital (Ohlson-Rueangsuwan 2026 · r = 2·ROE/(P/B+1))</h3>
+      <p class="section-intro" style="margin:0.2rem 0 0.5rem">Market-implied r from the RIV reduced form (g=r/2). High implied r = cheap (market demands a fat return); low = rich. Cross-check against the trifecta — not a standalone signal.</p>
+      <div class="scroll" style="max-height:360px"><table id="tbl-implied-r"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card" style="margin-top:1rem">
       <h3>Full fundamentals (sortable via SQL Lab)</h3>
       <div class="scroll" style="max-height:360px"><table id="tbl-fund"><thead></thead><tbody></tbody></table></div>
     </div>
@@ -1822,6 +1827,7 @@ const LIVE_TAB_WIDGETS = {
     queries: [
       { sql: "SELECT ticker, name, sector, ev_ebitda, pb_ratio, mktcap_to_assets, market_cap_b, in_portfolio FROM low_ev_ebitda ORDER BY ev_ebitda", tableId: "tbl-low-ev", limit: 20 },
       { sql: "SELECT ticker, name, sector, pb_ratio, mktcap_to_assets, ev_ebitda, in_portfolio FROM low_pb ORDER BY pb_ratio", tableId: "tbl-low-pb", limit: 15 },
+      { sql: "SELECT ticker, price, bvps, pb_ratio, roe, implied_r_pct, fwd_pe_bench, verdict, mktcap_b, ev_ebitda, roic, triplet_ok FROM implied_r_screen ORDER BY implied_r_pct DESC", tableId: "tbl-implied-r", limit: 40 },
       { sql: "SELECT ticker, momentum_score, mom_12_1, ret_63d, resid_mom_63, momentum_quintile FROM momentum_metrics ORDER BY momentum_score DESC", tableId: "tbl-fund", limit: 40 },
     ],
   },

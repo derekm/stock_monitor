@@ -33,6 +33,7 @@ JOBS = {
     "hmm": (["hmm_regime_detection.py", "--n-states", "3", "--save"], None),
     "rebalance": (["rebalance_calendar.py", "--months", "18", "--save"], None),
     "preferred": (["preferred_metrics.py", "--save"], None),
+    "implied_r": (["implied_r_screen.py", "--save"], None),
     "inclusion": (["inclusion_criteria.py", "--explore-defensive", "--save"], None),
     "stress": (["stress_dual_pass.py", "--save"], None),
     "crisis": (["crisis_correlation.py", "--save"], None),
@@ -74,6 +75,7 @@ JOBS = {
 DEPS = {
     "rebalance": {"hmm"},
     "inclusion": {"preferred"},
+    "implied_r": {"preferred"},
     "stress": {"preferred", "inclusion"},
     "risk_enrich": {"preferred"},
     "rolling": {"risk_enrich"},

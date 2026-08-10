@@ -121,6 +121,8 @@ TABLES = [
     "regime_model_oos_rpt",
     "rpt_vs_ibm_compare",
     "regime_calibration",
+    # Implied cost-of-capital screen (Ohlson-Rueangsuwan 2026, RIV reduced form)
+    "implied_r_screen",
     # Taleb layer: fat tails, gaps, ergodicity, fragility, barbell
     "tail_index",
     "portfolio_tail",

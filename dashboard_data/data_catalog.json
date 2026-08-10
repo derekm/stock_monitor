@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-09T21:41:58.328534",
-  "count": 249,
+  "generated": "2026-08-10T06:31:31.153929",
+  "count": 250,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -692,7 +692,7 @@
       "path": "factor_rotation_performance.csv",
       "url": "factor_rotation_performance.csv",
       "kind": "csv",
-      "size": 10173,
+      "size": 10250,
       "sql_name": "factor_rotation_performance"
     },
     {
@@ -1115,7 +1115,7 @@
       "path": "hmm_regime_summary.csv",
       "url": "hmm_regime_summary.csv",
       "kind": "csv",
-      "size": 432,
+      "size": 439,
       "sql_name": "hmm_regime_summary"
     },
     {
@@ -1133,7 +1133,7 @@
       "path": "hmm_transition_matrix.csv",
       "url": "hmm_transition_matrix.csv",
       "kind": "csv",
-      "size": 247,
+      "size": 250,
       "sql_name": "hmm_transition_matrix"
     },
     {
@@ -1162,6 +1162,15 @@
       "kind": "csv",
       "size": 1672,
       "sql_name": "holdings"
+    },
+    {
+      "name": "implied_r_screen",
+      "filename": "implied_r_screen.parquet",
+      "path": "implied_r_screen.parquet",
+      "url": "implied_r_screen.parquet",
+      "kind": "parquet",
+      "size": 40054,
+      "sql_name": "implied_r_screen"
     },
     {
       "name": "inclusion_candidates",
