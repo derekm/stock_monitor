@@ -1903,15 +1903,15 @@ const LIVE_TAB_WIDGETS = {
       ],
     },
     forecasts: {
-      duckLabel: "Live: regime forecast configs (IBM + RPT)",
-      queries: [
-        { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, excess, n_train, n_test, head_only, exog FROM regime_model_best ORDER BY excess DESC", tableId: "tbl-regime-best", limit: 50 },
-        { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, excess, n_train, n_test, head_only, exog FROM regime_model_oos ORDER BY excess DESC", tableId: "tbl-regime-oos", limit: 100 },
-        { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, excess, head_only, exog FROM regime_model_best_rpt ORDER BY excess DESC", tableId: "tbl-regime-best-rpt", limit: 50 },
-        { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, excess, head_only, exog FROM regime_model_oos_rpt ORDER BY excess DESC", tableId: "tbl-regime-oos-rpt", limit: 100 },
-        { sql: "SELECT ticker, regime, steps, cap, lr, head_only, exog, dir_acc_ibm, dir_acc_rpt, excess_delta FROM rpt_vs_ibm_compare ORDER BY excess_delta DESC", tableId: "tbl-rpt-compare", limit: 50 },
-      ],
-    },
+          duckLabel: "Live: regime forecast configs (IBM + RPT)",
+          queries: [
+            { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, (dir_acc - pers_dir) AS excess, n_train, n_test, head_only, exog FROM regime_model_best ORDER BY excess DESC", tableId: "tbl-regime-best", limit: 50 },
+            { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, (dir_acc - pers_dir) AS excess, n_train, n_test, head_only, exog FROM regime_model_oos ORDER BY excess DESC", tableId: "tbl-regime-oos", limit: 100 },
+            { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, (dir_acc - pers_dir) AS excess, head_only, exog FROM regime_model_best_rpt ORDER BY excess DESC", tableId: "tbl-regime-best-rpt", limit: 50 },
+            { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, (dir_acc - pers_dir) AS excess, head_only, exog FROM regime_model_oos_rpt ORDER BY excess DESC", tableId: "tbl-regime-oos-rpt", limit: 100 },
+            { sql: "SELECT ticker, regime, steps, cap, lr, head_only, exog, dir_acc_ibm, dir_acc_rpt, excess_delta FROM rpt_vs_ibm_compare ORDER BY excess_delta DESC", tableId: "tbl-rpt-compare", limit: 50 },
+          ],
+        },
   };
 
 
@@ -2437,56 +2437,59 @@ function renderForecasts() {
   if (!FC_ACTIVE) {
     renderForecastPaths({}, []);
   }
-  if (!$("#fc-run")?.dataset?.bound) {
-    const runBtn = $("#fc-run");
-    if (!runBtn) return;
-    runBtn.dataset.bound = "1";
-    $("#fc-api").value = GRANITE_API;
-    $("#api-url-label").textContent = GRANITE_API;
-    runBtn.addEventListener("click", fetchGraniteForecasts);
-    $("#fc-health")?.addEventListener("click", async () => {
-      const base = ($("#fc-api").value || GRANITE_API).replace(/\/$/, "");
-      try {
-        const r = await fetch(base + "/health");
-        const j = await r.json();
-        $("#fc-status").textContent = j.ok
-          ? (`OK · live=${j.live} · indexes=${(j.indexes||[]).join(",")}`)
-          : JSON.stringify(j);
-      } catch (e) {
-        $("#fc-status").textContent = "Service unreachable: " + e.message;
+}
+
+// Separate binding function - called after DuckDB is ready
+function bindForecastRunButton() {
+  if ($("#fc-run")?.dataset?.bound) return;
+  const runBtn = $("#fc-run");
+  if (!runBtn) return;
+  runBtn.dataset.bound = "1";
+  $("#fc-api").value = GRANITE_API;
+  $("#api-url-label").textContent = GRANITE_API;
+  runBtn.addEventListener("click", fetchGraniteForecasts);
+  $("#fc-health")?.addEventListener("click", async () => {
+    const base = ($("#fc-api").value || GRANITE_API).replace(/\/$/, "");
+    try {
+      const r = await fetch(base + "/health");
+      const j = await r.json();
+      $("#fc-status").textContent = j.ok
+        ? (`OK · live=${j.live} · indexes=${(j.indexes||[]).join(",")}`)
+        : JSON.stringify(j);
+    } catch (e) {
+      $("#fc-status").textContent = "Service unreachable: " + e.message;
+    }
+  });
+  $("#fc-indexes")?.addEventListener("click", async () => {
+    const base = ($("#fc-api").value || GRANITE_API).replace(/\/$/, "");
+    try {
+      const r = await fetch(base + "/indexes");
+      const j = await r.json();
+      $("#fc-status").textContent = j.ok
+        ? ("Indexes: " + (j.indexes || []).join(", "))
+        : JSON.stringify(j);
+      if (j.indexes && j.indexes.length) {
+        const sel = $("#fc-index");
+        const have = new Set([...sel.options].map(o => o.value));
+        j.indexes.forEach(n => {
+          if (!have.has(n)) {
+            const opt = document.createElement("option");
+            opt.value = n; opt.textContent = n;
+            sel.appendChild(opt);
+          }
+        });
+        if (![...sel.selectedOptions].length && !sel.value) sel.options[0].selected = true;
       }
-    });
-    $("#fc-indexes")?.addEventListener("click", async () => {
-      const base = ($("#fc-api").value || GRANITE_API).replace(/\/$/, "");
-      try {
-        const r = await fetch(base + "/indexes");
-        const j = await r.json();
-        $("#fc-status").textContent = j.ok
-          ? ("Indexes: " + (j.indexes || []).join(", "))
-          : JSON.stringify(j);
-        if (j.indexes && j.indexes.length) {
-          const sel = $("#fc-index");
-          const have = new Set([...sel.options].map(o => o.value));
-          j.indexes.forEach(n => {
-            if (!have.has(n)) {
-              const opt = document.createElement("option");
-              opt.value = n; opt.textContent = n;
-              sel.appendChild(opt);
-            }
-          });
-          if (![...sel.selectedOptions].length && !sel.value) sel.options[0].selected = true;
-        }
-      } catch (e) {
-        $("#fc-status").textContent = "Indexes error: " + e.message;
-      }
-    });
-    $("#fc-clear-runs")?.addEventListener("click", () => {
-      FC_RUNS.length = 0;
-      FC_ACTIVE = null;
-      renderRunList();
-      $("#fc-status").textContent = "Run history cleared";
-    });
-  }
+    } catch (e) {
+      $("#fc-status").textContent = "Indexes error: " + e.message;
+    }
+  });
+  $("#fc-clear-runs")?.addEventListener("click", () => {
+    FC_RUNS.length = 0;
+    FC_ACTIVE = null;
+    renderRunList();
+    $("#fc-status").textContent = "Run history cleared";
+  });
 }
 
 function renderForecastBar(rows) {
@@ -5321,6 +5324,7 @@ function initSprintStock() {
     stockBar.appendChild(st);
   }
   document.querySelector("#stock-refresh")?.addEventListener("click", renderStock);
+  document.querySelector("#stock-refresh")?.addEventListener("click", renderStock);
   document.querySelector("#stock-ticker")?.addEventListener("change", renderStock);
   renderSprint();
 }
@@ -5743,7 +5747,8 @@ async function main() {
 
   fiInit();
   await initDuckDB();
-  bindLiveDuckControls();
+    bindForecastRunButton();
+    bindLiveDuckControls();
   if (typeof LIVE_TAB_WIDGETS !== "undefined") {
     for (const [sectionId, spec] of Object.entries(LIVE_TAB_WIDGETS)) {
       try {
@@ -5766,6 +5771,7 @@ async function main() {
   }
   if (typeof populateAllTickerPickers === "function") await populateAllTickerPickers();
   else if (typeof populateStockTickers === "function") await populateStockTickers();
+  if (typeof initSprintStock === "function") initSprintStock();
   if (typeof renderSprint === "function") renderSprint();
   if (typeof renderSignals === "function") renderSignals();
   if (typeof renderRegimeModels === "function") renderRegimeModels();
