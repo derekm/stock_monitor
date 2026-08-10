@@ -92,6 +92,13 @@ def main():
         fund = pd.read_parquet(fund_file)
         # latest per ticker
         fund = fund.sort_values("as_of_date").groupby("ticker").tail(1)
+        # Fresh market cap from daily prices (beats quarterly fundamentals snapshot)
+        px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker", "date", "market_cap"])
+        px = px[px["market_cap"].notna()].sort_values("date").groupby("ticker").tail(1)
+        daily_mc = px.set_index("ticker")["market_cap"] / 1e9
+        fund = fund.set_index("ticker")
+        fund["market_cap_b"] = daily_mc.reindex(fund.index).fillna(fund["market_cap_b"])
+        fund = fund.reset_index()
         merged = holdings.merge(
             fund[["ticker", "market_cap_b", "total_assets_b", "pb_ratio", "mktcap_to_assets"]],
             on="ticker", how="left"

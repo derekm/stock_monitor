@@ -250,6 +250,12 @@ def build_rows(ticker: str, frames: list[dict], px: dict[str, pd.Series]) -> lis
             if len(avail):
                 mcap = float(avail.iloc[-1]) * shares
         mcap_b = mcap / 1e9 if mcap else None
+        # Unit sanity: EDGAR XBRL shares/price parsing occasionally yields
+        # 1e6x-too-big or 1e3x-too-small market caps. Null them at ingestion so
+        # they never propagate into daily_prices.market_cap.
+        if mcap_b is not None and (mcap_b > 100_000 or (mcap_b > 0 and mcap_b < 0.05)):
+            mcap_b = None
+            mcap = None
         roe = ttm_ni / equity if ttm_ni and equity else None
         rate = fr.get("eff_tax_rate") if fr.get("eff_tax_rate") is not None else 0.25
         if ttm_oi:

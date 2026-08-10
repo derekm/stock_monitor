@@ -38,6 +38,11 @@ def main():
     fund = pd.read_parquet(FUND_FILE) if FUND_FILE.exists() else pd.DataFrame()
     if not fund.empty:
         fund = fund.sort_values("as_of_date").groupby("ticker").tail(1).set_index("ticker")
+        # Fresh market cap from daily prices (beats quarterly fundamentals snapshot)
+        px = pd.read_parquet(PRICES_FILE, columns=["ticker", "date", "market_cap"])
+        px = px[px["market_cap"].notna()].sort_values("date").groupby("ticker").tail(1)
+        daily_mc = px.set_index("ticker")["market_cap"] / 1e9
+        fund["market_cap_b"] = daily_mc.reindex(fund.index).fillna(fund["market_cap_b"])
 
     rows = []
     for t in members:

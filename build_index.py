@@ -69,7 +69,7 @@ def main():
     avg_close = comp_df["close"].mean()
     # For multi-day we would compute cumulative; for now snapshot
     print("\n=== Fertilizer / Ag-Inputs Equal-Weight Snapshot ===")
-    print(f"Date: {latest['date'].iloc[0].date() if 'date' in latest.columns else 'latest'}")
+    print(f"Date: {latest['date'].iloc[0] if 'date' in latest.columns else 'latest'}")
     print(comp_df[["ticker", "close", "weight"]].to_string(index=False))
     print(f"\nSimple average close: ${avg_close:.2f}")
     print(f"Index level (base 100 on first observation): {index_level:.2f}")
@@ -101,6 +101,13 @@ def main():
     if fund_file.exists():
         fund = pd.read_parquet(fund_file)
         fund = fund.sort_values("as_of_date").groupby("ticker").tail(1)
+        # Fresh market cap from daily prices (beats quarterly fundamentals snapshot)
+        px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker", "date", "market_cap"])
+        px = px[px["market_cap"].notna()].sort_values("date").groupby("ticker").tail(1)
+        daily_mc = px.set_index("ticker")["market_cap"] / 1e9
+        fund = fund.set_index("ticker")
+        fund["market_cap_b"] = daily_mc.reindex(fund.index).fillna(fund["market_cap_b"])
+        fund = fund.reset_index()
         merged = comp_df.merge(fund[["ticker", "market_cap_b", "total_assets_b", "pb_ratio", "mktcap_to_assets"]], on="ticker", how="left")
         print("\nFundamentals:")
         print(merged[["ticker", "close", "market_cap_b", "pb_ratio", "mktcap_to_assets"]].round(2).to_string(index=False))

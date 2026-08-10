@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-10T15:23:56.281418",
+  "generated": "2026-08-10T16:28:24.041046",
   "count": 250,
   "files": [
     {
@@ -512,7 +512,7 @@
       "path": "defensive_value_index.parquet",
       "url": "defensive_value_index.parquet",
       "kind": "parquet",
-      "size": 2473,
+      "size": 6708,
       "sql_name": "defensive_value_index"
     },
     {
@@ -746,7 +746,7 @@
       "path": "fertilizer_index.parquet",
       "url": "fertilizer_index.parquet",
       "kind": "parquet",
-      "size": 1107,
+      "size": 4167,
       "sql_name": "fertilizer_index"
     },
     {
@@ -863,7 +863,7 @@
       "path": "fundamentals.parquet",
       "url": "fundamentals.parquet",
       "kind": "parquet",
-      "size": 588725,
+      "size": 588402,
       "sql_name": "fundamentals"
     },
     {
@@ -1169,7 +1169,7 @@
       "path": "implied_r_screen.parquet",
       "url": "implied_r_screen.parquet",
       "kind": "parquet",
-      "size": 40054,
+      "size": 40233,
       "sql_name": "implied_r_screen"
     },
     {

@@ -57,6 +57,21 @@ def latest_price() -> pd.Series:
     return p.set_index("ticker")["close"]
 
 
+def latest_market_cap_b() -> pd.Series:
+    """Latest daily market cap in $B (fresh — beats the quarterly fundamentals snapshot).
+
+    Falls back to fundamentals.market_cap_b where the daily column is missing
+    (ETFs/ADRs without fundamentals-derived shares).
+    """
+    p = pd.read_parquet(PRICES, columns=["date", "ticker", "market_cap"])
+    p = p[p["market_cap"].notna()].sort_values("date").groupby("ticker").tail(1)
+    mc = p.set_index("ticker")["market_cap"] / 1e9
+    f = pd.read_parquet(FUND)
+    f = f.sort_values("as_of_date").groupby("ticker").tail(1)
+    fb = f.set_index("ticker")["market_cap_b"]
+    return mc.combine_first(fb)
+
+
 def latest_fundamentals() -> pd.DataFrame:
     f = pd.read_parquet(FUND)
     f = f.sort_values("as_of_date").groupby("ticker").tail(1)
@@ -69,7 +84,7 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
     df = pd.DataFrame({"price": px})
     df["roe"] = f["roe"]
     df["pb_ratio"] = f["pb_ratio"]
-    df["mktcap_b"] = f["market_cap_b"]
+    df["mktcap_b"] = latest_market_cap_b().reindex(df.index)
     df["ev_ebitda"] = f["ev_ebitda"]
     df["roic"] = f["roic"]
     df["as_of"] = f["as_of_date"]
