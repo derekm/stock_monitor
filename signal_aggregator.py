@@ -33,7 +33,7 @@ import pandas as pd
 
 from analytics_common import DATA_DIR, load_adj_prices_pandas, wide_closes, clip_returns
 
-PREF = DATA_DIR / "preferred_metrics.csv"
+PREF = DATA_DIR / "preferred_metrics.parquet"
 PEER = DATA_DIR / "peer_analytics_signals.csv"
 CROSS = DATA_DIR / "cross_section_rankings.csv"
 PAIR = DATA_DIR / "pair_engine_pairs.csv"
@@ -125,8 +125,8 @@ def forward_returns(cutoff: pd.Timestamp) -> pd.Series:
 
 
 def load_regime_map() -> pd.Series:
-    """Date-indexed HMM regime labels (hmm_regime_states.csv), or empty."""
-    hmm = DATA_DIR / "hmm_regime_states.csv"
+    """Date-indexed HMM regime labels (hmm_regime_states.parquet), or empty."""
+    hmm = DATA_DIR / "hmm_regime_states.parquet"
     if not hmm.exists():
         return pd.Series(dtype=str)
     df = pd.read_csv(hmm)

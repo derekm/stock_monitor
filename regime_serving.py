@@ -32,7 +32,7 @@ from granite_config import DEFAULT_MODEL  # noqa: F401  (canonical model id)
 
 DATA_DIR = Path(__file__).parent
 REGIME_BEST = DATA_DIR / "regime_model_best.csv"
-HMM_FILE = DATA_DIR / "hmm_regime_states.csv"
+HMM_FILE = DATA_DIR / "hmm_regime_states.parquet"
 CKPT_DIR = DATA_DIR / "checkpoints" / "regime"
 
 

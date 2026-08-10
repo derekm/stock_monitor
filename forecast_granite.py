@@ -41,7 +41,7 @@ PRICES_FILE = DATA_DIR / "daily_prices.parquet"
 SECTOR_PRICES_FILE = DATA_DIR / "sector_prices.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 FORECAST_FILE = DATA_DIR / "forecasts_granite.parquet"
-FORECAST_CSV = DATA_DIR / "forecasts_granite.csv"
+FORECAST_CSV = DATA_DIR / "forecasts_granite.parquet"
 BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.csv"
 
 from granite_config import DEFAULT_MODEL  # canonical Granite model id

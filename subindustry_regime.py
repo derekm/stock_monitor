@@ -26,8 +26,8 @@ from hmm_regime_detection import build_features, fit_hmm, label_states
 from macro_sector_shock import _build_baskets, _load_price_matrix, _monthly_returns, _price_universe
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT = DATA_DIR / "subindustry_regime.csv"
-OUT_LEAD = DATA_DIR / "subindustry_regime_lead.csv"
+OUT = DATA_DIR / "subindustry_regime.parquet"
+OUT_LEAD = DATA_DIR / "subindustry_regime_lead.parquet"
 
 
 def basket_daily_rets(tickers: list[str]) -> pd.DataFrame:
@@ -149,8 +149,8 @@ def main(save: bool = True, max_baskets: int | None = None):
     lead = pd.DataFrame(lead_rows)
 
     if save:
-        out.to_csv(OUT, index=False)
-        lead.to_csv(OUT_LEAD, index=False)
+        out.to_parquet(OUT, index=False)
+        lead.to_parquet(OUT_LEAD, index=False)
 
     tot_exits = int(lead["n_exits"].sum()) if len(lead) else 0
     for lag in ("lead_10d", "lead_20d", "lead_30d"):

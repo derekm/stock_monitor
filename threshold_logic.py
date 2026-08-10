@@ -27,7 +27,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
-HMM = DATA_DIR / "hmm_regime_states.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
 OUT = DATA_DIR / "threshold_logic_screen.csv"
 OUT_RULES = DATA_DIR / "threshold_logic_rules.json"
 

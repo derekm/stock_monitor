@@ -55,7 +55,7 @@ Outputs:
                         debt_impulse_v, debt_acceleration, velocity,
                         p_stress, minsky_signal, minsky_pctile, danger_zone,
                         regime_ctx
-Reads: FRED CSV (network), hmm_regime_states.csv (via buy_candidates).
+Reads: FRED CSV (network), hmm_regime_states.parquet (via buy_candidates).
 Usage: python macro_fragility.py [--save]
 """
 from __future__ import annotations

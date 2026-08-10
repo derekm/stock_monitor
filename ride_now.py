@@ -42,7 +42,7 @@ import pandas as pd
 from macro_sector_shock import _build_baskets, _monthly_returns, _price_universe
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT = DATA_DIR / "ride_now.csv"
+OUT = DATA_DIR / "ride_now.parquet"
 
 
 def main(save: bool = True):
@@ -51,12 +51,12 @@ def main(save: bool = True):
     print(f"=== ride NOW · {len(baskets)} dynamic baskets ===")
 
     # latest shock zone per basket
-    sec = pd.read_csv(DATA_DIR / "macro_sector_shock.csv")
+    sec = pd.read_csv(DATA_DIR / "macro_sector_shock.parquet")
     sec = sec.sort_values("date").groupby("basket", as_index=False).tail(1)
     zone_map = dict(zip(sec["basket"], sec["shock_zone"]))
 
     # latest regime per basket
-    sub = pd.read_csv(DATA_DIR / "subindustry_regime.csv")
+    sub = pd.read_csv(DATA_DIR / "subindustry_regime.parquet")
     sub = sub.sort_values("date").groupby("basket", as_index=False).tail(1)
     stress_map = dict(zip(sub["basket"], sub["p_stress"]))
     regime_map = dict(zip(sub["basket"], sub["regime"]))
@@ -115,7 +115,7 @@ def main(save: bool = True):
     out = out.sort_values(["_o", "mom12"], ascending=[True, False]).drop(columns="_o")
 
     if save:
-        out.to_csv(OUT, index=False)
+        out.to_parquet(OUT, index=False)
 
     print("\n=== RECOMMENDATIONS (current) ===")
     print(out["recommendation"].value_counts().to_string())

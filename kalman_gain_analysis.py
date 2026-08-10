@@ -7,7 +7,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
-HMM = DATA_DIR / "hmm_regime_states.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
 OUT = DATA_DIR / "kalman_gain_path.csv"
 OUT_SUM = DATA_DIR / "kalman_gain_summary.csv"
 

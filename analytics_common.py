@@ -184,7 +184,7 @@ def load_membership() -> pd.DataFrame:
 
 
 def load_preferred() -> pd.DataFrame:
-    p = DATA_DIR / "preferred_metrics.csv"
+    p = DATA_DIR / "preferred_metrics.parquet"
     return pd.read_csv(p) if p.exists() else pd.DataFrame()
 
 

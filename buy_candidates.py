@@ -24,12 +24,12 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
-PREF = DATA_DIR / "preferred_metrics.csv"
+PREF = DATA_DIR / "preferred_metrics.parquet"
 MOM = DATA_DIR / "momentum_metrics.csv"
 FAC = DATA_DIR / "factor_panel.csv"
 RISK = DATA_DIR / "risk_metrics_ext.csv"
 AGG = DATA_DIR / "signal_aggregator_scores.csv"
-HMM = DATA_DIR / "hmm_regime_states.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
 SP500 = DATA_DIR / "sp500_sleeve.csv"
 OUT = DATA_DIR / "buy_candidates.csv"
 OUT_TOP = DATA_DIR / "buy_candidates_top.csv"

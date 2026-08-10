@@ -46,8 +46,8 @@ from index_registry import parse_indexes, tickers_for_index, available_indexes, 
 DATA_DIR = Path(__file__).parent
 PRICES_FILE = DATA_DIR / "daily_prices.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
-OUT_FILE = DATA_DIR / "fisher_indexes.csv"
-OUT_PQ = DATA_DIR / "fisher_indexes.parquet"
+OUT_FILE = DATA_DIR / "fisher_indexes.parquet"
+
 
 
 def load_pq() -> pd.DataFrame:
@@ -339,8 +339,8 @@ def main():
             "nominal_sqrt_fisher", "infl_rate", "growth_rate", "nominal_rate", "identity_gap",
             "infl_ann_21", "growth_ann_21", "nominal_ann_21", "ref_date", "n_items", "n_tickers",
         )]
-        out[rate_cols].to_csv(DATA_DIR / "fisher_rate_decomposition.csv", index=False)
-        print(f"Wrote {OUT_FILE} and fisher_rate_decomposition.csv ({len(out)} rows)")
+        out[rate_cols].to_parquet(DATA_DIR / "fisher_rate_decomposition.parquet", index=False)
+        print(f"Wrote {OUT_FILE} and fisher_rate_decomposition.parquet ({len(out)} rows)")
 
     jobs = []
     if args.backfill_all:

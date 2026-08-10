@@ -31,8 +31,8 @@ def build_ticker_regime_map(ticker: str) -> pd.Series:
     """Build per-ticker regime series from sector/subindustry baskets.
     Uses the ticker's GICS sector basket regime (primary fallback).
     """
-    bm = pd.read_csv(DATA_DIR / "basket_members.csv")
-    sr = pd.read_csv("subindustry_regime.csv", usecols=["basket", "date", "regime"])
+    bm = pd.read_parquet(DATA_DIR / "basket_members.parquet")
+    sr = pd.read_parquet("subindustry_regime.parquet", columns=["basket", "date", "regime"])
 
     # Find the ticker's GICS sector basket
     rows = bm[(bm["ticker"] == ticker) & (bm["basket_kind"] == "gics_sector")]
@@ -92,9 +92,9 @@ def run_ab_test(tickers: list[str], steps_list: list[int] = [3000, 6000],
                 by_regime_m[reg].append(w)
 
         # --- B) Per-ticker sector regime ---
-        ticker_regime_s = build_ticker_regime_map(ticker)
+        ticker_regime_s = build_ticker_regime_map(tk)
         ticker_regime_s.index = pd.to_datetime(ticker_regime_s.index)
-        tagged_ticker = tag_windows_per_ticker(ticker, all_wins, dates, ticker_regime_s)
+        tagged_ticker = tag_windows_per_ticker(tk, all_wins, dates, ticker_regime_s)
         by_regime_t = {r: [] for r in ["low_vol", "normal", "high_vol_stress"]}
         for w in tagged_ticker:
             reg = w[3]

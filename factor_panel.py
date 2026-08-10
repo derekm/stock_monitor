@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
-PREF = DATA_DIR / "preferred_metrics.csv"
+PREF = DATA_DIR / "preferred_metrics.parquet"
 MOM = DATA_DIR / "momentum_metrics.csv"
 OUT = DATA_DIR / "factor_panel.csv"
 OUT_TOP = DATA_DIR / "factor_panel_top.csv"

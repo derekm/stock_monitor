@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """csv_to_parquet.py — convert derived CSV outputs to parquet.
 
-Why: 318MB of CSVs (subindustry_regime.csv alone = 239MB) served to the
+Why: 318MB of CSVs (subindustry_regime.parquet alone = 239MB) served to the
 DuckDB-Wasm dashboard. Parquet is columnar + compressed: 239MB → ~30-60MB,
 and DuckDB reads parquet natively with schema (no CSV type guessing).
 

@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
-PREF_HIST = DATA_DIR / "preferred_metrics_history.csv"
+PREF_HIST = DATA_DIR / "preferred_metrics_history.parquet"
 PREF = DATA_DIR / "preferred_metrics.csv"
 FC_BT = DATA_DIR / "forecast_backtest_metrics.csv"
 OUT_WF = DATA_DIR / "inclusion_walkforward.csv"

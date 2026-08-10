@@ -30,7 +30,7 @@ from index_registry import parse_indexes, tickers_for_index, available_indexes, 
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT_CSV = DATA_DIR / "fisher_indexes_duckdb.csv"
+OUT_CSV = DATA_DIR / "fisher_indexes_duckdb.parquet"
 OUT_PQ = DATA_DIR / "fisher_indexes_duckdb.parquet"
 
 CORE_SQL = r"""
@@ -228,7 +228,7 @@ def main():
             out = pd.concat([old, df], ignore_index=True)
         else:
             out = df
-        out.to_csv(OUT_CSV, index=False)
+        out.to_parquet(OUT_CSV, index=False)
         try:
             out.to_parquet(OUT_PQ, index=False)
         except Exception:

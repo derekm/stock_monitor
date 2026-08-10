@@ -37,10 +37,15 @@ REGIMES = ["low_vol", "normal", "high_vol_stress"]
 
 
 def load_regime_map() -> pd.DataFrame:
-    path = gb.PRICES.parent / "hmm_regime_states.csv"
+    path = gb.PRICES.parent / "hmm_regime_states.parquet"
     if not path.exists():
-        return pd.DataFrame(columns=["date", "regime"])
-    df = pd.read_csv(path)
+        # fallback to CSV if parquet doesn't exist yet
+        path_csv = gb.PRICES.parent / "hmm_regime_states.csv"
+        if path_csv.exists():
+            path = path_csv
+        else:
+            return pd.DataFrame(columns=["date", "regime"])
+    df = pd.read_parquet(path)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"]).sort_values("date")
     # keep only the regime column, forward-filled per date

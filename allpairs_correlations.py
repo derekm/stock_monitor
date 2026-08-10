@@ -20,11 +20,11 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT_ASSET = DATA_DIR / "allpairs_asset_corr_history.csv"
-OUT_SECTOR = DATA_DIR / "allpairs_sector_corr_history.csv"
-OUT_ASSET_LATEST = DATA_DIR / "allpairs_asset_corr_latest.csv"
-OUT_SECTOR_LATEST = DATA_DIR / "allpairs_sector_corr_latest.csv"
-OUT_SUMMARY = DATA_DIR / "allpairs_corr_summary.csv"
+OUT_ASSET = DATA_DIR / "allpairs_asset_corr_history.parquet"
+OUT_SECTOR = DATA_DIR / "allpairs_sector_corr_history.parquet"
+OUT_ASSET_LATEST = DATA_DIR / "allpairs_asset_corr_latest.parquet"
+OUT_SECTOR_LATEST = DATA_DIR / "allpairs_sector_corr_latest.parquet"
+OUT_SUMMARY = DATA_DIR / "allpairs_corr_summary.parquet"
 
 
 def pairwise_long(corr: pd.DataFrame, date, window: int, kind: str) -> list[dict]:
@@ -106,7 +106,7 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
         for _, r in latest.iterrows():
             mat.loc[r.asset_a, r.asset_b] = r['corr']
             mat.loc[r.asset_b, r.asset_a] = r['corr']
-        mat.to_csv(OUT_ASSET_LATEST)
+        mat.to_parquet(OUT_ASSET_LATEST)
         print(f"Latest asset matrix {mat.shape} @ {last.date()}")
 
     if len(sector_df):
@@ -117,7 +117,7 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
         for _, r in latest.iterrows():
             mat.loc[r.asset_a, r.asset_b] = r['corr']
             mat.loc[r.asset_b, r.asset_a] = r['corr']
-        mat.to_csv(OUT_SECTOR_LATEST)
+        mat.to_parquet(OUT_SECTOR_LATEST)
         print(f"Latest sector matrix {mat.shape} @ {last.date()}")
 
     # summary stats
@@ -151,9 +151,9 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
         # keep history manageable
         if len(asset_df) > 200_000:
             asset_df = asset_df.tail(200_000)
-        asset_df.to_csv(OUT_ASSET, index=False)
-        sector_df.to_csv(OUT_SECTOR, index=False)
-        sdf.to_csv(OUT_SUMMARY, index=False)
+        asset_df.to_parquet(OUT_ASSET, index=False)
+        sector_df.to_parquet(OUT_SECTOR, index=False)
+        sdf.to_parquet(OUT_SUMMARY, index=False)
         print(f"Wrote {OUT_ASSET}, {OUT_SECTOR}, {OUT_SUMMARY}")
     return asset_df, sector_df
 

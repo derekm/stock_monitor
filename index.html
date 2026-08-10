@@ -168,6 +168,66 @@ const TECH_GLOSSARY = {
     d: "Combines the momentum gates, the shock zone, and the stress posterior into one honest verdict. The tension (momentum says long, stress says stand down) is surfaced, not hidden.",
     f: "BUY: long ∧ hot ∧ p_stress<0.8\nSTAND DOWN: long ∧ p_stress≥0.8\nAVOID: hot ∧ rolled over (mom3≤0)\nFLAT: no signal",
   },
+  "impliedR": {
+    t: "Implied cost of capital (Ohlson-Rueangsuwan 2026)",
+    d: "Market-implied required return from the RIV reduced form with g = r/2. HIGH implied r means the market demands a fat return → stock is CHEAP. LOW implied r → RICH. A diagnostic, not a standalone signal — cross-check against the trifecta.",
+    f: "r = 2·ROE / (P/B + 1)   [from P = −BV + 2·X(1)/r, X(1) = ROE·BV]\nCHEAP: r ≥ 12% · Fair: 7–10% · EXPENSIVE: r ≤ 6%",
+  },
+  "rpt": {
+    t: "RPT regime models (pass8)",
+    d: "Regime Prediction Transformer fine-tunes: IBM Granite-TTM backbone pretrained with our own RPT base (num_patches=9, daily freq_token=8), then head-only fine-tuned per (ticker, HMM regime) with an earnings-calendar exog channel. Chosen by max OOS directional excess over the regime's persistence baseline.",
+    f: "excess = dir_acc − pers_dir\nOOS = temporal 70/30 split with 96d embargo",
+  },
+  "rptVsIbm": {
+    t: "RPT vs IBM head-to-head",
+    d: "Same regime cells evaluated under both bases. Positive excess_delta means the RPT base beats the IBM base for that (ticker, regime). The compare table drives which base becomes the serving default.",
+    f: "excess_delta = (dir_acc_rpt − pers) − (dir_acc_ibm − pers)",
+  },
+  "squeeze": {
+    t: "Short-squeeze signals (Drechsler-Drechsler, Engelberg-Reed-Ringgenberg)",
+    d: "Elevated short interest + rising borrow fee + tight utilization + a positive catalyst (earnings surprise / momentum break) → covering cascade. Squeeze risk clusters in low_vol regimes when complacency meets a volume spike.",
+    f: "squeeze_score = f(SI%, days-to-cover, utilization, fee_chg, float_rotation, gamma_exposure)",
+  },
+  "barbell": {
+    t: "Barbell structure / convexity",
+    d: "Portfolio split between ultra-safe (T-bills, cash) and convex upside (options, venture). The middle (long-only equity beta) is the fragile zone. Checks whether the book is structurally convex to tail outcomes.",
+    f: "barbell_ratio = safe_weight × convex_weight vs middle_weight",
+  },
+  "tailDep": {
+    t: "Tail dependence",
+    d: "Upper/lower tail dependence coefficients between assets — how often they crash TOGETHER (lower) vs rally together (upper). Correlation is not enough: tail dependence is the copula's corner behavior.",
+    f: "λ_lower = lim_{q→0} P(X ≤ F⁻¹(q) | Y ≤ G⁻¹(q))",
+  },
+  "ergodic": {
+    t: "Ergodicity / ruin",
+    d: "Time-average vs ensemble-average growth. A strategy can have positive expected log growth yet ruin a single path (variance drag). Checks time-averaged wealth paths, not just expected value.",
+    f: "g = E[ln(1+r)]  (Kelly growth rate) vs  E[r]  (arithmetic)",
+  },
+  "shadow": {
+    t: "Shadow book",
+    d: "Paper-trade replay of the buy-candidate rules on FIFO tax lots with kill switches — what the rules WOULD have done without touching real money. The honest out-of-sample check before committing capital.",
+    f: "FIFO lots: buy_date → sell_date, realized_pl = Σ (exit − entry) × shares",
+  },
+  "peer": {
+    t: "Peer analytics",
+    d: "Single-name deep dive against sector peers: trend/recovery signals relative to the peer group. Use after a Decision or Fragility flag, not as a browsing toy.",
+    f: "z(metric) = (metric − peer_median) / peer_mad",
+  },
+  "pairs": {
+    t: "Pair engine",
+    d: "Cointegrated pairs with walk-forward OOS net of costs. Selected pairs pass FDR + half-life checks; trade when spread z-score reverts. OOS stats are net of transaction costs.",
+    f: "spread = y − β·x; z = (spread − μ)/σ; half-life via AR(1) on spread",
+  },
+  "crossSec": {
+    t: "Cross-section (L/S vs EW long)",
+    d: "Rank-based long/short across the universe vs equal-weight long. Decision: signal-only — the actionable strategy is long-only top quintile (see recommended_use in the stats).",
+    f: "L/S = long top quintile − short bottom quintile, monthly rebalance",
+  },
+  "sprint": {
+    t: "Sprint engines",
+    d: "Research engines in one place: blended OOS-IC signal weights, pair cointegration, cross-section ranks, earnings catalysts (PEAD drift). Highest composite with usable pairs/catalysts is the shortlist.",
+    f: "weights = max(IC, 0) normalized; negative-IC families contribute nothing",
+  },
 };
 
 function infoKey(key) {
@@ -465,20 +525,20 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
       <div class="card"><div class="kpi" id="kpi-anom">—</div><small>Recent anomaly events</small></div>
     </div>
     <div class="card" style="margin-bottom:1rem">
-      <h3>Decision memos (portfolio inclusion)</h3>
+      <h3>Decision memos (portfolio inclusion) <span class="info-ic" data-gloss="dualp">i</span></h3>
       <div id="decision-list"></div>
     </div>
     <div class="grid">
       <div class="card">
-        <h3>Value trifecta (EV/EBITDA≤9, P/B≤1.5, MktCap/Assets≤0.5)</h3>
+        <h3>Value trifecta (EV/EBITDA≤9, P/B≤1.5, MktCap/Assets≤0.5) <span class="info-ic" data-gloss="trifecta">i</span></h3>
         <div class="scroll"><div class="card" style="margin-bottom:1rem">
-      <h3>Buy candidates (gates + momentum + factors)</h3>
+      <h3>Buy candidates (gates + momentum + factors) <span class="info-ic" data-gloss="oosc">i</span></h3>
       <div class="scroll"><table id="tbl-buys"><thead></thead><tbody></tbody></table></div>
     </div>
     <table id="tbl-trifecta"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
-        <h3>Portfolio valuation rank</h3>
+        <h3>Portfolio valuation rank <span class="info-ic" data-gloss="pb">i</span></h3>
         <div class="scroll"><table id="tbl-port-val"><thead></thead><tbody></tbody></table></div>
       </div>
     </div>
@@ -487,16 +547,16 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
   <!-- PORTFOLIO -->
   <section id="portfolio">
     <div class="card" style="margin-bottom:1rem">
-      <h3>Holdings</h3>
+      <h3>Holdings <span class="info-ic" data-gloss="maxdd">i</span></h3>
       <div class="scroll"><table id="tbl-holdings"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="card">
-      <h3>Asset ↔ sector correlation (home vs market)</h3>
+      <h3>Asset ↔ sector correlation (home vs market) <span class="info-ic" data-gloss="avgcorr">i</span></h3>
       <div class="scroll"><table id="tbl-asset-sector"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="grid2" style="margin-top:1rem">
       <div class="card">
-        <h3>Shadow book — paper-trade replay (FIFO lots, kill switches)</h3>
+        <h3>Shadow book — paper-trade replay (FIFO lots, kill switches) <span class="info-ic" data-gloss="shadow">i</span></h3>
         <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
           buy_candidates weights replayed against realized prices, net of the cost model,
           with FIFO tax lots and kill switches. Kill threshold −25% (never fired).
@@ -518,16 +578,16 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
 
     <div class="grid">
       <div class="card">
-        <h3>Lowest EV/EBITDA (top 20)</h3>
+        <h3>Lowest EV/EBITDA (top 20) <span class="info-ic" data-gloss="evEbitda">i</span></h3>
         <div class="scroll"><table id="tbl-low-ev"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
-        <h3>Lowest P/B (top 15)</h3>
+        <h3>Lowest P/B (top 15) <span class="info-ic" data-gloss="pb">i</span></h3>
         <div class="scroll"><table id="tbl-low-pb"><thead></thead><tbody></tbody></table></div>
       </div>
     </div>
     <div class="card" style="margin-top:1rem">
-      <h3>Implied cost of capital (Ohlson-Rueangsuwan 2026 · r = 2·ROE/(P/B+1))</h3>
+      <h3>Implied cost of capital (Ohlson-Rueangsuwan 2026 · r = 2·ROE/(P/B+1)) <span class="info-ic" data-gloss="impliedR">i</span></h3>
       <p class="section-intro" style="margin:0.2rem 0 0.5rem">Market-implied r from the RIV reduced form (g=r/2). High implied r = cheap (market demands a fat return); low = rich. Cross-check against the trifecta — not a standalone signal.</p>
       <div class="scroll" style="max-height:360px"><table id="tbl-implied-r"><thead></thead><tbody></tbody></table></div>
     </div>
@@ -550,7 +610,7 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
       </div>
     </div>
     <div class="card" style="margin-top:1rem">
-      <h3>HMM regime conditional correlations</h3>
+      <h3>HMM regime conditional correlations <span class="info-ic" data-gloss="hmm">i</span></h3>
       <div class="scroll"><table id="tbl-hmm"><thead></thead><tbody></tbody></table></div>
     </div>
   </section>
@@ -703,6 +763,28 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
       <h3>Forecast table (active run)</h3>
       <div class="scroll"><table id="tbl-forecast"><thead></thead><tbody></tbody></table></div>
     </div>
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>RPT regime models — best config per ticker <span class="info-ic" data-gloss="rpt">i</span></h3>
+        <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
+          pass8 RPT fine-tunes (head-only + exog), chosen by max OOS direction excess over the
+          regime's own persistence baseline.
+        </p>
+        <div class="scroll"><table id="tbl-regime-best-rpt-fc"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>RPT regime model OOS eval (all cells)</h3>
+        <div class="scroll" style="max-height:360px"><table id="tbl-regime-oos-rpt-fc"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>RPT vs IBM regime comparison <span class="info-ic" data-gloss="rptVsIbm">i</span></h3>
+      <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
+        Head-to-head OOS directional accuracy: IBM base vs RPT base, same regime cells.
+        Positive excess_delta means RPT outperforms IBM for that cell.
+      </p>
+      <div class="scroll"><table id="tbl-rpt-compare-fc"><thead></thead><tbody></tbody></table></div>
+    </div>
   </section>
 
   
@@ -778,7 +860,7 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
 
     <div class="grid2" style="margin-bottom:1rem">
       <div class="card">
-        <h3>Signal model — OOS IC vs composite</h3>
+        <h3>Signal model — OOS IC vs composite <span class="info-ic" data-gloss="oosc">i</span></h3>
         <div class="scroll"><table id="tbl-signal-oos"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
@@ -789,7 +871,7 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
 
     <div class="grid2" style="margin-bottom:1rem">
       <div class="card">
-        <h3>Options skew (ATM IV, skew, put/call)</h3>
+        <h3>Options skew (ATM IV, skew, put/call) <span class="info-ic" data-gloss="skew">i</span></h3>
         <div class="scroll"><table id="tbl-opt-skew"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
@@ -902,7 +984,7 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
     <h3 style="margin:0.25rem 0 0.55rem;color:#c5d0e0;font-size:0.9rem">Micro fragility (per-name)</h3>
     <div class="grid2" style="margin-bottom:1rem">
       <div class="card">
-        <h3>Per-name fragility screen <button id="live-refresh-fragility" class="live-btn">↻</button></h3>
+        <h3>Per-name fragility screen <button id="live-refresh-fragility" class="live-btn">↻</button> <span class="info-ic" data-gloss="tailIdx">i</span></h3>
         <p class="hint">Composite fragility index (leverage, asset coverage, interest coverage, IV skew,
           illiquidity, gap share, tail fatness, kurtosis). <b>fragile_flag = veto</b> for
           inclusion: cheap + fragile = skip. Feeds buy_candidates (fragile_veto) and the
@@ -911,7 +993,7 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
         <div class="scroll" style="max-height:420px"><table id="tbl-fragility"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
-        <h3>Tail index (Hill α) — variance is nearly meaningless below α≈3</h3>
+        <h3>Tail index (Hill α) — variance is nearly meaningless below α≈3 <span class="info-ic" data-gloss="tailIdx">i</span></h3>
         <p class="hint">Empirical P(|z|&gt;5σ) vs Gaussian, tail ratio, kurtosis per ticker.
         </p>
         <div class="scroll" style="max-height:420px"><table id="tbl-tail"><thead></thead><tbody></tbody></table></div>
@@ -919,11 +1001,11 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
     </div>
     <div class="grid2" style="margin-bottom:1rem">
       <div class="card">
-        <h3>Portfolio tail vs Gaussian</h3>
+        <h3>Portfolio tail vs Gaussian <span class="info-ic" data-gloss="tailIdx">i</span></h3>
         <div class="scroll"><table id="tbl-port-tail"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
-        <h3>Ergodicity / ruin (portfolio)</h3>
+        <h3>Ergodicity / ruin (portfolio) <span class="info-ic" data-gloss="ergodic">i</span></h3>
         <p class="hint">Arith vs geom return, variance drag, ruin probability, terminal-wealth
           percentiles from block-bootstrap paths.
         </p>
@@ -932,14 +1014,14 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
     </div>
     <div class="grid2" style="margin-bottom:1rem">
       <div class="card">
-        <h3>Barbell structure / convexity</h3>
+        <h3>Barbell structure / convexity <span class="info-ic" data-gloss="barbell">i</span></h3>
         <p class="hint">Safe/middle/convex buckets, barbell score (positive = barbell, negative =
           Christmas tree), vol &amp; vol-of-vol beta, hedge cost, convexity allocation.
         </p>
         <div class="scroll"><table id="tbl-barbell"><thead></thead><tbody></tbody></table></div>
       </div>
       <div class="card">
-        <h3>Tail dependence (upper/lower)</h3>
+        <h3>Tail dependence (upper/lower) <span class="info-ic" data-gloss="tailDep">i</span></h3>
         <p class="hint">Crisis-period co-movement that correlation misses (corr → 0 mid-distribution,
           → 1 in tails).
         </p>
@@ -947,7 +1029,7 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
       </div>
     </div>
     <div class="card">
-      <h3>Gap risk — the risk that arrives overnight</h3>
+      <h3>Gap risk — the risk that arrives overnight <span class="info-ic" data-gloss="gapRisk">i</span></h3>
       <p class="hint">Close-to-close backtests can't see gaps. Gap share of variance &gt; 1 means the
         name's risk is overnight-dominated; these names gap through stops.
       </p>
@@ -1324,6 +1406,28 @@ ORDER BY ev_ebitda;</textarea>
         <div class="scroll" style="max-height:360px"><table id="tbl-regime-oos"><thead></thead><tbody></tbody></table></div>
       </div>
     </div>
+    <div class="grid2" style="margin-bottom:1rem">
+      <div class="card">
+        <h3>RPT regime models — best config per ticker</h3>
+        <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
+          pass8 RPT fine-tunes (head-only + exog), chosen by max OOS direction excess over the
+          regime's own persistence baseline. Serving uses current HMM regime + regime_model_best_rpt.csv.
+        </p>
+        <div class="scroll"><table id="tbl-regime-best-rpt"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card">
+        <h3>RPT regime model OOS eval (all cells)</h3>
+        <div class="scroll" style="max-height:360px"><table id="tbl-regime-oos-rpt"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>RPT vs IBM regime comparison</h3>
+      <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
+        Head-to-head OOS directional accuracy: IBM base vs RPT base, same regime cells.
+        Positive excess_delta means RPT outperforms IBM for that cell.
+      </p>
+      <div class="scroll"><table id="tbl-rpt-compare"><thead></thead><tbody></tbody></table></div>
+    </div>
     <div class="card" style="margin-bottom:1rem">
       <h3>Threshold logic screen (dual-pass first)</h3>
       <div class="scroll"><table id="tbl-thr"><thead></thead><tbody></tbody></table></div>
@@ -1477,7 +1581,7 @@ ORDER BY ev_ebitda;</textarea>
       <span id="rolling-status" style="color:var(--muted);font-size:0.78rem"></span>
     </div>
     <div class="card" style="margin-bottom:1rem">
-      <h3>Rolling window risk metrics</h3>
+      <h3>Rolling window risk metrics <span class="info-ic" data-gloss="oosc">i</span></h3>
       <div class="scroll"><table id="tbl-rolling"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="card" style="margin-bottom:1rem">
@@ -1612,7 +1716,7 @@ ORDER BY ev_ebitda;</textarea>
     <p class="section-intro">Research engines in one place: blended IC, pair cointegration, cross-section ranks, earnings catalysts. Highest composite with usable pairs/catalysts is the shortlist.</p>
     <div class="widget-live-bar" id="sprint-live-bar"></div>
 
-    <h3 style="margin-top:1.2rem">Signal Aggregator — OOS IC weights</h3>
+    <h3 style="margin-top:1.2rem">Signal Aggregator — OOS IC weights <span class="info-ic" data-gloss="sprint">i</span></h3>
     <div class="grid2">
       <div class="card">
         <h4>Family IC (trailing window, cutoff − 21d)</h4>
@@ -1625,7 +1729,7 @@ ORDER BY ev_ebitda;</textarea>
       </div>
     </div>
 
-    <h3 style="margin-top:1.2rem">Pair Engine — walk-forward OOS (net of costs)</h3>
+    <h3 style="margin-top:1.2rem">Pair Engine — walk-forward OOS (net of costs) <span class="info-ic" data-gloss="pairs">i</span></h3>
     <div class="grid2">
       <div class="card">
         <h4>Selected pairs (FDR + half-life)</h4>
@@ -1637,7 +1741,7 @@ ORDER BY ev_ebitda;</textarea>
       </div>
     </div>
 
-    <h3 style="margin-top:1.2rem">Cross-Section — L/S vs equal-weight long</h3>
+    <h3 style="margin-top:1.2rem">Cross-Section — L/S vs equal-weight long <span class="info-ic" data-gloss="crossSec">i</span></h3>
     <div class="grid2">
       <div class="card">
         <h4>OOS stats</h4>
@@ -1795,7 +1899,7 @@ function widgetEnsureCardTable(sectionId, tableId, title) {
   const card = document.createElement("div");
   card.className = "card";
   card.style.marginTop = "1rem";
-  card.innerHTML = `<h3>${title || tableId}</h3><div class="scroll"><table id="${tableId}"><thead></thead><tbody></tbody></table></div>`;
+  card.innerHTML = `<h3>${title || tableId} <span class="info-ic" data-gloss="peer">i</span></h3><div class="scroll"><table id="${tableId}"><thead></thead><tbody></tbody></table></div>`;
   sec.appendChild(card);
   return card.querySelector("table");
 }
@@ -1851,6 +1955,15 @@ const LIVE_TAB_WIDGETS = {
       { sql: "SELECT ticker, pb_ratio, ev_ebitda, roe, roic, mktcap_to_assets, notes FROM defensive_value_etfs", tableId: "tbl-etf", limit: 20 },
       { sql: "SELECT * FROM crisis_correlation_summary", tableId: "tbl-crisis", limit: 20 },
       { sql: "SELECT strategy, ann_ret, ann_vol, sharpe, max_dd, cvar_5pct FROM tail_risk_hedge_performance ORDER BY sharpe DESC", tableId: "tbl-tail", limit: 20 },
+      { sql: 'SELECT "index", sharpe, ann_return_pct, ann_vol_pct, max_dd_pct, sharpe_rank FROM index_backtest_stats ORDER BY sharpe DESC', tableId: "tbl-sharpe", limit: 20 },
+      { sql: "SELECT * FROM factor_rotation_performance", tableId: "tbl-factor-rot", limit: 20 },
+      { sql: "SELECT * FROM forecast_backtest_metrics", tableId: "tbl-fc-bt", limit: 20 },
+      { sql: 'SELECT date, "window", avg_pairwise_corr, median_pairwise_corr, mkt_vol FROM rolling_corr_avg_timeseries ORDER BY date DESC', tableId: "tbl-rollcorr", limit: 40 },
+      { sql: "SELECT * FROM factor_rotation_performance", tableId: "tbl-frot", limit: 20 },
+      { sql: "SELECT kind, mean_corr, median_corr, p10, p90 FROM allpairs_corr_summary", tableId: "tbl-apsum", limit: 10 },
+      { sql: "SELECT * FROM allpairs_sector_corr_latest", tableId: "tbl-apsec", limit: 20 },
+      { sql: "SELECT * FROM hmm_posterior_summary", tableId: "tbl-hmm-sum", limit: 20 },
+      { sql: "SELECT * FROM kalman_gain_summary", tableId: "tbl-regime-meta", limit: 20 },
     ],
   },
   regime: {
@@ -1861,6 +1974,12 @@ const LIVE_TAB_WIDGETS = {
       { sql: "SELECT date, regime, mkt_ret, vol21, kf_level, gain_ret, gain_vol FROM kalman_gain_path ORDER BY date DESC", tableId: "tbl-kgain", limit: 40 },
       { sql: "SELECT date, VIX9D_proxy, VIX_proxy, VIX3M_proxy, term_slope_21_63, contango FROM vix_term_structure ORDER BY date DESC", tableId: "tbl-vix", limit: 30 },
       { sql: "SELECT ticker, regime, label, dual_pass, roe, roic, ev_ebitda, pb_ratio FROM threshold_logic_screen WHERE dual_pass = true OR dual_pass = 1", tableId: "tbl-thr", limit: 50 },
+      { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, (dir_acc - pers_dir) AS excess, head_only, exog FROM regime_model_best_rpt ORDER BY excess DESC", tableId: "tbl-regime-best-rpt", limit: 50 },
+      { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, (dir_acc - pers_dir) AS excess, head_only, exog FROM regime_model_oos_rpt ORDER BY excess DESC", tableId: "tbl-regime-oos-rpt", limit: 100 },
+      { sql: "SELECT ticker, regime, steps, cap, lr, head_only, exog, dir_acc_ibm, dir_acc_rpt, excess_delta FROM rpt_vs_ibm_compare ORDER BY excess_delta DESC", tableId: "tbl-rpt-compare", limit: 50 },
+      { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, (dir_acc - pers_dir) AS excess, head_only, exog FROM regime_model_best_rpt ORDER BY excess DESC", tableId: "tbl-regime-best-rpt-fc", limit: 50 },
+      { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, (dir_acc - pers_dir) AS excess, head_only, exog FROM regime_model_oos_rpt ORDER BY excess DESC", tableId: "tbl-regime-oos-rpt-fc", limit: 100 },
+      { sql: "SELECT ticker, regime, steps, cap, lr, head_only, exog, dir_acc_ibm, dir_acc_rpt, excess_delta FROM rpt_vs_ibm_compare ORDER BY excess_delta DESC", tableId: "tbl-rpt-compare-fc", limit: 50 },
     ],
   },
   quality: {
@@ -1886,12 +2005,17 @@ const LIVE_TAB_WIDGETS = {
       { sql: "SELECT * FROM inclusion_candidates", tableId: "tbl-inc", limit: 40 },
       { sql: "SELECT * FROM exclusion_candidates", tableId: "tbl-exc", limit: 40 },
       { sql: "SELECT * FROM near_dual_candidates", tableId: "tbl-near", limit: 30 },
+      { sql: "SELECT * FROM defensive_value_exploration", tableId: "tbl-defexp", limit: 40 },
+      { sql: "SELECT * FROM sector_correlation_matrix_latest", tableId: "tbl-scorr", limit: 40 },
+      { sql: "SELECT * FROM asset_correlation_matrix", tableId: "tbl-acorr", limit: 60 },
     ],
   },
   sleeves: {
     duckLabel: "Live: monitored_stocks",
     queries: [
       { sql: "SELECT ticker, name, sector, industry, growth_sleeve, value_sleeve, index_member, defensive_value_index, growth_tech_index FROM monitored_stocks", tableId: "tbl-slv-members", limit: 120 },
+      { sql: "SELECT * FROM factor_rotation_weights ORDER BY date DESC LIMIT 20", tableId: "tbl-slv-counts", limit: 20 },
+      { sql: "SELECT * FROM factor_sleeve_returns ORDER BY date DESC LIMIT 20", tableId: "tbl-aero", limit: 20 },
     ],
     extraButtons: null, // filled at runtime
   },
@@ -1902,6 +2026,21 @@ const LIVE_TAB_WIDGETS = {
           { sql: "SELECT * FROM hmm_regime_correlations", tableId: "tbl-hmm", limit: 40 },
         ],
       },
+  fisher: {
+    duckLabel: "Live: fisher",
+    queries: [
+      { sql: "SELECT * FROM fisher_indexes ORDER BY date DESC LIMIT 20", tableId: "tbl-fi-baskets", limit: 20 },
+      { sql: "SELECT * FROM fisher_sector_baskets_latest", tableId: "tbl-fisher-latest", limit: 40 },
+      { sql: "SELECT * FROM fisher_rate_decomposition ORDER BY date DESC LIMIT 15", tableId: "tbl-fisher-tail", limit: 15 },
+    ],
+  },
+  quality: {
+    duckLabel: "Live: quality (DuckDB)",
+    queries: [
+      { sql: "SELECT * FROM preferred_metrics ORDER BY composite_score DESC", tableId: "tbl-quality-mix", limit: 40 },
+      { sql: "SELECT * FROM dupont_analysis ORDER BY roe DESC", tableId: "tbl-lev-disc", limit: 40 },
+    ],
+  },
   manage: {
       duckLabel: "Live: monitored_stocks",
       queries: [
@@ -5405,6 +5544,30 @@ async function renderRegimeModels() {
   }
 }
 
+async function renderRptRegimeModels() {
+  try {
+    const [bestRpt, oosRpt, compare] = await Promise.all([
+      liveTable("regime_model_best_rpt"),
+      liveTable("regime_model_oos_rpt"),
+      liveTable("rpt_vs_ibm_compare"),
+    ]);
+    // Regime tab tables
+    fillSimple("#tbl-regime-best-rpt", bestRpt, ["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir", "excess", "head_only", "exog"]);
+    const oosRptSorted = (oosRpt || []).slice().sort((a, b) =>
+      String(a.ticker || "").localeCompare(String(b.ticker || "")) ||
+      String(a.regime || "").localeCompare(String(b.regime || "")) ||
+      (+b.dir_acc || 0) - (+a.dir_acc || 0));
+    fillSimple("#tbl-regime-oos-rpt", oosRptSorted, ["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir", "excess", "head_only", "exog", "n_train", "n_test"]);
+    fillSimple("#tbl-rpt-compare", compare, ["ticker", "regime", "steps", "cap", "lr", "head_only", "exog", "dir_acc_ibm", "dir_acc_rpt", "excess_delta"]);
+    // Forecasts tab tables
+    fillSimple("#tbl-regime-best-rpt-fc", bestRpt, ["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir", "excess", "head_only", "exog"]);
+    fillSimple("#tbl-regime-oos-rpt-fc", oosRptSorted, ["ticker", "regime", "steps", "cap", "lr", "dir_acc", "pers_dir", "excess", "head_only", "exog", "n_train", "n_test"]);
+    fillSimple("#tbl-rpt-compare-fc", compare, ["ticker", "regime", "steps", "cap", "lr", "head_only", "exog", "dir_acc_ibm", "dir_acc_rpt", "excess_delta"]);
+  } catch (e) {
+    console.warn("renderRptRegimeModels", e);
+  }
+}
+
 const SHADOW_COLS = ["date", "equity", "cash", "drawdown", "n_holdings", "kill_switch", "ann_ret", "sharpe"];
 
 async function renderShadow() {
@@ -5781,8 +5944,16 @@ async function main() {
   if (typeof renderSprint === "function") renderSprint();
   if (typeof renderSignals === "function") renderSignals();
   if (typeof renderRegimeModels === "function") renderRegimeModels();
+  if (typeof renderRptRegimeModels === "function") renderRptRegimeModels();
   if (typeof renderShadow === "function") renderShadow();
   if (typeof renderFragility === "function") renderFragility();
+  if (typeof renderFisher === "function") renderFisher();
+  if (typeof renderSleeves === "function") renderSleeves();
+  if (typeof renderQuality === "function") renderQuality();
+  if (typeof renderInclusion === "function") renderInclusion();
+  if (typeof renderStress === "function") renderStress();
+  if (typeof renderRolling === "function") renderRolling();
+  if (typeof renderStock === "function") renderStock();
   if (typeof addManualFallbackButton === "function") addManualFallbackButton();
 }
 

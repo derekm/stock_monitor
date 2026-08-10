@@ -77,11 +77,11 @@ STOCKS = DATA_DIR / "monitored_stocks.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
 SP500 = DATA_DIR / "sp500_constituents.parquet"
 SP500_CHANGES = DATA_DIR / "sp500_changes.parquet"
-GROUPS = DATA_DIR / "factor_groups.csv"           # catalog: group, group_type
-MEMBERS = DATA_DIR / "factor_group_members.csv"   # join: group, ticker, valid_from, valid_to
-OUT_W = DATA_DIR / "factor_rotation_weights.csv"
-OUT_PERF = DATA_DIR / "factor_rotation_performance.csv"
-OUT_SLEEVE = DATA_DIR / "factor_sleeve_returns.csv"
+GROUPS = DATA_DIR / "factor_groups.parquet"           # catalog: group, group_type
+MEMBERS = DATA_DIR / "factor_group_members.parquet"   # join: group, ticker, valid_from, valid_to
+OUT_W = DATA_DIR / "factor_rotation_weights.parquet"
+OUT_PERF = DATA_DIR / "factor_rotation_performance.parquet"
+OUT_SLEEVE = DATA_DIR / "factor_sleeve_returns.parquet"
 
 MOM_SKIP = 21     # 12-1 momentum: skip the most recent month
 MOM_WINDOW = 252  # trailing 12 months (trading days)
@@ -256,8 +256,8 @@ def ensure_groups(ann: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
         if g not in set(cat["group"]):
             cat = pd.concat([cat, pd.DataFrame([{"group": g, "group_type": "custom"}])], ignore_index=True)
 
-    GROUPS.write_text(cat.to_csv(index=False), encoding="utf-8")
-    MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+    cat.to_parquet(GROUPS, index=False)
+    mem.to_parquet(MEMBERS, index=False)
     print(f"Seeded {GROUPS.name} ({len(cat)} groups) + {MEMBERS.name} ({len(mem)} memberships)")
     return cat, mem
 
@@ -485,9 +485,9 @@ def run(save: bool = True):
                 print(f"  {k}: {v}")
 
     if save:
-        wdf.to_csv(OUT_W, index=False)
-        perf_df.to_csv(OUT_PERF, index=False)
-        full_sret.reset_index().rename(columns={"index": "date"}).to_csv(OUT_SLEEVE, index=False)
+        wdf.to_parquet(OUT_W, index=False)
+        perf_df.to_parquet(OUT_PERF, index=False)
+        full_sret.reset_index().rename(columns={"index": "date"}).to_parquet(OUT_SLEEVE, index=False)
         print(f"Wrote {OUT_W}\nWrote {OUT_PERF}\nWrote {OUT_SLEEVE}")
     return perf_df
 
@@ -515,9 +515,9 @@ def manage_group_members(args):
     """
     cat, mem = load_group_tables()
     if not GROUPS.exists():
-        GROUPS.write_text(cat.to_csv(index=False), encoding="utf-8")
+        cat.to_parquet(GROUPS, index=False)
     if not MEMBERS.exists():
-        MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+        mem.to_parquet(MEMBERS, index=False)
 
     g = getattr(args, "group", None)
     g = g.upper() if g else None
@@ -529,7 +529,7 @@ def manage_group_members(args):
             print(f"group {g} already exists (type {cat.loc[cat['group']==g,'group_type'].iloc[0]})")
             return
         cat = pd.concat([cat, pd.DataFrame([{"group": g, "group_type": args.type or "custom"}])], ignore_index=True)
-        GROUPS.write_text(cat.to_csv(index=False), encoding="utf-8")
+        cat.to_parquet(GROUPS, index=False)
         print(f"group {g} (type={args.type or 'custom'}) created")
     elif args.cmd == "add":
         if g not in set(cat["group"].str.upper()):
@@ -537,7 +537,7 @@ def manage_group_members(args):
             return
         row = {"group": g, "ticker": tk, "valid_from": args.frm, "valid_to": args.to}
         mem = pd.concat([mem, pd.DataFrame([row])], ignore_index=True)
-        MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+        mem.to_parquet(MEMBERS, index=False)
         print(f"{tk} added to {g} [{args.frm or 'open'} -> {args.to or 'open'}]")
     elif args.cmd == "evict":
         m = mem[(mem["group"].str.upper() == g) & (mem["ticker"].str.upper() == tk)]
@@ -548,11 +548,11 @@ def manage_group_members(args):
             # set valid_to on the open-ended window(s); rows already closed stay
             idx = m[m["valid_to"].isna() | (m["valid_to"] == "")].index
             mem.loc[idx, "valid_to"] = args.on
-            MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+            mem.to_parquet(MEMBERS, index=False)
             print(f"{tk} evicted from {g} effective {args.on}")
         else:
             mem = mem.drop(m.index)
-            MEMBERS.write_text(mem.to_csv(index=False), encoding="utf-8")
+            mem.to_parquet(MEMBERS, index=False)
             print(f"{tk} evicted from {g} (rows removed)")
     elif args.cmd == "show":
         m = mem

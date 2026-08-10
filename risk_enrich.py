@@ -6,7 +6,7 @@ import pandas as pd
 
 DATA = Path(__file__).parent
 PRICES = DATA / "daily_prices.parquet"
-PREF = DATA / "preferred_metrics.csv"
+PREF = DATA / "preferred_metrics.parquet"
 PREF_PQ = DATA / "preferred_metrics.parquet"
 FUND = DATA / "fundamentals.parquet"
 

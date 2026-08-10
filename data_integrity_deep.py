@@ -26,7 +26,7 @@ PRICES = DATA_DIR / "daily_prices.parquet"
 CLEAN = DATA_DIR / "daily_prices_clean.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-PREF = DATA_DIR / "preferred_metrics.csv"
+PREF = DATA_DIR / "preferred_metrics.parquet"
 OUT_DIR = DATA_DIR
 
 

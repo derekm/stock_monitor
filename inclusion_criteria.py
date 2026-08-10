@@ -48,7 +48,7 @@ FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
-PREF = DATA_DIR / "preferred_metrics.csv"
+PREF = DATA_DIR / "preferred_metrics.parquet"
 
 OUT_INC = DATA_DIR / "inclusion_candidates.csv"
 OUT_EXC = DATA_DIR / "exclusion_candidates.csv"

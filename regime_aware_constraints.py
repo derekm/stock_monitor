@@ -22,7 +22,7 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
-HMM = DATA_DIR / "hmm_regime_states.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 
 OUT_BIND = DATA_DIR / "regime_constraint_binding.csv"

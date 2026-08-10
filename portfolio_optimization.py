@@ -47,7 +47,7 @@ PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 CALENDAR = DATA_DIR / "rebalance_calendar.csv"
-HMM = DATA_DIR / "hmm_regime_states.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
 OUT_W = DATA_DIR / "erc_gmv_strategies.csv"
 OUT_S = DATA_DIR / "erc_gmv_summary.csv"
 

@@ -20,7 +20,7 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-HMM = DATA_DIR / "hmm_regime_states.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
 OUT = DATA_DIR / "regime_corr_breakdown.csv"
 OUT_PAIRS = DATA_DIR / "regime_corr_pair_delta.csv"
 OUT_SEC = DATA_DIR / "regime_sector_corr.csv"

@@ -15,7 +15,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 HMM = DATA_DIR / "hmm_posterior_analysis.csv"
-FALLBACK = DATA_DIR / "hmm_regime_states.csv"
+FALLBACK = DATA_DIR / "hmm_regime_states.parquet"
 OUT = DATA_DIR / "posterior_entropy_dynamics.csv"
 OUT_SUM = DATA_DIR / "posterior_entropy_summary.csv"
 

@@ -28,7 +28,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
-HMM_STATES = DATA_DIR / "hmm_regime_states.csv"
+HMM_STATES = DATA_DIR / "hmm_regime_states.parquet"
 HMM_TRANS = DATA_DIR / "hmm_transition_matrix.csv"
 OUT_SUMMARY = DATA_DIR / "monte_carlo_summary.csv"
 OUT_PATHS = DATA_DIR / "monte_carlo_path_stats.csv"
@@ -57,7 +57,7 @@ def load_returns(tickers: list[str] | None = None) -> pd.DataFrame:
 
 def load_hmm_alignment(rets_index: pd.DatetimeIndex) -> pd.Series:
     if not HMM_STATES.exists():
-        raise SystemExit("Missing hmm_regime_states.csv — run hmm_regime_detection.py --save")
+        raise SystemExit("Missing hmm_regime_states.parquet — run hmm_regime_detection.py --save")
     h = pd.read_csv(HMM_STATES)
     h["date"] = pd.to_datetime(h["date"])
     s = h.set_index("date")["regime"].reindex(rets_index).ffill().bfill()

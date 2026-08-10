@@ -21,10 +21,10 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
-OUT_STATES = DATA_DIR / "hmm_regime_states.csv"
-OUT_SUM = DATA_DIR / "hmm_regime_summary.csv"
-OUT_TRANS = DATA_DIR / "hmm_transition_matrix.csv"
-OUT_TRIGGERS = DATA_DIR / "hmm_transition_triggers.csv"
+OUT_STATES = DATA_DIR / "hmm_regime_states.parquet"
+OUT_SUM = DATA_DIR / "hmm_regime_summary.parquet"
+OUT_TRANS = DATA_DIR / "hmm_transition_matrix.parquet"
+OUT_TRIGGERS = DATA_DIR / "hmm_transition_triggers.parquet"
 
 # Window policy (adaptive, not a fixed default):
 #   - Fit only on the current regime episode: data since the last detected
@@ -192,9 +192,9 @@ def run(n_states: int = 3, save: bool = True, window_days: int | None = "auto"):
     print(out[["regime", "mkt_ret", "vol21", "avg_corr"]].tail(30).to_string())
 
     if save:
-        out.reset_index().rename(columns={"index": "date"}).to_csv(OUT_STATES, index=False)
-        summary.to_csv(OUT_SUM, index=False)
-        trans.to_csv(OUT_TRANS)
+        out.reset_index().rename(columns={"index": "date"}).to_parquet(OUT_STATES, index=False)
+        summary.to_parquet(OUT_SUM, index=False)
+        trans.to_parquet(OUT_TRANS)
         print(f"\nWrote {OUT_STATES}\nWrote {OUT_SUM}\nWrote {OUT_TRANS}")
     return out, summary, trans
 

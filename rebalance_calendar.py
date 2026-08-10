@@ -24,7 +24,7 @@ import numpy as np
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "rebalance_calendar.csv"
 PRICES = DATA_DIR / "daily_prices.parquet"
-HMM = DATA_DIR / "hmm_regime_states.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
 PREF = DATA_DIR / "preferred_metrics.csv"
 
 

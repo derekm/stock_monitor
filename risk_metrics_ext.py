@@ -17,7 +17,7 @@ import polars as pl
 DATA_DIR = Path(__file__).resolve().parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLD = DATA_DIR / "portfolio_holdings.parquet"
-PREF = DATA_DIR / "preferred_metrics.csv"
+PREF = DATA_DIR / "preferred_metrics.parquet"
 OUT = DATA_DIR / "risk_metrics_ext.csv"
 OUT_PORT = DATA_DIR / "portfolio_risk_summary.csv"
 

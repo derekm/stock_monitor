@@ -34,8 +34,8 @@ import pandas as pd
 from macro_fragility import _fetch_fred
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT = DATA_DIR / "macro_sector_shock.csv"
-OUT_MEMBERS = DATA_DIR / "basket_members.csv"
+OUT = DATA_DIR / "macro_sector_shock.parquet"
+OUT_MEMBERS = DATA_DIR / "basket_members.parquet"
 MIN_SUB_N = 2  # min names with price history to keep a sub-industry basket
 MIN_OBS_PER_TICKER = 250
 
@@ -275,8 +275,8 @@ def main(save: bool = True):
         out[c] = out[c].round(4)
 
     if save:
-        out.to_csv(OUT, index=False)
-        mem_df.to_csv(OUT_MEMBERS, index=False)
+        out.to_parquet(OUT, index=False)
+        mem_df.to_parquet(OUT_MEMBERS, index=False)
 
     # report: latest zone distribution + top shocks
     latest = out.sort_values("date").groupby("basket", as_index=False).tail(1)

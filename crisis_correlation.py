@@ -23,9 +23,9 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT = DATA_DIR / "crisis_correlation_summary.csv"
-OUT_PAIR = DATA_DIR / "crisis_correlation_pairs.csv"
-OUT_TS = DATA_DIR / "crisis_avg_corr_timeseries.csv"
+OUT = DATA_DIR / "crisis_correlation_summary.parquet"
+OUT_PAIR = DATA_DIR / "crisis_correlation_pairs.parquet"
+OUT_TS = DATA_DIR / "crisis_avg_corr_timeseries.parquet"
 
 
 def avg_pairwise_pl(corr: np.ndarray) -> float:

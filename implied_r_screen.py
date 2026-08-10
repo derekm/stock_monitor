@@ -41,7 +41,6 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT = DATA_DIR / "implied_r_screen.csv"
 OUT_PQ = DATA_DIR / "implied_r_screen.parquet"
 
 # Fair-value thresholds (paper's worked example uses r = 9% for a risky firm;
@@ -151,10 +150,8 @@ def main():
           f"EXPENSIVE count: {(df['verdict']=='EXPENSIVE').sum()}")
 
     if args.save:
-        df.to_csv(OUT, index=False)
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), OUT_PQ)
-        print(f"\nWrote {OUT} ({len(df)} rows)")
-        print(f"Wrote {OUT_PQ}")
+        print(f"\nWrote {OUT_PQ} ({len(df)} rows)")
 
 
 if __name__ == "__main__":

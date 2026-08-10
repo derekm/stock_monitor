@@ -31,7 +31,7 @@ import pyarrow.parquet as pq
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 SNAP = DATA_DIR / "preferred_metrics_history.parquet"
-SNAP_CSV = DATA_DIR / "preferred_metrics_history.csv"
+SNAP_CSV = DATA_DIR / "preferred_metrics_history.parquet"
 SCREEN_BT = DATA_DIR / "screen_backtest.csv"
 
 # thresholds (same as preferred_metrics)

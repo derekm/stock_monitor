@@ -15,13 +15,13 @@ from pathlib import Path
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-FORECAST_CSV = DATA_DIR / "forecasts_granite.csv"
+FORECAST_CSV = DATA_DIR / "forecasts_granite.parquet"
 FORECAST_PQ = DATA_DIR / "forecasts_granite.parquet"
 BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.csv"
 PRICES_FILE = DATA_DIR / "daily_prices.parquet"
 REGIME_STATS = DATA_DIR / "regime_forecast_stats.csv"
 HMM_FILE = DATA_DIR / "hmm_regime_states.csv"
-REGIME_BEST = DATA_DIR / "regime_model_best.csv"
+REGIME_BEST = DATA_DIR / "regime_model_best.parquet"
 
 
 def load_regime_selection() -> tuple[str | None, dict[str, dict]]:
