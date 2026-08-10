@@ -102,10 +102,14 @@ def label_states(feat: pd.DataFrame, states: np.ndarray) -> dict[int, str]:
     return labels, g
 
 
-def run(n_states: int = 3, save: bool = True):
+def run(n_states: int = 3, save: bool = True, window_days: int | None = None):
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
     prices["date"] = pd.to_datetime(prices["date"])
     wide = prices.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
+    # Rolling window: fit only on recent history (older regimes pollute EM).
+    # Regime dynamics change — 2y default keeps the fit focused and fast.
+    if window_days is not None and len(wide) > window_days:
+        wide = wide.iloc[-window_days:]
     rets = np.log(wide / wide.shift(1)).dropna(how="all")
 
     feat = build_features(rets)
@@ -159,8 +163,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-states", type=int, default=3)
     ap.add_argument("--save", action="store_true")
+    ap.add_argument("--window-days", type=int, default=504,
+                    help="Fit only on recent N trading days (default 504 ≈ 2y). "
+                         "Pass 0 for full history.")
     args = ap.parse_args()
-    run(n_states=args.n_states, save=True)
+    wd = None if args.window_days <= 0 else args.window_days
+    run(n_states=args.n_states, save=True, window_days=wd)
 
 
 if __name__ == "__main__":
