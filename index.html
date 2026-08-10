@@ -645,10 +645,31 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
           <input id="fc-run-label" value="" placeholder="optional name for comparison" />
         </div>
         <div>
-          <label>API base URL</label>
-          <input id="fc-api" value="http://127.0.0.1:5055" />
-        </div>
-      </div>
+                  <label>API base URL</label>
+                  <input id="fc-api" value="http://127.0.0.1:5055" />
+                </div>
+                <div>
+                  <label>Model base</label>
+                  <select id="fc-base">
+                    <option value="ibm" selected>IBM base (pass6)</option>
+                    <option value="rpt">RPT base (pass8)</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Use log returns</label>
+                  <select id="fc-use-log">
+                    <option value="0" selected>No</option>
+                    <option value="1">Yes</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Disable regime selection</label>
+                  <select id="fc-no-regime">
+                    <option value="0" selected>No (use regime selection)</option>
+                    <option value="1">Yes (general model only)</option>
+                  </select>
+                </div>
+              </div>
       <div class="sql-actions">
         <button type="button" id="fc-run">Run live forecast</button>
         <button type="button" class="chip-btn" id="fc-health">Health</button>
@@ -1876,12 +1897,22 @@ const LIVE_TAB_WIDGETS = {
         ],
       },
   manage: {
-    duckLabel: "Live: monitored_stocks",
-    queries: [
-      { sql: "SELECT ticker, name, sector, growth_sleeve, value_sleeve, index_member, defensive_value_index, growth_tech_index, in_portfolio FROM monitored_stocks", tableId: "tbl-mg-stocks", limit: 80 },
-    ],
-  },
-};
+      duckLabel: "Live: monitored_stocks",
+      queries: [
+        { sql: "SELECT ticker, name, sector, growth_sleeve, value_sleeve, index_member, defensive_value_index, growth_tech_index, in_portfolio FROM monitored_stocks", tableId: "tbl-mg-stocks", limit: 80 },
+      ],
+    },
+    forecasts: {
+      duckLabel: "Live: regime forecast configs (IBM + RPT)",
+      queries: [
+        { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, excess, n_train, n_test, head_only, exog FROM regime_model_best ORDER BY excess DESC", tableId: "tbl-regime-best", limit: 50 },
+        { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, excess, n_train, n_test, head_only, exog FROM regime_model_oos ORDER BY excess DESC", tableId: "tbl-regime-oos", limit: 100 },
+        { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, excess, head_only, exog FROM regime_model_best_rpt ORDER BY excess DESC", tableId: "tbl-regime-best-rpt", limit: 50 },
+        { sql: "SELECT ticker, regime, steps, cap, lr, dir_acc, pers_dir, excess, head_only, exog FROM regime_model_oos_rpt ORDER BY excess DESC", tableId: "tbl-regime-oos-rpt", limit: 100 },
+        { sql: "SELECT ticker, regime, steps, cap, lr, head_only, exog, dir_acc_ibm, dir_acc_rpt, excess_delta FROM rpt_vs_ibm_compare ORDER BY excess_delta DESC", tableId: "tbl-rpt-compare", limit: 50 },
+      ],
+    },
+  };
 
 
 function cleanupDuplicateLiveBars() {
@@ -2385,6 +2416,9 @@ function fcConfigFromForm() {
     peer_top_n: parseInt($("#fc-peer-topn")?.value || "5", 10),
     label: ($("#fc-run-label")?.value || "").trim(),
     api: ($("#fc-api")?.value || GRANITE_API).replace(/\/$/, ""),
+    base: $("#fc-base")?.value || "ibm",
+    use_log: ($("#fc-use-log")?.value || "0") === "1",
+    no_regime: ($("#fc-no-regime")?.value || "0") === "1",
   };
 }
 
@@ -2611,16 +2645,19 @@ async function fetchGraniteForecasts() {
     return;
   }
   const body = {
-    horizon: cfg.horizon,
-    context: cfg.context,
-    from_first_trade: cfg.from_first_trade,
-    days_ago: cfg.days_ago && cfg.days_ago > 0 ? cfg.days_ago : null,
-    multivariate: cfg.multivariate,
-    peer_mode: cfg.multivariate ? cfg.peer_mode : "none",
-    peer_index: cfg.peer_index || null,
-    peer_tickers: cfg.peer_tickers || null,
-    peer_top_n: cfg.peer_top_n,
-  };
+      horizon: cfg.horizon,
+      context: cfg.context,
+      from_first_trade: cfg.from_first_trade,
+      days_ago: cfg.days_ago && cfg.days_ago > 0 ? cfg.days_ago : null,
+      multivariate: cfg.multivariate,
+      peer_mode: cfg.multivariate ? cfg.peer_mode : "none",
+      peer_index: cfg.peer_index || null,
+      peer_tickers: cfg.peer_tickers || null,
+      peer_top_n: cfg.peer_top_n,
+      base: cfg.base,
+      log: cfg.use_log,
+      no_regime: cfg.no_regime,
+    };
   if (cfg.source === "portfolio") {
     body.tickers = null;
     body.index = "portfolio";

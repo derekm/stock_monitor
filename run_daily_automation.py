@@ -36,7 +36,7 @@ JOBS = {
     "inclusion": (["inclusion_criteria.py", "--explore-defensive", "--save"], None),
     "stress": (["stress_dual_pass.py", "--save"], None),
     "crisis": (["crisis_correlation.py", "--save"], None),
-    "factor_rot": (["factor_rotation_defense.py", "--save"], None),
+    "factor_rot": (["factor_rotation_defense.py", "run", "--save"], None),
     "risk_enrich": (["risk_enrich.py"], None),
     "rolling": (["rolling_window_analysis.py", "--universe", "portfolio", "--save"], None),
     "rolling_corr": (["rolling_correlation_windows.py", "--save"], None),

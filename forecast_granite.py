@@ -216,6 +216,7 @@ def index_label_for(ticker: str, mapping: dict[str, list[str]]) -> str:
 
 _model = None
 _model_name = None
+_model_base = None
 
 
 
@@ -256,18 +257,34 @@ def resolve_history_start(
     return None
 
 
-def load_granite_model(model_name: str = DEFAULT_MODEL):
-    global _model, _model_name
-    if _model is not None and _model_name == model_name:
+def load_granite_model(model_name: str = DEFAULT_MODEL, base: str = "ibm"):
+    global _model, _model_name, _model_base
+    cache_key = (model_name, base)
+    if _model is not None and _model_name == model_name and _model_base == base:
         return _model, "granite"
     try:
         from tsfm_public.models.tinytimemixer import TinyTimeMixerForPrediction
         import torch  # noqa: F401
 
-        print(f"Loading Granite TTM: {model_name}")
-        model = TinyTimeMixerForPrediction.from_pretrained(model_name)
+        if base == "rpt":
+            # Load RPT base from checkpoints/rpt_base/
+            from pathlib import Path
+            rpt_base_dir = Path(__file__).parent / "checkpoints" / "rpt_base"
+            ckpts = sorted(rpt_base_dir.glob("ttm_rpt_*.pt"))
+            if not ckpts:
+                raise RuntimeError("No RPT base found — run pass8 --pretrain first")
+            ckpt = ckpts[-1]
+            state = torch.load(ckpt, map_location="cpu")
+            cfg = state["config"]
+            from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig
+            cfg = TinyTimeMixerConfig(**cfg)
+            model = TinyTimeMixerForPrediction(cfg)
+            model.load_state_dict(state["model"])
+        else:
+            # IBM base
+            model = TinyTimeMixerForPrediction.from_pretrained(model_name)
         model.eval()
-        _model, _model_name = model, model_name
+        _model, _model_name, _model_base = model, model_name, base
         return model, "granite"
     except Exception as e1:
         try:
@@ -277,7 +294,7 @@ def load_granite_model(model_name: str = DEFAULT_MODEL):
             print(f"Loading via transformers: {model_name}")
             model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
             model.eval()
-            _model, _model_name = model, model_name
+            _model, _model_name, _model_base = model, model_name, base
             return model, "transformers"
         except Exception as e2:
             print("Granite TTM unavailable — statistical fallback (drift + seasonal).")
@@ -519,7 +536,7 @@ def forecast_multivariate_close(
 def cmd_status(args):
     print("Granite TTM forecast module")
     print(f"  prices : {PRICES_FILE.exists()}  stocks: {STOCKS_FILE.exists()}")
-    model, kind = load_granite_model(args.model)
+    model, kind = load_granite_model(args.model, base="ibm")
     print(f"  model  : {args.model}  backend={kind}")
     if PRICES_FILE.exists():
         p = load_ohlcv()
@@ -535,7 +552,7 @@ def cmd_forecast(args):
     indexes = sorted({ix for labs in ticker_map.values() for ix in labs})
     horizon = args.horizon
     context = args.context
-    model, kind = load_granite_model(args.model)
+    model, kind = load_granite_model(args.model, base="ibm")
     first_map = first_trade_dates()
     days_ago = getattr(args, "days_ago", None)
     # --days-ago takes priority over --from-first-trade; portfolio still defaults to first-trade when neither set
@@ -604,7 +621,7 @@ def cmd_forecast(args):
                 base_cfg.num_input_channels = ckpt_ch
                 if ckpt_rpt:
                     base_cfg.resolution_prefix_tuning = True
-                    base_cfg.frequency_token_vocab_size = 5
+                    base_cfg.frequency_token_vocab_size = 10
                 if ckpt_ch > 1 or ckpt_rpt:
                     # rebuild with the checkpoint's exact architecture (channel
                     # count / RPT) so the state dict matches — deepcopying the
@@ -836,7 +853,7 @@ def cmd_backtest(args):
     indexes = sorted({ix for labs in ticker_map.values() for ix in labs})
     horizon = args.horizon
     window = args.window
-    model, kind = load_granite_model(args.model)
+    model, kind = load_granite_model(args.model, base="ibm")
     first_map = first_trade_dates()
     use_first = bool(getattr(args, "from_first_trade", False))
     if not use_first and indexes == ["portfolio"]:

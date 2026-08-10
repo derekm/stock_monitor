@@ -39,6 +39,18 @@ def load_prices():
     return pd.DataFrame(columns=["date", "ticker", "open", "high", "low", "close", "volume", "source"])
 
 def save_prices(df):
+    # Parquet round-trips can leave 'ticker' as an unordered Categorical;
+    # sorting on it then throws "values is not ordered". Normalize to str.
+    if isinstance(df["ticker"].dtype, pd.CategoricalDtype):
+        df = df.copy()
+        df["ticker"] = df["ticker"].astype(str)
+    # DATE-native: existing parquet rows are datetime.date while newly fetched
+    # rows are pd.Timestamp — mixed types cannot be sorted (Timestamp vs
+    # datetime.date comparison raises). Normalize to datetime.date (the
+    # canonical daily date-key type) so the sort is homogeneous and the
+    # parquet sink stays date32[day].
+    df = df.copy()
+    df["date"] = df["date"].map(lambda d: d.date() if isinstance(d, pd.Timestamp) else d)
     df = df.sort_values(["date", "ticker"]).drop_duplicates(subset=["date", "ticker"], keep="last")
     table = pa.Table.from_pandas(df, preserve_index=False)
     pq.write_table(table, PRICES_FILE)

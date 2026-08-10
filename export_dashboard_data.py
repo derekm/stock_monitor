@@ -117,6 +117,9 @@ TABLES = [
     # Regime-selected Granite forecasting (pass6/7)
     "regime_model_best",
     "regime_model_oos",
+    "regime_model_best_rpt",
+    "regime_model_oos_rpt",
+    "rpt_vs_ibm_compare",
     "regime_calibration",
     # Taleb layer: fat tails, gaps, ergodicity, fragility, barbell
     "tail_index",

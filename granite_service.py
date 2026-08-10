@@ -124,6 +124,8 @@ def _live_forecast(
     peer_top_n: int = 5,
     context: int = 512,
     use_log: bool = False,
+    base: str = "ibm",  # "ibm" | "rpt"
+    no_regime: bool = False,
 ):
     """Compute live forecasts — always model/fallback, never stored forecast files."""
     import numpy as np
@@ -313,6 +315,8 @@ def handle_forecast(qs, body=None):
     peer_top_n = int(g("peer_top_n", 5) or 5)
     context = int(g("context", 512) or 512)
     use_log = str(g("log", "0")).lower() in ("1", "true", "yes")
+    base = g("base", "ibm")
+    no_regime = str(g("no_regime", "0")).lower() in ("1", "true", "yes")
     peer_tickers_raw = g("peer_tickers") or ""
 
     index_name = g("index_name") or g("name") or g("index")
@@ -346,6 +350,8 @@ def handle_forecast(qs, body=None):
             peer_top_n=peer_top_n,
             context=context,
             use_log=use_log,
+            base=base,
+            no_regime=no_regime,
         )
     except Exception as e:
         return {"ok": False, "error": str(e), "trace": traceback.format_exc()}

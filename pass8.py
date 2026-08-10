@@ -192,7 +192,7 @@ def load_rpt_base(ckpt_path: Path):
 
 # ---------------------------------------------------------------- Stage B
 def fine_tune(tickers, steps_list, caps_list, lr_list, regimes, split_frac,
-              resume, max_experiments, head_only, exog, rpt_base: Path):
+              resume, max_experiments, head_only, exog, rpt_base: Path, ckpt_dir: Path | None = None):
     """pass6-style regime sweep FROM the RPT base."""
     global done_set
     done_set = set()
@@ -259,7 +259,7 @@ def fine_tune(tickers, steps_list, caps_list, lr_list, regimes, split_frac,
                             r = train_regime_model(tr_win, test, steps, tag, lr=lr,
                                                    n_channels=4 if exog else 1,
                                                    head_only=head_only, rpt=True,
-                                                   exog=exog, dates=dates)
+                                                   exog=exog, dates=dates, ckpt_dir=ckpt_dir)
                             if r.get("skipped"):
                                 print(f"    {tag}: skipped", flush=True)
                                 continue
@@ -321,13 +321,15 @@ def main():
     ap.add_argument("--save-to", default="checkpoints/rpt_base")
     ap.add_argument("--fine-tune", action="store_true", help="Stage B: regime sweep from RPT base")
     ap.add_argument("--tickers", default="AEP,NVR,FICO")
+    ap.add_argument("--steps-list", nargs="+", type=int, default=[3000, 6000], help="Stage B fine-tune steps (e.g. 3000 6000)")
     ap.add_argument("--caps", nargs="+", type=int, default=[100, 200])
-    ap.add_argument("--lrs", nargs="+", type=float, default=[None])
+    ap.add_argument("--lrs", nargs="+", type=float, default=[1e-4])
     ap.add_argument("--regimes", nargs="+", default=REGIMES)
     ap.add_argument("--split-frac", type=float, default=0.7)
     ap.add_argument("--head-only", action="store_true")
     ap.add_argument("--exog", action="store_true")
     ap.add_argument("--rpt-base", default=None, help="Stage B base ckpt (default: newest in --save-to)")
+    ap.add_argument("--ckpt-dir", default=None, help="Dir to save per-regime checkpoints (e.g. checkpoints/regime)")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--max-experiments", type=int, default=None)
     ap.add_argument("--compare", action="store_true")
@@ -348,9 +350,9 @@ def main():
                 raise SystemExit(f"no RPT base in {save_dir} — run --pretrain first")
             base = ckpts[-1]
         tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
-        fine_tune(tickers, [3000, 6000], args.caps, args.lrs, args.regimes,
+        fine_tune(tickers, args.steps_list, args.caps, args.lrs, args.regimes,
                   args.split_frac, args.resume, args.max_experiments,
-                  args.head_only, args.exog, Path(base))
+                  args.head_only, args.exog, Path(base), Path(args.ckpt_dir) if args.ckpt_dir else None)
         return
     ap.print_help()
 
