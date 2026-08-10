@@ -31,6 +31,7 @@ DATA_DIR = Path(__file__).parent
 # name -> (cmd, timeout_s)
 JOBS = {
     "hmm": (["hmm_regime_detection.py", "--n-states", "3", "--save"], None),
+    "market_cap": (["add_daily_marketcap.py"], None),
     "rebalance": (["rebalance_calendar.py", "--months", "18", "--save"], None),
     "preferred": (["preferred_metrics.py", "--save"], None),
     "implied_r": (["implied_r_screen.py", "--save"], None),
@@ -74,6 +75,7 @@ JOBS = {
 # dependencies: job -> set of jobs that must finish first
 DEPS = {
     "rebalance": {"hmm"},
+    "market_cap": set(),  # runs right after prices fetch; no deps
     "inclusion": {"preferred"},
     "implied_r": {"preferred"},
     "stress": {"preferred", "inclusion"},

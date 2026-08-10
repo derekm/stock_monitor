@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-10T09:40:51.779886",
+  "generated": "2026-08-10T15:23:56.281418",
   "count": 250,
   "files": [
     {
@@ -440,7 +440,7 @@
       "path": "daily_prices.parquet",
       "url": "daily_prices.parquet",
       "kind": "parquet",
-      "size": 117305598,
+      "size": 29817357,
       "sql_name": "daily_prices"
     },
     {
@@ -1106,7 +1106,7 @@
       "path": "hmm_regime_states.parquet",
       "url": "hmm_regime_states.parquet",
       "kind": "parquet",
-      "size": 865815,
+      "size": 1062436,
       "sql_name": "hmm_regime_states"
     },
     {
@@ -1115,7 +1115,7 @@
       "path": "hmm_regime_summary.parquet",
       "url": "hmm_regime_summary.parquet",
       "kind": "parquet",
-      "size": 5299,
+      "size": 5353,
       "sql_name": "hmm_regime_summary"
     },
     {
@@ -1133,7 +1133,7 @@
       "path": "hmm_transition_matrix.parquet",
       "url": "hmm_transition_matrix.parquet",
       "kind": "parquet",
-      "size": 2968,
+      "size": 3350,
       "sql_name": "hmm_transition_matrix"
     },
     {

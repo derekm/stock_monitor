@@ -511,8 +511,8 @@ def main():
                 tick_set.update(v)
             if tick_set:
                 px = px[px["ticker"].astype(str).str.upper().isin(tick_set)]
-            panel = px.rename(columns={"close": "close", "volume": "volume"})[
-                [c for c in ["date", "ticker", "close", "volume"] if c in px.columns]
+            panel = px.rename(columns={"close": "close", "volume": "volume", "market_cap": "market_cap"})[
+                [c for c in ["date", "ticker", "close", "volume", "market_cap"] if c in px.columns]
             ].copy()
             panel["date"] = panel["date"].astype(str).str.slice(0, 10)
             payload["price_qty_panel"] = df_records(panel)
