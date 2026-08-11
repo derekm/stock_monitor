@@ -9,9 +9,10 @@ Adds ticker(s) to the universe and runs the full backfill + analytics chain:
   3. Backfill price history with --period max (full available history).
   4. Backfill fundamentals: EDGAR XBRL when a CIK exists, else yfinance
      quarterly statements (point-in-time, source=yfinance_history).
-  5. Compute daily market cap (close x shares outstanding).
-  6. Run the full analytics pipeline (run_daily_automation.py all jobs).
-  7. Regenerate the dashboard export.
+  5. Compute momentum metrics for the new tickers.
+  6. Compute daily market cap (close x shares outstanding).
+  7. Run the full analytics pipeline (run_daily_automation.py all jobs).
+  8. Regenerate the dashboard export.
 
 Usage:
   python add_ticker.py QSR
@@ -117,6 +118,30 @@ def backfill_fundamentals(tickers: list[str]) -> None:
     run([PY, str(DATA_DIR / "update_fundamentals.py"),
          "fetch-history", "--tickers", ",".join(tickers)])
 
+def backfill_momentum(tickers: list[str]) -> None:
+    """Compute momentum metrics for new tickers immediately."""
+    import subprocess, sys
+    # Call the build function directly with tickers via a one-liner
+    code = f"""
+import sys
+sys.path.insert(0, r'{DATA_DIR}')
+from momentum_analytics import build
+df, qdf, ic = build(tickers={tickers})
+df.to_parquet(r'{DATA_DIR}/momentum_metrics.parquet', index=False)
+qdf.to_parquet(r'{DATA_DIR}/momentum_quintiles.parquet', index=False)
+ic.to_parquet(r'{DATA_DIR}/momentum_ic.parquet', index=False)
+print(f'Wrote momentum parquets for {len(tickers)} tickers')
+"""
+    r = subprocess.run([PY, "-c", code], capture_output=True, text=True, timeout=300)
+    tail = (r.stdout or "").strip().splitlines()[-5:]
+    for line in tail:
+        print(f"      {line}")
+    if r.returncode != 0:
+        err = (r.stderr or "").strip().splitlines()[-4:]
+        for line in err:
+            print(f"      !! {line}")
+        raise SystemExit(f"momentum backfill failed: exit {r.returncode}")
+
 
 def marketcap() -> None:
     run([PY, str(DATA_DIR / "add_daily_marketcap.py")])
@@ -163,7 +188,11 @@ def main() -> None:
     if not args.no_fundamentals:
         backfill_fundamentals(tickers)
 
-    # 4. Market cap
+    # 4. Momentum
+    if not args.no_fundamentals:
+        backfill_momentum(tickers)
+
+    # 5. Market cap
     marketcap()
 
     # 5. Analytics + dashboard

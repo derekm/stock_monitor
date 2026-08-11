@@ -93,13 +93,45 @@ def _load_sp500() -> pd.DataFrame:
     return sp
 
 
+def _load_universe_map() -> pd.DataFrame:
+    """Merge S&P-500 GICS labels with the monitored universe so non-S&P names
+    (newly onboarded tickers) still get sector/sub-industry baskets.
+
+    Returns a deduped DataFrame with columns [ticker, gics_sector,
+    gics_sub_industry]. Monitored stocks fill gaps the S&P list leaves (a
+    ticker added to the universe but not yet an S&P constituent). S&P labels
+    win on conflict; monitored `sector`/`industry` are the fallback.
+    """
+    cols = {}
+    sp = _load_sp500()
+    if not sp.empty:
+        cols["gics_sector"] = dict(zip(sp["ticker"], sp["gics_sector"]))
+        cols["gics_sub_industry"] = dict(zip(sp["ticker"], sp["gics_sub_industry"]))
+    ms = DATA_DIR / "monitored_stocks.parquet"
+    if ms.exists():
+        m = pd.read_parquet(ms)
+        m["ticker"] = m["ticker"].astype(str).str.upper()
+        if "sector" in m.columns:
+            for _, r in m[["ticker", "sector"]].drop_duplicates("ticker").iterrows():
+                cols.setdefault("gics_sector", {}).setdefault(str(r["ticker"]), str(r["sector"]))
+        if "industry" in m.columns:
+            for _, r in m[["ticker", "industry"]].drop_duplicates("ticker").iterrows():
+                cols.setdefault("gics_sub_industry", {}).setdefault(str(r["ticker"]), str(r["industry"]))
+    out = pd.DataFrame({
+        "ticker": sorted(set(cols.get("gics_sector", {})) | set(cols.get("gics_sub_industry", {}))),
+    })
+    out["gics_sector"] = out["ticker"].map(cols.get("gics_sector", {}))
+    out["gics_sub_industry"] = out["ticker"].map(cols.get("gics_sub_industry", {}))
+    return out
+
+
 def _build_baskets(have: set[str]) -> dict[str, dict]:
     """Return {basket_id: {kind, tickers, commodity}} — fully dynamic."""
     baskets: dict[str, dict] = {}
-    sp = _load_sp500()
+    uni = _load_universe_map()
 
     # --- GICS sectors ---
-    for sector, g in sp.groupby("gics_sector"):
+    for sector, g in uni.groupby("gics_sector"):
         tickers = sorted({t for t in g["ticker"] if t in have})
         if len(tickers) < MIN_SUB_N:
             continue
@@ -112,7 +144,7 @@ def _build_baskets(have: set[str]) -> dict[str, dict]:
         }
 
     # --- GICS sub-industries ---
-    for sub, g in sp.groupby("gics_sub_industry"):
+    for sub, g in uni.groupby("gics_sub_industry"):
         tickers = sorted({t for t in g["ticker"] if t in have})
         if len(tickers) < MIN_SUB_N:
             continue
