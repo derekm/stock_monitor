@@ -46,7 +46,7 @@ def dollar_volume(days: int = 21) -> pl.DataFrame:
 
 def build() -> tuple[pd.DataFrame, pd.DataFrame]:
     liq = dollar_volume().to_pandas()
-    pref = pd.read_csv(PREF) if PREF.exists() else pd.DataFrame()
+    pref = pd.read_parquet(PREF) if PREF.exists() else pd.DataFrame()
     if len(pref):
         df = pref.merge(liq, on="ticker", how="left")
     else:

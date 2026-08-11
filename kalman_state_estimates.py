@@ -99,7 +99,7 @@ def run(save: bool = True):
 
     # compare to HMM if present
     if Path(HMM).exists():
-        h = pd.read_csv(HMM)
+        h = pd.read_parquet(HMM)
         h["date"] = pd.to_datetime(h["date"])
         df = df.reset_index().rename(columns={"index": "date"})
         df = df.merge(h[["date", "regime", "vol21"]].rename(columns={"vol21": "hmm_vol"}), on="date", how="left")

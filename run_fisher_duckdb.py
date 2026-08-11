@@ -220,7 +220,7 @@ def main():
 
     if args.save:
         if OUT_CSV.exists():
-            old = pd.read_csv(OUT_CSV)
+            old = pd.read_parquet(OUT_CSV)
             # date column is a DATE; read as string then ingest as datetime.date
             old["date"] = old["date"].apply(
                 lambda s: datetime.strptime(str(s)[:10], "%Y-%m-%d").date())

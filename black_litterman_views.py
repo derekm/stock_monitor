@@ -41,7 +41,7 @@ def current_regime() -> str:
 def build_views() -> pd.DataFrame:
     if not PREF.exists():
         return pd.DataFrame()
-    df = pd.read_csv(PREF)
+    df = pd.read_parquet(PREF)
     regime = current_regime()
     stress = "stress" in regime.lower()
     rows = []

@@ -47,7 +47,7 @@ def load_regime_selection() -> tuple[str | None, dict[str, dict]]:
     sel: dict[str, dict] = {}
     if REGIME_BEST.exists():
         try:
-            rb = pd.read_csv(REGIME_BEST)
+            rb = pd.read_parquet(REGIME_BEST)
             for _, r in rb.iterrows():
                 tk = str(r.get("ticker", "")).upper()
                 reg = str(r.get("regime", ""))

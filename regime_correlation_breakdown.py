@@ -37,7 +37,7 @@ def avg_pairwise(corr: pd.DataFrame) -> tuple[float, float]:
 
 
 def run(save: bool = True, max_assets: int = 60):
-    hmm = pd.read_csv(HMM)
+    hmm = pd.read_parquet(HMM)
     hmm["date"] = pd.to_datetime(hmm["date"])
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
     prices["date"] = pd.to_datetime(prices["date"])

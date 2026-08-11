@@ -33,6 +33,10 @@ def main() -> None:
     fund = fund.sort_values(["ticker", "as_of_date"])
     print(f"  {len(fund):,} rows, {fund['ticker'].nunique()} tickers")
 
+    # Normalize date dtypes: prices are datetime64[ms], fundamentals'
+    # as_of_date can arrive as datetime.date objects (fresh EDGAR/yfinance).
+    fund["as_of_date"] = pd.to_datetime(fund["as_of_date"], errors="coerce")
+
     # Check shares_outstanding column
     if "shares_outstanding" not in fund.columns:
         print("  WARNING: shares_outstanding column missing — falling back to market_cap/close")

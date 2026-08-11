@@ -52,7 +52,7 @@ def latest_regime_on(date) -> str:
     if not HMM.exists():
         return "unknown"
     try:
-        h = pd.read_csv(HMM)
+        h = pd.read_parquet(HMM)
         if "date" not in h.columns:
             return "unknown"
         h["date"] = pd.to_datetime(h["date"])
@@ -81,7 +81,7 @@ def stress_prob_on(date) -> float:
     if not HMM.exists():
         return 0.0
     try:
-        h = pd.read_csv(HMM)
+        h = pd.read_parquet(HMM)
         if "date" not in h.columns:
             return 0.0
         h["date"] = pd.to_datetime(h["date"])

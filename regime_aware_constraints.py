@@ -232,7 +232,7 @@ def run(save: bool = True):
         import subprocess, sys
         subprocess.run([sys.executable, "hmm_regime_detection.py", "--save"], cwd=str(DATA_DIR), check=False)
 
-    hmm = pd.read_csv(HMM)
+    hmm = pd.read_parquet(HMM)
     hmm["date"] = pd.to_datetime(hmm["date"])
     fund = latest_fund()
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])

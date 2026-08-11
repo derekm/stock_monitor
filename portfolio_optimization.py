@@ -294,7 +294,7 @@ def regime_scaled_cov(cov: np.ndarray, tickers: list[str], window: int = 126) ->
     reg = ""
     if HMM.exists():
         try:
-            h = pd.read_csv(HMM)
+            h = pd.read_parquet(HMM)
             h["date"] = pd.to_datetime(h.get("date"), errors="coerce")
             h = h.dropna(subset=["date"]).sort_values("date")
             if len(h):

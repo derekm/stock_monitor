@@ -155,22 +155,42 @@ def fetch_yfinance(tickers: list[str], start: str | None, end: str | None, perio
     rows = []
     if len(tickers) == 1:
         t = tickers[0]
-        for idx, row in raw.iterrows():
-            if pd.isna(row.get("Close")):
-                continue
-            rows.append(
-                {
-                    "date": idx.date() if hasattr(idx, "date") else idx,
-                    "ticker": t,
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    "adj_close": float(row["Adj Close"]) if pd.notna(row.get("Adj Close")) else float(row["Close"]),
-                    "volume": int(row["Volume"]) if pd.notna(row.get("Volume")) else 0,
-                    "source": "yfinance",
-                }
-            )
+        # group_by="ticker" yields MultiIndex columns even for a single ticker
+        if isinstance(raw.columns, pd.MultiIndex):
+            sub = raw[t].dropna(subset=["Close"]) if t in raw.columns.get_level_values(0) else raw.dropna(subset=["Close"])
+            for idx, row in sub.iterrows():
+                if pd.isna(row.get("Close")):
+                    continue
+                rows.append(
+                    {
+                        "date": idx.date() if hasattr(idx, "date") else idx,
+                        "ticker": t,
+                        "open": float(row["Open"]),
+                        "high": float(row["High"]),
+                        "low": float(row["Low"]),
+                        "close": float(row["Close"]),
+                        "adj_close": float(row["Adj Close"]) if pd.notna(row.get("Adj Close")) else float(row["Close"]),
+                        "volume": int(row["Volume"]) if pd.notna(row.get("Volume")) else 0,
+                        "source": "yfinance",
+                    }
+                )
+        else:
+            for idx, row in raw.iterrows():
+                if pd.isna(row.get("Close")):
+                    continue
+                rows.append(
+                    {
+                        "date": idx.date() if hasattr(idx, "date") else idx,
+                        "ticker": t,
+                        "open": float(row["Open"]),
+                        "high": float(row["High"]),
+                        "low": float(row["Low"]),
+                        "close": float(row["Close"]),
+                        "adj_close": float(row["Adj Close"]) if pd.notna(row.get("Adj Close")) else float(row["Close"]),
+                        "volume": int(row["Volume"]) if pd.notna(row.get("Volume")) else 0,
+                        "source": "yfinance",
+                    }
+                )
     else:
         # Multi-index columns: (ticker, field)
         for t in tickers:
@@ -314,6 +334,11 @@ def merge_and_save(new_df: pd.DataFrame, overwrite: bool = False,
     if new_df.empty:
         return
     existing = load_prices()
+
+    # Normalize date to a single dtype so merges/concat don't choke:
+    # parquet stores datetime64[ms]; fresh yfinance rows arrive as date objects.
+    existing["date"] = pd.to_datetime(existing["date"])
+    new_df["date"] = pd.to_datetime(new_df["date"])
 
     if overwrite:
         # Remove any overlapping (date, ticker) pairs from existing

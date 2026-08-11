@@ -58,7 +58,7 @@ def load_returns(tickers: list[str] | None = None) -> pd.DataFrame:
 def load_hmm_alignment(rets_index: pd.DatetimeIndex) -> pd.Series:
     if not HMM_STATES.exists():
         raise SystemExit("Missing hmm_regime_states.parquet — run hmm_regime_detection.py --save")
-    h = pd.read_csv(HMM_STATES)
+    h = pd.read_parquet(HMM_STATES)
     h["date"] = pd.to_datetime(h["date"])
     s = h.set_index("date")["regime"].reindex(rets_index).ffill().bfill()
     return s

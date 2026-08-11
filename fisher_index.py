@@ -313,7 +313,7 @@ def main():
         if out.empty:
             return
         if OUT_FILE.exists() and not args.backfill_all:
-            old = pd.read_csv(OUT_FILE)
+            old = pd.read_parquet(OUT_FILE)
             old["date"] = old["date"].apply(
                 lambda s: datetime.strptime(str(s)[:10], "%Y-%m-%d").date())
             for _, g in out.groupby(["universe", "freq"], dropna=False):
@@ -322,7 +322,7 @@ def main():
             out = pd.concat([old, out], ignore_index=True)
         elif OUT_FILE.exists() and args.backfill_all:
             # replace all rebuilt universes
-            old = pd.read_csv(OUT_FILE)
+            old = pd.read_parquet(OUT_FILE)
             old["date"] = old["date"].apply(
                 lambda s: datetime.strptime(str(s)[:10], "%Y-%m-%d").date())
             labs = set(out["universe"].unique())

@@ -41,7 +41,7 @@ def current_regime() -> str | None:
     if not HMM_FILE.exists():
         return None
     try:
-        hmm = pd.read_csv(HMM_FILE)
+        hmm = pd.read_parquet(HMM_FILE)
         if "date" in hmm.columns and "regime" in hmm.columns:
             hmm["date"] = pd.to_datetime(hmm["date"], errors="coerce")
             hmm = hmm.dropna(subset=["date"]).sort_values("date")

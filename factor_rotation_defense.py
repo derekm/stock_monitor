@@ -151,8 +151,8 @@ def ensure_groups(ann: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     Returns (catalog, members).
     """
     if GROUPS.exists() and MEMBERS.exists():
-        cat = pd.read_csv(GROUPS, dtype=str)
-        mem = pd.read_csv(MEMBERS, dtype=str)
+        cat = pd.read_parquet(GROUPS)
+        mem = pd.read_parquet(MEMBERS)
         for c in ("valid_from", "valid_to"):
             if c not in mem.columns:
                 mem[c] = pd.NaT

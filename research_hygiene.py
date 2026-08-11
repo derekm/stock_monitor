@@ -24,7 +24,7 @@ OUT_FR = DATA_DIR / "forecast_reliability_report.csv"
 def walk_forward() -> pd.DataFrame:
     """If history exists, measure dual-pass stability across as_of dates; else single snapshot."""
     if PREF_HIST.exists():
-        h = pd.read_csv(PREF_HIST)
+        h = pd.read_parquet(PREF_HIST)
     elif PREF.exists():
         h = pd.read_csv(PREF)
         h["as_of_date"] = pd.Timestamp.today().date().isoformat()

@@ -185,7 +185,7 @@ def load_membership() -> pd.DataFrame:
 
 def load_preferred() -> pd.DataFrame:
     p = DATA_DIR / "preferred_metrics.parquet"
-    return pd.read_csv(p) if p.exists() else pd.DataFrame()
+    return pd.read_parquet(p) if p.exists() else pd.DataFrame()
 
 
 def ann_stats(rets: pd.Series, rf: float = 0.04) -> dict:

@@ -114,7 +114,7 @@ def coverage_matrix() -> dict:
     if STOCKS.exists():
         tickers["monitored"] = set(pd.read_parquet(STOCKS)["ticker"].astype(str).str.upper())
     if PREF.exists():
-        tickers["preferred"] = set(pd.read_csv(PREF)["ticker"].astype(str).str.upper())
+        tickers["preferred"] = set(pd.read_parquet(PREF)["ticker"].astype(str).str.upper())
     src = CLEAN if CLEAN.exists() else PRICES
     if src.exists():
         tickers["prices"] = set(

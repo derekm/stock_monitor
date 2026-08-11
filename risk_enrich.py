@@ -35,7 +35,7 @@ def main():
     rets = np.log(wide / wide.shift(1)).dropna(how="all")
     mkt = rets.mean(axis=1)
 
-    pref = pd.read_csv(PREF)
+    pref = pd.read_parquet(PREF)
     m = metrics_for(pref["ticker"].tolist(), rets, mkt)
     for col in ("name_vol", "beta", "max_dd"):
         pref[col] = pref["ticker"].map(lambda t: m.get(t, {}).get(col))

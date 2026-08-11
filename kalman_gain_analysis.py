@@ -59,7 +59,7 @@ def run(save=True):
     out["innov_vol_z"] = innov[:,1] / np.where(innov_std[:,1]==0, np.nan, innov_std[:,1])
     out = out.reset_index().rename(columns={"index":"date"})
     if HMM.exists():
-        h = pd.read_csv(HMM)
+        h = pd.read_parquet(HMM)
         h["date"] = pd.to_datetime(h["date"])
         out = out.merge(h[["date","regime"]], on="date", how="left")
     print(out[["gain_ret","gain_vol"]].describe().to_string())
