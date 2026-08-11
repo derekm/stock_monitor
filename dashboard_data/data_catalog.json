@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-10T23:41:25.652737",
+  "generated": "2026-08-11T00:02:37.816231",
   "count": 250,
   "files": [
     {
@@ -1169,7 +1169,7 @@
       "path": "implied_r_screen.parquet",
       "url": "implied_r_screen.parquet",
       "kind": "parquet",
-      "size": 40351,
+      "size": 54925,
       "sql_name": "implied_r_screen"
     },
     {

@@ -50,6 +50,28 @@ R_FAIR_HI = 0.10
 R_FAIR_LO = 0.07
 R_EXPENSIVE = 0.06
 
+# Fair-value range endpoints: price implied by the full RIV reduced form
+# P = -BV + 2*EPS1/r at a 7% vs 10% required return. r=10% -> lower price
+# (conservative bound), r=7% -> higher price (generous bound). A stock inside
+# the range is fairly valued; below the low end is undervalued vs fair value;
+# above the high end is overvalued even at a cheap required return.
+FV_R_LO = 0.10   # conservative required return -> fair-value LOW bound
+FV_R_HI = 0.07   # generous required return    -> fair-value HIGH bound
+FV_R_MID = 0.085  # midpoint for the point estimate
+
+
+def fair_value_range(roe, bvps):
+    """Full RIV reduced-form price P = -BV + 2*EPS1/r at r in {7, 8.5, 10}%.
+
+    EPS1 = ROE * BV (next-period earnings on current book). Returns the three
+    fair values plus low/high bounds of the 7-10% band. None-safe.
+    """
+    eps1 = roe * bvps
+    fv_lo = -bvps + 2.0 * eps1 / FV_R_LO if eps1 else np.nan
+    fv_mid = -bvps + 2.0 * eps1 / FV_R_MID if eps1 else np.nan
+    fv_hi = -bvps + 2.0 * eps1 / FV_R_HI if eps1 else np.nan
+    return fv_lo, fv_mid, fv_hi
+
 
 def latest_price() -> pd.Series:
     p = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
@@ -127,11 +149,33 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
     df["price"] = df["price"].round(2)
     df["bvps"] = df["bvps"].round(2)
 
+    # Fair-value range at r = 7% / 8.5% / 10% (full RIV reduced form)
+    fv = df.apply(lambda r: pd.Series(fair_value_range(r["roe"], r["bvps"])), axis=1)
+    df["fv_lo_r10"] = fv[0].round(2)
+    df["fv_mid_r8p5"] = fv[1].round(2)
+    df["fv_hi_r7"] = fv[2].round(2)
+
+    # Where is price vs the 7-10% fair band?
+    def vs_fair(row):
+        price, lo, hi = row["price"], row["fv_lo_r10"], row["fv_hi_r7"]
+        if np.isnan(lo) or np.isnan(hi):
+            return None
+        if price < lo:
+            return "BELOW_FAIR"
+        if price > hi:
+            return "ABOVE_FAIR"
+        return "IN_FAIR"
+
+    df["vs_fair"] = df.apply(vs_fair, axis=1)
+    # % gap between price and the mid (r=8.5%) fair value
+    df["fv_gap_pct"] = ((df["price"] / df["fv_mid_r8p5"] - 1.0) * 100).round(1)
+
     df = df.reset_index().rename(columns={"index": "ticker"})
     df = df.sort_values("implied_r", ascending=False)
     cols = ["ticker", "price", "bvps", "pb_ratio", "roe", "implied_r_pct",
             "fwd_pe_bench", "verdict", "mktcap_b", "ev_ebitda", "roic",
-            "r_gt_roe", "pb_lt_1", "triplet_ok", "as_of"]
+            "r_gt_roe", "pb_lt_1", "triplet_ok", "as_of",
+            "fv_lo_r10", "fv_mid_r8p5", "fv_hi_r7", "vs_fair", "fv_gap_pct"]
     return df[cols]
 
 
@@ -149,13 +193,16 @@ def main():
 
     print(f"=== Implied cost-of-capital screen ({len(df)} tickers) ===")
     print("Formula: r = 2*ROE/(P/B + 1)  [RIV reduced form, g=r/2, Ohlson & Rueangsuwan 2026]")
-    print(f"Thresholds: CHEAP r>=12% | Fair 7-10% | EXPENSIVE r<=6%\n")
+    print(f"Thresholds: CHEAP r>=12% | Fair 7-10% | EXPENSIVE r<=6%")
+    print("Fair-value band: P = -BV + 2*EPS1/r at r = 7%/8.5%/10% (full RIV reduced form)\n")
     for v in ["CHEAP", "Fair-ish", "FAIR", "Rich", "EXPENSIVE"]:
         sub = df[df["verdict"] == v]
         if sub.empty:
             continue
         print(f"--- {v} ({len(sub)}) ---")
-        print(sub.head(args.top).to_string(index=False))
+        show_cols = ["ticker", "price", "pb_ratio", "roe", "implied_r_pct",
+                     "fv_lo_r10", "fv_mid_r8p5", "fv_hi_r7", "vs_fair", "fv_gap_pct"]
+        print(sub[show_cols].head(args.top).to_string(index=False))
         print()
 
     # market stats
@@ -163,6 +210,8 @@ def main():
     print(f"Median implied r: {med:.1f}% | n={len(df)}")
     print(f"  CHEAP count: {(df['verdict']=='CHEAP').sum()} | "
           f"EXPENSIVE count: {(df['verdict']=='EXPENSIVE').sum()}")
+    vb = df["vs_fair"].value_counts(dropna=False)
+    print(f"  vs fair band: {dict(vb)}")
 
     if args.save:
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), OUT_PQ)
