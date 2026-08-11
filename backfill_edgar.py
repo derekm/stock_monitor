@@ -256,6 +256,11 @@ def build_rows(ticker: str, frames: list[dict], px: dict[str, pd.Series]) -> lis
         if mcap_b is not None and (mcap_b > 100_000 or (mcap_b > 0 and mcap_b < 0.05)):
             mcap_b = None
             mcap = None
+        # Shares outstanding (direct EDGAR count) — sanity: a real company has
+        # between 1M and 200B shares. Null absurd counts so they never poison
+        # the direct daily market-cap derivation.
+        if shares is not None and not (1e6 <= shares <= 2e11):
+            shares = None
         roe = ttm_ni / equity if ttm_ni and equity else None
         rate = fr.get("eff_tax_rate") if fr.get("eff_tax_rate") is not None else 0.25
         if ttm_oi:
@@ -279,6 +284,7 @@ def build_rows(ticker: str, frames: list[dict], px: dict[str, pd.Series]) -> lis
             "as_of_date": qend.date(),
             "market_cap": int(mcap) if mcap else None,
             "market_cap_b": round(mcap_b, 2) if mcap_b else None,
+            "shares_outstanding": shares,
             "total_assets": int(assets) if assets else None,
             "total_assets_b": round(assets / 1e9, 2) if assets else None,
             "pb_ratio": round(pb, 3) if pb else None,

@@ -1,48 +1,66 @@
 #!/usr/bin/env python3
 """
-Add daily market cap to daily_prices.parquet.
+Add daily market cap to daily_prices.parquet using DIRECT shares outstanding.
 
-Decision: calculate daily market cap = close * shares_outstanding
-where shares_outstanding is carried forward from fundamentals (market_cap_b / close at fundamental dates).
+Decision: calculate daily market cap = close × shares_outstanding
+where shares_outstanding is carried forward from fundamentals (EDGAR XBRL
+shares tags), NOT re-inverted from market_cap/close.
 
-Adds column `market_cap` to daily_prices (absolute dollars).
+This avoids the price-noise amplification and unit-error propagation
+that happened when we did: daily_market_cap = close × (market_cap / close).
 """
 import pandas as pd
-import numpy as np
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent
 
-def main():
-    print("Loading daily_prices...")
-    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
-    prices = prices.sort_values(["ticker", "date"])
-    print(f"  {len(prices):,} rows, {prices['ticker'].nunique()} tickers")
 
-    print("Loading fundamentals...")
+def main() -> None:
+    print("Loading daily_prices...")
+    # PRESERVE all existing columns (close, adj_close, volume, ...) — only
+    # add/recompute market_cap. Reading a subset here is what dropped
+    # adj_close + volume in an earlier version.
+    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet")
+    if "close" not in prices.columns:
+        raise SystemExit("daily_prices.parquet has no close column")
+    keep = [c for c in prices.columns if c != "market_cap"]
+    prices = prices[keep].copy()
+    prices = prices.sort_values(["ticker", "date"])
+    print(f"  {len(prices):,} rows, {prices['ticker'].nunique()} tickers, cols={list(prices.columns)}")
+
+    print("Loading fundamentals (shares_outstanding)...")
     fund = pd.read_parquet(DATA_DIR / "fundamentals.parquet")
     fund = fund.sort_values(["ticker", "as_of_date"])
     print(f"  {len(fund):,} rows, {fund['ticker'].nunique()} tickers")
 
-    # Compute shares_outstanding at fundamental dates: market_cap_b (billions) * 1e9 / close
-    # Need close price at fundamental as_of_date
-    fund_dates = fund[["ticker", "as_of_date", "market_cap_b"]].copy()
-    fund_dates = fund_dates.merge(
-        prices[["ticker", "date", "close"]],
-        left_on=["ticker", "as_of_date"],
-        right_on=["ticker", "date"],
-        how="left"
-    )
-    fund_dates["shares_out"] = fund_dates["market_cap_b"] * 1e9 / fund_dates["close"]
+    # Check shares_outstanding column
+    if "shares_outstanding" not in fund.columns:
+        print("  WARNING: shares_outstanding column missing — falling back to market_cap/close")
+        # Fallback (old logic)
+        fund_dates = fund[["ticker", "as_of_date", "market_cap"]].copy()
+        fund_dates = fund_dates.merge(
+            prices[["ticker", "date", "close"]],
+            left_on=["ticker", "as_of_date"],
+            right_on=["ticker", "date"],
+            how="left"
+        )
+        fund_dates["shares_out"] = fund_dates["market_cap"] / fund_dates["close"]
+        fund_dates = fund_dates.dropna(subset=["shares_out"])
+        # Filter absurd implied shares (same bounds as backfill_edgar)
+        fund_dates = fund_dates[(fund_dates["shares_out"] >= 1e6) & (fund_dates["shares_out"] <= 2e11)]
+        fund_dates = fund_dates[["ticker", "as_of_date", "shares_out"]].drop_duplicates(subset=["ticker", "as_of_date"])
+        print(f"  Computed shares_out at {len(fund_dates)} fundamental dates (fallback)")
+    else:
+        # Use direct EDGAR shares
+        fund_dates = fund[["ticker", "as_of_date", "shares_outstanding"]].copy()
+        fund_dates = fund_dates.dropna(subset=["shares_outstanding"])
+        # Sanity: real companies have 1M-200B shares
+        fund_dates = fund_dates[(fund_dates["shares_outstanding"] >= 1e6) & (fund_dates["shares_outstanding"] <= 2e11)]
+        fund_dates = fund_dates[["ticker", "as_of_date", "shares_outstanding"]].drop_duplicates(subset=["ticker", "as_of_date"])
+        fund_dates = fund_dates.rename(columns={"shares_outstanding": "shares_out"})
+        print(f"  Using direct EDGAR shares at {len(fund_dates)} fundamental dates")
 
-    # Detect outliers: market_cap_b should be in billions; reject > 100,000 (unrealistic for market cap in billions)
-    fund_dates = fund_dates[fund_dates["market_cap_b"] <= 100000]
-    fund_dates = fund_dates.dropna(subset=["shares_out"])
-    fund_dates = fund_dates[["ticker", "as_of_date", "shares_out"]].drop_duplicates(subset=["ticker", "as_of_date"])
-    print(f"  Computed shares_out at {len(fund_dates)} fundamental dates")
-
-    # Forward-fill shares_out to all trading dates per ticker
-    # For each ticker, merge fund_dates into prices and forward-fill
+    # Forward-fill shares to all trading dates per ticker
     prices = prices.merge(fund_dates, left_on=["ticker", "date"], right_on=["ticker", "as_of_date"], how="left")
     prices = prices.drop(columns=["as_of_date"])
 
@@ -50,15 +68,15 @@ def main():
     prices["shares_out"] = prices.groupby("ticker")["shares_out"].ffill()
     print(f"  After ffill: {prices['shares_out'].notna().sum():,} non-null / {len(prices):,} total")
 
-    # Compute daily market cap
+    # Compute daily market cap = close × shares_out
     prices["market_cap"] = prices["close"] * prices["shares_out"]
 
     # Drop shares_out helper column, keep market_cap
     prices = prices.drop(columns=["shares_out"])
 
     # Verify
-    print(f"  Market cap stats:")
     mc = prices["market_cap"].dropna()
+    print(f"  Market cap stats:")
     print(f"    non-null: {mc.notna().sum():,} / {len(prices):,}")
     print(f"    min: ${mc.min():,.0f}")
     print(f"    max: ${mc.max():,.0f}")
@@ -68,6 +86,7 @@ def main():
     print("Saving daily_prices.parquet...")
     prices.to_parquet(DATA_DIR / "daily_prices.parquet", index=False)
     print("Done!")
+
 
 if __name__ == "__main__":
     main()

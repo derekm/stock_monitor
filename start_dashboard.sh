@@ -6,7 +6,7 @@ cd "$ROOT"
 PORT_API="${PORT_API:-5055}"
 PORT_PIPE="${PORT_PIPE:-5056}"
 PORT_WEB="${PORT_WEB:-8765}"
-HOST="${HOST:-127.0.0.1}"
+HOST="${HOST:-0.0.0.0}"
 mkdir -p "$ROOT/logs" "$ROOT/dashboard_data"
 
 echo "==> Export dashboard data (best effort)"

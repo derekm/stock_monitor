@@ -14,7 +14,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 DATA_DIR = Path(__file__).parent
-TRADES_FILE = Path("/home/workdir/artifacts/trades.parquet")
+TRADES_FILE = DATA_DIR / "trades.parquet"
 HOLDINGS_FILE = DATA_DIR / "portfolio_holdings.parquet"
 PRICES_FILE = DATA_DIR / "daily_prices.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"

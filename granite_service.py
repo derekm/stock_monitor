@@ -21,7 +21,7 @@ sys.path.insert(0, str(DATA_DIR))
 
 from index_registry import available_indexes, parse_indexes, tickers_for_index  # noqa: E402
 
-HOST, PORT = "127.0.0.1", 5055
+HOST, PORT = "0.0.0.0", 5055
 
 
 def _json(handler, code, payload):

@@ -128,7 +128,10 @@ def monthly_rebalance_dates(wide: pd.DataFrame) -> list[pd.Timestamp]:
 
 def build() -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     stocks = pd.read_parquet(STOCKS) if STOCKS.exists() else pd.DataFrame()
-    tickers = sorted(stocks["ticker"].astype(str).str.upper().unique()) if not stocks.empty else []
+    # Full universe: every ticker with price history (not just monitored).
+    # monitored_stocks only supplies sector labels when present.
+    prices_all = load_adj_prices_pandas()
+    tickers = sorted(prices_all["ticker"].astype(str).str.upper().unique()) if prices_all is not None and len(prices_all) else []
     sector_map = _sector_map()
 
     prices = load_adj_prices_pandas(tickers=tickers)

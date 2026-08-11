@@ -32,8 +32,9 @@ def load() -> pd.DataFrame:
     if FUND_FILE.exists():
         return pd.read_parquet(FUND_FILE)
     return pd.DataFrame(columns=[
-        "ticker", "as_of_date", "market_cap", "market_cap_b", "total_assets",
-        "total_assets_b", "pb_ratio", "mktcap_to_assets", "source", "notes", "last_updated"
+        "ticker", "as_of_date", "market_cap", "market_cap_b", "shares_outstanding",
+        "total_assets", "total_assets_b", "pb_ratio", "mktcap_to_assets", "source",
+        "notes", "last_updated"
     ])
 
 
@@ -65,11 +66,22 @@ def cmd_manual(args):
     # Remove prior row for same ticker+date if present
     df = df[~((df["ticker"] == t) & (df["as_of_date"] == as_of))]
 
+    # shares_outstanding: direct count if the price at as_of is available,
+    # else derived from market cap (mcap / close). Prefer an explicit count.
+    shares = None
+    px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker", "date", "close"])
+    px = px[px["ticker"] == t]
+    px["date"] = pd.to_datetime(px["date"])
+    row_close = px[px["date"] <= pd.Timestamp(as_of)]
+    if len(row_close):
+        shares = (mcap_b * 1e9) / float(row_close["close"].iloc[-1])
+
     row = {
         "ticker": t,
         "as_of_date": as_of,
         "market_cap": int(mcap_b * 1e9),
         "market_cap_b": mcap_b,
+        "shares_outstanding": shares,
         "total_assets": int(assets_b * 1e9),
         "total_assets_b": assets_b,
         "pb_ratio": pb,
@@ -99,6 +111,19 @@ def cmd_from_csv(args):
     csv_df["market_cap"] = (csv_df["market_cap_b"] * 1e9).astype("int64")
     csv_df["total_assets"] = (csv_df["total_assets_b"] * 1e9).astype("int64")
     csv_df["mktcap_to_assets"] = (csv_df["market_cap_b"] / csv_df["total_assets_b"]).round(3)
+    # shares_outstanding: explicit column if provided, else derive from mcap/close
+    if "shares_outstanding" not in csv_df.columns:
+        px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker", "date", "close"])
+        px["date"] = pd.to_datetime(px["date"])
+        def _shares(t, asof):
+            sub = px[(px["ticker"] == t) & (px["date"] <= pd.Timestamp(asof))]
+            if not len(sub):
+                return None
+            mcap_b = csv_df.loc[csv_df["ticker"] == t, "market_cap_b"].iloc[0]
+            return (float(mcap_b) * 1e9) / float(sub["close"].iloc[-1])
+        csv_df["shares_outstanding"] = [None] * len(csv_df)
+        for i, r in csv_df.iterrows():
+            csv_df.at[i, "shares_outstanding"] = _shares(r["ticker"], r["as_of_date"])
     if "source" not in csv_df.columns:
         csv_df["source"] = "csv"
     if "notes" not in csv_df.columns:

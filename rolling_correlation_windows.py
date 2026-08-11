@@ -38,8 +38,8 @@ def run(windows=(21, 63, 126), step: int = 5, max_assets: int = 80, save: bool =
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "adj_close"])
     prices = prices.rename(columns={"adj_close": "close"})
     prices["date"] = pd.to_datetime(prices["date"])
-    stocks = pd.read_parquet(STOCKS, columns=["ticker", "sector"])
-    sector_map = stocks.set_index("ticker")["sector"].to_dict()
+    stocks = pd.read_parquet(STOCKS, columns=["ticker", "sector"]) if STOCKS.exists() else pd.DataFrame()
+    sector_map = stocks.set_index("ticker")["sector"].to_dict() if len(stocks) else {}
 
     counts = prices.groupby("ticker").size().sort_values(ascending=False)
     tickers = counts.index.tolist()[:max_assets]

@@ -5402,7 +5402,12 @@ async function populateStockTickers() {
 }
 
 
-const STOCK_METRIC_COLS = ["roe", "roic", "debt_to_equity", "ev_ebitda", "pb_ratio", "earnings_stability", "mktcap_to_assets"];
+const STOCK_METRIC_COLS = [
+  "roe", "roic", "debt_to_equity", "ev_ebitda", "pb_ratio",
+  "earnings_stability", "mktcap_to_assets", "implied_r_pct", "verdict",
+  "fragility_score", "fragility_pctile", "fragile_flag",
+  "shares_outstanding", "market_cap_b", "pe_ratio", "beta"
+];
 
 async function renderStock() {
   const ticker = document.querySelector("#stock-ticker")?.value;

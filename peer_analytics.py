@@ -44,10 +44,19 @@ RISK_WINDOWS = [21, 63, 126, 252]
 
 
 def load_data() -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    """Load prices, stocks metadata, and fundamentals."""
+    """Load prices, stocks metadata (full universe: monitored + sp500), and fundamentals."""
     prices = pl.read_parquet(PRICES, columns=["date", "ticker", "adj_close", "close"])
     stocks = pl.read_parquet(STOCKS)
     fund = pl.read_parquet(FUND)
+    # Expand sector metadata to the full universe: sp500_constituents carries
+    # GICS sector for ~503 names beyond the monitored set. Keep monitored
+    # sleeve/index columns intact; sp500 rows only fill sector.
+    sp500 = DATA_DIR / "sp500_constituents.parquet"
+    if sp500.exists():
+        sp = pl.read_parquet(sp500).select(["ticker", "gics_sector"]).rename({"gics_sector": "sector"})
+        sp = sp.with_columns(pl.lit(None).alias("growth_sleeve"), pl.lit(None).alias("value_sleeve"),
+                             pl.lit(False).alias("defensive_value_index"), pl.lit(False).alias("growth_tech_index"))
+        stocks = pl.concat([stocks, sp], how="diagonal").unique(subset=["ticker"], keep="first")
     return prices, stocks, fund
 
 
@@ -97,86 +106,107 @@ def get_peer_groups(stocks: pl.DataFrame) -> dict[str, list[str]]:
     return groups
 
 
-def compute_rolling_returns(prices: pl.DataFrame, windows: list[int]) -> dict[str, pl.DataFrame]:
-    """Compute rolling returns for each window."""
-    # Pivot to wide format for vectorized computation
-    wide = prices.select(["date", "ticker", "adj_close"]).pivot(
-        index="date", columns="ticker", values="adj_close"
-    ).sort("date")
+def compute_rolling_returns(wide: pl.DataFrame, windows: list[int]) -> dict[str, dict]:
+    """Compute rolling returns for each window from a single pre-pivoted wide frame.
 
+    Returns {f"ret_{w}d": {"date": np.ndarray, "X": np.ndarray (N-w, k), "tickers": list}}
+    — raw numpy, no polars DataFrame round-trip (the DataFrame construction
+    was a major cost at 585 columns × 16k rows).
+    """
     tickers = [c for c in wide.columns if c != "date"]
     date_col = wide["date"].to_numpy()
+    X = wide.select(tickers).to_numpy()  # (N, k)
     results = {}
 
     for window in windows:
-        # Compute log returns over window
-        rets_dict = {"date": date_col[window:]}
-        for t in tickers:
-            vals = wide[t].to_numpy()
-            if len(vals) > window:
-                rets = np.log(vals[window:] / vals[:-window])
-                rets_dict[t] = rets
-        results[f"ret_{window}d"] = pl.DataFrame(rets_dict)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rets = np.log(X[window:] / X[:-window])
+        results[f"ret_{window}d"] = {
+            "date": date_col[window:],
+            "X": rets,
+            "tickers": tickers,
+        }
 
     return results
 
 
-def compute_rolling_vol(prices: pl.DataFrame, windows: list[int]) -> dict[str, pl.DataFrame]:
-    """Compute rolling volatility for each window."""
-    wide = prices.select(["date", "ticker", "adj_close"]).pivot(
-        index="date", columns="ticker", values="adj_close"
-    ).sort("date")
+def compute_rolling_vol(wide: pl.DataFrame, windows: list[int]) -> dict[str, dict]:
+    """Compute rolling volatility for each window from a single pre-pivoted wide frame.
 
+    Returns {f"vol_{w}d": {"date": np.ndarray, "X": np.ndarray (N-w, k), "tickers": list}}.
+    """
     tickers = [c for c in wide.columns if c != "date"]
     date_col = wide["date"].to_numpy()
+    X = wide.select(tickers).to_numpy()
+    k = X.shape[1]
     results = {}
 
     for window in windows:
-        vol_dict = {"date": date_col[window:]}
-        for t in tickers:
-            vals = wide[t].to_numpy()
-            if len(vals) > window:
-                logrets = np.log(vals[1:] / vals[:-1])
-                # Rolling std * sqrt(252/window) for annualized
-                roll_vol = pd.Series(logrets).rolling(window).std().values * np.sqrt(252)
-                vol_dict[t] = roll_vol[window-1:]
-        results[f"vol_{window}d"] = pl.DataFrame(vol_dict)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            lr = np.log(X[1:] / X[:-1])
+        # Rolling std over window via cumsum identity (O(N·k), no giant
+        # (N, k, w) intermediate): var = E[x²] - E[x]² over the window.
+        n = len(lr)
+        if n >= window:
+            x = np.nan_to_num(lr, nan=0.0)
+            valid_cnt = (~np.isnan(lr)).astype(np.float64)  # count VALID obs
+            s1 = np.vstack([np.zeros((1, k)), np.cumsum(x, axis=0)])
+            s2 = np.vstack([np.zeros((1, k)), np.cumsum(x * x, axis=0)])
+            sc = np.vstack([np.zeros((1, k)), np.cumsum(valid_cnt, axis=0)])
+            sw1 = s1[window:] - s1[:-window]           # (n-w+1, k)
+            sw2 = s2[window:] - s2[:-window]
+            swc = sc[window:] - sc[:-window]
+            valid = swc >= window                       # full window of valid obs
+            mean = sw1 / window
+            # sample std (ddof=1), matching pandas rolling().std() semantics
+            var = np.maximum((sw2 - sw1 * sw1 / window) / (window - 1), 0.0)
+            roll_vol = np.sqrt(var) * np.sqrt(252)
+            roll_vol[~valid] = np.nan
+            results[f"vol_{window}d"] = {
+                "date": date_col[window:],
+                "X": roll_vol,
+                "tickers": tickers,
+            }
 
     return results
 
 
-def compute_beta_to_group(prices: pl.DataFrame, group_tickers: list[str], window: int = 126) -> dict[str, float]:
-    """Compute beta of each stock to its peer group equal-weight return."""
-    wide = prices.select(["date", "ticker", "adj_close"]).pivot(
-        index="date", columns="ticker", values="adj_close"
-    ).sort("date")
+def compute_beta_to_group(wide: pl.DataFrame, group_tickers: list[str], window: int = 126) -> dict[str, float]:
+    """Compute beta of each stock to its peer group equal-weight return.
 
-    # Filter to tickers that exist in data
-    available = [t for t in group_tickers if t in wide.columns]
+    Uses the pre-pivoted wide frame — no re-pivot. Vectorized per group.
+    """
+    tickers = [c for c in wide.columns if c != "date"]
+    available = [t for t in group_tickers if t in tickers]
     if len(available) < 3:
         return {}
 
-    # Group return (equal weight)
-    group_rets = np.log(wide[available].to_numpy()[1:] / wide[available].to_numpy()[:-1]).mean(axis=1)
-
-    results = {}
-    for t in available:
-        if t in wide.columns:
-            stock_rets = np.log(wide[t].to_numpy()[1:] / wide[t].to_numpy()[:-1])
-            if len(stock_rets) >= window and len(group_rets) >= window:
-                # Rolling beta
-                roll_betas = []
-                for i in range(window, len(stock_rets)):
-                    s = stock_rets[i-window:i]
-                    g = group_rets[i-window:i]
-                    if np.std(g) > 0:
-                        beta = np.cov(s, g)[0,1] / np.var(g)
-                    else:
-                        beta = 1.0
-                    roll_betas.append(beta)
-                if roll_betas:
-                    results[t] = float(np.nanmean(roll_betas[-63:]))  # recent 63d avg beta
-    return results
+    X = wide.select(available).to_numpy()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rets = np.log(X[1:] / X[:-1])
+    # Align to rows where ALL group members have data (no NaN) — matches the
+    # original semantics where a NaN in the window invalidated the beta.
+    finite_rows = np.isfinite(rets).all(axis=1)
+    rets = rets[finite_rows]
+    if len(rets) < window:
+        return {}
+    # Group equal-weight return (row mean), then rolling beta window
+    group_ret = rets.mean(axis=1)
+    # Per-stock beta over trailing `window` rows — vectorized
+    from numpy.lib.stride_tricks import sliding_window_view
+    sw = sliding_window_view(rets, window, axis=0)       # (N-w+1, g, w)
+    swg = sliding_window_view(group_ret, window)          # (N-w+1, w)
+    # center + covariance per window (window axis is LAST)
+    xc = sw - sw.mean(axis=-1, keepdims=True)             # (N-w+1, g, w)
+    gc = swg - swg.mean(axis=-1, keepdims=True)           # (N-w+1, w)
+    cov = np.nansum(xc * gc[:, None, :], axis=-1) / (window - 1)   # (N-w+1, g)
+    var = np.nansum(gc ** 2, axis=-1) / (window - 1)               # (N-w+1,)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        betas = cov / var[:, None]                        # (N-w+1, g)
+    # Original semantics: average of the last 63 overlapping beta windows
+    recent = betas[-63:] if len(betas) >= 63 else betas
+    avg = np.nanmean(recent, axis=0)
+    return {t: float(b) for t, b in zip(available, avg) if np.isfinite(b)}
 
 
 def analyze_fundamental_trends(fund: pl.DataFrame, min_obs: int = 4) -> pl.DataFrame:
@@ -283,7 +313,7 @@ def detect_recovery(trends: pl.DataFrame) -> pl.DataFrame:
 
 
 def compute_peer_rankings(
-    prices: pl.DataFrame,
+    wide: pl.DataFrame,
     fund: pl.DataFrame,
     stocks: pl.DataFrame,
     peer_groups: dict[str, list[str]],
@@ -292,13 +322,16 @@ def compute_peer_rankings(
     """
     Compute peer-relative rankings for each stock within each group.
     Returns (signals_df, group_summary_df).
+
+    Vectorized: latest return/vol per group are pulled into numpy arrays once
+    per (group, window) — no per-ticker drop_nulls() calls in the peer loop.
     """
     # Get latest fundamentals
     latest_fund = fund.sort("as_of_date").group_by("ticker").tail(1)
 
     # Compute returns and vol for ranking windows
-    returns_dict = compute_rolling_returns(prices, windows)
-    vol_dict = compute_rolling_vol(prices, windows)
+    returns_dict = compute_rolling_returns(wide, windows)
+    vol_dict = compute_rolling_vol(wide, windows)
 
     all_signals = []
     all_group_stats = []
@@ -327,84 +360,80 @@ def compute_peer_rankings(
                         "p75": float(np.percentile(vals, 75)),
                     })
 
-        # Per-stock rankings within group
+        # Per-stock rankings within group — vectorized over peers
         for window in windows:
             ret_key = f"ret_{window}d"
             vol_key = f"vol_{window}d"
+            if ret_key not in returns_dict or vol_key not in vol_dict:
+                continue
+            ret_blk = returns_dict[ret_key]
+            vol_blk = vol_dict[vol_key]
+            ret_cols = {t: i for i, t in enumerate(ret_blk["tickers"])}
+            vol_cols = {t: i for i, t in enumerate(vol_blk["tickers"])}
 
-            if ret_key in returns_dict and vol_key in vol_dict:
-                rets_df = returns_dict[ret_key]
-                vols_df = vol_dict[vol_key]
+            # Latest non-null value per available ticker (numpy column indexing)
+            n = len(available)
+            ret_latest = np.full(n, np.nan)
+            vol_latest = np.full(n, np.nan)
+            for idx, t in enumerate(available):
+                if t in ret_cols:
+                    col = ret_blk["X"][:, ret_cols[t]]
+                    col = col[~np.isnan(col)]
+                    if len(col):
+                        ret_latest[idx] = col[-1]
+                if t in vol_cols:
+                    col = vol_blk["X"][:, vol_cols[t]]
+                    col = col[~np.isnan(col)]
+                    if len(col):
+                        vol_latest[idx] = col[-1]
 
-                for ticker in available:
-                    if ticker not in rets_df.columns or ticker not in vols_df.columns:
-                        continue
+            valid = ~np.isnan(ret_latest) & ~np.isnan(vol_latest)
+            for idx in np.where(valid)[0]:
+                latest_ret = ret_latest[idx]
+                latest_vol = vol_latest[idx]
+                peer_mask = valid.copy()
+                peer_mask[idx] = False
+                peer_rets = ret_latest[peer_mask]
+                peer_vols = vol_latest[peer_mask]
+                if len(peer_rets) < 2:
+                    continue
 
-                    # Get recent return and vol
-                    ticker_ret = rets_df[ticker].drop_nulls().to_numpy()
-                    ticker_vol = vols_df[ticker].drop_nulls().to_numpy()
+                # Percentile ranks
+                ret_rank = (peer_rets < latest_ret).mean()
+                vol_rank = (peer_vols > latest_vol).mean()  # lower vol = better rank
 
-                    if len(ticker_ret) == 0 or len(ticker_vol) == 0:
-                        continue
+                # Risk-adjusted rank (Sharpe-like)
+                if latest_vol > 0:
+                    sharpe_rank = ((peer_rets / peer_vols) < (latest_ret / latest_vol)).mean()
+                else:
+                    sharpe_rank = 0.5
 
-                    latest_ret = ticker_ret[-1] if len(ticker_ret) > 0 else np.nan
-                    latest_vol = ticker_vol[-1] if len(ticker_vol) > 0 else np.nan
+                all_signals.append({
+                    "ticker": available[idx],
+                    "group": group_name,
+                    "window": window,
+                    "ret": float(latest_ret) if not np.isnan(latest_ret) else None,
+                    "vol": float(latest_vol) if not np.isnan(latest_vol) else None,
+                    "ret_rank": float(ret_rank),
+                    "vol_rank": float(vol_rank),
+                    "sharpe_rank": float(sharpe_rank),
+                    "n_peers": len(peer_rets),
+                })
 
-                    # Group peers' latest values
-                    peer_rets = []
-                    peer_vols = []
-                    for p in available:
-                        if p != ticker and p in rets_df.columns and p in vols_df.columns:
-                            pr = rets_df[p].drop_nulls().to_numpy()
-                            pv = vols_df[p].drop_nulls().to_numpy()
-                            if len(pr) > 0 and len(pv) > 0:
-                                peer_rets.append(pr[-1])
-                                peer_vols.append(pv[-1])
-
-                    if len(peer_rets) < 2:
-                        continue
-
-                    peer_rets = np.array(peer_rets)
-                    peer_vols = np.array(peer_vols)
-
-                    # Percentile ranks
-                    ret_rank = (peer_rets < latest_ret).mean() if not np.isnan(latest_ret) else 0.5
-                    vol_rank = (peer_vols > latest_vol).mean() if not np.isnan(latest_vol) else 0.5  # lower vol = better rank
-
-                    # Risk-adjusted rank (Sharpe-like)
-                    if latest_vol > 0:
-                        sharpe = latest_ret / latest_vol
-                        peer_sharpes = peer_rets / peer_vols
-                        sharpe_rank = (peer_sharpes < sharpe).mean()
-                    else:
-                        sharpe_rank = 0.5
-
-                    all_signals.append({
-                        "ticker": ticker,
-                        "group": group_name,
-                        "window": window,
-                        "ret": float(latest_ret) if not np.isnan(latest_ret) else None,
-                        "vol": float(latest_vol) if not np.isnan(latest_vol) else None,
-                        "ret_rank": float(ret_rank),
-                        "vol_rank": float(vol_rank),
-                        "sharpe_rank": float(sharpe_rank),
-                        "n_peers": len(peer_rets),
-                    })
-
-    signals_df = pl.DataFrame(all_signals) if all_signals else pl.DataFrame()
+    signals_df = pl.DataFrame(all_signals, infer_schema_length=10000) if all_signals else pl.DataFrame()
     group_df = pl.DataFrame(all_group_stats) if all_group_stats else pl.DataFrame()
     return signals_df, group_df
 
 
 def compute_beta_signals(
-    prices: pl.DataFrame,
+    wide: pl.DataFrame,
     peer_groups: dict[str, list[str]]
 ) -> pl.DataFrame:
     """Compute beta to peer group and flag high-beta names."""
     all_betas = []
 
     for group_name, tickers in peer_groups.items():
-        betas = compute_beta_to_group(prices, tickers, window=126)
+        betas = compute_beta_to_group(wide, tickers, window=126)
         if not betas:
             continue
 
@@ -554,6 +583,13 @@ def run(save: bool = True) -> dict[str, pl.DataFrame]:
     print(f"  Stocks: {len(stocks)} rows")
     print(f"  Fundamentals: {len(fund)} rows, {fund['ticker'].n_unique()} tickers")
 
+    # Pivot ONCE — all downstream functions reuse this wide frame
+    print("Pivoting prices to wide (once)...")
+    wide = prices.select(["date", "ticker", "adj_close"]).pivot(
+        index="date", columns="ticker", values="adj_close"
+    ).sort("date")
+    print(f"  Wide: {len(wide)} dates x {wide.width - 1} tickers")
+
     print("Building peer groups...")
     peer_groups = get_peer_groups(stocks)
     print(f"  Found {len(peer_groups)} peer groups:")
@@ -571,11 +607,11 @@ def run(save: bool = True) -> dict[str, pl.DataFrame]:
     print(f"  Recovery signals: {n_recovery}, Deteriorating: {n_deteriorating}")
 
     print("Computing peer rankings...")
-    peer_signals, group_summary = compute_peer_rankings(prices, fund, stocks, peer_groups)
+    peer_signals, group_summary = compute_peer_rankings(wide, fund, stocks, peer_groups)
     print(f"  Peer signals: {len(peer_signals)} rows, Group stats: {len(group_summary)} rows")
 
     print("Computing beta signals...")
-    beta_signals = compute_beta_signals(prices, peer_groups)
+    beta_signals = compute_beta_signals(wide, peer_groups)
     print(f"  Beta signals: {len(beta_signals)} rows")
 
     print("Generating composite signals...")

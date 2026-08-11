@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 DATA_DIR = Path(__file__).resolve().parent
 LOG_DIR = DATA_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
-HOST, PORT = "127.0.0.1", 5056
+HOST, PORT = "0.0.0.0", 5056
 
 # name -> argv (python script relative to DATA_DIR)
 JOB_CATALOG = {

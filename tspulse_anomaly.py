@@ -73,7 +73,9 @@ def resolve_tickers_from_args(args, default_index='portfolio') -> list[str]:
                     seen.add(tk)
                     out.append(tk)
         return out
-    return tickers_for_index("portfolio") or tickers_for_index("fertilizer")
+    # Default: FULL universe (all tickers with prices), not just portfolio/fertilizer
+    df = pd.read_parquet(PRICES_FILE, columns=["ticker"])
+    return sorted(df["ticker"].astype(str).str.upper().unique())
 
 
 

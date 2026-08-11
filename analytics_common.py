@@ -137,7 +137,7 @@ def load_adj_prices_pandas(tickers: Optional[list[str]] = None) -> pd.DataFrame:
             lf = lf.filter(pl.col("ticker").is_in([t.upper() for t in tickers]))
         df = lf.collect().to_pandas()
     else:
-        df = pd.read_parquet(path, columns=cols)
+        df = pd.read_parquet(path, columns=["date", "ticker", "adj_close"])
         if tickers:
             df = df[df["ticker"].isin([t.upper() for t in tickers])]
     df["date"] = pd.to_datetime(df["date"])

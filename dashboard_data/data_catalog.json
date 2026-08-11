@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-10T16:28:24.041046",
-  "count": 250,
+  "generated": "2026-08-10T23:19:33.733343",
+  "count": 251,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -127,6 +127,15 @@
       "kind": "parquet",
       "size": 5763774,
       "sql_name": "['all']"
+    },
+    {
+      "name": "_qsr_fundamentals",
+      "filename": "_qsr_fundamentals.csv",
+      "path": "_qsr_fundamentals.csv",
+      "url": "_qsr_fundamentals.csv",
+      "kind": "csv",
+      "size": 307,
+      "sql_name": "_qsr_fundamentals"
     },
     {
       "name": "aerospace_supply",
@@ -440,7 +449,7 @@
       "path": "daily_prices.parquet",
       "url": "daily_prices.parquet",
       "kind": "parquet",
-      "size": 29817357,
+      "size": 76595914,
       "sql_name": "daily_prices"
     },
     {
@@ -863,7 +872,7 @@
       "path": "fundamentals.parquet",
       "url": "fundamentals.parquet",
       "kind": "parquet",
-      "size": 588402,
+      "size": 656974,
       "sql_name": "fundamentals"
     },
     {
@@ -1106,7 +1115,7 @@
       "path": "hmm_regime_states.parquet",
       "url": "hmm_regime_states.parquet",
       "kind": "parquet",
-      "size": 1062436,
+      "size": 19489,
       "sql_name": "hmm_regime_states"
     },
     {
@@ -1115,7 +1124,7 @@
       "path": "hmm_regime_summary.parquet",
       "url": "hmm_regime_summary.parquet",
       "kind": "parquet",
-      "size": 5353,
+      "size": 5352,
       "sql_name": "hmm_regime_summary"
     },
     {
@@ -1133,7 +1142,7 @@
       "path": "hmm_transition_matrix.parquet",
       "url": "hmm_transition_matrix.parquet",
       "kind": "parquet",
-      "size": 3350,
+      "size": 3342,
       "sql_name": "hmm_transition_matrix"
     },
     {
@@ -1169,7 +1178,7 @@
       "path": "implied_r_screen.parquet",
       "url": "implied_r_screen.parquet",
       "kind": "parquet",
-      "size": 40233,
+      "size": 40351,
       "sql_name": "implied_r_screen"
     },
     {
@@ -1385,7 +1394,7 @@
       "path": "monitored_stocks.parquet",
       "url": "monitored_stocks.parquet",
       "kind": "parquet",
-      "size": 13881,
+      "size": 21670,
       "sql_name": "monitored_stocks"
     },
     {
@@ -1529,7 +1538,7 @@
       "path": "portfolio_holdings.parquet",
       "url": "portfolio_holdings.parquet",
       "kind": "parquet",
-      "size": 9566,
+      "size": 9727,
       "sql_name": "portfolio_holdings"
     },
     {
@@ -1574,7 +1583,7 @@
       "path": "preferred_metrics.parquet",
       "url": "preferred_metrics.parquet",
       "kind": "parquet",
-      "size": 119106,
+      "size": 102448,
       "sql_name": "preferred_metrics"
     },
     {
@@ -2177,7 +2186,7 @@
       "path": "trades.parquet",
       "url": "trades.parquet",
       "kind": "parquet",
-      "size": 8827,
+      "size": 8882,
       "sql_name": "trades"
     },
     {
