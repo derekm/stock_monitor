@@ -27,6 +27,7 @@ OUT_SUM = DATA_DIR / "hmm_regime_summary.parquet"
 OUT_TRANS = DATA_DIR / "hmm_transition_matrix.parquet"
 OUT_TRIGGERS = DATA_DIR / "hmm_transition_triggers.parquet"
 CKPT = DATA_DIR / "hmm_checkpoint.pkl"
+FEAT_CACHE = DATA_DIR / "hmm_features_cache.parquet"
 
 # Window policy (adaptive, not a fixed default):
 #   - Fit only on the current regime episode: data since the last detected
@@ -232,13 +233,21 @@ def fit_hmm(feat: pd.DataFrame, n_states: int = 3, seed: int = 7, resume: bool =
         ck_last = ckpt["last_date"]
         new = feat[feat.index > ck_last]
         if len(new) >= 1:
-            Xn = new[["mkt_ret", "vol21", "avg_corr"]].values
-            # standardize new rows with the checkpoint's saved scaler so the
+            # Fit the new rows PLUS a trailing context from the checkpoint's
+            # window. With covariance_type="full" a single row (or very few)
+            # makes the emission covariances singular -> 'covars must be
+            # symmetric, positive-definite'. The trailing context keeps EM
+            # well-posed while still warm-starting from persisted params.
+            ctx = feat[feat.index <= ck_last].tail(max(60, 4 * len(new)))
+            fit_rows = pd.concat([ctx, new])
+            Xn = fit_rows[["mkt_ret", "vol21", "avg_corr"]].values
+            # standardize with the checkpoint's saved scaler so the
             # persisted params stay comparable
             Xnz = (Xn - ckpt["mu"]) / ckpt["sd"]
             model.fit(Xnz)
-            print(f"[hmm] resumed from checkpoint: fit {len(new)} new rows "
-                  f"since {pd.Timestamp(ck_last).date()} (warm start)")
+            print(f"[hmm] resumed from checkpoint: warm-start fit "
+                  f"{len(new)} new rows + {len(ctx)} context rows "
+                  f"since {pd.Timestamp(ck_last).date()}")
         else:
             print("[hmm] checkpoint current — no new rows to fit")
     elif ckpt is not None and not fp_ok:
@@ -364,6 +373,48 @@ def _content_hash(wide: pd.DataFrame) -> str:
     return hashlib.sha256(np.nan_to_num(arr, nan=-999.0).tobytes()).hexdigest()
 
 
+def load_features_cache(rets: pd.DataFrame, fp: dict, wide: pd.DataFrame) -> pd.DataFrame | None:
+    """Return cached features if the data they were built from is unchanged.
+
+    The cache stores {date, mkt_ret, vol21, avg_corr} plus the structural
+    fingerprint and the content hash of the price matrix rows it covers.
+    On a daily append the covered rows are unchanged → cache hit; only the
+    new rows need fresh feature computation.
+    """
+    if not FEAT_CACHE.exists():
+        return None
+    try:
+        c = pd.read_parquet(FEAT_CACHE)
+        if "date" not in c.columns or "fp_tickers" not in c.columns:
+            return None
+        if c["fp_tickers"].iloc[0] != ",".join(fp["tickers"]):
+            return None
+        if c["fp_start"].iloc[0] != fp.get("start"):
+            return None
+        c_last = pd.Timestamp(c["date"].max())
+        # hash only the rows the cache covers — unchanged on pure appends
+        covered = wide[wide.index <= c_last]
+        if _content_hash(covered) != c["fp_hash"].iloc[0]:
+            return None
+        c = c.set_index("date").sort_index()
+        return c.loc[c.index.isin(rets.index)]
+    except Exception:
+        return None
+
+
+def save_features_cache(feat: pd.DataFrame, fp: dict, wide: pd.DataFrame) -> None:
+    """Persist features with the structural fingerprint + covered-row hash."""
+    try:
+        c = feat.reset_index().rename(columns={"index": "date"})
+        c["fp_tickers"] = ",".join(fp["tickers"])
+        c["fp_start"] = fp.get("start")
+        covered = wide[wide.index <= c["date"].max()]
+        c["fp_hash"] = _content_hash(covered)
+        c.to_parquet(FEAT_CACHE, index=False)
+    except Exception as e:
+        print(f"[hmm] WARNING: feature cache save failed: {e}")
+
+
 def label_states(feat: pd.DataFrame, states: np.ndarray) -> dict[int, str]:
     tmp = feat.copy()
     tmp["state"] = states
@@ -427,7 +478,26 @@ def run(n_states: int = 3, save: bool = True, window_days: int | None = "auto"):
         wide = wide.iloc[-window_days:]
     rets = np.log(wide / wide.shift(1)).dropna(how="all")
 
-    feat = build_features(rets)
+    # Feature cache: reuse the previous run's features when the data is
+    # unchanged (same tickers/start AND same content hash over covered rows).
+    # On a pure daily append the cache covers everything except the new rows
+    # — only those need fresh pairwise-correlation work. Hashing the covered
+    # matrix is O(N·k) and far cheaper than recomputing O(N·k²/2) correlations.
+    feat = load_features_cache(rets, fp, wide)
+    if feat is not None and len(feat) >= len(rets) - 21:
+        print(f"[hmm] feature cache hit: {len(feat)} rows (skip pairwise corr)")
+        if len(feat) < len(rets):
+            # append-only: build features for the new rows only (needs the
+            # trailing 21-day context for the rolling windows)
+            n_new = len(rets) - len(feat)
+            tail = rets.iloc[-(21 + n_new):]
+            new_feat = build_features(tail).iloc[-n_new:]
+            feat = pd.concat([feat, new_feat])
+    else:
+        feat = build_features(rets)
+        print(f"[hmm] full feature build: {len(feat)} rows")
+    save_features_cache(feat, fp, wide)
+
     model, states, post, mu, sd = fit_hmm(feat, n_states=n_states, data_fp=fp)
     labels, g = label_states(feat, states)
 

@@ -25,15 +25,15 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
 PREF = DATA_DIR / "preferred_metrics.parquet"
-MOM = DATA_DIR / "momentum_metrics.csv"
-FAC = DATA_DIR / "factor_panel.csv"
-RISK = DATA_DIR / "risk_metrics_ext.csv"
+MOM = DATA_DIR / "momentum_metrics.parquet"
+FAC = DATA_DIR / "factor_panel.parquet"
+RISK = DATA_DIR / "risk_metrics_ext.parquet"
 AGG = DATA_DIR / "signal_aggregator_scores.csv"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
 SP500 = DATA_DIR / "sp500_sleeve.csv"
-OUT = DATA_DIR / "buy_candidates.csv"
+OUT = DATA_DIR / "buy_candidates.parquet"
 OUT_TOP = DATA_DIR / "buy_candidates_top.csv"
-FRAGILITY = DATA_DIR / "fragility_screen.csv"
+FRAGILITY = DATA_DIR / "fragility_screen.parquet"
 SKEW_CSV = DATA_DIR / "options_skew.csv"
 SKEW_STEEP = 0.35  # skew >= this (steep put-side fear) triggers the veto
 
@@ -45,7 +45,7 @@ skew_map: dict[str, float] | None = None
 def regime() -> str:
     if not HMM.exists():
         return "normal"
-    h = pd.read_csv(HMM)
+    h = pd.read_parquet(HMM)
     h["date"] = pd.to_datetime(h.get("date"), errors="coerce")
     h = h.dropna(subset=["date"]).sort_values("date")
     if h.empty:
@@ -70,7 +70,7 @@ def regime_stress_prob() -> float:
     """
     if not HMM.exists():
         return 0.0
-    h = pd.read_csv(HMM)
+    h = pd.read_parquet(HMM)
     h["date"] = pd.to_datetime(h.get("date"), errors="coerce")
     h = h.dropna(subset=["date"]).sort_values("date")
     if h.empty:
@@ -102,7 +102,7 @@ def _load_maps():
     """Taleb veto maps: fragility flag (top-10% pctile) and latest IV skew."""
     fragility_map, skew_map = None, None
     if FRAGILITY.exists():
-        fs = pd.read_csv(FRAGILITY)
+        fs = pd.read_parquet(FRAGILITY)
         fragility_map = dict(zip(fs["ticker"].astype(str).str.upper(), fs["fragile_flag"] == True))
     if SKEW_CSV.exists():
         sk = pd.read_csv(SKEW_CSV)
@@ -290,7 +290,7 @@ def build() -> pd.DataFrame:
     global fragility_map, skew_map
     fragility_map, skew_map = _load_maps()
 
-    pref = pd.read_csv(PREF) if PREF.exists() else pd.DataFrame()
+    pref = pd.read_parquet(PREF) if PREF.exists() else pd.DataFrame()
     if pref.empty:
         return pref
     df = pref.copy()
@@ -300,7 +300,7 @@ def build() -> pd.DataFrame:
         (RISK, ["ticker", "adv_dollar_21", "liquidity_score"]),
     ):
         if path.exists():
-            extra = pd.read_csv(path)
+            extra = pd.read_parquet(path)
             keep = [c for c in cols if c in extra.columns]
             if "ticker" in keep:
                 df = df.merge(extra[keep], on="ticker", how="left", suffixes=("", "_x"))
@@ -358,7 +358,7 @@ def main():
     print(df[show].head(20).to_string(index=False))
     print("\nAction counts:", df["action"].value_counts().to_dict())
     if args.save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT, index=False)
         df[df["action"].isin(["BUY", "ACCUMULATE"])].to_csv(OUT_TOP, index=False)
         print(f"Wrote {OUT.name} ({len(df)}), {OUT_TOP.name}")
 
