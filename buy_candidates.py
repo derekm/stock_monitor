@@ -273,6 +273,18 @@ def score_row(r, stress_p: float, fragility_map=None, skew_map=None, sigs: dict 
             score -= 0.05 * stress_p
         elif mom < 0.25:
             score -= 0.05 * stress_p * ((0.25 - mom) / 0.25)
+
+        # Momentum crash mitigation (Daniel & Moskowitz 2016): in stress the
+        # momentum spread has option-like negative exposure — past losers rally
+        # violently in rebounds while winners lag. Attenuate the momentum credit
+        # so a fixed 6-9m momentum ride isn't held through a bear→bull reversal.
+        # Continuous in stress_p: credit *= (1 - 0.5*stress_p), capped 50% cut.
+        if pd.notna(mom):
+            m_orig = _step_expectation(float(mom), sigs.get("momentum", 0.0), *MOMENTUM_STEPS)
+            if m_orig > 0:
+                m_att = m_orig * (1.0 - 0.5 * stress_p)
+                score += (m_att - m_orig)  # remove the attenuated fraction
+                reasons.append(f"momentum_attenuated_{0.5*stress_p:.0%}")
     return score, reasons
 
 

@@ -32,7 +32,7 @@ def z(s: pd.Series) -> pd.Series:
 
 def build() -> pd.DataFrame:
     pref = pd.read_parquet(PREF) if PREF.exists() else pd.DataFrame()
-    mom = pd.read_csv(MOM) if MOM.exists() else pd.DataFrame()
+    mom = pd.read_parquet(MOM) if MOM.exists() else pd.DataFrame()
     if pref.empty:
         return pd.DataFrame()
     df = pref.copy()

@@ -35,6 +35,7 @@ JOBS = {
     "rebalance": (["rebalance_calendar.py", "--months", "18", "--save"], None),
     "preferred": (["preferred_metrics.py", "--save"], None),
     "implied_r": (["implied_r_screen.py", "--save"], None),
+    "momentum": (["momentum_analytics.py", "--save"], None),
     "inclusion": (["inclusion_criteria.py", "--explore-defensive", "--save"], None),
     "stress": (["stress_dual_pass.py", "--save"], None),
     "crisis": (["crisis_correlation.py", "--save"], None),
@@ -59,6 +60,7 @@ JOBS = {
     "shadow": (["shadow_book.py", "--save"], None),
     "taleb_tail": (["tail_index.py"], None),
     "taleb_gap": (["gap_risk.py"], None),
+    "taleb_iv_skew": (["iv_skew.py", "--max-tickers", "100", "--skip-existing"], 600),
     "taleb_ergodic": (["ergodicity_ruin.py"], None),
     "taleb_fragility": (["fragility_screen.py"], None),
     "taleb_minsky": (["macro_fragility.py", "--save"], None),
@@ -78,6 +80,7 @@ DEPS = {
     "market_cap": set(),  # runs right after prices fetch; no deps
     "inclusion": {"preferred"},
     "implied_r": {"preferred"},
+    "momentum": {"preferred"},
     "stress": {"preferred", "inclusion"},
     "risk_enrich": {"preferred"},
     "rolling": {"risk_enrich"},
@@ -98,8 +101,9 @@ DEPS = {
     "shadow": {"preferred", "aggregate"},
     "taleb_tail": {"preferred"},
     "taleb_gap": {"preferred"},
+    "taleb_iv_skew": {"preferred"},
     "taleb_ergodic": {"taleb_tail"},
-    "taleb_fragility": {"taleb_tail", "taleb_gap"},
+    "taleb_fragility": {"taleb_tail", "taleb_gap", "taleb_iv_skew"},
     "taleb_minsky": {"hmm", "taleb_fragility"},
     "taleb_shock": {"hmm"},
     "taleb_sector_shock": {"hmm"},
@@ -108,7 +112,7 @@ DEPS = {
     "taleb_barbell": {"taleb_fragility", "taleb_ergodic"},
     "taleb_optionality": {"aggregate", "preferred"},
     "export": {"aggregate", "technical", "econ_cal", "est_rev", "shadow",
-               "taleb_tail", "taleb_gap", "taleb_ergodic", "taleb_fragility", "taleb_minsky", "taleb_shock", "taleb_sector_shock", "taleb_shock_ride", "taleb_subindustry_regime", "taleb_barbell",
+               "taleb_tail", "taleb_gap", "taleb_iv_skew", "taleb_ergodic", "taleb_fragility", "taleb_minsky", "taleb_shock", "taleb_sector_shock", "taleb_shock_ride", "taleb_subindustry_regime", "taleb_barbell",
                "taleb_optionality"},
 }
 

@@ -39,8 +39,15 @@ DATA_DIR = Path(__file__).resolve().parent
 def pctile(s):
     """0..1 percentile of a series (higher = worse fragility for that input)."""
     s = pd.to_numeric(s, errors="coerce")
-    r = s.rank(pct=True)
-    return r
+    # Need to compute ranks on non-null values only, then reindex to original
+    mask = s.notna()
+    if not mask.any():
+        return pd.Series(index=s.index, dtype=float)
+    ranked = s[mask].rank(pct=True)
+    # Reindex to original index (NaN positions will be NaN)
+    result = pd.Series(index=s.index, dtype=float)
+    result[mask] = ranked
+    return result
 
 
 def main():
@@ -144,7 +151,7 @@ def main():
         if c in frag.columns:
             out[c] = frag[c]
     out = out.sort_values("fragility_score", ascending=False)
-    out.to_csv(DATA_DIR / "fragility_screen.csv", index=False)
+    out.to_parquet(DATA_DIR / "fragility_screen.parquet", index=False)
 
     n_fragile = int(out["fragile_flag"].sum())
     print(f"fragility_screen.csv: {len(out)} tickers | {n_fragile} flagged FRAGILE (top 10%)")

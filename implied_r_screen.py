@@ -43,6 +43,13 @@ FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT_PQ = DATA_DIR / "implied_r_screen.parquet"
 
+# ── Financial-distortion guard (Damodaran) ─────────────────────────────
+# For banks/insurers/REITs/utilities, book value ≈ invested assets and ROE is
+# levered by float/deposits. The RIV reduced form r = 2*ROE/(P/B+1) therefore
+# MECHANICALLY overstates cheapness (inflated ROE + depressed P/B). These
+# sectors' implied-r is unreliable as a standalone value signal.
+DISTORTED_SECTORS = {"Financials", "Utilities", "Real Estate", "Financial", "Multi-Sector"}
+
 # Fair-value thresholds (paper's worked example uses r = 9% for a risky firm;
 # 8% is the textbook midpoint). CHEAP = market demands > 12%, EXPENSIVE < 6%.
 R_CHEAP = 0.12
@@ -79,6 +86,35 @@ def latest_price() -> pd.Series:
     return p.set_index("ticker")["close"]
 
 
+def price_series() -> pd.DataFrame:
+    """Full daily close matrix (wide) for beta / risk computation."""
+    p = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
+    p["date"] = pd.to_datetime(p["date"])
+    return p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
+
+
+def _beta_map(wide: pd.DataFrame, tickers) -> pd.Series:
+    """1y weekly beta vs equal-weight market (close-based). NaN-safe."""
+    if wide is None or len(wide) < 60:
+        return pd.Series(dtype=float)
+    r = np.log(wide / wide.shift(1)).resample("W").sum()
+    mkt = r.mean(axis=1)
+    out = {}
+    for t in tickers:
+        if t not in r.columns:
+            continue
+        x = r[[t]].dropna().iloc[-60:]
+        if len(x) < 30:
+            continue
+        y = mkt.reindex(x.index).dropna()
+        x = x.reindex(y.index).iloc[:, 0]
+        if len(x) < 30:
+            continue
+        cov = np.cov(x, y)
+        out[t] = cov[0, 1] / cov[1, 1] if cov[1, 1] != 0 else np.nan
+    return pd.Series(out)
+
+
 def latest_market_cap_b() -> pd.Series:
     """Latest daily market cap in $B (fresh — beats the quarterly fundamentals snapshot).
 
@@ -100,6 +136,24 @@ def latest_fundamentals() -> pd.DataFrame:
     return f.set_index("ticker")
 
 
+def sector_map() -> pd.Series:
+    """ticker -> GICS sector. Primary: sp500_constituents (full universe).
+    Fallback: monitored_stocks. Unknown otherwise."""
+    sec = {}
+    sp = DATA_DIR / "sp500_constituents.parquet"
+    if sp.exists():
+        s = pd.read_parquet(sp, columns=["ticker", "gics_sector"])
+        for _, r in s.drop_duplicates("ticker").iterrows():
+            sec[str(r["ticker"]).upper()] = str(r["gics_sector"])
+    if STOCKS.exists():
+        s = pd.read_parquet(STOCKS, columns=["ticker", "sector"])
+        for _, r in s.drop_duplicates("ticker").iterrows():
+            sec.setdefault(str(r["ticker"]).upper(), str(r["sector"]))
+    out = pd.Series(sec, dtype=str)
+    out.index.name = "ticker"
+    return out
+
+
 def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
     px = latest_price()
     f = latest_fundamentals()
@@ -110,11 +164,47 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
     df["ev_ebitda"] = f["ev_ebitda"]
     df["roic"] = f["roic"]
     df["as_of"] = f["as_of_date"]
+    wide = price_series()
 
     df = df.dropna(subset=["price", "roe", "pb_ratio"])
     df = df[df["price"] > 0]
     if min_cap_b:
         df = df[df["mktcap_b"] >= min_cap_b]
+
+    # Sector + financial-distortion guard
+    sec = sector_map().reindex(df.index)
+    df["sector"] = sec.fillna("Unknown")
+    df["is_financial"] = df["sector"].isin(DISTORTED_SECTORS)
+    # For financials, the RIV implied-r is structurally inflated. Flag it
+    # (distortion_flag=True) and keep the raw value but mark unreliable.
+    df["r_distorted"] = df["is_financial"]
+
+    # ── Damodaran excess-return metric (financials' correct value driver) ──
+    # Value = BV + PV(excess returns), excess return = ROE − cost of equity.
+    # COE via CAPM = rf + levered-beta·ERP. Levered beta from the price beta
+    # (which already embeds leverage) + a leverage penalty for high D/E, since
+    # Damodaran stresses financials' equity-only risk rises with leverage and
+    # deposits/float are raw material, not capital. ERP 4.5%, rf 4.0%.
+    RF = 0.04
+    ERP = 0.045
+    betas = _beta_map(wide, df.index)
+    df["beta"] = betas.reindex(df.index).fillna(1.0)
+    # Leverage penalty: D/E above ~2x raises COE (beta-like). Use a gentle
+    # additive term so high-D/E financials aren't read as free value.
+    de = pd.to_numeric(f.get("debt_to_equity"), errors="coerce").reindex(df.index)
+    df["debt_to_equity"] = de
+    lev_prem = np.clip((de - 2.0) / 5.0, 0.0, 0.05).fillna(0.0)
+    df["cost_of_equity"] = RF + df["beta"] * ERP + lev_prem
+    df["excess_return"] = df["roe"] - df["cost_of_equity"]
+    df["excess_ret_pct"] = (df["excess_return"] * 100).round(1)
+    # Operative value verdict for financials: value created iff ROE > COE.
+    def excess_verdict(row):
+        if row["excess_return"] >= 0.03:
+            return "CREATES_VALUE"
+        if row["excess_return"] >= 0.0:
+            return "AT_COST"
+        return "DESTROYS_VALUE"
+    df["excess_ret_verdict"] = df.apply(excess_verdict, axis=1)
 
     # RIV reduced form, g = r/2:  r = 2*ROE/(P/B + 1)
     df["implied_r"] = 2.0 * df["roe"] / (df["pb_ratio"] + 1.0)
@@ -155,6 +245,25 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
     df["fv_mid_r8p5"] = fv[1].round(2)
     df["fv_hi_r7"] = fv[2].round(2)
 
+    # ── g-sensitivity (Ohlson: g is under-identified) ────────────────────
+    # The fair-value band uses an implicit g=r/2. Report how the implied-r
+    # verdict shifts under alternative growth anchors. RIV reduced form at
+    # general g: r = (ROE·(1+g) + g·(P/B)) / (P/B + 1). Solving implied-r with
+    # g=0, g=r/2 (paper default), g=0.75r.
+    pb = df["pb_ratio"]
+    roe = df["roe"]
+    # g=0 (no-growth): r = ROE·(1)/(PB+1) ... use r = ROE/PB is wrong; use the
+    # clean-surplus PVED growth-adjusted form: r_g0 = ROE / PB  (E/P + implied)
+    # Simplest defensible anchors: report ROE/PB (g=0 perpetual) and ROE (g=r,
+    # the ceiling). These bracket the paper's r/2.
+    df["r_g0"] = roe / pb          # implied r under no growth (E/P-style)
+    df["r_g_ceiling"] = roe        # implied r ceiling (g→r)
+    df["r_g0_pct"] = (df["r_g0"] * 100).round(1)
+    df["r_g_ceiling_pct"] = (df["r_g_ceiling"] * 100).round(1)
+    # verdict under the two anchors (distorted financials excluded from clean)
+    df["cheap_robust"] = (df["r_g0"] >= R_CHEAP) & ~df["r_distorted"]
+    df["rich_robust"] = (df["r_g_ceiling"] < R_EXPENSIVE) & ~df["r_distorted"]
+
     # Where is price vs the 7-10% fair band?
     def vs_fair(row):
         price, lo, hi = row["price"], row["fv_lo_r10"], row["fv_hi_r7"]
@@ -172,7 +281,14 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
 
     df = df.reset_index().rename(columns={"index": "ticker"})
     df = df.sort_values("implied_r", ascending=False)
-    cols = ["ticker", "price", "bvps", "pb_ratio", "roe", "implied_r_pct",
+    # Clean implied-r: drop the distorted financial value so the CHEAP/FAIR
+    # screen isn't polluted by book-heavy sectors' mechanically-high r.
+    df["implied_r_clean"] = df["implied_r"].where(~df["r_distorted"])
+    df["implied_r_clean_pct"] = (df["implied_r_clean"] * 100).round(1)
+    cols = ["ticker", "sector", "is_financial", "r_distorted", "price", "bvps",
+            "pb_ratio", "roe", "beta", "debt_to_equity", "implied_r_pct", "implied_r_clean_pct",
+            "cost_of_equity", "excess_ret_pct", "excess_ret_verdict",
+            "r_g0_pct", "r_g_ceiling_pct", "cheap_robust", "rich_robust",
             "fwd_pe_bench", "verdict", "mktcap_b", "ev_ebitda", "roic",
             "r_gt_roe", "pb_lt_1", "triplet_ok", "as_of",
             "fv_lo_r10", "fv_mid_r8p5", "fv_hi_r7", "vs_fair", "fv_gap_pct"]
@@ -194,22 +310,25 @@ def main():
     print(f"=== Implied cost-of-capital screen ({len(df)} tickers) ===")
     print("Formula: r = 2*ROE/(P/B + 1)  [RIV reduced form, g=r/2, Ohlson & Rueangsuwan 2026]")
     print(f"Thresholds: CHEAP r>=12% | Fair 7-10% | EXPENSIVE r<=6%")
-    print("Fair-value band: P = -BV + 2*EPS1/r at r = 7%/8.5%/10% (full RIV reduced form)\n")
+    print("Fair-value band: P = -BV + 2*EPS1/r at r = 7%/8.5%/10% (full RIV reduced form)")
+    print(f"NOTE: {int(df['r_distorted'].sum())} financial/utility/REIT names flagged (r_distorted=True) — "
+          f"their implied-r is unreliable (book-heavy, see clean col).\n")
     for v in ["CHEAP", "Fair-ish", "FAIR", "Rich", "EXPENSIVE"]:
         sub = df[df["verdict"] == v]
         if sub.empty:
             continue
         print(f"--- {v} ({len(sub)}) ---")
-        show_cols = ["ticker", "price", "pb_ratio", "roe", "implied_r_pct",
-                     "fv_lo_r10", "fv_mid_r8p5", "fv_hi_r7", "vs_fair", "fv_gap_pct"]
+        show_cols = ["ticker", "sector", "r_distorted", "price", "pb_ratio", "roe",
+                     "implied_r_clean_pct", "fv_lo_r10", "fv_mid_r8p5", "fv_hi_r7",
+                     "vs_fair", "fv_gap_pct"]
         print(sub[show_cols].head(args.top).to_string(index=False))
         print()
 
     # market stats
-    med = df["implied_r_pct"].median()
-    print(f"Median implied r: {med:.1f}% | n={len(df)}")
-    print(f"  CHEAP count: {(df['verdict']=='CHEAP').sum()} | "
-          f"EXPENSIVE count: {(df['verdict']=='EXPENSIVE').sum()}")
+    med = df["implied_r_clean_pct"].dropna().median()
+    print(f"Median implied r (clean, ex-financials): {med:.1f}% | n={df['implied_r_clean_pct'].notna().sum()}")
+    print(f"  CHEAP count (clean): {(df['implied_r_clean_pct'] >= R_CHEAP*100).sum()} | "
+          f"EXPENSIVE count (clean): {(df['implied_r_clean_pct'] < R_EXPENSIVE*100).sum()}")
     vb = df["vs_fair"].value_counts(dropna=False)
     print(f"  vs fair band: {dict(vb)}")
 

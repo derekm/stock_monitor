@@ -26,9 +26,9 @@ from analytics_common import load_adj_prices_pandas, wide_closes, clip_returns, 
 from index_registry import parse_indexes, tickers_for_index, available_indexes
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT = DATA_DIR / "momentum_metrics.csv"
-OUT_Q = DATA_DIR / "momentum_quintiles.csv"
-OUT_IC = DATA_DIR / "momentum_ic.csv"
+OUT = DATA_DIR / "momentum_metrics.parquet"
+OUT_Q = DATA_DIR / "momentum_quintiles.parquet"
+OUT_IC = DATA_DIR / "momentum_ic.parquet"
 
 
 def horizon_return(wide: pd.DataFrame, days: int) -> pd.Series:
@@ -152,9 +152,9 @@ def main():
         print("\nIC:")
         print(ic.to_string(index=False))
     if args.save:
-        df.to_csv(OUT, index=False)
-        qdf.to_csv(OUT_Q, index=False)
-        ic.to_csv(OUT_IC, index=False)
+        df.to_parquet(OUT, index=False)
+        qdf.to_parquet(OUT_Q, index=False)
+        ic.to_parquet(OUT_IC, index=False)
         print(f"Wrote {OUT.name}, {OUT_Q.name}, {OUT_IC.name}")
 
 

@@ -204,6 +204,23 @@ def cmd_fetch(args):
                     r["market_cap"] / last["total_assets"], 3
                 )
 
+    # Source-priority: don't overwrite EDGAR rows with same-day yfinance info
+    edgar_keys = set(
+        zip(
+            existing.loc[existing.get("source") == "edgar", "ticker"],
+            existing.loc[existing.get("source") == "edgar", "as_of_date"],
+        )
+    )
+    new_df = new_df[
+        ~new_df.apply(lambda r: (r["ticker"], r["as_of_date"]) in edgar_keys, axis=1)
+    ]
+    if len(new_df) != len(rows):
+        print(f"  (skipped {len(rows) - len(new_df)} rows whose date is covered by EDGAR)")
+        if new_df.empty:
+            save(existing)
+            print("  nothing new to add (all rows already EDGAR)")
+            return
+
     keys = set(zip(new_df["ticker"], new_df["as_of_date"]))
     existing = existing[~existing.apply(lambda r: (r["ticker"], r["as_of_date"]) in keys, axis=1)]
     combined = pd.concat([existing, new_df], ignore_index=True)
@@ -330,6 +347,25 @@ def cmd_fetch_history(args):
             & (existing.get("source") == "fundamentals_history_backfill")
         )
     ]
+    # ── Source-priority guard: EDGAR is the gold standard (point-in-time,
+    # as-reported XBRL). Never let a yfinance row overwrite an existing EDGAR
+    # row for the same (ticker, as_of_date). Source priority:
+    #   edgar > manual > yfinance_history > yfinance > fundamentals_history_backfill
+    edgar_keys = set(
+        zip(
+            existing.loc[existing.get("source") == "edgar", "ticker"],
+            existing.loc[existing.get("source") == "edgar", "as_of_date"],
+        )
+    )
+    new_df = new_df[
+        ~new_df.apply(lambda r: (r["ticker"], r["as_of_date"]) in edgar_keys, axis=1)
+    ]
+    if len(new_df) != len(new_rows):
+        print(f"  (skipped {len(new_rows) - len(new_df)} rows whose quarter is covered by EDGAR)")
+        if new_df.empty:
+            save(existing)
+            print("  nothing new to add (all quarters already EDGAR)")
+            return
     keys = set(zip(new_df["ticker"], new_df["as_of_date"]))
     existing = existing[~existing.apply(lambda r: (r["ticker"], r["as_of_date"]) in keys, axis=1)]
     combined = pd.concat([existing, new_df], ignore_index=True)
