@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-10T23:25:22.588085",
+  "generated": "2026-08-10T23:41:25.652737",
   "count": 250,
   "files": [
     {
@@ -1484,7 +1484,7 @@
       "path": "peer_analytics_signals.parquet",
       "url": "peer_analytics_signals.parquet",
       "kind": "parquet",
-      "size": 334531,
+      "size": 255650,
       "sql_name": "peer_analytics_signals"
     },
     {
@@ -1493,7 +1493,7 @@
       "path": "peer_fundamental_trends.parquet",
       "url": "peer_fundamental_trends.parquet",
       "kind": "parquet",
-      "size": 157655,
+      "size": 120374,
       "sql_name": "peer_fundamental_trends"
     },
     {
@@ -1502,7 +1502,7 @@
       "path": "peer_group_summary.parquet",
       "url": "peer_group_summary.parquet",
       "kind": "parquet",
-      "size": 10741,
+      "size": 9016,
       "sql_name": "peer_group_summary"
     },
     {
@@ -1511,7 +1511,7 @@
       "path": "peer_recovery_signals.parquet",
       "url": "peer_recovery_signals.parquet",
       "kind": "parquet",
-      "size": 84163,
+      "size": 64577,
       "sql_name": "peer_recovery_signals"
     },
     {

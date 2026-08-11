@@ -34,7 +34,7 @@ import pandas as pd
 from analytics_common import DATA_DIR, load_adj_prices_pandas, wide_closes, clip_returns
 
 PREF = DATA_DIR / "preferred_metrics.parquet"
-PEER = DATA_DIR / "peer_analytics_signals.csv"
+PEER = DATA_DIR / "peer_analytics_signals.parquet"
 CROSS = DATA_DIR / "cross_section_rankings.csv"
 PAIR = DATA_DIR / "pair_engine_pairs.csv"
 EARN = DATA_DIR / "earnings_catalyst_signals.csv"
@@ -57,8 +57,8 @@ def load_scores() -> pd.DataFrame:
         if not df.empty and "ticker" in df.columns:
             tickers.update(df["ticker"].astype(str).str.upper())
 
-    pref = pd.read_csv(PREF) if PREF.exists() else pd.DataFrame()
-    peer = pd.read_csv(PEER) if PEER.exists() else pd.DataFrame()
+    pref = pd.read_parquet(PREF) if PREF.exists() else pd.DataFrame()
+    peer = pd.read_parquet(PEER) if PEER.exists() else pd.DataFrame()
     cross = pd.read_csv(CROSS) if CROSS.exists() else pd.DataFrame()
     pair = pd.read_csv(PAIR) if PAIR.exists() else pd.DataFrame()
     earn = pd.read_csv(EARN) if EARN.exists() else pd.DataFrame()
@@ -129,7 +129,7 @@ def load_regime_map() -> pd.Series:
     hmm = DATA_DIR / "hmm_regime_states.parquet"
     if not hmm.exists():
         return pd.Series(dtype=str)
-    df = pd.read_csv(hmm)
+    df = pd.read_parquet(hmm)
     if "date" not in df.columns or "regime" not in df.columns:
         return pd.Series(dtype=str)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")

@@ -28,10 +28,10 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
-OUT_SIGNALS = DATA_DIR / "peer_analytics_signals.csv"
-OUT_GROUP = DATA_DIR / "peer_group_summary.csv"
-OUT_TRENDS = DATA_DIR / "peer_fundamental_trends.csv"
-OUT_RECOVERY = DATA_DIR / "peer_recovery_signals.csv"
+OUT_SIGNALS = DATA_DIR / "peer_analytics_signals.parquet"
+OUT_GROUP = DATA_DIR / "peer_group_summary.parquet"
+OUT_TRENDS = DATA_DIR / "peer_fundamental_trends.parquet"
+OUT_RECOVERY = DATA_DIR / "peer_recovery_signals.parquet"
 
 # Fundamental metrics to track trends for
 FUND_METRICS = [
@@ -632,10 +632,10 @@ def run(save: bool = True) -> dict[str, pl.DataFrame]:
 
     if save:
         print(f"\nSaving outputs...")
-        signals.write_csv(OUT_SIGNALS)
-        group_summary.write_csv(OUT_GROUP)
-        trends.write_csv(OUT_TRENDS)
-        recovery.write_csv(OUT_RECOVERY)
+        signals.write_parquet(OUT_SIGNALS)
+        group_summary.write_parquet(OUT_GROUP)
+        trends.write_parquet(OUT_TRENDS)
+        recovery.write_parquet(OUT_RECOVERY)
         print(f"  {OUT_SIGNALS}")
         print(f"  {OUT_GROUP}")
         print(f"  {OUT_TRENDS}")
