@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-10T23:19:33.733343",
-  "count": 251,
+  "generated": "2026-08-10T23:25:22.588085",
+  "count": 250,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -127,15 +127,6 @@
       "kind": "parquet",
       "size": 5763774,
       "sql_name": "['all']"
-    },
-    {
-      "name": "_qsr_fundamentals",
-      "filename": "_qsr_fundamentals.csv",
-      "path": "_qsr_fundamentals.csv",
-      "url": "_qsr_fundamentals.csv",
-      "kind": "csv",
-      "size": 307,
-      "sql_name": "_qsr_fundamentals"
     },
     {
       "name": "aerospace_supply",
@@ -1493,7 +1484,7 @@
       "path": "peer_analytics_signals.parquet",
       "url": "peer_analytics_signals.parquet",
       "kind": "parquet",
-      "size": 143182,
+      "size": 334531,
       "sql_name": "peer_analytics_signals"
     },
     {
