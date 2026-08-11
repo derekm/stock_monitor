@@ -33,6 +33,8 @@ OUT_TICKERS = DATA_DIR / "shock_ride_tickers.parquet"
 MIN_TICKER_HISTORY = 36  # months of price history required for a ticker ride
 MAX_TICKERS = 600        # cap for the per-ticker pass (universe is ~583)
 
+from momentum_research import research_report  # noqa: E402
+
 
 def _ride_stats(m: pd.Series, entry_thresh: float) -> dict:
     cum = (1 + m).cumprod()
@@ -106,45 +108,94 @@ def run(entry_thresh: float = 0.40, save: bool = True):
     trows = []
     tickers = sorted(t for t in have if t in w.columns)
     tickers = tickers[:MAX_TICKERS]
+    # ADV proxy (mean |daily log ret| x mean close) as a liquidity filter input
+    adv_proxy = w.abs().mean()  # rough turnover/liquidity proxy per ticker
     for t in tickers:
         s = w[t].dropna()
-        if len(s) < MIN_TICKER_HISTORY * 21:
+        if len(s) < 3 * 21:  # 3 months floor (Ritter: post-first-month)
             continue
         m = np.log(s / s.shift(1))
         m = m.replace([np.inf, -np.inf], np.nan).dropna()
         m = m.resample("ME").sum().dropna()
-        if len(m) < MIN_TICKER_HISTORY:
+        if len(m) < 3:
             continue
-        st = _ride_stats(m, entry_thresh)
-        # recommendation (same honest logic as ride_now.py)
-        hot = st["mom12"] > 0.40
-        if st["ride_long"] and hot and st["mom3"] > 0:
-            rec, interp = "BUY", (
-                f"explosion still accelerating (12m {st['mom12']:+.0%}, "
-                f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%})."
-            )
-        elif st["ride_long"] and hot:
-            rec, interp = "STAND DOWN", (
-                f"momentum says long (12m {st['mom12']:+.0%}, 3m {st['mom3']:+.0%}, "
-                f"1m {st['mom1']:+.0%}) — 1m rolling over. Tighten stop to 3m rollover."
-            )
-        elif st["mom12"] > 0.40 and st["mom3"] <= 0:
-            rec, interp = "AVOID", (
-                f"exploded (12m {st['mom12']:+.0%}) but 3m {st['mom3']:+.0%} "
-                f"(1m {st['mom1']:+.0%}) — rolled over; ride exited."
-            )
-        elif st["mom12"] > 0.40:
-            rec, interp = "WATCH", (
-                f"12m {st['mom12']:+.0%} — above threshold but 3m {st['mom3']:+.0%} "
-                f"not yet positive; waiting for entry."
-            )
+        ann_vol = m.tail(12).std() * np.sqrt(12) if len(m) >= 2 else np.nan
+        # research report (all measures + young-gate), Ritter first-month drop inside
+        rr = research_report(m, annual_vol=ann_vol,
+                             adv=float(adv_proxy[t]) if t in adv_proxy.index else None,
+                             adv_series=adv_proxy)
+        yg = rr["young_gate"]
+        established = len(m) >= MIN_TICKER_HISTORY
+        if established:
+            st = _ride_stats(m, entry_thresh)
         else:
-            rec, interp = "FLAT", f"12m {st['mom12']:+.0%} / 3m {st['mom3']:+.0%} — no signal."
+            # young ticker: build a minimal _ride_stats-equivalent so the row is uniform
+            cum = (1 + m).cumprod()
+            st = {
+                "n_trades": 0,
+                "in_market_share": 0.0,
+                "buy_hold_return": round(float(m.sum()), 4),
+                "ride_return": 0.0,
+                "excess": 0.0,
+                "max_dd_ride": np.nan,
+                "max_dd_buyhold": np.nan,
+                "mom1": rr.get("mom_1m"),
+                "mom3": rr.get("mom_3m_ann"),
+                "mom12": rr.get("mom_6m_ann"),
+                "ride_long": int(yg["gate_open"]),
+                "as_of": m.index[-1].strftime("%Y-%m-%d") if len(m) else "",
+            }
+        # recommendation: use young-gate for young tickers, classic rule otherwise
+        if not established:
+            if yg["gate_open"]:
+                rec, interp = "BUY", (
+                    f"young-ticker gate OPEN (6m {yg['mom_6m_ann']:+.0%} ann, "
+                    f"1m {yg['mom_1m']:+.0%}, near-high {yg['gw_high_prox']:.2f}, "
+                    f"{yg['reliability']}). Early momentum explosion."
+                )
+            else:
+                rec, interp = "FLAT", (
+                    f"young-ticker gate closed ({yg['reliability']}): "
+                    f"6m {yg['mom_6m_ann']:+.0%} 1m {yg['mom_1m']:+.0%} "
+                    f"near-high {yg['gw_high_prox']:.2f} — {', '.join(yg['reasons']) or 'no signal'}"
+                )
+        else:
+            hot = st["mom12"] > 0.40
+            if st["ride_long"] and hot and st["mom3"] > 0:
+                rec, interp = "BUY", (
+                    f"explosion still accelerating (12m {st['mom12']:+.0%}, "
+                    f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%})."
+                )
+            elif st["ride_long"] and hot:
+                rec, interp = "STAND DOWN", (
+                    f"momentum says long (12m {st['mom12']:+.0%}, 3m {st['mom3']:+.0%}, "
+                    f"1m {st['mom1']:+.0%}) — 1m rolling over. Tighten stop to 3m rollover."
+                )
+            elif st["mom12"] > 0.40 and st["mom3"] <= 0:
+                rec, interp = "AVOID", (
+                    f"exploded (12m {st['mom12']:+.0%}) but 3m {st['mom3']:+.0%} "
+                    f"(1m {st['mom1']:+.0%}) — rolled over; ride exited."
+                )
+            elif st["mom12"] > 0.40:
+                rec, interp = "WATCH", (
+                    f"12m {st['mom12']:+.0%} — above threshold but 3m {st['mom3']:+.0%} "
+                    f"not yet positive; waiting for entry."
+                )
+            else:
+                rec, interp = "FLAT", f"12m {st['mom12']:+.0%} / 3m {st['mom3']:+.0%} — no signal."
         trows.append({
             "ticker": t,
             "name": (meta or {}).get(t, ""),
             "sector": (sec or {}).get(t, ""),
             **st,
+            "is_young": bool(not established),
+            "tsmom_3mo_sharpe": rr["tsmom_3mo_sharpe"],
+            "tsmom_6mo_sharpe": rr["tsmom_6mo_sharpe"],
+            "tsmom_12mo_sharpe": rr["tsmom_12mo_sharpe"],
+            "stmom_1m_ret": rr["stmom_1m_ret"],
+            "gw_high_prox": rr["gw52_high_prox"],
+            "young_gate_open": yg["gate_open"],
+            "young_gate_reliability": yg["reliability"],
             "recommendation": rec,
             "interpretation": interp,
         })

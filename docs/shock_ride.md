@@ -93,10 +93,32 @@ coincident with rollover ~14-17%, not leading).
   n_trades, in_market_share, buy_hold_return, ride_return, excess,
   max_dd_ride, max_dd_buyhold`
 - `shock_ride_tickers.csv` — **per-ticker** ride pass over the full price
-  universe (min 36mo history): `ticker, name, sector, n_trades,
+  universe (min 3mo history; classic rule for names with >=36mo, else the
+  young-ticker gate): `ticker, name, sector, n_trades,
   in_market_share, buy_hold_return, ride_return, excess, max_dd_ride,
   max_dd_buyhold, mom1, mom3, mom12, ride_long, recommendation,
-  interpretation, as_of`
+  interpretation, as_of`, plus the research-momentum columns:
+  `is_young, tsmom_3mo_sharpe, tsmom_6mo_sharpe, tsmom_12mo_sharpe,
+  stmom_1m_ret, gw_high_prox, young_gate_open, young_gate_reliability`
+
+## Young-ticker gate (research-grounded, <36mo history)
+
+Newly listed / recently onboarded tickers lack the 12-month window the classic
+rule needs. `shock_ride.py` now applies the **graduated young-ticker gate** from
+[`momentum_research.py`](momentum_research.md) to names with <36 months:
+
+- requires ≥6 months clean history (strict min 3; the first ~1 month is dropped
+  per Ritter 1991 — IPO pop is not momentum)
+- annualized 3/6-mo momentum vs a maturity-scaled 40% gate
+- requires 6-mo momentum > 0 AND 1-mo return > 0 (RFS 2022 liquid-stock
+  continuation) AND nearness to the listing all-time-high (George-Hwang 2004)
+- volatility + liquidity filters (short-term momentum only works in liquid,
+  high-turnover names)
+
+For young names the recommendation uses the gate (BUY when open, FLAT with the
+reasons when not) instead of the 12-month rule. The research measures
+(TSMOM 3/6/12, JT-6, STMOM-1, GW-high) are emitted for every ticker regardless
+of age.
 
 ## Usage
 

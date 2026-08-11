@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-11T17:56:32.608080",
-  "count": 251,
+  "generated": "2026-08-11T18:51:01.571833",
+  "count": 253,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -629,7 +629,7 @@
       "path": "estimate_revisions.parquet",
       "url": "estimate_revisions.parquet",
       "kind": "parquet",
-      "size": 42769,
+      "size": 43097,
       "sql_name": "estimate_revisions"
     },
     {
@@ -1376,7 +1376,7 @@
       "path": "momentum_metrics.parquet",
       "url": "momentum_metrics.parquet",
       "kind": "parquet",
-      "size": 102303,
+      "size": 150912,
       "sql_name": "momentum_metrics"
     },
     {
@@ -1387,6 +1387,24 @@
       "kind": "parquet",
       "size": 3690,
       "sql_name": "momentum_quintiles"
+    },
+    {
+      "name": "momentum_research_backtest",
+      "filename": "momentum_research_backtest.parquet",
+      "path": "momentum_research_backtest.parquet",
+      "url": "momentum_research_backtest.parquet",
+      "kind": "parquet",
+      "size": 6063,
+      "sql_name": "momentum_research_backtest"
+    },
+    {
+      "name": "momentum_research_confidence",
+      "filename": "momentum_research_confidence.parquet",
+      "path": "momentum_research_confidence.parquet",
+      "url": "momentum_research_confidence.parquet",
+      "kind": "parquet",
+      "size": 6027,
+      "sql_name": "momentum_research_confidence"
     },
     {
       "name": "monitored_stocks",
@@ -1493,7 +1511,7 @@
       "path": "peer_analytics_signals.parquet",
       "url": "peer_analytics_signals.parquet",
       "kind": "parquet",
-      "size": 257451,
+      "size": 257664,
       "sql_name": "peer_analytics_signals"
     },
     {
@@ -1502,7 +1520,7 @@
       "path": "peer_fundamental_trends.parquet",
       "url": "peer_fundamental_trends.parquet",
       "kind": "parquet",
-      "size": 121155,
+      "size": 121220,
       "sql_name": "peer_fundamental_trends"
     },
     {
@@ -1511,7 +1529,7 @@
       "path": "peer_group_summary.parquet",
       "url": "peer_group_summary.parquet",
       "kind": "parquet",
-      "size": 9054,
+      "size": 9026,
       "sql_name": "peer_group_summary"
     },
     {
@@ -1520,7 +1538,7 @@
       "path": "peer_recovery_signals.parquet",
       "url": "peer_recovery_signals.parquet",
       "kind": "parquet",
-      "size": 65085,
+      "size": 65067,
       "sql_name": "peer_recovery_signals"
     },
     {
@@ -1988,7 +2006,7 @@
       "path": "shock_ride_tickers.parquet",
       "url": "shock_ride_tickers.parquet",
       "kind": "parquet",
-      "size": 67004,
+      "size": 86851,
       "sql_name": "shock_ride_tickers"
     },
     {

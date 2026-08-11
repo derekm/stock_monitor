@@ -30,6 +30,11 @@ OUT = DATA_DIR / "momentum_metrics.parquet"
 OUT_Q = DATA_DIR / "momentum_quintiles.parquet"
 OUT_IC = DATA_DIR / "momentum_ic.parquet"
 
+from momentum_research import (  # noqa: E402
+    tsmom_stats, jt_momentum, stmom_1m, gw52_high, young_gate, research_report,
+    ENTRY_THRESH,
+)
+
 
 def horizon_return(wide: pd.DataFrame, days: int) -> pd.Series:
     return wide.iloc[-1] / wide.iloc[-1 - days] - 1.0 if len(wide) > days + 1 else pd.Series(dtype=float)
@@ -87,6 +92,28 @@ def build(tickers: list[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame,
                 rec["beta_est"] = np.nan
         st = ann_stats(r.tail(252)) if len(r) > 20 else {}
         rec.update({f"trail_{k}": v for k, v in st.items()})
+        # ── research-grounded momentum measures (monthly) ──
+        m = np.log(s / s.shift(1)).replace([np.inf, -np.inf], np.nan).dropna()
+        m = m.resample("ME").sum().dropna()
+        if len(m) >= 4:
+            ann_vol = m.tail(12).std() * np.sqrt(12) if len(m) >= 2 else np.nan
+            rr = research_report(m, annual_vol=ann_vol)
+            yg = rr["young_gate"]
+            rec.update({
+                "tsmom_3mo_sharpe": rr["tsmom_3mo_sharpe"],
+                "tsmom_6mo_sharpe": rr["tsmom_6mo_sharpe"],
+                "tsmom_12mo_sharpe": rr["tsmom_12mo_sharpe"],
+                "tsmom_3mo_ret": rr["tsmom_3mo_return"],
+                "tsmom_6mo_ret": rr["tsmom_6mo_return"],
+                "jt_6_1_ret": rr["jt_ret_6_1"],
+                "stmom_1m_ret": rr["stmom_1m_ret"],
+                "gw52_high_prox": rr["gw52_high_prox"],
+                "mom_3m_ann": yg["mom_3m_ann"],
+                "mom_6m_ann": yg["mom_6m_ann"],
+                "young_gate_open": yg["gate_open"],
+                "young_gate_reliability": yg["reliability"],
+                "signal_age_months": yg["signal_age_months"],
+            })
         rows.append(rec)
 
     df = pd.DataFrame(rows)
