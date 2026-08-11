@@ -1,6 +1,6 @@
 {
-  "generated": "2026-08-11T00:02:37.816231",
-  "count": 250,
+  "generated": "2026-08-11T01:56:39.159127",
+  "count": 251,
   "files": [
     {
       "name": "PALLFNFINDEXM",
@@ -161,7 +161,7 @@
       "path": "allpairs_asset_corr_history.parquet",
       "url": "allpairs_asset_corr_history.parquet",
       "kind": "parquet",
-      "size": 1853650,
+      "size": 1887265,
       "sql_name": "allpairs_asset_corr_history"
     },
     {
@@ -170,7 +170,7 @@
       "path": "allpairs_asset_corr_latest.parquet",
       "url": "allpairs_asset_corr_latest.parquet",
       "kind": "parquet",
-      "size": 49370,
+      "size": 64775,
       "sql_name": "allpairs_asset_corr_latest"
     },
     {
@@ -179,7 +179,7 @@
       "path": "allpairs_corr_summary.parquet",
       "url": "allpairs_corr_summary.parquet",
       "kind": "parquet",
-      "size": 4976,
+      "size": 5046,
       "sql_name": "allpairs_corr_summary"
     },
     {
@@ -188,7 +188,7 @@
       "path": "allpairs_sector_corr_history.parquet",
       "url": "allpairs_sector_corr_history.parquet",
       "kind": "parquet",
-      "size": 263936,
+      "size": 299150,
       "sql_name": "allpairs_sector_corr_history"
     },
     {
@@ -197,7 +197,7 @@
       "path": "allpairs_sector_corr_latest.parquet",
       "url": "allpairs_sector_corr_latest.parquet",
       "kind": "parquet",
-      "size": 7392,
+      "size": 8558,
       "sql_name": "allpairs_sector_corr_latest"
     },
     {
@@ -332,7 +332,7 @@
       "path": "buy_candidates.parquet",
       "url": "buy_candidates.parquet",
       "kind": "parquet",
-      "size": 67521,
+      "size": 75404,
       "sql_name": "buy_candidates"
     },
     {
@@ -440,7 +440,7 @@
       "path": "daily_prices.parquet",
       "url": "daily_prices.parquet",
       "kind": "parquet",
-      "size": 76595914,
+      "size": 76715692,
       "sql_name": "daily_prices"
     },
     {
@@ -1074,6 +1074,15 @@
       "sql_name": "hmm_2state_regimes"
     },
     {
+      "name": "hmm_features_cache",
+      "filename": "hmm_features_cache.parquet",
+      "path": "hmm_features_cache.parquet",
+      "url": "hmm_features_cache.parquet",
+      "kind": "parquet",
+      "size": 618928,
+      "sql_name": "hmm_features_cache"
+    },
+    {
       "name": "hmm_posterior_analysis",
       "filename": "hmm_posterior_analysis.parquet",
       "path": "hmm_posterior_analysis.parquet",
@@ -1106,7 +1115,7 @@
       "path": "hmm_regime_states.parquet",
       "url": "hmm_regime_states.parquet",
       "kind": "parquet",
-      "size": 19489,
+      "size": 1072783,
       "sql_name": "hmm_regime_states"
     },
     {
@@ -1115,7 +1124,7 @@
       "path": "hmm_regime_summary.parquet",
       "url": "hmm_regime_summary.parquet",
       "kind": "parquet",
-      "size": 5352,
+      "size": 5347,
       "sql_name": "hmm_regime_summary"
     },
     {
@@ -1133,7 +1142,7 @@
       "path": "hmm_transition_matrix.parquet",
       "url": "hmm_transition_matrix.parquet",
       "kind": "parquet",
-      "size": 3342,
+      "size": 3351,
       "sql_name": "hmm_transition_matrix"
     },
     {

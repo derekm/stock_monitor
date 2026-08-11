@@ -282,6 +282,31 @@ def _append_parquet(path: Path, rows: list[dict], cols: list[str]):
     pq.write_table(pa.Table.from_pandas(df, preserve_index=False), path)
 
 
+def _filter_phantom(rows: list[dict]) -> list[dict]:
+    """Drop yfinance holiday rows (Volume=0, stale close far from both neighbors).
+
+    Same guard as update_prices.py / backfill_historical.py — yfinance emits
+    non-trading days with a garbage close that would create impossible daily
+    returns. Only rows with volume == 0 and a >30% gap to both neighbors are
+    dropped.
+    """
+    if not rows:
+        return rows
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values(["ticker", "date"])
+    df["prev_close"] = df.groupby("ticker")["close"].shift(1)
+    df["next_close"] = df.groupby("ticker")["close"].shift(-1)
+    zv = df["volume"].fillna(-1) == 0
+    gap_prev = (df["close"] / df["prev_close"] - 1).abs()
+    gap_next = (df["close"] / df["next_close"] - 1).abs()
+    phantom = zv & (gap_prev > 0.30) & (gap_next > 0.30)
+    if phantom.any():
+        print(f"  _filter_phantom: dropping {int(phantom.sum())} holiday rows")
+    df = df.loc[~phantom].drop(columns=["prev_close", "next_close"])
+    return df.to_dict("records")
+
+
 def cmd_run(args):
     tickers = missing_tickers()
     if args.deep:
@@ -325,13 +350,13 @@ def cmd_run(args):
                 prog.setdefault("failed", []).append(tk)
         if i % FLUSH == 0:
             _append_parquet(FUND_STAGE, fund_buf, FUND_COLS)
-            _append_parquet(PRICE_STAGE, price_buf, PRICE_COLS)
+            _append_parquet(PRICE_STAGE, _filter_phantom(price_buf), PRICE_COLS)
             fund_buf, price_buf = [], []
             save_progress(prog)
             print(f"  progress {i}/{len(todo)} done={len(prog['done'])} failed={len(prog['failed'])}")
     # flush remainder
     _append_parquet(FUND_STAGE, fund_buf, FUND_COLS)
-    _append_parquet(PRICE_STAGE, price_buf, PRICE_COLS)
+    _append_parquet(PRICE_STAGE, _filter_phantom(price_buf), PRICE_COLS)
     save_progress(prog)
     print(f"DONE. staging: fund={FUND_STAGE} price={PRICE_STAGE}. Run 'merge' to union into real files.")
 

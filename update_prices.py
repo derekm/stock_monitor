@@ -62,6 +62,34 @@ def get_active_tickers():
     df = pd.read_parquet(STOCKS_FILE)
     return df[df["status"].isin(["active", "monitored"])]["ticker"].tolist()
 
+
+def drop_phantom_rows(df: pd.DataFrame, gap_threshold: float = 0.30) -> pd.DataFrame:
+    """Drop yfinance non-trading-day rows (volume==0, close far from both neighbors).
+
+    yfinance emits a row for holidays with Volume=0 and a stale/garbage Close
+    (e.g. $47 for a $300 stock). Without this guard those rows produce
+    impossible 400-500% daily returns that corrupt vol/corr features and the
+    HMM regime map.
+
+    A row is phantom if ALL of:
+      - volume == 0
+      - |close/prev_close - 1| > gap_threshold
+      - |close/next_close - 1| > gap_threshold
+    """
+    if df.empty or "volume" not in df.columns:
+        return df
+    d = df.sort_values(["ticker", "date"]).copy()
+    d["prev_close"] = d.groupby("ticker")["close"].shift(1)
+    d["next_close"] = d.groupby("ticker")["close"].shift(-1)
+    zv = d["volume"] == 0
+    gap_prev = (d["close"] / d["prev_close"] - 1).abs()
+    gap_next = (d["close"] / d["next_close"] - 1).abs()
+    phantom = zv & (gap_prev > gap_threshold) & (gap_next > gap_threshold)
+    n = int(phantom.sum())
+    if n:
+        print(f"  drop_phantom_rows: dropping {n} non-trading-day rows")
+    return d.loc[~phantom].drop(columns=["prev_close", "next_close"]).reset_index(drop=True)
+
 def cmd_fetch(args):
     """Attempt to fetch via yfinance (requires network)."""
     try:
@@ -117,10 +145,14 @@ def cmd_fetch(args):
 
     new_df = pd.DataFrame(rows)
     new_df["date"] = pd.to_datetime(new_df["date"])
+    # yfinance returns non-trading days (holidays) as rows with volume=0 and a
+    # stale/garbage close (e.g. $47 for a $300 stock on Labor Day). Those rows
+    # create impossible 400-500% daily returns. Drop them BEFORE the merge.
+    new_df = drop_phantom_rows(new_df)
     existing = load_prices()
     combined = pd.concat([existing, new_df], ignore_index=True)
     save_prices(combined)
-    print(f"Added/updated {len(rows)} rows.")
+    print(f"Added/updated {len(rows)} rows ({len(new_df)} after phantom-drop).")
 
 def cmd_manual(args):
     existing = load_prices()

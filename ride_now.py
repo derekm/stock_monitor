@@ -51,12 +51,12 @@ def main(save: bool = True):
     print(f"=== ride NOW · {len(baskets)} dynamic baskets ===")
 
     # latest shock zone per basket
-    sec = pd.read_csv(DATA_DIR / "macro_sector_shock.parquet")
+    sec = pd.read_parquet(DATA_DIR / "macro_sector_shock.parquet")
     sec = sec.sort_values("date").groupby("basket", as_index=False).tail(1)
     zone_map = dict(zip(sec["basket"], sec["shock_zone"]))
 
     # latest regime per basket
-    sub = pd.read_csv(DATA_DIR / "subindustry_regime.parquet")
+    sub = pd.read_parquet(DATA_DIR / "subindustry_regime.parquet")
     sub = sub.sort_values("date").groupby("basket", as_index=False).tail(1)
     stress_map = dict(zip(sub["basket"], sub["p_stress"]))
     regime_map = dict(zip(sub["basket"], sub["regime"]))

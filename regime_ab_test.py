@@ -102,6 +102,12 @@ def run_ab_test(tickers: list[str], steps_list: list[int] = [3000, 6000],
                 by_regime_t[reg].append(w)
 
         # Evaluate each regime for both approaches
+        # SHARED temporal boundary in forecast-index space (same as pass6:
+        # boundary = int(n * split_frac) on the FULL series) so both approaches
+        # are evaluated on the same time window — a per-regime window-count
+        # boundary (int(len(rw)*0.7)) was the bug: it's a count, not an index,
+        # so every window landed in test and train was empty.
+        boundary = int(n * 0.7)
         for reg in ["low_vol", "normal", "high_vol_stress"]:
             rw_m = by_regime_m.get(reg, [])
             rw_t = by_regime_t.get(reg, [])
@@ -109,8 +115,6 @@ def run_ab_test(tickers: list[str], steps_list: list[int] = [3000, 6000],
             if len(rw_m) < 3 or len(rw_t) < 3:
                 continue
 
-            # Same temporal split boundary for fair comparison
-            boundary = int(len(rw_m) * 0.7)  # crude approximation, real boundary used in train
             train_m, test_m = temporal_split(rw_m, boundary)
             train_t, test_t = temporal_split(rw_t, boundary)
 

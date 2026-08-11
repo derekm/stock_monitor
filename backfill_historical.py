@@ -41,6 +41,30 @@ PRICES_FILE = DATA_DIR / "daily_prices.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 
 
+def drop_phantom_rows(df: pd.DataFrame, gap_threshold: float = 0.30) -> pd.DataFrame:
+    """Drop yfinance non-trading-day rows (volume==0, close far from both neighbors).
+
+    yfinance emits a row for holidays with Volume=0 and a stale/garbage Close
+    (e.g. $47 for a $300 stock). Without this guard those rows produce
+    impossible 400-500% daily returns that corrupt vol/corr features and the
+    HMM regime map. Same guard as update_prices.py (kept local to avoid an
+    import cycle; both stay in sync).
+    """
+    if df.empty or "volume" not in df.columns:
+        return df
+    d = df.sort_values(["ticker", "date"]).copy()
+    d["prev_close"] = d.groupby("ticker")["close"].shift(1)
+    d["next_close"] = d.groupby("ticker")["close"].shift(-1)
+    zv = d["volume"] == 0
+    gap_prev = (d["close"] / d["prev_close"] - 1).abs()
+    gap_next = (d["close"] / d["next_close"] - 1).abs()
+    phantom = zv & (gap_prev > gap_threshold) & (gap_next > gap_threshold)
+    n = int(phantom.sum())
+    if n:
+        print(f"  drop_phantom_rows: dropping {n} non-trading-day rows")
+    return d.loc[~phantom].drop(columns=["prev_close", "next_close"]).reset_index(drop=True)
+
+
 def load_prices() -> pd.DataFrame:
     if PRICES_FILE.exists():
         df = pd.read_parquet(PRICES_FILE)
@@ -175,6 +199,9 @@ def fetch_yfinance(tickers: list[str], start: str | None, end: str | None, perio
 
     df = pd.DataFrame(rows)
     # rows already carry datetime.date from ingestion; keep as date.
+    # yfinance emits non-trading days (holidays) with Volume=0 and a stale
+    # close — drop them so daily returns don't get impossible 400-500% spikes.
+    df = drop_phantom_rows(df)
     print(f"  Retrieved {len(df)} rows across {df['ticker'].nunique()} tickers")
     return df
 

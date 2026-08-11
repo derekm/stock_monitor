@@ -28,18 +28,29 @@ OUT_SUMMARY = DATA_DIR / "allpairs_corr_summary.parquet"
 
 
 def pairwise_long(corr: pd.DataFrame, date, window: int, kind: str) -> list[dict]:
+    """Upper-triangular pairs of a correlation matrix, vectorized.
+
+    np.triu_indices gives all (i, j) with j > i in one shot — no Python
+    double-loop (the old loop did k²/2 dict-appends per date; over ~770
+    dates × 80 assets that was ~2.4M iterations and the job's bottleneck).
+    """
     cols = list(corr.columns)
-    rows = []
-    for i, a in enumerate(cols):
-        for b in cols[i + 1 :]:
-            rows.append({
-                "date": date,
-                "window": window,
-                "kind": kind,
-                "asset_a": a,
-                "asset_b": b,
-                "corr": float(corr.loc[a, b]) if pd.notna(corr.loc[a, b]) else np.nan,
-            })
+    k = len(cols)
+    if k < 2:
+        return []
+    vals = corr.to_numpy()
+    i_idx, j_idx = np.triu_indices(k, k=1)
+    rows = [
+        {
+            "date": date,
+            "window": window,
+            "kind": kind,
+            "asset_a": cols[i],
+            "asset_b": cols[j],
+            "corr": float(vals[i, j]) if np.isfinite(vals[i, j]) else np.nan,
+        }
+        for i, j in zip(i_idx, j_idx)
+    ]
     return rows
 
 
@@ -72,6 +83,9 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
     asset_rows = []
     sector_rows = []
     sector_map = stocks.set_index("ticker")["sector"].to_dict()
+    # sector -> member tickers, grouped once (avoid re-filtering per date)
+    sector_cols = {sec: [t for t in tickers if sector_map.get(t) == sec]
+                   for sec in sorted(set(sector_map.values()))}
 
     for dt in dates:
         loc = rets.index.get_loc(dt)
@@ -81,10 +95,10 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
         c = block.corr()
         asset_rows.extend(pairwise_long(c, dt, window, "asset"))
 
-        # sector EW
+        # sector EW — group tickers by sector ONCE (outside the date loop),
+        # then per-date only the ~k_sector column means are computed
         sret = {}
-        for sec in sorted(set(sector_map.values())):
-            cols = [t for t in c.columns if sector_map.get(t) == sec]
+        for sec, cols in sector_cols.items():
             if len(cols) >= 2:
                 sret[sec] = block[cols].mean(axis=1)
         if len(sret) >= 2:
