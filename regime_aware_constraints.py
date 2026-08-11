@@ -25,11 +25,11 @@ FUND = DATA_DIR / "fundamentals.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 
-OUT_BIND = DATA_DIR / "regime_constraint_binding.csv"
-OUT_TRIG = DATA_DIR / "hmm_transition_triggers.csv"
+OUT_BIND = DATA_DIR / "regime_constraint_binding.parquet"
+OUT_TRIG = DATA_DIR / "hmm_transition_triggers.parquet"
 OUT_POLICY = DATA_DIR / "regime_aware_thresholds.json"
-OUT_SCREEN = DATA_DIR / "regime_aware_dual_pass.csv"
-OUT_SUM = DATA_DIR / "regime_aware_summary.csv"
+OUT_SCREEN = DATA_DIR / "regime_aware_dual_pass.parquet"
+OUT_SUM = DATA_DIR / "regime_aware_summary.parquet"
 
 # Base dual-pass
 BASE = dict(roe_min=0.15, roic_min=0.15, de_max=1.0, ev_max=9.0, pb_max=1.5, mca_max=0.5)
@@ -274,10 +274,10 @@ def run(save: bool = True):
     summary = pd.DataFrame(summary_rows)
 
     if save:
-        bind.to_csv(OUT_BIND, index=False)
-        trig.to_csv(OUT_TRIG, index=False)
-        screen.to_csv(OUT_SCREEN, index=False)
-        summary.to_csv(OUT_SUM, index=False)
+        bind.to_parquet(OUT_BIND)
+        trig.to_parquet(OUT_TRIG)
+        screen.to_parquet(OUT_SCREEN)
+        summary.to_parquet(OUT_SUM)
         Path(OUT_POLICY).write_text(json.dumps({
             "current_regime": current_regime,
             "thresholds": REGIME_THRESHOLDS,

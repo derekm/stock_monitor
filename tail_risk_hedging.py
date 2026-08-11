@@ -31,8 +31,8 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
-OUT = DATA_DIR / "tail_risk_hedge_performance.csv"
-OUT_CRISIS = DATA_DIR / "tail_risk_hedge_crisis.csv"
+OUT = DATA_DIR / "tail_risk_hedge_performance.parquet"
+OUT_CRISIS = DATA_DIR / "tail_risk_hedge_crisis.parquet"
 
 
 def stats(r: pd.Series) -> dict:
@@ -151,8 +151,8 @@ def run(save: bool = True):
                 print(f"  {k}: {v}")
 
     if save:
-        df.to_csv(OUT, index=False)
-        cdf.to_csv(OUT_CRISIS, index=False)
+        df.to_parquet(OUT)
+        cdf.to_parquet(OUT_CRISIS)
         print(f"Wrote {OUT}\nWrote {OUT_CRISIS}")
     return df
 

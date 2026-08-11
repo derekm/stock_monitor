@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-11T16:41:39.429523",
+  "generated": "2026-08-11T17:56:32.608080",
   "count": 251,
   "files": [
     {
@@ -215,7 +215,7 @@
       "path": "anomalies.parquet",
       "url": "anomalies.parquet",
       "kind": "parquet",
-      "size": 15066,
+      "size": 15535,
       "sql_name": "anomalies"
     },
     {
@@ -233,7 +233,7 @@
       "path": "asset_correlation_matrix.parquet",
       "url": "asset_correlation_matrix.parquet",
       "kind": "parquet",
-      "size": 46366,
+      "size": 46901,
       "sql_name": "asset_correlation_matrix"
     },
     {
@@ -260,7 +260,7 @@
       "path": "barbell_check.parquet",
       "url": "barbell_check.parquet",
       "kind": "parquet",
-      "size": 1907,
+      "size": 2374,
       "sql_name": "barbell_check"
     },
     {
@@ -269,7 +269,7 @@
       "path": "basket_members.parquet",
       "url": "basket_members.parquet",
       "kind": "parquet",
-      "size": 12282,
+      "size": 15156,
       "sql_name": "basket_members"
     },
     {
@@ -368,7 +368,7 @@
       "path": "macro_data/cpi.parquet",
       "url": "macro_data/cpi.parquet",
       "kind": "parquet",
-      "size": 12140,
+      "size": 12621,
       "sql_name": "cpi"
     },
     {
@@ -413,7 +413,7 @@
       "path": "cross_section_rankings.parquet",
       "url": "cross_section_rankings.parquet",
       "kind": "parquet",
-      "size": 15369,
+      "size": 597852,
       "sql_name": "cross_section_rankings"
     },
     {
@@ -422,7 +422,7 @@
       "path": "cross_section_returns.parquet",
       "url": "cross_section_returns.parquet",
       "kind": "parquet",
-      "size": 175940,
+      "size": 150963,
       "sql_name": "cross_section_returns"
     },
     {
@@ -431,7 +431,7 @@
       "path": "cross_section_stats.parquet",
       "url": "cross_section_stats.parquet",
       "kind": "parquet",
-      "size": 13560,
+      "size": 3478,
       "sql_name": "cross_section_stats"
     },
     {
@@ -476,7 +476,7 @@
       "path": "decision_notes.parquet",
       "url": "decision_notes.parquet",
       "kind": "parquet",
-      "size": 2502,
+      "size": 2930,
       "sql_name": "decision_notes"
     },
     {
@@ -503,7 +503,7 @@
       "path": "defensive_value_exploration.parquet",
       "url": "defensive_value_exploration.parquet",
       "kind": "parquet",
-      "size": 18159,
+      "size": 19698,
       "sql_name": "defensive_value_exploration"
     },
     {
@@ -521,7 +521,7 @@
       "path": "dual_pass_sensitivity.parquet",
       "url": "dual_pass_sensitivity.parquet",
       "kind": "parquet",
-      "size": 2837,
+      "size": 3298,
       "sql_name": "dual_pass_sensitivity"
     },
     {
@@ -530,7 +530,7 @@
       "path": "dual_pass_stress.parquet",
       "url": "dual_pass_stress.parquet",
       "kind": "parquet",
-      "size": 6995,
+      "size": 7461,
       "sql_name": "dual_pass_stress"
     },
     {
@@ -557,7 +557,7 @@
       "path": "dupont_analysis.parquet",
       "url": "dupont_analysis.parquet",
       "kind": "parquet",
-      "size": 51707,
+      "size": 55936,
       "sql_name": "dupont_analysis"
     },
     {
@@ -575,7 +575,7 @@
       "path": "earnings_catalyst_signals.parquet",
       "url": "earnings_catalyst_signals.parquet",
       "kind": "parquet",
-      "size": 10845,
+      "size": 11712,
       "sql_name": "earnings_catalyst_signals"
     },
     {
@@ -584,7 +584,7 @@
       "path": "earnings_drift_stats.parquet",
       "url": "earnings_drift_stats.parquet",
       "kind": "parquet",
-      "size": 3472,
+      "size": 3943,
       "sql_name": "earnings_drift_stats"
     },
     {
@@ -593,7 +593,7 @@
       "path": "economic_calendar.parquet",
       "url": "economic_calendar.parquet",
       "kind": "parquet",
-      "size": 8267,
+      "size": 11648,
       "sql_name": "economic_calendar"
     },
     {
@@ -620,7 +620,7 @@
       "path": "ergodicity_ruin.parquet",
       "url": "ergodicity_ruin.parquet",
       "kind": "parquet",
-      "size": 27822,
+      "size": 27953,
       "sql_name": "ergodicity_ruin"
     },
     {
@@ -629,7 +629,7 @@
       "path": "estimate_revisions.parquet",
       "url": "estimate_revisions.parquet",
       "kind": "parquet",
-      "size": 42089,
+      "size": 42769,
       "sql_name": "estimate_revisions"
     },
     {
@@ -638,7 +638,7 @@
       "path": "exclusion_candidates.parquet",
       "url": "exclusion_candidates.parquet",
       "kind": "parquet",
-      "size": 29819,
+      "size": 32325,
       "sql_name": "exclusion_candidates"
     },
     {
@@ -701,7 +701,7 @@
       "path": "factor_rotation_weights.parquet",
       "url": "factor_rotation_weights.parquet",
       "kind": "parquet",
-      "size": 137071,
+      "size": 137094,
       "sql_name": "factor_rotation_weights"
     },
     {
@@ -719,7 +719,7 @@
       "path": "macro_data/fedfunds.parquet",
       "url": "macro_data/fedfunds.parquet",
       "kind": "parquet",
-      "size": 9442,
+      "size": 9912,
       "sql_name": "fedfunds"
     },
     {
@@ -845,7 +845,7 @@
       "path": "fragility_screen.parquet",
       "url": "fragility_screen.parquet",
       "kind": "parquet",
-      "size": 54751,
+      "size": 54761,
       "sql_name": "fragility_screen"
     },
     {
@@ -890,7 +890,7 @@
       "path": "gap_events.parquet",
       "url": "gap_events.parquet",
       "kind": "parquet",
-      "size": 3501,
+      "size": 4829,
       "sql_name": "gap_events"
     },
     {
@@ -899,7 +899,7 @@
       "path": "gap_risk.parquet",
       "url": "gap_risk.parquet",
       "kind": "parquet",
-      "size": 43411,
+      "size": 7179,
       "sql_name": "gap_risk"
     },
     {
@@ -908,7 +908,7 @@
       "path": "macro_data/gdp.parquet",
       "url": "macro_data/gdp.parquet",
       "kind": "parquet",
-      "size": 5973,
+      "size": 6451,
       "sql_name": "gdp"
     },
     {
@@ -935,7 +935,7 @@
       "path": "growth_tech_backtest_stats.parquet",
       "url": "growth_tech_backtest_stats.parquet",
       "kind": "parquet",
-      "size": 4118,
+      "size": 4593,
       "sql_name": "growth_tech_backtest_stats"
     },
     {
@@ -944,7 +944,7 @@
       "path": "growth_tech_corr_stability.parquet",
       "url": "growth_tech_corr_stability.parquet",
       "kind": "parquet",
-      "size": 4302,
+      "size": 4793,
       "sql_name": "growth_tech_corr_stability"
     },
     {
@@ -953,7 +953,7 @@
       "path": "growth_tech_correlation_matrix.parquet",
       "url": "growth_tech_correlation_matrix.parquet",
       "kind": "parquet",
-      "size": 40238,
+      "size": 40750,
       "sql_name": "growth_tech_correlation_matrix"
     },
     {
@@ -962,7 +962,7 @@
       "path": "growth_tech_fisher.parquet",
       "url": "growth_tech_fisher.parquet",
       "kind": "parquet",
-      "size": 2326410,
+      "size": 2376108,
       "sql_name": "growth_tech_fisher"
     },
     {
@@ -989,7 +989,7 @@
       "path": "growth_tech_index_levels_compare.parquet",
       "url": "growth_tech_index_levels_compare.parquet",
       "kind": "parquet",
-      "size": 706312,
+      "size": 706463,
       "sql_name": "growth_tech_index_levels_compare"
     },
     {
@@ -998,7 +998,7 @@
       "path": "growth_tech_membership.parquet",
       "url": "growth_tech_membership.parquet",
       "kind": "parquet",
-      "size": 5765,
+      "size": 6929,
       "sql_name": "growth_tech_membership"
     },
     {
@@ -1007,7 +1007,7 @@
       "path": "growth_tech_risk_models.parquet",
       "url": "growth_tech_risk_models.parquet",
       "kind": "parquet",
-      "size": 8454,
+      "size": 8365,
       "sql_name": "growth_tech_risk_models"
     },
     {
@@ -1016,7 +1016,7 @@
       "path": "growth_tech_rolling_corr.parquet",
       "url": "growth_tech_rolling_corr.parquet",
       "kind": "parquet",
-      "size": 890237,
+      "size": 923875,
       "sql_name": "growth_tech_rolling_corr"
     },
     {
@@ -1025,7 +1025,7 @@
       "path": "growth_tech_sleeve_correlations.parquet",
       "url": "growth_tech_sleeve_correlations.parquet",
       "kind": "parquet",
-      "size": 3790,
+      "size": 4271,
       "sql_name": "growth_tech_sleeve_correlations"
     },
     {
@@ -1034,7 +1034,7 @@
       "path": "growth_tech_sleeve_performance.parquet",
       "url": "growth_tech_sleeve_performance.parquet",
       "kind": "parquet",
-      "size": 5775,
+      "size": 6252,
       "sql_name": "growth_tech_sleeve_performance"
     },
     {
@@ -1043,7 +1043,7 @@
       "path": "growth_tech_vol_returns.parquet",
       "url": "growth_tech_vol_returns.parquet",
       "kind": "parquet",
-      "size": 9599,
+      "size": 10785,
       "sql_name": "growth_tech_vol_returns"
     },
     {
@@ -1052,7 +1052,7 @@
       "path": "hidden_optionality.parquet",
       "url": "hidden_optionality.parquet",
       "kind": "parquet",
-      "size": 3664,
+      "size": 4658,
       "sql_name": "hidden_optionality"
     },
     {
@@ -1079,7 +1079,7 @@
       "path": "hmm_features_cache.parquet",
       "url": "hmm_features_cache.parquet",
       "kind": "parquet",
-      "size": 24968,
+      "size": 25365,
       "sql_name": "hmm_features_cache"
     },
     {
@@ -1115,7 +1115,7 @@
       "path": "hmm_regime_states.parquet",
       "url": "hmm_regime_states.parquet",
       "kind": "parquet",
-      "size": 19882,
+      "size": 34991,
       "sql_name": "hmm_regime_states"
     },
     {
@@ -1169,7 +1169,7 @@
       "path": "holdings.parquet",
       "url": "holdings.parquet",
       "kind": "parquet",
-      "size": 9524,
+      "size": 10144,
       "sql_name": "holdings"
     },
     {
@@ -1187,7 +1187,7 @@
       "path": "inclusion_candidates.parquet",
       "url": "inclusion_candidates.parquet",
       "kind": "parquet",
-      "size": 19498,
+      "size": 20937,
       "sql_name": "inclusion_candidates"
     },
     {
@@ -1286,7 +1286,7 @@
       "path": "low_ev_ebitda.parquet",
       "url": "low_ev_ebitda.parquet",
       "kind": "parquet",
-      "size": 75923,
+      "size": 80778,
       "sql_name": "low_ev_ebitda"
     },
     {
@@ -1295,7 +1295,7 @@
       "path": "low_pb.parquet",
       "url": "low_pb.parquet",
       "kind": "parquet",
-      "size": 85221,
+      "size": 91423,
       "sql_name": "low_pb"
     },
     {
@@ -1304,7 +1304,7 @@
       "path": "macro_data/m2_velocity.parquet",
       "url": "macro_data/m2_velocity.parquet",
       "kind": "parquet",
-      "size": 4773,
+      "size": 5251,
       "sql_name": "m2_velocity"
     },
     {
@@ -1313,7 +1313,7 @@
       "path": "macro_fragility.parquet",
       "url": "macro_fragility.parquet",
       "kind": "parquet",
-      "size": 20767,
+      "size": 23830,
       "sql_name": "macro_fragility"
     },
     {
@@ -1322,7 +1322,7 @@
       "path": "macro_sector_shock.parquet",
       "url": "macro_sector_shock.parquet",
       "kind": "parquet",
-      "size": 525168,
+      "size": 670493,
       "sql_name": "macro_sector_shock"
     },
     {
@@ -1331,7 +1331,7 @@
       "path": "macro_shock.parquet",
       "url": "macro_shock.parquet",
       "kind": "parquet",
-      "size": 25890,
+      "size": 29375,
       "sql_name": "macro_shock"
     },
     {
@@ -1430,7 +1430,7 @@
       "path": "near_dual_candidates.parquet",
       "url": "near_dual_candidates.parquet",
       "kind": "parquet",
-      "size": 12766,
+      "size": 13759,
       "sql_name": "near_dual_candidates"
     },
     {
@@ -1439,7 +1439,7 @@
       "path": "macro_data/oilprice.parquet",
       "url": "macro_data/oilprice.parquet",
       "kind": "parquet",
-      "size": 8740,
+      "size": 9219,
       "sql_name": "oilprice"
     },
     {
@@ -1448,7 +1448,7 @@
       "path": "options_skew.parquet",
       "url": "options_skew.parquet",
       "kind": "parquet",
-      "size": 4558,
+      "size": 10833,
       "sql_name": "options_skew"
     },
     {
@@ -1466,7 +1466,7 @@
       "path": "pair_engine_pairs.parquet",
       "url": "pair_engine_pairs.parquet",
       "kind": "parquet",
-      "size": 10584,
+      "size": 16270,
       "sql_name": "pair_engine_pairs"
     },
     {
@@ -1475,7 +1475,7 @@
       "path": "pair_engine_stats.parquet",
       "url": "pair_engine_stats.parquet",
       "kind": "parquet",
-      "size": 6337,
+      "size": 7362,
       "sql_name": "pair_engine_stats"
     },
     {
@@ -1484,7 +1484,7 @@
       "path": "pair_engine_trades.parquet",
       "url": "pair_engine_trades.parquet",
       "kind": "parquet",
-      "size": 11190,
+      "size": 13417,
       "sql_name": "pair_engine_trades"
     },
     {
@@ -1493,7 +1493,7 @@
       "path": "peer_analytics_signals.parquet",
       "url": "peer_analytics_signals.parquet",
       "kind": "parquet",
-      "size": 257779,
+      "size": 257451,
       "sql_name": "peer_analytics_signals"
     },
     {
@@ -1502,7 +1502,7 @@
       "path": "peer_fundamental_trends.parquet",
       "url": "peer_fundamental_trends.parquet",
       "kind": "parquet",
-      "size": 121162,
+      "size": 121155,
       "sql_name": "peer_fundamental_trends"
     },
     {
@@ -1511,7 +1511,7 @@
       "path": "peer_group_summary.parquet",
       "url": "peer_group_summary.parquet",
       "kind": "parquet",
-      "size": 9021,
+      "size": 9054,
       "sql_name": "peer_group_summary"
     },
     {
@@ -1520,7 +1520,7 @@
       "path": "peer_recovery_signals.parquet",
       "url": "peer_recovery_signals.parquet",
       "kind": "parquet",
-      "size": 65008,
+      "size": 65085,
       "sql_name": "peer_recovery_signals"
     },
     {
@@ -1529,7 +1529,7 @@
       "path": "portfolio_ergodic.parquet",
       "url": "portfolio_ergodic.parquet",
       "kind": "parquet",
-      "size": 1929,
+      "size": 2389,
       "sql_name": "portfolio_ergodic"
     },
     {
@@ -1556,7 +1556,7 @@
       "path": "portfolio_tail.parquet",
       "url": "portfolio_tail.parquet",
       "kind": "parquet",
-      "size": 2865,
+      "size": 3341,
       "sql_name": "portfolio_tail"
     },
     {
@@ -1601,7 +1601,7 @@
       "path": "preferred_screen_hits.parquet",
       "url": "preferred_screen_hits.parquet",
       "kind": "parquet",
-      "size": 35868,
+      "size": 37343,
       "sql_name": "preferred_screen_hits"
     },
     {
@@ -1628,7 +1628,7 @@
       "path": "rebalance_calendar.parquet",
       "url": "rebalance_calendar.parquet",
       "kind": "parquet",
-      "size": 5023,
+      "size": 5372,
       "sql_name": "rebalance_calendar"
     },
     {
@@ -1772,7 +1772,7 @@
       "path": "ride_now.parquet",
       "url": "ride_now.parquet",
       "kind": "parquet",
-      "size": 17904,
+      "size": 20417,
       "sql_name": "ride_now"
     },
     {
@@ -1781,7 +1781,7 @@
       "path": "risk_metrics.parquet",
       "url": "risk_metrics.parquet",
       "kind": "parquet",
-      "size": 21533,
+      "size": 22084,
       "sql_name": "risk_metrics"
     },
     {
@@ -1808,7 +1808,7 @@
       "path": "rolling_corr_avg_timeseries.parquet",
       "url": "rolling_corr_avg_timeseries.parquet",
       "kind": "parquet",
-      "size": 331977,
+      "size": 249368,
       "sql_name": "rolling_corr_avg_timeseries"
     },
     {
@@ -1817,7 +1817,7 @@
       "path": "rolling_corr_stability_by_asset.parquet",
       "url": "rolling_corr_stability_by_asset.parquet",
       "kind": "parquet",
-      "size": 6893,
+      "size": 8265,
       "sql_name": "rolling_corr_stability_by_asset"
     },
     {
@@ -1835,7 +1835,7 @@
       "path": "rolling_screen_stability.parquet",
       "url": "rolling_screen_stability.parquet",
       "kind": "parquet",
-      "size": 18794,
+      "size": 22969,
       "sql_name": "rolling_screen_stability"
     },
     {
@@ -1844,7 +1844,7 @@
       "path": "rolling_sector_corr_windows.parquet",
       "url": "rolling_sector_corr_windows.parquet",
       "kind": "parquet",
-      "size": 814235,
+      "size": 819893,
       "sql_name": "rolling_sector_corr_windows"
     },
     {
@@ -1862,7 +1862,7 @@
       "path": "rolling_window_metrics.parquet",
       "url": "rolling_window_metrics.parquet",
       "kind": "parquet",
-      "size": 5905,
+      "size": 7007,
       "sql_name": "rolling_window_metrics"
     },
     {
@@ -1889,7 +1889,7 @@
       "path": "screen_backtest.parquet",
       "url": "screen_backtest.parquet",
       "kind": "parquet",
-      "size": 20783,
+      "size": 21360,
       "sql_name": "screen_backtest"
     },
     {
@@ -1907,7 +1907,7 @@
       "path": "sector_correlation_matrix_latest.parquet",
       "url": "sector_correlation_matrix_latest.parquet",
       "kind": "parquet",
-      "size": 10536,
+      "size": 10964,
       "sql_name": "sector_correlation_matrix_latest"
     },
     {
@@ -1952,7 +1952,7 @@
       "path": "shadow_book.parquet",
       "url": "shadow_book.parquet",
       "kind": "parquet",
-      "size": 16117,
+      "size": 13638,
       "sql_name": "shadow_book"
     },
     {
@@ -1961,7 +1961,7 @@
       "path": "shadow_lots.parquet",
       "url": "shadow_lots.parquet",
       "kind": "parquet",
-      "size": 59239,
+      "size": 8691,
       "sql_name": "shadow_lots"
     },
     {
@@ -1979,7 +1979,7 @@
       "path": "shock_ride.parquet",
       "url": "shock_ride.parquet",
       "kind": "parquet",
-      "size": 26684,
+      "size": 28209,
       "sql_name": "shock_ride"
     },
     {
@@ -1988,7 +1988,7 @@
       "path": "shock_ride_tickers.parquet",
       "url": "shock_ride_tickers.parquet",
       "kind": "parquet",
-      "size": 62321,
+      "size": 67004,
       "sql_name": "shock_ride_tickers"
     },
     {
@@ -1997,7 +1997,7 @@
       "path": "signal_aggregator_ic.parquet",
       "url": "signal_aggregator_ic.parquet",
       "kind": "parquet",
-      "size": 7550,
+      "size": 8134,
       "sql_name": "signal_aggregator_ic"
     },
     {
@@ -2006,7 +2006,7 @@
       "path": "signal_aggregator_scores.parquet",
       "url": "signal_aggregator_scores.parquet",
       "kind": "parquet",
-      "size": 12489,
+      "size": 23253,
       "sql_name": "signal_aggregator_scores"
     },
     {
@@ -2078,7 +2078,7 @@
       "path": "subindustry_regime.parquet",
       "url": "subindustry_regime.parquet",
       "kind": "parquet",
-      "size": 27837154,
+      "size": 39487093,
       "sql_name": "subindustry_regime"
     },
     {
@@ -2087,7 +2087,7 @@
       "path": "subindustry_regime_lead.parquet",
       "url": "subindustry_regime_lead.parquet",
       "kind": "parquet",
-      "size": 9983,
+      "size": 11279,
       "sql_name": "subindustry_regime_lead"
     },
     {
@@ -2105,7 +2105,7 @@
       "path": "tail_dependence.parquet",
       "url": "tail_dependence.parquet",
       "kind": "parquet",
-      "size": 3863,
+      "size": 4936,
       "sql_name": "tail_dependence"
     },
     {
@@ -2114,7 +2114,7 @@
       "path": "tail_index.parquet",
       "url": "tail_index.parquet",
       "kind": "parquet",
-      "size": 28716,
+      "size": 28608,
       "sql_name": "tail_index"
     },
     {
@@ -2123,7 +2123,7 @@
       "path": "tail_risk_hedge_crisis.parquet",
       "url": "tail_risk_hedge_crisis.parquet",
       "kind": "parquet",
-      "size": 5317,
+      "size": 5801,
       "sql_name": "tail_risk_hedge_crisis"
     },
     {
@@ -2132,7 +2132,7 @@
       "path": "tail_risk_hedge_performance.parquet",
       "url": "tail_risk_hedge_performance.parquet",
       "kind": "parquet",
-      "size": 17328,
+      "size": 17789,
       "sql_name": "tail_risk_hedge_performance"
     },
     {
@@ -2141,7 +2141,7 @@
       "path": "technical_signals.parquet",
       "url": "technical_signals.parquet",
       "kind": "parquet",
-      "size": 55904,
+      "size": 59308,
       "sql_name": "technical_signals"
     },
     {
@@ -2177,7 +2177,7 @@
       "path": "macro_data/total_credit_market_debt.parquet",
       "url": "macro_data/total_credit_market_debt.parquet",
       "kind": "parquet",
-      "size": 5759,
+      "size": 6222,
       "sql_name": "total_credit_market_debt"
     },
     {
@@ -2213,7 +2213,7 @@
       "path": "value_trifecta.parquet",
       "url": "value_trifecta.parquet",
       "kind": "parquet",
-      "size": 5959,
+      "size": 6422,
       "sql_name": "value_trifecta"
     },
     {
@@ -2258,7 +2258,7 @@
       "path": "macro_data/wti.parquet",
       "url": "macro_data/wti.parquet",
       "kind": "parquet",
-      "size": 7135,
+      "size": 7594,
       "sql_name": "wti"
     }
   ]

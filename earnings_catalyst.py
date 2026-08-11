@@ -33,8 +33,8 @@ from analytics_common import (
 EARN = DATA_DIR / "earnings_calendar.parquet"
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT_SIG = DATA_DIR / "earnings_catalyst_signals.csv"
-OUT_DRIFT = DATA_DIR / "earnings_drift_stats.csv"
+OUT_SIG = DATA_DIR / "earnings_catalyst_signals.parquet"
+OUT_DRIFT = DATA_DIR / "earnings_drift_stats.parquet"
 
 
 def _load_earnings() -> pd.DataFrame:
@@ -291,8 +291,8 @@ def main():
     print(f"\n=== signals: {len(sig)} tickers; {len(hot)} hot pre-mom; {len(rich)} iv-rich ===")
     print(sig.sort_values("catalyst_score", ascending=False).head(15).to_string(index=False))
     if args.save:
-        sig.to_csv(OUT_SIG, index=False)
-        drift.to_csv(OUT_DRIFT, index=False)
+        sig.to_parquet(OUT_SIG)
+        drift.to_parquet(OUT_DRIFT)
         print(f"\nWrote {OUT_SIG}\nWrote {OUT_DRIFT}")
 
 

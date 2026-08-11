@@ -28,7 +28,7 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
-OUT = DATA_DIR / "threshold_logic_screen.csv"
+OUT = DATA_DIR / "threshold_logic_screen.parquet"
 OUT_RULES = DATA_DIR / "threshold_logic_rules.json"
 
 from analytics_common import BASE_THRESHOLDS  # canonical dual-pass thresholds
@@ -83,7 +83,7 @@ def select_regime(
 def select_regime_from_hmm_file(path: Path = HMM, soft_min: float = 0.7) -> str:
     if not path.exists():
         return "normal"
-    h = pd.read_csv(path)
+    h = pd.read_parquet(path)
     h["date"] = pd.to_datetime(h["date"])
     row = h.sort_values("date").iloc[-1]
     return select_regime(row, soft_min=soft_min)
@@ -184,7 +184,7 @@ def main():
     print(f"Near (1 leg): {out[out.n_failed==1].ticker.tolist()}")
 
     if args.save or True:
-        out.to_csv(OUT, index=False)
+        out.to_parquet(OUT)
         Path(OUT_RULES).write_text(json.dumps({
             "active_regime": regime,
             "base": BASE_THRESHOLDS,

@@ -8,8 +8,8 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
-OUT = DATA_DIR / "kalman_gain_path.csv"
-OUT_SUM = DATA_DIR / "kalman_gain_summary.csv"
+OUT = DATA_DIR / "kalman_gain_path.parquet"
+OUT_SUM = DATA_DIR / "kalman_gain_summary.parquet"
 
 def kf_with_gains(obs, Q_scale=5e-5, R_scale=2e-2):
     T, d = obs.shape
@@ -68,8 +68,8 @@ def run(save=True):
     summary = pd.DataFrame([{"mean_gain_ret": out.gain_ret.mean(), "mean_gain_vol": out.gain_vol.mean(),
         "corr_gain_vol_vs_vol": float(out.gain_vol.corr(out.vol21))}])
     if save:
-        out.to_csv(OUT, index=False)
-        summary.to_csv(OUT_SUM, index=False)
+        out.to_parquet(OUT)
+        summary.to_parquet(OUT_SUM)
         print("Wrote", OUT)
     return out
 

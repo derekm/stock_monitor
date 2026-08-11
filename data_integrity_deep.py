@@ -148,16 +148,14 @@ def main():
     if args.save:
         summary_path = OUT_DIR / "data_integrity_deep_summary.json"
         summary_path.write_text(json.dumps({"jumps": summary, "coverage": cov}, indent=2, default=str))
-        splits.head(500).to_csv(OUT_DIR / "suspected_splits.csv", index=False)
-        flats.to_csv(OUT_DIR / "price_flatlines.csv", index=False)
-        miss.to_csv(OUT_DIR / "fundamental_missingness.csv", index=False)
+        splits.head(500).to_parquet(OUT_DIR / "suspected_splits.parquet")
+        flats.to_parquet(OUT_DIR / "price_flatlines.parquet")
+        miss.to_parquet(OUT_DIR / "fundamental_missingness.parquet")
         # per-ticker jump rate
         pdf = full.to_pandas()
         jr = pdf.assign(big=pdf["ret"].abs() > 0.25).groupby("ticker")["big"].mean().reset_index()
         jr.columns = ["ticker", "pct_days_absret_gt_25"]
-        jr.sort_values("pct_days_absret_gt_25", ascending=False).to_csv(
-            OUT_DIR / "ticker_jump_rates.csv", index=False
-        )
+        jr.sort_values("pct_days_absret_gt_25", ascending=False).to_parquet(OUT_DIR / "ticker_jump_rates.parquet")
         print("Wrote deep integrity artifacts")
 
 

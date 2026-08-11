@@ -30,8 +30,8 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT_PORT = DATA_DIR / "vol_target_vs_risk_parity.csv"
-OUT_GROWTH = DATA_DIR / "growth_ai_vol_vs_risk_parity.csv"
+OUT_PORT = DATA_DIR / "vol_target_vs_risk_parity.parquet"
+OUT_GROWTH = DATA_DIR / "growth_ai_vol_vs_risk_parity.parquet"
 
 DEFAULT_VT_TARGET = 0.25
 DEFAULT_NAME_CAP = 0.05
@@ -250,7 +250,7 @@ def run(
     port_df, summary = build_portfolio_table(
         prices, holdings, window_vol, window_cov, vt_target, name_cap
     )
-    port_df.to_csv(OUT_PORT, index=False)
+    port_df.to_parquet(OUT_PORT)
     print(f"Wrote {OUT_PORT} ({len(port_df)} rows)")
     print(
         f"  σ current={summary['sigma_current']*100:.2f}%  "
@@ -264,7 +264,7 @@ def run(
             prices, stocks, window_vol, window_cov, vt_target, name_cap, growth_cap
         )
         if len(gdf):
-            gdf.to_csv(OUT_GROWTH, index=False)
+            gdf.to_parquet(OUT_GROWTH)
             print(f"Wrote {OUT_GROWTH} ({len(gdf)} rows)")
             print(gdf[["ticker", "sigma", "w_VT_capped", "w_RP_inv_vol", "w_RP_ERC"]].to_string(index=False))
 

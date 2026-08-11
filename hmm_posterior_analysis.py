@@ -18,10 +18,10 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-HMM = DATA_DIR / "hmm_regime_states.csv"
-OUT = DATA_DIR / "hmm_posterior_analysis.csv"
-OUT_UNC = DATA_DIR / "hmm_uncertain_days.csv"
-OUT_SUM = DATA_DIR / "hmm_posterior_summary.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
+OUT = DATA_DIR / "hmm_posterior_analysis.parquet"
+OUT_UNC = DATA_DIR / "hmm_uncertain_days.parquet"
+OUT_SUM = DATA_DIR / "hmm_posterior_summary.parquet"
 
 
 def run(save: bool = True, uncertain_entropy: float = 0.7, soft_min: float = 0.7):
@@ -29,7 +29,7 @@ def run(save: bool = True, uncertain_entropy: float = 0.7, soft_min: float = 0.7
         import subprocess, sys
         subprocess.run([sys.executable, str(DATA_DIR / "hmm_regime_detection.py"), "--save"], check=False)
 
-    h = pd.read_csv(HMM)
+    h = pd.read_parquet(HMM)
     h["date"] = pd.to_datetime(h["date"])
     pcols = [c for c in h.columns if c.startswith("p_state_")]
     # map state_id -> regime name using mode
@@ -94,9 +94,9 @@ def run(save: bool = True, uncertain_entropy: float = 0.7, soft_min: float = 0.7
     }])
 
     if save:
-        h.to_csv(OUT, index=False)
-        unc.to_csv(OUT_UNC, index=False)
-        summary.to_csv(OUT_SUM, index=False)
+        h.to_parquet(OUT)
+        unc.to_parquet(OUT_UNC)
+        summary.to_parquet(OUT_SUM)
         print(f"\nWrote {OUT}\nWrote {OUT_UNC}\nWrote {OUT_SUM}")
     return h
 

@@ -122,7 +122,7 @@ def main():
         }
         rows.append(row)
     df = pd.DataFrame(rows).sort_values("ticker")
-    df.to_csv(DATA_DIR / "tail_index.csv", index=False)
+    df.to_parquet(DATA_DIR / "tail_index.parquet")
 
     # portfolio-level: equal-weight average of standardized returns (aligned on REAL dates)
     port_srs = None
@@ -143,7 +143,7 @@ def main():
             "gaussian": round(gauss, 6), "ratio": round(ratio, 1),
         })
     port_alpha = hill_alpha(np.abs(port))
-    pd.DataFrame(port_rows).to_csv(DATA_DIR / "portfolio_tail.csv", index=False)
+    pd.DataFrame(port_rows).to_parquet(DATA_DIR / "portfolio_tail.parquet")
 
     # tail dependence on top liquid names (subset to keep pairwise feasible)
     # date-aligned series so different listing histories intersect correctly
@@ -167,7 +167,7 @@ def main():
                 "tail_dep_max": round(max(up, lo), 3),
             })
     dep = pd.DataFrame(dep_rows).sort_values("tail_dep_max", ascending=False).head(args.top_pairs)
-    dep.to_csv(DATA_DIR / "tail_dependence.csv", index=False)
+    dep.to_parquet(DATA_DIR / "tail_dependence.parquet")
 
     print(f"tail_index.csv: {len(df)} tickers | portfolio alpha={round(port_alpha,2)}")
     print(f"portfolio_tail.csv: {len(port_rows)} rows")

@@ -64,7 +64,7 @@ def main():
 
     # per-name buckets: safe (low vol + low gap), middle, convex (high vol or high gap)
     try:
-        g = pd.read_csv(DATA_DIR / "gap_risk.csv")
+        g = pd.read_parquet(DATA_DIR / "gap_risk.parquet")
     except Exception:
         g = pd.DataFrame(columns=["ticker", "gap_share_of_var", "ret_sd"])
     vol_ser = {}
@@ -93,14 +93,14 @@ def main():
 
     # hedge cost: average ATM IV from options_skew as put cost proxy
     try:
-        sk = pd.read_csv(DATA_DIR / "options_skew.csv")
+        sk = pd.read_parquet(DATA_DIR / "options_skew.parquet")
         atm = float(sk["atm_iv"].mean()) if len(sk) else np.nan
         put_cost = atm * 0.3  # ~30% of IV for an ATM 3m put
     except Exception:
         atm, put_cost = np.nan, np.nan
     # recommended convexity allocation: scale with portfolio fragility
     try:
-        fs = pd.read_csv(DATA_DIR / "fragility_screen.csv")
+        fs = pd.read_parquet(DATA_DIR / "fragility_screen.parquet")
         avg_frag = float(fs["fragility_pctile"].mean())
     except Exception:
         avg_frag = 0.5
@@ -118,7 +118,7 @@ def main():
         {"metric": "put_ladder_cost_ann", "value": round(put_cost, 4) if np.isfinite(put_cost) else None},
         {"metric": "recommended_convexity_alloc", "value": alloc},
     ]
-    pd.DataFrame(rows).to_csv(DATA_DIR / "barbell_check.csv", index=False)
+    pd.DataFrame(rows).to_parquet(DATA_DIR / "barbell_check.parquet")
 
     print(f"barbell_check.csv written | n={n}")
     for r_ in rows:

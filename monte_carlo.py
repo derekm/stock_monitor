@@ -29,10 +29,10 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HMM_STATES = DATA_DIR / "hmm_regime_states.parquet"
-HMM_TRANS = DATA_DIR / "hmm_transition_matrix.csv"
-OUT_SUMMARY = DATA_DIR / "monte_carlo_summary.csv"
-OUT_PATHS = DATA_DIR / "monte_carlo_path_stats.csv"
-OUT_WEALTH = DATA_DIR / "monte_carlo_terminal_wealth.csv"
+HMM_TRANS = DATA_DIR / "hmm_transition_matrix.parquet"
+OUT_SUMMARY = DATA_DIR / "monte_carlo_summary.parquet"
+OUT_PATHS = DATA_DIR / "monte_carlo_path_stats.parquet"
+OUT_WEALTH = DATA_DIR / "monte_carlo_terminal_wealth.parquet"
 
 REGIME_ORDER_DEFAULT = ["low_vol", "normal", "high_vol_stress"]
 
@@ -72,7 +72,7 @@ def load_transition(regimes: list[str]) -> np.ndarray:
         P = np.full((n, n), 0.05 / max(n - 1, 1))
         np.fill_diagonal(P, 0.95)
         return P
-    tm = pd.read_csv(HMM_TRANS, index_col=0)
+    tm = pd.read_parquet(HMM_TRANS)
     # align to regimes order
     P = np.zeros((len(regimes), len(regimes)))
     for i, a in enumerate(regimes):
@@ -548,7 +548,7 @@ def main():
     print(pd.DataFrame(result["P"], index=result["regime_names"], columns=result["regime_names"]).round(3))
 
     if args.save:
-        pd.DataFrame([stats]).to_csv(OUT_SUMMARY, index=False)
+        pd.DataFrame([stats]).to_parquet(OUT_SUMMARY)
         # path quantiles over time
         w = result["wealth"]
         q = np.quantile(w, [0.05, 0.25, 0.5, 0.75, 0.95], axis=0)
@@ -557,8 +557,8 @@ def main():
             "p05": q[0], "p25": q[1], "p50": q[2], "p75": q[3], "p95": q[4],
             "mean": w.mean(axis=0),
         })
-        path_df.to_csv(OUT_PATHS, index=False)
-        pd.DataFrame({"terminal_wealth": result["terminal"]}).to_csv(OUT_WEALTH, index=False)
+        path_df.to_parquet(OUT_PATHS)
+        pd.DataFrame({"terminal_wealth": result["terminal"]}).to_parquet(OUT_WEALTH)
         print(f"\nWrote {OUT_SUMMARY}\nWrote {OUT_PATHS}\nWrote {OUT_WEALTH}")
 
 

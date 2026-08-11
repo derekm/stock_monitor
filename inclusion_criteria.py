@@ -50,13 +50,13 @@ PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 PREF = DATA_DIR / "preferred_metrics.parquet"
 
-OUT_INC = DATA_DIR / "inclusion_candidates.csv"
-OUT_EXC = DATA_DIR / "exclusion_candidates.csv"
-OUT_NEAR = DATA_DIR / "near_dual_candidates.csv"
-OUT_DEF = DATA_DIR / "defensive_value_exploration.csv"
+OUT_INC = DATA_DIR / "inclusion_candidates.parquet"
+OUT_EXC = DATA_DIR / "exclusion_candidates.parquet"
+OUT_NEAR = DATA_DIR / "near_dual_candidates.parquet"
+OUT_DEF = DATA_DIR / "defensive_value_exploration.parquet"
 OUT_RULES = DATA_DIR / "inclusion_rules.json"
-OUT_ACORR = DATA_DIR / "asset_correlation_matrix.csv"
-OUT_SCORR = DATA_DIR / "sector_correlation_matrix_latest.csv"
+OUT_ACORR = DATA_DIR / "asset_correlation_matrix.parquet"
+OUT_SCORR = DATA_DIR / "sector_correlation_matrix_latest.parquet"
 
 from analytics_common import (
     BASE_THRESHOLDS, quality_value_parts, COMP_W_Q, COMP_W_V,
@@ -250,7 +250,7 @@ def correlation_tables(save: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     rets = np.log(wide / wide.shift(1)).iloc[-126:]
     acorr = rets.corr()
     if save:
-        acorr.to_csv(OUT_ACORR)
+        acorr.to_parquet(OUT_ACORR)
         print(f"Wrote {OUT_ACORR} ({acorr.shape[0]} assets)")
 
     # sector EW corr
@@ -268,7 +268,7 @@ def correlation_tables(save: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
         sret = pd.DataFrame(sector_rets).dropna(how="all")
         scorr = sret.corr()
         if save:
-            scorr.to_csv(OUT_SCORR)
+            scorr.to_parquet(OUT_SCORR)
             print(f"Wrote {OUT_SCORR} ({scorr.shape[0]} sectors)")
     else:
         scorr = pd.DataFrame()
@@ -296,13 +296,13 @@ def run(explore: bool = False, save: bool = True):
 
     if save:
         Path(OUT_RULES).write_text(json.dumps(RULES, indent=2))
-        inc.to_csv(OUT_INC, index=False)
-        exc.to_csv(OUT_EXC, index=False)
-        near.to_csv(OUT_NEAR, index=False)
+        inc.to_parquet(OUT_INC)
+        exc.to_parquet(OUT_EXC)
+        near.to_parquet(OUT_NEAR)
         if explore:
-            defensive.to_csv(OUT_DEF, index=False)
+            defensive.to_parquet(OUT_DEF)
         else:
-            df[df.defensive_value_index].to_csv(OUT_DEF, index=False)
+            df[df.defensive_value_index].to_parquet(OUT_DEF)
         print(f"Wrote {OUT_INC}, {OUT_EXC}, {OUT_NEAR}, {OUT_DEF}, {OUT_RULES}")
     return df
 

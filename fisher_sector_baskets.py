@@ -24,14 +24,14 @@ from index_registry import parse_indexes, tickers_for_index
 
 DATA_DIR = Path(__file__).resolve().parent
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-SP500 = DATA_DIR / "sp500_sleeve.csv"
-OUT = DATA_DIR / "fisher_sector_baskets.csv"
-OUT_LATEST = DATA_DIR / "fisher_sector_baskets_latest.csv"
+SP500 = DATA_DIR / "sp500_sleeve.parquet"
+OUT = DATA_DIR / "fisher_sector_baskets.parquet"
+OUT_LATEST = DATA_DIR / "fisher_sector_baskets_latest.parquet"
 
 
 def members_by_sector(index_name: str) -> dict[str, list[str]]:
     if index_name == "sp500" and SP500.exists():
-        sp = pd.read_csv(SP500)
+        sp = pd.read_parquet(SP500)
         g = sp.groupby(sp["sp500_sector"].fillna("Unknown"))["ticker"].apply(lambda s: sorted(set(s.astype(str)))).to_dict()
         return g
     # generic: membership then sector from monitored_stocks
@@ -121,8 +121,8 @@ def main():
     latest["ret_63d"] = latest.apply(lambda r: chg.get((r["index_name"], r["sector"]), np.nan), axis=1)
     print(latest.sort_values("ret_63d", ascending=False).to_string(index=False))
     if args.save:
-        df.to_csv(OUT, index=False)
-        latest.to_csv(OUT_LATEST, index=False)
+        df.to_parquet(OUT)
+        latest.to_parquet(OUT_LATEST)
         print(f"Wrote {OUT.name} ({len(df)}), {OUT_LATEST.name}")
 
 

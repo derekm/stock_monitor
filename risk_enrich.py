@@ -39,7 +39,7 @@ def main():
     m = metrics_for(pref["ticker"].tolist(), rets, mkt)
     for col in ("name_vol", "beta", "max_dd"):
         pref[col] = pref["ticker"].map(lambda t: m.get(t, {}).get(col))
-    pref.to_csv(PREF, index=False)
+    pref.to_parquet(PREF)
     try:
         pref.to_parquet(PREF_PQ, index=False)
     except Exception:
@@ -49,7 +49,7 @@ def main():
 
     # also write risk_metrics.csv standalone
     rows = [{"ticker": t, **v} for t, v in m.items()]
-    pd.DataFrame(rows).to_csv(DATA / "risk_metrics.csv", index=False)
+    pd.DataFrame(rows).to_parquet(DATA / "risk_metrics.parquet")
     print("Wrote risk_metrics.csv")
 
 

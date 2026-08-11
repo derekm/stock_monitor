@@ -125,7 +125,7 @@ def cmd_correlations(_args=None):
     stocks = load_stocks()
     sec = sector_returns(prices, stocks)
     corr = sec.corr()
-    corr.to_csv(DATA_DIR / "sector_correlation_matrix.csv")
+    corr.to_parquet(DATA_DIR / "sector_correlation_matrix.parquet")
     print(f"Wrote sector_correlation_matrix.csv  ({corr.shape[0]}x{corr.shape[1]})")
 
     fert = stocks[stocks.get("index_member", False) == True]["ticker"].tolist()
@@ -134,7 +134,7 @@ def cmd_correlations(_args=None):
     fert = [t for t in fert if t in logrets.columns]
     if len(fert) >= 2:
         fcorr = logrets[fert].corr()
-        fcorr.to_csv(DATA_DIR / "fertilizer_correlation_matrix.csv")
+        fcorr.to_parquet(DATA_DIR / "fertilizer_correlation_matrix.parquet")
         print(f"Wrote fertilizer_correlation_matrix.csv  ({len(fert)} members)")
     else:
         print("Skipped fertilizer matrix (need >=2 index members with prices)")
@@ -155,7 +155,7 @@ def cmd_rolling(_args=None):
         out[label20] = sec[a].rolling(20, min_periods=15).corr(sec[b])
 
     df = pd.DataFrame(out)
-    df.to_csv(DATA_DIR / "rolling_sector_correlations.csv")
+    df.to_parquet(DATA_DIR / "rolling_sector_correlations.parquet")
     print(f"Wrote rolling_sector_correlations.csv  ({df.shape[1]} series, {len(df)} days)")
 
 
@@ -188,7 +188,7 @@ def cmd_stability(_args=None):
         })
 
     df = pd.DataFrame(rows).sort_values("std", ascending=False)
-    df.to_csv(DATA_DIR / "correlation_stability_metrics.csv", index=False)
+    df.to_parquet(DATA_DIR / "correlation_stability_metrics.parquet")
     print(f"Wrote correlation_stability_metrics.csv  ({len(df)} pairs)")
 
 
@@ -226,7 +226,7 @@ def cmd_hmm(_args=None):
     labels = {calm_id: "Calm", stress_id: "Stress"}
     feat["regime"] = feat["state"].map(labels)
 
-    feat[["regime", "state", "mkt", "abs_mkt"]].to_csv(DATA_DIR / "hmm_2state_regimes.csv")
+    feat[["regime", "state", "mkt", "abs_mkt"]].to_parquet(DATA_DIR / "hmm_2state_regimes.parquet")
     print(f"Wrote hmm_2state_regimes.csv  (Calm={(feat.regime=='Calm').sum()}, Stress={(feat.regime=='Stress').sum()})")
 
     sec_a = sec.reindex(feat.index)
@@ -244,7 +244,7 @@ def cmd_hmm(_args=None):
             "corr_all": round(c_all, 4) if pd.notna(c_all) else np.nan,
             "delta_stress_calm": round(c_stress - c_calm, 4) if pd.notna(c_stress) and pd.notna(c_calm) else np.nan,
         })
-    pd.DataFrame(rows).to_csv(DATA_DIR / "hmm_2state_regime_correlations.csv", index=False)
+    pd.DataFrame(rows).to_parquet(DATA_DIR / "hmm_2state_regime_correlations.parquet")
     print(f"Wrote hmm_2state_regime_correlations.csv  ({len(rows)} pairs)")
 
 
@@ -307,7 +307,7 @@ def cmd_kalman(_args=None):
             print(f"  (index Kalman skipped: {e})")
 
     df = pd.DataFrame(out)
-    df.to_csv(DATA_DIR / "kalman_correlations.csv")
+    df.to_parquet(DATA_DIR / "kalman_correlations.parquet")
     print(f"Wrote kalman_correlations.csv  ({df.shape[1]} series, {len(df)} days)")
 
 
@@ -354,7 +354,7 @@ def cmd_var(_args=None):
             except Exception:
                 pass
 
-    gc.to_csv(DATA_DIR / "granger_causality_sectors.csv")
+    gc.to_parquet(DATA_DIR / "granger_causality_sectors.parquet")
     print(f"Wrote granger_causality_sectors.csv  (VAR lag={best_lag}, {len(var_secs)} sectors)")
 
 
@@ -425,7 +425,7 @@ def cmd_backtest(_args=None):
 
     stats = [perf_stats(idx[c], c) for c in idx.columns]
     stats = [s for s in stats if s]
-    pd.DataFrame(stats).to_csv(DATA_DIR / "index_backtest_stats.csv", index=False)
+    pd.DataFrame(stats).to_parquet(DATA_DIR / "index_backtest_stats.parquet")
     print(f"Wrote index_backtest_stats.csv  ({len(stats)} indices)")
     for s in stats:
         print(f"  {s['index']}: total {s['total_return_pct']:+.1f}%  Sharpe {s['sharpe']:.2f}  MaxDD {s['max_dd_pct']:.1f}%")

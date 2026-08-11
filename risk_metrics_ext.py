@@ -18,8 +18,8 @@ DATA_DIR = Path(__file__).resolve().parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLD = DATA_DIR / "portfolio_holdings.parquet"
 PREF = DATA_DIR / "preferred_metrics.parquet"
-OUT = DATA_DIR / "risk_metrics_ext.csv"
-OUT_PORT = DATA_DIR / "portfolio_risk_summary.csv"
+OUT = DATA_DIR / "risk_metrics_ext.parquet"
+OUT_PORT = DATA_DIR / "portfolio_risk_summary.parquet"
 
 
 def dollar_volume(days: int = 21) -> pl.DataFrame:
@@ -101,8 +101,8 @@ def main():
     print(df[["ticker", "adv_dollar_21", "liquidity_score"]].dropna().head(8).to_string(index=False)
           if "liquidity_score" in df.columns else df.head())
     if args.save:
-        df.to_csv(OUT, index=False)
-        port.to_csv(OUT_PORT, index=False)
+        df.to_parquet(OUT)
+        port.to_parquet(OUT_PORT)
         print(f"Wrote {OUT.name}, {OUT_PORT.name}")
 
 

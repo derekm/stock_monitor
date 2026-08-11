@@ -328,7 +328,7 @@ def main():
             labs = set(out["universe"].unique())
             old = old[~old["universe"].isin(labs)]
             out = pd.concat([old, out], ignore_index=True)
-        out.to_csv(OUT_FILE, index=False)
+        out.to_parquet(OUT_FILE)
         try:
             out.to_parquet(OUT_PQ, index=False)
         except Exception:

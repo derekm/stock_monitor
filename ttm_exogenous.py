@@ -84,7 +84,7 @@ def build_exog_panel(
                 exog[key] = logret[cols].mean(axis=1)
 
     if external_csv is not None and Path(external_csv).exists():
-        ext = pd.read_csv(external_csv)
+        ext = pd.read_parquet(external_csv)
         # expect a date column
         dcol = "date" if "date" in ext.columns else ext.columns[0]
         ext[dcol] = ext[dcol].apply(

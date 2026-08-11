@@ -47,7 +47,7 @@ def read_table(name: str):
                 except Exception:
                     import duckdb
                     return duckdb.query(f"SELECT * FROM read_parquet('{p}')").df()
-            return pd.read_csv(p)
+            return pd.read_parquet(p)
     # aliases
     aliases = {
         "preferred": "preferred_metrics",

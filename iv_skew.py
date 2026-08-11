@@ -32,7 +32,7 @@ import pandas as pd
 DATA_DIR = Path(__file__).resolve().parent
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 PRICES = DATA_DIR / "daily_prices.parquet"
-OUT = DATA_DIR / "options_skew.csv"
+OUT = DATA_DIR / "options_skew.parquet"
 
 # ── Black-Scholes delta (put) ────────────────────────────────────────────
 def _delta(S: float, K: float, T: float, r: float, sigma: float) -> float | None:
@@ -183,7 +183,7 @@ def main():
 
     existing = set()
     if args.skip_existing and OUT.exists():
-        e = pd.read_csv(OUT)
+        e = pd.read_parquet(OUT)
         existing = set(e["ticker"].astype(str).str.upper())
 
     rows = []
@@ -202,10 +202,10 @@ def main():
 
     new = pd.DataFrame(rows)
     if OUT.exists():
-        old = pd.read_csv(OUT)
+        old = pd.read_parquet(OUT)
         keep = old[~old["ticker"].astype(str).str.upper().isin(new["ticker"].astype(str).str.upper())]
         new = pd.concat([keep, new], ignore_index=True)
-    new.to_csv(OUT, index=False)
+    new.to_parquet(OUT)
     print(f"\nWrote {OUT} ({len(new)} tickers, {len(rows)} updated)")
 
 

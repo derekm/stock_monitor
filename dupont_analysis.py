@@ -26,7 +26,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
-OUT = DATA_DIR / "dupont_analysis.csv"
+OUT = DATA_DIR / "dupont_analysis.parquet"
 
 
 def dupont_row(r: pd.Series) -> dict:
@@ -127,7 +127,7 @@ def run(min_roe: float = 0.0, save: bool = True) -> pd.DataFrame:
     print(ops[show].head(15).to_string(index=False) if len(ops) else "  (none)")
 
     if save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         print(f"\nWrote {OUT}")
     return df
 

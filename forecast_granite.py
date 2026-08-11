@@ -42,7 +42,7 @@ SECTOR_PRICES_FILE = DATA_DIR / "sector_prices.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 FORECAST_FILE = DATA_DIR / "forecasts_granite.parquet"
 FORECAST_CSV = DATA_DIR / "forecasts_granite.parquet"
-BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.csv"
+BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.parquet"
 
 from granite_config import DEFAULT_MODEL  # canonical Granite model id
 
@@ -120,9 +120,9 @@ def portfolio_tickers() -> list[str]:
 
 
 def sector_slugs() -> list[str]:
-    meta = DATA_DIR / "sector_tickers.csv"
+    meta = DATA_DIR / "sector_tickers.parquet"
     if meta.exists():
-        return pd.read_csv(meta)["ticker"].tolist()
+        return pd.read_parquet(meta)["ticker"].tolist()
     if SECTOR_PRICES_FILE.exists():
         return pd.read_parquet(SECTOR_PRICES_FILE)["ticker"].unique().tolist()
     return []
@@ -172,9 +172,9 @@ def resolve_ticker_index_map(args) -> dict[str, list[str]]:
         mapping = {}
         raw = [s.strip() for s in args.sector.split(",")]
         slug_map = {}
-        meta = DATA_DIR / "sector_tickers.csv"
+        meta = DATA_DIR / "sector_tickers.parquet"
         if meta.exists():
-            m = pd.read_csv(meta)
+            m = pd.read_parquet(meta)
             slug_map = dict(zip(m["sector_name"].str.lower(), m["ticker"]))
             slug_map.update({x.lower(): x for x in m["ticker"]})
         for s in raw:
@@ -334,7 +334,7 @@ def _event_proximity_series(n: int, end_ts: pd.Timestamp) -> np.ndarray:
     events as an exogenous input channel; TTM paper 3.2, input form)."""
     out = np.zeros(n, dtype=np.float32)
     try:
-        ev = pd.read_csv(Path(__file__).resolve().parent / "economic_calendar.csv")
+        ev = pd.read_parquet(Path(__file__).resolve().parent / "economic_calendar.parquet")
         dates = []
         for _, r in ev.iterrows():
             et = str(r.get("event_type", ""))
@@ -818,7 +818,7 @@ def cmd_forecast(args):
         print("No forecasts produced.")
         return
     out = pd.DataFrame(rows)
-    out.to_csv(FORECAST_CSV, index=False)
+    out.to_parquet(FORECAST_CSV)
     try:
         out.to_parquet(FORECAST_FILE, index=False)
         print(f"\nWrote {FORECAST_FILE}")
@@ -941,7 +941,7 @@ def cmd_backtest(args):
               f"from_first_trade={use_first} ({kind})")
 
     if metrics:
-        pd.DataFrame(metrics).to_csv(BACKTEST_FILE, index=False)
+        pd.DataFrame(metrics).to_parquet(BACKTEST_FILE)
         print(f"Wrote {BACKTEST_FILE}")
 
 

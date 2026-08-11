@@ -29,8 +29,8 @@ import pandas as pd
 DATA_DIR = Path(__file__).resolve().parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 EARNINGS = DATA_DIR / "earnings_calendar.parquet"
-MACRO = DATA_DIR / "macro_events.csv"
-OUT = DATA_DIR / "economic_calendar.csv"
+MACRO = DATA_DIR / "macro_events.parquet"
+OUT = DATA_DIR / "economic_calendar.parquet"
 
 # Curated FOMC meeting dates (Fed publishes years ahead; update annually).
 # Format: date,event_type,label,source
@@ -104,7 +104,7 @@ def main() -> None:
     # 2) FOMC schedule — curated file if present, else embedded default
     macro_file = MACRO if MACRO.exists() else None
     if macro_file:
-        m = pd.read_csv(macro_file)
+        m = pd.read_parquet(macro_file)
         for _, r in m.iterrows():
             rows.append({"date": pd.to_datetime(r["date"]).date(),
                          "event_type": str(r.get("event_type", "macro")),
@@ -138,7 +138,7 @@ def main() -> None:
           [["date", "event_type", "label", "days_until", "is_trading_day"]]
           .to_string(index=False))
     if args.save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         print(f"\nWrote {OUT}")
 
 

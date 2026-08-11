@@ -14,10 +14,10 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-HMM = DATA_DIR / "hmm_posterior_analysis.csv"
+HMM = DATA_DIR / "hmm_posterior_analysis.parquet"
 FALLBACK = DATA_DIR / "hmm_regime_states.parquet"
-OUT = DATA_DIR / "posterior_entropy_dynamics.csv"
-OUT_SUM = DATA_DIR / "posterior_entropy_summary.csv"
+OUT = DATA_DIR / "posterior_entropy_dynamics.parquet"
+OUT_SUM = DATA_DIR / "posterior_entropy_summary.parquet"
 
 
 def ensure_entropy(df: pd.DataFrame) -> pd.DataFrame:
@@ -40,7 +40,7 @@ def run(save: bool = True):
         subprocess.run([sys.executable, "hmm_posterior_analysis.py", "--save"], cwd=str(DATA_DIR))
         path = HMM if HMM.exists() else FALLBACK
 
-    h = pd.read_csv(path)
+    h = pd.read_parquet(path)
     h["date"] = pd.to_datetime(h["date"])
     h = ensure_entropy(h).sort_values("date")
 
@@ -90,8 +90,8 @@ def run(save: bool = True):
     }])
 
     if save:
-        out.to_csv(OUT, index=False)
-        summary.to_csv(OUT_SUM, index=False)
+        out.to_parquet(OUT)
+        summary.to_parquet(OUT_SUM)
         print(f"\nWrote {OUT}\nWrote {OUT_SUM}")
     return out, summary
 

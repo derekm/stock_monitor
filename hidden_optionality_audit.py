@@ -139,7 +139,7 @@ def main():
         print(f"  hmm regime audit skipped ({e})")
 
     out = pd.DataFrame(rows).sort_values("flip_rate", ascending=False) if rows else pd.DataFrame()
-    out.to_csv(DATA_DIR / "hidden_optionality.csv", index=False)
+    out.to_parquet(DATA_DIR / "hidden_optionality.parquet")
     print(f"\nWrote hidden_optionality.csv ({len(out)} drivers)")
     if len(out):
         print("\nDrivers ranked by hidden optionality (decision flip rate):")

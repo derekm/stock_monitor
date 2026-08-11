@@ -3,10 +3,10 @@
 Convert CSV producers/consumers to parquet across the repo.
 
 For each .py script, transforms:
-  - `.to_csv(PATH, index=...)`  -> `.to_parquet(PATH.replace('.csv','.parquet'))` (drop index=)
-  - `.read_csv(PATH, ...)`      -> `.read_parquet(PATH.replace('.csv','.parquet'))` (drop csv-only kwargs)
+  - `.to_parquet(PATH)`  -> `.to_parquet(PATH.replace('.csv','.parquet'))` (drop index=)
+  - `.read_parquet(PATH, ...)`      -> `.read_parquet(PATH.replace('.csv','.parquet'))` (drop csv-only kwargs)
   - string literals "x.csv"     -> "x.parquet" for DERIVED data files (not external sources)
-  - constant defs `X = .../ "x.csv"` -> ".parquet"
+  - constant defs `X = .../ "x.parquet"` -> ".parquet"
 
 Derived CSVs = files that have a producer in-repo (from the producer map). External
 source CSVs (factor_groups.csv, factor_group_members.csv, sp500_constituents.csv,
@@ -39,7 +39,7 @@ def _to_parquet_call(match):
     # split top-level args (naive: split on commas not inside brackets)
     parts = _split_top(inner)
     path_part = parts[0].strip() if parts else ""
-    # convert .csv literal / DATA_DIR/"x.csv" / CONST path
+    # convert .csv literal / DATA_DIR/"x.parquet" / CONST path
     new_parts = []
     new_path = None
     for i, p in enumerate(parts):
@@ -76,7 +76,7 @@ def _read_parquet_call(match):
 
 def _replace_csv_in_expr(expr):
     # Replace ".csv" with ".parquet" inside a path expression
-    # handle: "x.csv"  or  DATA_DIR / "x.csv"
+    # handle: "x.csv"  or  DATA_DIR / "x.parquet"
     if re.search(r'\.csv["\']', expr):
         expr = expr.replace('.csv', '.parquet')
     return expr
@@ -106,7 +106,7 @@ def _split_top(s):
 def process_file(path: Path):
     src = path.read_text(encoding="utf-8", errors="ignore")
     orig = src
-    # 1. Constant definitions: X = DATA_DIR / "x.csv"  and  X = "x.csv"
+    # 1. Constant definitions: X = DATA_DIR / "x.parquet"  and  X = "x.parquet"
     def const_repl(m):
         val = m.group(0)
         # only convert if not an external source filename
@@ -119,7 +119,7 @@ def process_file(path: Path):
     src = re.sub(r'\.to_csv\(([^()]*(?:\([^()]*\)[^()]*)*)\)', _to_parquet_call, src)
     # 3. read_csv calls
     src = re.sub(r'\.read_csv\(([^()]*(?:\([^()]*\)[^()]*)*)\)', _read_parquet_call, src)
-    # 4. bare string literals ".csv" that are file paths (in DATA_DIR / "x.csv" style) already handled
+    # 4. bare string literals ".csv" that are file paths (in DATA_DIR / "x.parquet" style) already handled
     if src != orig:
         path.write_text(src, encoding="utf-8")
         return True

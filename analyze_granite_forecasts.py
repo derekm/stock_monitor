@@ -17,10 +17,10 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 FORECAST_CSV = DATA_DIR / "forecasts_granite.parquet"
 FORECAST_PQ = DATA_DIR / "forecasts_granite.parquet"
-BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.csv"
+BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.parquet"
 PRICES_FILE = DATA_DIR / "daily_prices.parquet"
-REGIME_STATS = DATA_DIR / "regime_forecast_stats.csv"
-HMM_FILE = DATA_DIR / "hmm_regime_states.csv"
+REGIME_STATS = DATA_DIR / "regime_forecast_stats.parquet"
+HMM_FILE = DATA_DIR / "hmm_regime_states.parquet"
 REGIME_BEST = DATA_DIR / "regime_model_best.parquet"
 
 
@@ -36,7 +36,7 @@ def load_regime_selection() -> tuple[str | None, dict[str, dict]]:
     regime_now = None
     if HMM_FILE.exists():
         try:
-            hmm = pd.read_csv(HMM_FILE)
+            hmm = pd.read_parquet(HMM_FILE)
             if "date" in hmm.columns and "regime" in hmm.columns:
                 hmm["date"] = pd.to_datetime(hmm["date"], errors="coerce")
                 hmm = hmm.dropna(subset=["date"]).sort_values("date")
@@ -82,7 +82,7 @@ def load_regime_gate() -> tuple[str | None, dict[str, float]]:
     regime_now = None
     if HMM_FILE.exists():
         try:
-            hmm = pd.read_csv(HMM_FILE)
+            hmm = pd.read_parquet(HMM_FILE)
             if "date" in hmm.columns and "regime" in hmm.columns:
                 hmm["date"] = pd.to_datetime(hmm["date"], errors="coerce")
                 hmm = hmm.dropna(subset=["date"]).sort_values("date")
@@ -93,7 +93,7 @@ def load_regime_gate() -> tuple[str | None, dict[str, float]]:
     baselines: dict[str, float] = {}
     if REGIME_STATS.exists():
         try:
-            rs = pd.read_csv(REGIME_STATS)
+            rs = pd.read_parquet(REGIME_STATS)
             col = f"persistence_dir_acc_by_regime"
             for _, r in rs.iterrows():
                 tk = str(r.get("ticker", "")).upper()
@@ -118,7 +118,7 @@ def load_forecasts() -> pd.DataFrame:
         except Exception:
             pass
     if FORECAST_CSV.exists():
-        return pd.read_csv(FORECAST_CSV, parse_dates=["as_of", "forecast_date"])
+        return pd.read_parquet(FORECAST_CSV)
     raise SystemExit("No forecasts found. Run: python forecast_granite.py forecast --ticker MOS")
 
 
@@ -211,7 +211,7 @@ def main():
         print(f"  {r['ticker']:6}  {r['pct_change']:+6.2f}%  ({r['last_close']:.2f} → {r['forecast_close']:.2f})")
 
     if BACKTEST_FILE.exists():
-        bt = pd.read_csv(BACKTEST_FILE)
+        bt = pd.read_parquet(BACKTEST_FILE)
         if args.ticker:
             bt = bt[bt["ticker"].isin([x.strip().upper() for x in args.ticker.split(",")])]
         if args.index and "index_name" in bt.columns:

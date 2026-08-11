@@ -33,7 +33,7 @@ import pandas as pd
 
 from analytics_common import DATA_DIR, load_adj_prices_pandas
 
-OUT = DATA_DIR / "technical_signals.csv"
+OUT = DATA_DIR / "technical_signals.parquet"
 
 
 def _wilder_rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -117,7 +117,7 @@ def main():
     cols = [c for c in ["ticker", "date", "close", "rsi14", "macd_hist", "bb_pct", "sma_cross", "above_sma50"] if c in df]
     print(df[cols].sort_values("ticker").head(25).to_string(index=False))
     if args.save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         print(f"\nWrote {OUT}")
 
 

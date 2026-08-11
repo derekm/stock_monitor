@@ -18,9 +18,9 @@ from cost_model import apply_costs_to_daily
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT_RANK = DATA_DIR / "cross_section_rankings.csv"
-OUT_RET = DATA_DIR / "cross_section_returns.csv"
-OUT_STATS = DATA_DIR / "cross_section_stats.csv"
+OUT_RANK = DATA_DIR / "cross_section_rankings.parquet"
+OUT_RET = DATA_DIR / "cross_section_returns.parquet"
+OUT_STATS = DATA_DIR / "cross_section_stats.parquet"
 
 
 def _z(s: pd.Series) -> pd.Series:
@@ -199,9 +199,9 @@ def run_cli():
     print(f"Stats: {len(stats)} rows")
 
     if args.save:
-        rankings.to_csv(OUT_RANK, index=False)
-        returns.to_csv(OUT_RET, index=False)
-        stats.to_csv(OUT_STATS, index=False)
+        rankings.to_parquet(OUT_RANK)
+        returns.to_parquet(OUT_RET)
+        stats.to_parquet(OUT_STATS)
         print(f"Wrote {OUT_RANK}, {OUT_RET}, {OUT_STATS}")
 
     # Print latest

@@ -34,9 +34,9 @@ import pandas as pd
 
 from analytics_common import DATA_DIR, load_adj_prices_pandas
 
-OUT_BOOK = DATA_DIR / "shadow_book.csv"
-OUT_LOTS = DATA_DIR / "shadow_lots.csv"
-CANDIDATES = DATA_DIR / "buy_candidates.csv"
+OUT_BOOK = DATA_DIR / "shadow_book.parquet"
+OUT_LOTS = DATA_DIR / "shadow_lots.parquet"
+CANDIDATES = DATA_DIR / "buy_candidates.parquet"
 MAX_DD_KILL = -0.25      # kill: 25% drawdown from high-water mark
 VOL_KILL = 0.60          # kill: 21d annualized vol > 60%
 MIN_PRICES = 250
@@ -45,7 +45,7 @@ MIN_PRICES = 250
 def load_target_weights() -> dict[str, float]:
     if not CANDIDATES.exists():
         return {}
-    df = pd.read_csv(CANDIDATES)
+    df = pd.read_parquet(CANDIDATES)
     w: dict[str, float] = {}
     if "ticker" not in df.columns or "action" not in df.columns:
         return {}
@@ -77,7 +77,7 @@ def run(save: bool = True, days: int = 504, start_cash: float = 100_000.0):
     # Enables the proactive fragility kill switch (exit before the loss).
     fragility: dict[str, bool] | None = None
     try:
-        fs = pd.read_csv(DATA_DIR / "fragility_screen.csv")
+        fs = pd.read_parquet(DATA_DIR / "fragility_screen.parquet")
         fragility = dict(zip(fs["ticker"], fs["fragile_flag"] == True))
         n_frag = sum(1 for v in fragility.values() if v)
         print(f"fragility kill armed: {n_frag} fragile names in screen")
@@ -169,9 +169,9 @@ def run(save: bool = True, days: int = 504, start_cash: float = 100_000.0):
           f"maxDD {book['drawdown'].min():.1%}  kill={killed}")
     open_lots = pd.DataFrame([l for l in lots if l["qty"] > 0])
     if save:
-        book.to_csv(OUT_BOOK, index=False)
+        book.to_parquet(OUT_BOOK)
         if len(open_lots):
-            open_lots.to_csv(OUT_LOTS, index=False)
+            open_lots.to_parquet(OUT_LOTS)
         print(f"\nWrote {OUT_BOOK}" + (f"\nWrote {OUT_LOTS}" if len(open_lots) else ""))
 
 

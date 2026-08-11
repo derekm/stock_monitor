@@ -28,13 +28,13 @@ PREF = DATA_DIR / "preferred_metrics.parquet"
 MOM = DATA_DIR / "momentum_metrics.parquet"
 FAC = DATA_DIR / "factor_panel.parquet"
 RISK = DATA_DIR / "risk_metrics_ext.parquet"
-AGG = DATA_DIR / "signal_aggregator_scores.csv"
+AGG = DATA_DIR / "signal_aggregator_scores.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
-SP500 = DATA_DIR / "sp500_sleeve.csv"
+SP500 = DATA_DIR / "sp500_sleeve.parquet"
 OUT = DATA_DIR / "buy_candidates.parquet"
-OUT_TOP = DATA_DIR / "buy_candidates_top.csv"
+OUT_TOP = DATA_DIR / "buy_candidates_top.parquet"
 FRAGILITY = DATA_DIR / "fragility_screen.parquet"
-SKEW_CSV = DATA_DIR / "options_skew.csv"
+SKEW_CSV = DATA_DIR / "options_skew.parquet"
 SKEW_STEEP = 0.35  # skew >= this (steep put-side fear) triggers the veto
 
 # Taleb veto maps, loaded once in build(): ticker -> fragile flag, ticker -> skew
@@ -105,7 +105,7 @@ def _load_maps():
         fs = pd.read_parquet(FRAGILITY)
         fragility_map = dict(zip(fs["ticker"].astype(str).str.upper(), fs["fragile_flag"] == True))
     if SKEW_CSV.exists():
-        sk = pd.read_csv(SKEW_CSV)
+        sk = pd.read_parquet(SKEW_CSV)
         sk = sk.sort_values("date") if "date" in sk.columns else sk
         skew_map = dict(zip(sk["ticker"].astype(str).str.upper(), pd.to_numeric(sk["skew"], errors="coerce")))
     return fragility_map, skew_map
@@ -318,12 +318,12 @@ def build() -> pd.DataFrame:
                 df = df.merge(extra[keep], on="ticker", how="left", suffixes=("", "_x"))
     # signal aggregator composite (OOS IC-weighted blend of 5 families)
     if AGG.exists():
-        agg = pd.read_csv(AGG)
+        agg = pd.read_parquet(AGG)
         keep = [c for c in ("ticker", "composite", "rank") if c in agg.columns]
         if len(keep) >= 2:
             df = df.merge(agg[keep], on="ticker", how="left", suffixes=("", "_agg"))
     if SP500.exists():
-        sp = pd.read_csv(SP500)
+        sp = pd.read_parquet(SP500)
         df = df.merge(sp[["ticker", "sp500_member", "sp500_sector"]], on="ticker", how="left")
     else:
         df["sp500_member"] = False
@@ -371,7 +371,7 @@ def main():
     print("\nAction counts:", df["action"].value_counts().to_dict())
     if args.save:
         df.to_parquet(OUT, index=False)
-        df[df["action"].isin(["BUY", "ACCUMULATE"])].to_csv(OUT_TOP, index=False)
+        df[df["action"].isin(["BUY", "ACCUMULATE"])].to_parquet(OUT_TOP)
         print(f"Wrote {OUT.name} ({len(df)}), {OUT_TOP.name}")
 
 

@@ -7,9 +7,9 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
-LIVE = DATA_DIR / "vix_term_structure_live.csv"
-OUT = DATA_DIR / "vix_term_structure.csv"
-OUT_SUM = DATA_DIR / "vix_term_structure_summary.csv"
+LIVE = DATA_DIR / "vix_term_structure_live.parquet"
+OUT = DATA_DIR / "vix_term_structure.parquet"
+OUT_SUM = DATA_DIR / "vix_term_structure_summary.parquet"
 
 def synthetic_curve(mkt: pd.Series) -> pd.DataFrame:
     horizons = [5, 10, 21, 42, 63]
@@ -27,7 +27,7 @@ def synthetic_curve(mkt: pd.Series) -> pd.DataFrame:
 
 def run(save: bool = True):
     if LIVE.exists():
-        curve = pd.read_csv(LIVE)
+        curve = pd.read_parquet(LIVE)
         curve["date"] = pd.to_datetime(curve["date"])
         source = "live"
     else:
@@ -50,8 +50,8 @@ def run(save: bool = True):
         "last_vix_proxy": float(curve["VIX_proxy"].iloc[-1]) if "VIX_proxy" in curve.columns else np.nan,
     }])
     if save:
-        curve.to_csv(OUT, index=False)
-        summary.to_csv(OUT_SUM, index=False)
+        curve.to_parquet(OUT)
+        summary.to_parquet(OUT_SUM)
         print(f"Wrote {OUT}")
     return curve
 

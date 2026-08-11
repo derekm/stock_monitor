@@ -19,8 +19,8 @@ from pathlib import Path
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-BACKTEST = DATA_DIR / "forecast_backtest_metrics.csv"
-OUT = DATA_DIR / "forecast_reliability_rank.csv"
+BACKTEST = DATA_DIR / "forecast_backtest_metrics.parquet"
+OUT = DATA_DIR / "forecast_reliability_rank.parquet"
 
 
 def run_one(tickers: str | None, index: str | None, horizon: int, window: int, context: int) -> pd.DataFrame:
@@ -36,7 +36,7 @@ def run_one(tickers: str | None, index: str | None, horizon: int, window: int, c
     subprocess.run(cmd, cwd=str(DATA_DIR), check=False)
     if not BACKTEST.exists():
         return pd.DataFrame()
-    df = pd.read_csv(BACKTEST)
+    df = pd.read_parquet(BACKTEST)
     df["setup_horizon"] = horizon
     df["setup_window"] = window
     df["setup_context"] = context
@@ -81,8 +81,8 @@ def main():
     print("\n=== Reliability ranking (higher DirAcc, lower MAE) ===")
     print(summary.to_string(index=False))
     if args.save:
-        all_df.to_csv(DATA_DIR / "forecast_reliability_detail.csv", index=False)
-        summary.to_csv(OUT, index=False)
+        all_df.to_parquet(DATA_DIR / "forecast_reliability_detail.parquet")
+        summary.to_parquet(OUT)
         print(f"Wrote {OUT}")
 
 

@@ -22,10 +22,10 @@ import pandas as pd
 import numpy as np
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT = DATA_DIR / "rebalance_calendar.csv"
+OUT = DATA_DIR / "rebalance_calendar.parquet"
 PRICES = DATA_DIR / "daily_prices.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
-PREF = DATA_DIR / "preferred_metrics.csv"
+PREF = DATA_DIR / "preferred_metrics.parquet"
 
 
 def trading_calendar() -> pl.DataFrame:
@@ -106,7 +106,7 @@ def stress_prob_on(date) -> float:
 def dual_core_tickers() -> set[str]:
     if not PREF.exists():
         return set()
-    df = pd.read_csv(PREF)
+    df = pd.read_parquet(PREF)
     if "decision" in df.columns:
         return set(df.loc[df["decision"] == "INCLUDE_CORE", "ticker"].astype(str))
     return set()
@@ -156,7 +156,7 @@ def main():
     df = build(args.months)
     print(df.tail(12).to_string(index=False))
     if args.save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         print(f"Wrote {OUT}")
 
 

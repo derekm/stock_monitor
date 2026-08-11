@@ -64,7 +64,7 @@ import pandas as pd
 from macro_fragility import _fetch_fred  # shared FRED cache + TTL logic
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT = DATA_DIR / "macro_shock.csv"
+OUT = DATA_DIR / "macro_shock.parquet"
 
 # long-history energy producers, in depth order (thin pre-1980)
 ENERGY = ["XOM", "CVX", "HAL", "APA", "COP", "OXY", "SLB", "VLO", "WMB", "OKE"]
@@ -74,8 +74,8 @@ def _splice_oil() -> pd.DataFrame:
     """Continuous monthly crude series: IMF OILPRICE (1946-2013) then WTI
     (1986-). Overlap 1986-2013 is close (both ~$100 at 2013); splice at the
     last OILPRICE observation."""
-    old = _fetch_fred("OILPRICE", DATA_DIR / "macro_data" / "oilprice.csv")
-    new = _fetch_fred("MCOILWTICO", DATA_DIR / "macro_data" / "wti.csv")
+    old = _fetch_fred("OILPRICE", DATA_DIR / "macro_data" / "oilprice.parquet")
+    new = _fetch_fred("MCOILWTICO", DATA_DIR / "macro_data" / "wti.parquet")
     old = old.rename(columns={"OILPRICE": "oil"})
     new = new.rename(columns={"MCOILWTICO": "oil"})
     last_old = old["observation_date"].max()
@@ -103,8 +103,8 @@ def load_energy_basket() -> pd.DataFrame:
 def main(save: bool = True):
     print("macro_shock: fetching FRED (OILPRICE/WTI, CPI, FEDFUNDS)...")
     oil = _splice_oil()
-    cpi = _fetch_fred("CPIAUCSL", DATA_DIR / "macro_data" / "cpi.csv")
-    ff = _fetch_fred("FEDFUNDS", DATA_DIR / "macro_data" / "fedfunds.csv")
+    cpi = _fetch_fred("CPIAUCSL", DATA_DIR / "macro_data" / "cpi.parquet")
+    ff = _fetch_fred("FEDFUNDS", DATA_DIR / "macro_data" / "fedfunds.parquet")
 
     oil["oil_mom_12m"] = oil["oil"] / oil["oil"].shift(12) - 1
     cpi["cpi_yoy"] = cpi["CPIAUCSL"] / cpi["CPIAUCSL"].shift(12) - 1
@@ -156,7 +156,7 @@ def main(save: bool = True):
         df[c] = df[c].round(4)
 
     if save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
 
     # ---- validation: what would this have said at each crisis? ----
     print("\n=== macro shock (supply-side layer) — point-in-time at crises ===")

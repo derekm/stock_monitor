@@ -208,10 +208,10 @@ def resolve_tickers_from_args(
         stocks_path = data / "monitored_stocks.parquet"
         out: list[str] = []
         raw = [s.strip() for s in str(sector).split(",") if s.strip()]
-        meta = data / "sector_tickers.csv"
+        meta = data / "sector_tickers.parquet"
         slug_map: dict[str, str] = {}
         if meta.exists():
-            m = pd.read_csv(meta)
+            m = pd.read_parquet(meta)
             slug_map = dict(zip(m["sector_name"].str.lower(), m["ticker"]))
             slug_map.update({t.lower(): t for t in m["ticker"]})
         stocks = pd.read_parquet(stocks_path) if stocks_path.exists() else pd.DataFrame()

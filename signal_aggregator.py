@@ -35,11 +35,11 @@ from analytics_common import DATA_DIR, load_adj_prices_pandas, wide_closes, clip
 
 PREF = DATA_DIR / "preferred_metrics.parquet"
 PEER = DATA_DIR / "peer_analytics_signals.parquet"
-CROSS = DATA_DIR / "cross_section_rankings.csv"
-PAIR = DATA_DIR / "pair_engine_pairs.csv"
-EARN = DATA_DIR / "earnings_catalyst_signals.csv"
-OUT_SCORES = DATA_DIR / "signal_aggregator_scores.csv"
-OUT_IC = DATA_DIR / "signal_aggregator_ic.csv"
+CROSS = DATA_DIR / "cross_section_rankings.parquet"
+PAIR = DATA_DIR / "pair_engine_pairs.parquet"
+EARN = DATA_DIR / "earnings_catalyst_signals.parquet"
+OUT_SCORES = DATA_DIR / "signal_aggregator_scores.parquet"
+OUT_IC = DATA_DIR / "signal_aggregator_ic.parquet"
 
 FORWARD_HORIZON = 21
 
@@ -59,9 +59,9 @@ def load_scores() -> pd.DataFrame:
 
     pref = pd.read_parquet(PREF) if PREF.exists() else pd.DataFrame()
     peer = pd.read_parquet(PEER) if PEER.exists() else pd.DataFrame()
-    cross = pd.read_csv(CROSS) if CROSS.exists() else pd.DataFrame()
-    pair = pd.read_csv(PAIR) if PAIR.exists() else pd.DataFrame()
-    earn = pd.read_csv(EARN) if EARN.exists() else pd.DataFrame()
+    cross = pd.read_parquet(CROSS) if CROSS.exists() else pd.DataFrame()
+    pair = pd.read_parquet(PAIR) if PAIR.exists() else pd.DataFrame()
+    earn = pd.read_parquet(EARN) if EARN.exists() else pd.DataFrame()
     _add(pref); _add(peer); _add(cross); _add(pair); _add(earn)
 
     rows = []
@@ -311,8 +311,8 @@ def main():
     cols = [c for c in ["ticker", "preferred", "peer", "cross", "pair", "earnings", "composite", "rank"] if c in scores]
     print(scores[cols].head(20).to_string(index=False))
     if args.save:
-        scores.to_csv(OUT_SCORES, index=False)
-        ic_df.to_csv(OUT_IC, index=False)
+        scores.to_parquet(OUT_SCORES)
+        ic_df.to_parquet(OUT_IC)
         print(f"\nWrote {OUT_SCORES}\nWrote {OUT_IC}")
 
 

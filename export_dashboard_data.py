@@ -176,18 +176,12 @@ TABLES = [
 
 
 def load(name: str) -> pd.DataFrame | None:
-    for ext in (".parquet", ".csv"):
-        p = DATA_DIR / f"{name}{ext}"
-        if p.exists():
-            try:
-                if ext == ".parquet":
-                    return pd.read_parquet(p)
-                return pd.read_csv(p)
-            except Exception:
-                try:
-                    return pd.read_csv(p)
-                except Exception:
-                    return None
+    p = DATA_DIR / f"{name}.parquet"
+    if p.exists():
+        try:
+            return pd.read_parquet(p)
+        except Exception:
+            return None
     return None
 
 
@@ -387,7 +381,7 @@ def main():
     }
     for tname, tdf in computed_dash_tables.items():
         if tdf is not None and len(tdf) > 0:
-            tdf.to_csv(DATA_DIR / f"{tname}.csv", index=False)
+            tdf.to_parquet(DATA_DIR / f"{tname}.parquet")
             print(f"  wrote {tname}.csv ({len(tdf)} rows)")
 
     # Forecasts snapshot if present

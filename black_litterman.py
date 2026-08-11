@@ -32,7 +32,7 @@ import pandas as pd
 from robust_covariance import load_returns, ledoit_wolf_cov, resolve, sample_cov
 
 DATA_DIR = Path(__file__).parent
-OUT = DATA_DIR / "black_litterman_weights.csv"
+OUT = DATA_DIR / "black_litterman_weights.parquet"
 
 from scipy.optimize import minimize  # noqa: F401  (canonical availability flag in analytics_common)
 from analytics_common import HAS_SCIPY  # canonical scipy-availability flag
@@ -178,7 +178,7 @@ def run(universe: str, views: list[str], tau: float, delta: float, window: int, 
 
     if save:
         df["universe"] = universe
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         print(f"Wrote {OUT}")
     return df
 

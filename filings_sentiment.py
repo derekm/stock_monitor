@@ -35,7 +35,7 @@ from analytics_common import DATA_DIR
 
 UA = {"User-Agent": "personal-research derek.moore@example.com"}
 SEARCH = "https://efts.sec.gov/LATEST/search-index"
-OUT = DATA_DIR / "filings_sentiment.csv"
+OUT = DATA_DIR / "filings_sentiment.parquet"
 
 # Loughran-McDonald-style word lists (subset, financial-domain tuned)
 NEG = {"loss", "losses", "impairment", "impairments", "restructuring", "litigation",
@@ -169,7 +169,7 @@ def main():
     cols = [c for c in ["ticker", "filing_date", "form", "n_neg", "n_pos", "n_fwd", "score_per_1k"] if c in df]
     print(df[cols].head(20).to_string(index=False) if len(df) else "(no filings matched)")
     if args.save and len(df):
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         print(f"\nWrote {OUT}")
 
 

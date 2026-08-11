@@ -24,9 +24,9 @@ from hmm_regime_detection import _pairwise_avg_corr_numba, _pairwise_avg_corr_np
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT_TS = DATA_DIR / "rolling_corr_avg_timeseries.csv"
-OUT_SEC = DATA_DIR / "rolling_sector_corr_windows.csv"
-OUT_STAB = DATA_DIR / "rolling_corr_stability_by_asset.csv"
+OUT_TS = DATA_DIR / "rolling_corr_avg_timeseries.parquet"
+OUT_SEC = DATA_DIR / "rolling_sector_corr_windows.parquet"
+OUT_STAB = DATA_DIR / "rolling_corr_stability_by_asset.parquet"
 
 
 def rolling_pairwise_stats(rets: pd.DataFrame, w: int, sample_idx: np.ndarray):
@@ -142,9 +142,9 @@ def run(windows=(21, 63, 126), step: int = 5, max_assets: int = 80, save: bool =
     print(stab_df.head(8).to_string(index=False))
 
     if save:
-        ts.to_csv(OUT_TS, index=False)
-        sec_df.to_csv(OUT_SEC, index=False)
-        stab_df.to_csv(OUT_STAB, index=False)
+        ts.to_parquet(OUT_TS)
+        sec_df.to_parquet(OUT_SEC)
+        stab_df.to_parquet(OUT_STAB)
         print(f"Wrote {OUT_TS}, {OUT_SEC}, {OUT_STAB}")
     return ts, sec_df, stab_df
 

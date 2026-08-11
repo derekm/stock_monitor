@@ -33,7 +33,7 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT = DATA_DIR / "robust_covariance_summary.csv"
+OUT = DATA_DIR / "robust_covariance_summary.parquet"
 
 
 def load_returns(tickers: list[str], window: int = 126) -> pd.DataFrame:
@@ -174,11 +174,9 @@ def run(universe: str = "portfolio", window: int = 126, save: bool = False) -> d
 
     df = pd.DataFrame(rows)
     if save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         # save LW cov matrix
-        pd.DataFrame(S_lw, index=tickers, columns=tickers).to_csv(
-            DATA_DIR / f"cov_ledoit_wolf_{universe}.csv"
-        )
+        pd.DataFrame(S_lw, index=tickers, columns=tickers).to_parquet(DATA_DIR / f"cov_ledoit_wolf_{universe}.parquet")
         print(f"Wrote {OUT}")
     return {"tickers": tickers, "estimators": estimators, "summary": df}
 

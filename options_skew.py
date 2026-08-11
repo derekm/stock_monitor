@@ -30,7 +30,7 @@ import yfinance as yf
 
 from analytics_common import DATA_DIR
 
-OUT = DATA_DIR / "options_skew.csv"
+OUT = DATA_DIR / "options_skew.parquet"
 
 
 def ticker_options_metrics(t: str, target_days: int = 30) -> dict:
@@ -129,7 +129,7 @@ def main():
     cols = [c for c in ["ticker", "date", "spot", "atm_iv", "skew", "put_call_vol", "expiry"] if c in df.columns]
     print(df[cols].sort_values("ticker").to_string(index=False))
     if args.save and len(df):
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         print(f"\nWrote {OUT}")
 
 

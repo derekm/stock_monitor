@@ -36,8 +36,8 @@ from sklearn.model_selection import KFold
 from analytics_common import DATA_DIR
 from signal_aggregator import load_scores, forward_returns
 
-OUT_OOS = DATA_DIR / "signal_model_oos.csv"
-OUT_W = DATA_DIR / "signal_model_weights.csv"
+OUT_OOS = DATA_DIR / "signal_model_oos.parquet"
+OUT_W = DATA_DIR / "signal_model_weights.parquet"
 FAMILIES = ["preferred", "peer", "cross", "pair", "earnings"]
 
 
@@ -103,8 +103,8 @@ def run(save: bool = True):
     print("\n=== Feature importances ===")
     print(wdf.to_string(index=False))
     if save:
-        oos.to_csv(OUT_OOS, index=False)
-        wdf.to_csv(OUT_W, index=False)
+        oos.to_parquet(OUT_OOS)
+        wdf.to_parquet(OUT_W)
         print(f"\nWrote {OUT_OOS}\nWrote {OUT_W}")
 
 

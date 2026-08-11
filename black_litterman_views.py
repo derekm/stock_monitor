@@ -19,15 +19,15 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
 PREF = DATA_DIR / "preferred_metrics.parquet"
-HMM = DATA_DIR / "hmm_regime_states.csv"
-OUT = DATA_DIR / "black_litterman_views.csv"
-OUT_W = DATA_DIR / "black_litterman_weights_from_views.csv"
+HMM = DATA_DIR / "hmm_regime_states.parquet"
+OUT = DATA_DIR / "black_litterman_views.parquet"
+OUT_W = DATA_DIR / "black_litterman_weights_from_views.parquet"
 
 
 def current_regime() -> str:
     if not HMM.exists():
         return "normal"
-    h = pd.read_csv(HMM)
+    h = pd.read_parquet(HMM)
     h["date"] = pd.to_datetime(h.get("date"), errors="coerce")
     h = h.dropna(subset=["date"]).sort_values("date")
     if h.empty:
@@ -100,8 +100,8 @@ def main():
     print("\nWeights:")
     print(w.head(10).to_string(index=False))
     if args.save:
-        views.to_csv(OUT, index=False)
-        w.to_csv(OUT_W, index=False)
+        views.to_parquet(OUT)
+        w.to_parquet(OUT_W)
         print(f"Wrote {OUT.name}, {OUT_W.name}")
 
 

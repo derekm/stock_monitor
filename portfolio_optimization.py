@@ -46,10 +46,10 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-CALENDAR = DATA_DIR / "rebalance_calendar.csv"
+CALENDAR = DATA_DIR / "rebalance_calendar.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
-OUT_W = DATA_DIR / "erc_gmv_strategies.csv"
-OUT_S = DATA_DIR / "erc_gmv_summary.csv"
+OUT_W = DATA_DIR / "erc_gmv_strategies.parquet"
+OUT_S = DATA_DIR / "erc_gmv_summary.parquet"
 
 
 def load_returns(tickers: list[str], window: int = 126) -> pd.DataFrame:
@@ -256,7 +256,7 @@ def turnover_band() -> float:
     """Return the latest turnover_band from rebalance_calendar.csv, or 1.0 if unavailable."""
     if not CALENDAR.exists():
         return 1.0
-    cal = pd.read_csv(CALENDAR)
+    cal = pd.read_parquet(CALENDAR)
     if cal.empty:
         return 1.0
     date_col = "rebalance_date" if "rebalance_date" in cal.columns else ("date" if "date" in cal.columns else None)
@@ -406,8 +406,8 @@ def run(universe: str = "portfolio", window: int = 126, name_cap: float = 0.05,
         rc = {t: round(100.0 * float(st["rc_pct"][i]), 1) for i, t in enumerate(tickers)}
         print(f"  {name:22s} σ={st['vol']*100:5.2f}%  RC={rc}")
 
-    pd.DataFrame(rows_long).to_csv(OUT_W, index=False)
-    pd.DataFrame(rows_sum).to_csv(OUT_S, index=False)
+    pd.DataFrame(rows_long).to_parquet(OUT_W)
+    pd.DataFrame(rows_sum).to_parquet(OUT_S)
     print(f"\nWrote {OUT_W}")
     print(f"Wrote {OUT_S}")
 

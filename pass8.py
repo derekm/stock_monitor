@@ -79,10 +79,10 @@ FREQ_DAILY = 8  # daily resolution token per granite-tsfm DEFAULT_FREQUENCY_MAPP
 # locally — we use 8 to match the upstream canonical mapping so a future tsfm
 # upgrade serves RPT checkpoints with the correct daily token.
 
-OUT_OOS_RPT = DATA_DIR / "regime_model_oos_rpt.csv"
-OUT_BEST_RPT = DATA_DIR / "regime_model_best_rpt.csv"
+OUT_OOS_RPT = DATA_DIR / "regime_model_oos_rpt.parquet"
+OUT_BEST_RPT = DATA_DIR / "regime_model_best_rpt.parquet"
 OUT_JSONL = "/tmp/pass8_results.jsonl"
-OUT_COMPARE = DATA_DIR / "rpt_vs_ibm_compare.csv"
+OUT_COMPARE = DATA_DIR / "rpt_vs_ibm_compare.parquet"
 
 
 # ---------------------------------------------------------------- Stage A
@@ -282,10 +282,10 @@ def _finish_rpt(results):
         print("No results.")
         return
     df = pd.DataFrame(results)
-    df.to_csv(OUT_OOS_RPT, index=False)
+    df.to_parquet(OUT_OOS_RPT)
     df["excess"] = df["dir_acc"] - df["pers_dir"].fillna(50.0)
     best = df.loc[df.groupby(["ticker", "regime"])["excess"].idxmax()].reset_index(drop=True)
-    best.to_csv(OUT_BEST_RPT, index=False)
+    best.to_parquet(OUT_BEST_RPT)
     print("=== RPT-base best per-regime configs ===")
     show = ["ticker", "regime", "steps", "cap", "lr", "head_only", "exog", "dir_acc", "pers_dir", "mape", "secs"]
     print(best[[c for c in show if c in best.columns]].to_string(index=False))
@@ -294,8 +294,8 @@ def _finish_rpt(results):
 
 # ---------------------------------------------------------------- Compare
 def compare():
-    ibm = pd.read_csv(DATA_DIR / "regime_model_oos.csv")
-    rpt = pd.read_csv(OUT_OOS_RPT)
+    ibm = pd.read_parquet(DATA_DIR / "regime_model_oos.parquet")
+    rpt = pd.read_parquet(OUT_OOS_RPT)
     ibm["excess"] = ibm["dir_acc"] - ibm["pers_dir"].fillna(50.0)
     rpt["excess"] = rpt["dir_acc"] - rpt["pers_dir"].fillna(50.0)
     keys = ["ticker", "regime", "steps", "cap", "lr", "head_only", "exog"]
@@ -305,7 +305,7 @@ def compare():
         return
     m["excess_delta"] = m["excess_rpt"] - m["excess_ibm"]
     m = m.sort_values("excess_delta", ascending=False)
-    m.to_csv(OUT_COMPARE, index=False)
+    m.to_parquet(OUT_COMPARE)
     print(f"=== RPT base vs IBM base ({len(m)} overlapping cells) ===")
     show = keys + ["dir_acc_ibm", "dir_acc_rpt", "excess_delta"]
     print(m[show].head(15).to_string(index=False))

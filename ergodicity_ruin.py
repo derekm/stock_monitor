@@ -102,7 +102,7 @@ def main():
         rows.append(row)
 
     df = pd.DataFrame(rows).sort_values("ticker")
-    df.to_csv(DATA_DIR / "ergodicity_ruin.csv", index=False)
+    df.to_parquet(DATA_DIR / "ergodicity_ruin.parquet")
 
     # portfolio: equal-weight daily returns (date-aligned)
     port = None
@@ -134,7 +134,7 @@ def main():
             port_rows.append({"metric": f"terminal_p5_{yrs}y", "value": round(float(pct[0]), 3)})
             port_rows.append({"metric": f"terminal_p50_{yrs}y", "value": round(float(pct[1]), 3)})
             port_rows.append({"metric": f"terminal_p95_{yrs}y", "value": round(float(pct[2]), 3)})
-        pd.DataFrame(port_rows).to_csv(DATA_DIR / "portfolio_ergodic.csv", index=False)
+        pd.DataFrame(port_rows).to_parquet(DATA_DIR / "portfolio_ergodic.parquet")
 
     print(f"ergodicity_ruin.csv: {len(df)} tickers | portfolio_ergodic.csv written")
     if len(df):

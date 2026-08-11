@@ -19,8 +19,8 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT = DATA_DIR / "dual_screen_gap.csv"
-OUT_EXT = DATA_DIR / "dual_screen_external_candidates.csv"
+OUT = DATA_DIR / "dual_screen_gap.parquet"
+OUT_EXT = DATA_DIR / "dual_screen_external_candidates.parquet"
 
 # Illustrative external names sometimes cited near "quality at a reasonable price"
 # Approximate — must be verified before use
@@ -98,7 +98,7 @@ def analyze():
             ),
         })
     gap = pd.DataFrame(rows)
-    gap.to_csv(OUT, index=False)
+    gap.to_parquet(OUT)
 
     print("=== External candidates (NOT in monitored set) — illustrative ===")
     print("Approximate characteristics; verify with live data before any decision.\n")
@@ -121,7 +121,7 @@ def analyze():
             "note": note,
         })
     edf = pd.DataFrame(ext)
-    edf.to_csv(OUT_EXT, index=False)
+    edf.to_parquet(OUT_EXT)
     dual = edf[(edf.buffett_pass_approx) & (edf.trifecta_pass_approx)]
     near = edf[edf.near_dual_approx & ~((edf.buffett_pass_approx) & (edf.trifecta_pass_approx))]
     print("Approx dual pass:")

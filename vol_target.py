@@ -41,9 +41,9 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-CALENDAR = DATA_DIR / "rebalance_calendar.csv"
+CALENDAR = DATA_DIR / "rebalance_calendar.parquet"
 OUT = DATA_DIR / "vol_targets.parquet"
-OUT_CSV = DATA_DIR / "vol_targets.csv"
+OUT_CSV = DATA_DIR / "vol_targets.parquet"
 
 # Defaults tuned for high-beta growth names
 DEFAULT_TARGET_VOL = 0.25      # 25% annualized standalone vol target for the *position*
@@ -100,7 +100,7 @@ def turnover_band() -> float:
     """Return the latest turnover_band from rebalance_calendar.csv, or 1.0 if unavailable."""
     if not CALENDAR.exists():
         return 1.0
-    cal = pd.read_csv(CALENDAR)
+    cal = pd.read_parquet(CALENDAR)
     if cal.empty:
         return 1.0
     cal["date"] = pd.to_datetime(cal["date"]).dt.date
@@ -306,12 +306,12 @@ def main():
 
     if args.save:
         if OUT_CSV.exists():
-            old = pd.read_csv(OUT_CSV)
+            old = pd.read_parquet(OUT_CSV)
             old = old[~old["ticker"].isin(df["ticker"])]
             out = pd.concat([old, df], ignore_index=True)
         else:
             out = df
-        out.to_csv(OUT_CSV, index=False)
+        out.to_parquet(OUT_CSV)
         pq.write_table(pa.Table.from_pandas(out, preserve_index=False), OUT)
         print(f"\nWrote {OUT_CSV} and {OUT}")
 

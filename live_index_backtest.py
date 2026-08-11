@@ -16,9 +16,9 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT_STATS = DATA_DIR / "index_backtest_stats.csv"
+OUT_STATS = DATA_DIR / "index_backtest_stats.parquet"
 OUT_LEVELS = DATA_DIR / "index_levels_1y.parquet"
-OUT_SHARPE = DATA_DIR / "sharpe_comparison.csv"
+OUT_SHARPE = DATA_DIR / "sharpe_comparison.parquet"
 
 
 def load_prices() -> pd.DataFrame:
@@ -178,7 +178,7 @@ def run(args) -> dict:
         s["sharpe_rank"] = i
 
     df_stats = pd.DataFrame(stats_sorted)
-    df_stats.to_csv(OUT_STATS, index=False)
+    df_stats.to_parquet(OUT_STATS)
 
     # sharpe comparison long form
     sharpe_rows = []
@@ -193,7 +193,7 @@ def run(args) -> dict:
             "vs_best_sharpe": round((s["sharpe"] or 0) - (stats_sorted[0]["sharpe"] or 0), 3)
             if stats_sorted[0].get("sharpe") is not None else None,
         })
-    pd.DataFrame(sharpe_rows).to_csv(OUT_SHARPE, index=False)
+    pd.DataFrame(sharpe_rows).to_parquet(OUT_SHARPE)
 
     if levels:
         lvl = pd.concat(levels, axis=1).dropna(how="all")
@@ -201,7 +201,7 @@ def run(args) -> dict:
         try:
             lvl.to_parquet(OUT_LEVELS, index=False)
         except Exception:
-            lvl.to_csv(DATA_DIR / "index_levels_1y.csv", index=False)
+            lvl.to_parquet(DATA_DIR / "index_levels_1y.parquet")
 
     result = {
         "ok": True,

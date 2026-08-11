@@ -31,7 +31,7 @@ import pandas as pd
 from granite_config import DEFAULT_MODEL  # noqa: F401  (canonical model id)
 
 DATA_DIR = Path(__file__).parent
-REGIME_BEST = DATA_DIR / "regime_model_best.csv"
+REGIME_BEST = DATA_DIR / "regime_model_best.parquet"
 HMM_FILE = DATA_DIR / "hmm_regime_states.parquet"
 CKPT_DIR = DATA_DIR / "checkpoints" / "regime"
 
@@ -57,7 +57,7 @@ def best_config_for(ticker: str, regime: str | None) -> dict | None:
     if not REGIME_BEST.exists() or not regime:
         return None
     try:
-        rb = pd.read_csv(REGIME_BEST)
+        rb = pd.read_parquet(REGIME_BEST)
         row = rb[(rb["ticker"].astype(str).str.upper() == ticker.upper())
                  & (rb["regime"].astype(str) == regime)]
         if not len(row):

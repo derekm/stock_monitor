@@ -68,7 +68,7 @@ def ann_vol(r: pd.Series, window: int = 21) -> float:
 
 def cmd_membership(m: pd.DataFrame) -> pd.DataFrame:
     out = m[["ticker", "name", "sector", "growth_sleeve", "notes"]].copy() if "name" in m.columns else m[["ticker", "growth_sleeve"]].copy()
-    out.to_csv(DATA_DIR / "growth_tech_membership.csv", index=False)
+    out.to_parquet(DATA_DIR / "growth_tech_membership.parquet")
     print(f"membership: {len(out)} names")
     print(out.groupby("growth_sleeve")["ticker"].apply(list).to_string() if "growth_sleeve" in out.columns else "")
     return out
@@ -92,7 +92,7 @@ def cmd_vol_return(rets: pd.DataFrame, wide: pd.DataFrame, m: pd.DataFrame, wind
             "sharpe_proxy": (float(r.tail(window).mean() * 252) / ann_vol(r, window)) if ann_vol(r, window) > 1e-8 else float("nan"),
         })
     df = pd.DataFrame(rows).sort_values("vol_21d", ascending=False)
-    df.to_csv(DATA_DIR / "growth_tech_vol_returns.csv", index=False)
+    df.to_parquet(DATA_DIR / "growth_tech_vol_returns.parquet")
     print("\n=== Vol / returns (top by 21d vol) ===")
     print(df[["ticker", "growth_sleeve", "last_close", "ret_3m", "vol_21d", "sharpe_proxy"]].head(12).to_string(index=False))
     return df
@@ -100,7 +100,7 @@ def cmd_vol_return(rets: pd.DataFrame, wide: pd.DataFrame, m: pd.DataFrame, wind
 
 def cmd_correlations(rets: pd.DataFrame, m: pd.DataFrame) -> pd.DataFrame:
     c = rets.corr()
-    c.to_csv(DATA_DIR / "growth_tech_correlation_matrix.csv")
+    c.to_parquet(DATA_DIR / "growth_tech_correlation_matrix.parquet")
     # sleeve average corr
     rows = []
     if "growth_sleeve" in m.columns:
@@ -121,7 +121,7 @@ def cmd_correlations(rets: pd.DataFrame, m: pd.DataFrame) -> pd.DataFrame:
                     vals = block.ravel()
                 rows.append({"sleeve_a": a, "sleeve_b": b, "avg_corr": float(np.nanmean(vals)), "n_pairs": int(np.isfinite(vals).sum())})
         sdf = pd.DataFrame(rows)
-        sdf.to_csv(DATA_DIR / "growth_tech_sleeve_correlations.csv", index=False)
+        sdf.to_parquet(DATA_DIR / "growth_tech_sleeve_correlations.parquet")
         print("\n=== Sleeve avg correlations ===")
         print(sdf.pivot(index="sleeve_a", columns="sleeve_b", values="avg_corr").round(2).to_string())
     # pair extremes
@@ -156,7 +156,7 @@ def cmd_rolling(rets: pd.DataFrame, window: int = 20) -> pd.DataFrame:
             "dispersion": float(np.nanstd(vals)),
         })
     df = pd.DataFrame(rows)
-    df.to_csv(DATA_DIR / "growth_tech_rolling_corr.csv", index=False)
+    df.to_parquet(DATA_DIR / "growth_tech_rolling_corr.parquet")
     print(f"\n=== Rolling {window}d pairwise corr ===")
     print(f"  last avg={df.avg_corr.iloc[-1]:.3f}  median={df.median_corr.iloc[-1]:.3f}  "
           f"dispersion={df.dispersion.iloc[-1]:.3f}")
@@ -171,7 +171,7 @@ def cmd_rolling(rets: pd.DataFrame, window: int = 20) -> pd.DataFrame:
         "min": df.avg_corr.min(),
         "max": df.avg_corr.max(),
     }])
-    stab.to_csv(DATA_DIR / "growth_tech_corr_stability.csv", index=False)
+    stab.to_parquet(DATA_DIR / "growth_tech_corr_stability.parquet")
     return df
 
 
@@ -209,7 +209,7 @@ def cmd_index_backtest(wide: pd.DataFrame, prices: pd.DataFrame, stocks: pd.Data
 
     lv = lv.dropna(how="all").ffill()
     lv.to_parquet(DATA_DIR / "growth_tech_index_levels_compare.parquet")
-    lv.reset_index().to_csv(DATA_DIR / "growth_tech_index_levels_compare.csv", index=False)
+    lv.reset_index().to_parquet(DATA_DIR / "growth_tech_index_levels_compare.parquet")
 
     def perf(s: pd.Series) -> dict:
         s = s.dropna()
@@ -230,7 +230,7 @@ def cmd_index_backtest(wide: pd.DataFrame, prices: pd.DataFrame, stocks: pd.Data
         p["index"] = c
         rows.append(p)
     stats = pd.DataFrame(rows)
-    stats.to_csv(DATA_DIR / "growth_tech_backtest_stats.csv", index=False)
+    stats.to_parquet(DATA_DIR / "growth_tech_backtest_stats.parquet")
     print("\n=== Index backtest ===")
     print(stats[["index", "total_return", "ann_vol", "sharpe", "max_dd", "last_level"]].to_string(index=False))
     return stats
@@ -281,7 +281,7 @@ def cmd_risk_models(rets: pd.DataFrame, m: pd.DataFrame, window: int) -> pd.Data
                 "port_vol": st["vol"], "port_ret": st["ret"],
             })
     df = pd.DataFrame(rows)
-    df.to_csv(DATA_DIR / "growth_tech_risk_models.csv", index=False)
+    df.to_parquet(DATA_DIR / "growth_tech_risk_models.parquet")
     return df
 
 
@@ -289,8 +289,8 @@ def cmd_fisher(tickers: list[str]) -> None:
     try:
         from run_fisher_duckdb import compute
         df = compute(tickers, freq="D", label="growth_tech")
-        out = DATA_DIR / "growth_tech_fisher.csv"
-        df.to_csv(out, index=False)
+        out = DATA_DIR / "growth_tech_fisher.parquet"
+        df.to_parquet(out)
         print(f"\n=== Fisher (growth_tech) last ===")
         print(df[["date", "fisher_p", "fisher_q", "nominal_sqrt_fisher"]].tail(3).to_string(index=False))
         print(f"Wrote {out}")
@@ -319,7 +319,7 @@ def cmd_sleeve_perf(rets: pd.DataFrame, m: pd.DataFrame) -> pd.DataFrame:
             "last_3m": float(ew.tail(63).sum()),
         })
     df = pd.DataFrame(rows)
-    df.to_csv(DATA_DIR / "growth_tech_sleeve_performance.csv", index=False)
+    df.to_parquet(DATA_DIR / "growth_tech_sleeve_performance.parquet")
     print("\n=== Sleeve performance ===")
     print(df.to_string(index=False))
     return df

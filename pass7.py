@@ -65,8 +65,8 @@ def run(tickers, arms, split_fracs, caps, steps_list, lrs, fresh_years,
         resume, max_experiments):
     global OUT_CSV, OUT_SUM
     data_dir = Path(__file__).resolve().parent
-    OUT_CSV = data_dir / "regime_model_matrix.csv"
-    OUT_SUM = data_dir / "regime_model_matrix_summary.csv"
+    OUT_CSV = data_dir / "regime_model_matrix.parquet"
+    OUT_SUM = data_dir / "regime_model_matrix_summary.parquet"
 
     regime_s = load_regime_map()
     done = set()
@@ -181,7 +181,7 @@ def _finish(results):
     # dedupe by full cell identity (last write wins)
     keys = ["ticker", "regime", "split_frac", "steps", "cap", "lr", "composition"]
     df = pd.DataFrame(all_rows).drop_duplicates(subset=keys, keep="last")
-    df.to_csv(OUT_CSV, index=False)
+    df.to_parquet(OUT_CSV)
     df["excess"] = df["dir_acc"] - df["pers_dir"].fillna(50.0)
     # per-arm summary: mean/max excess, and config stability (best config freq)
     rows = []
@@ -195,7 +195,7 @@ def _finish(results):
                                           .idxmax() if len(g) else None,
         })
     summary = pd.DataFrame(rows)
-    summary.to_csv(OUT_SUM, index=False)
+    summary.to_parquet(OUT_SUM)
     print("\n=== pass7 arm summary (mean/max OOS dir excess over persistence) ===")
     print(summary.to_string(index=False))
     print(f"\nWrote {OUT_CSV} ({len(df)} unique cells from {len(all_rows)} jsonl+run rows)")

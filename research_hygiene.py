@@ -15,10 +15,10 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
 PREF_HIST = DATA_DIR / "preferred_metrics_history.parquet"
-PREF = DATA_DIR / "preferred_metrics.csv"
-FC_BT = DATA_DIR / "forecast_backtest_metrics.csv"
-OUT_WF = DATA_DIR / "inclusion_walkforward.csv"
-OUT_FR = DATA_DIR / "forecast_reliability_report.csv"
+PREF = DATA_DIR / "preferred_metrics.parquet"
+FC_BT = DATA_DIR / "forecast_backtest_metrics.parquet"
+OUT_WF = DATA_DIR / "inclusion_walkforward.parquet"
+OUT_FR = DATA_DIR / "forecast_reliability_report.parquet"
 
 
 def walk_forward() -> pd.DataFrame:
@@ -26,7 +26,7 @@ def walk_forward() -> pd.DataFrame:
     if PREF_HIST.exists():
         h = pd.read_parquet(PREF_HIST)
     elif PREF.exists():
-        h = pd.read_csv(PREF)
+        h = pd.read_parquet(PREF)
         h["as_of_date"] = pd.Timestamp.today().date().isoformat()
     else:
         return pd.DataFrame()
@@ -60,7 +60,7 @@ def walk_forward() -> pd.DataFrame:
 def forecast_reliability() -> pd.DataFrame:
     if not FC_BT.exists():
         return pd.DataFrame()
-    df = pd.read_csv(FC_BT)
+    df = pd.read_parquet(FC_BT)
     # rank by directional accuracy then mae
     if "directional_accuracy" in df.columns:
         df = df.sort_values(["directional_accuracy", "mae"] if "mae" in df.columns else ["directional_accuracy"],
@@ -85,7 +85,7 @@ def main():
         print("Walk-forward inclusion:")
         print(wf.tail(10).to_string(index=False) if len(wf) else "(empty)")
         if args.save and len(wf):
-            wf.to_csv(OUT_WF, index=False)
+            wf.to_parquet(OUT_WF)
             print(f"Wrote {OUT_WF}")
     if args.cmd in ("forecast-reliability", "all"):
         fr = forecast_reliability()
@@ -93,7 +93,7 @@ def main():
         cols = [c for c in ("ticker", "horizon", "directional_accuracy", "mae", "reliability_tier", "backend") if c in fr.columns]
         print(fr[cols].head(12).to_string(index=False) if len(fr) else "(empty)")
         if args.save and len(fr):
-            fr.to_csv(OUT_FR, index=False)
+            fr.to_parquet(OUT_FR)
             print(f"Wrote {OUT_FR}")
 
 

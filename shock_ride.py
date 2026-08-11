@@ -28,8 +28,8 @@ import pandas as pd
 from macro_sector_shock import _build_baskets, _load_price_matrix, _monthly_returns, _price_universe
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT = DATA_DIR / "shock_ride.csv"
-OUT_TICKERS = DATA_DIR / "shock_ride_tickers.csv"
+OUT = DATA_DIR / "shock_ride.parquet"
+OUT_TICKERS = DATA_DIR / "shock_ride_tickers.parquet"
 MIN_TICKER_HISTORY = 36  # months of price history required for a ticker ride
 MAX_TICKERS = 600        # cap for the per-ticker pass (universe is ~583)
 
@@ -89,7 +89,7 @@ def run(entry_thresh: float = 0.40, save: bool = True):
         print(f"Mean excess: {out['excess'].mean():+.1%} | "
               f"mean maxDD ride {out['max_dd_ride'].mean():.1%} vs BH {out['max_dd_buyhold'].mean():.1%}")
     if save:
-        out.to_csv(OUT, index=False)
+        out.to_parquet(OUT)
         print(f"Wrote {OUT}")
 
     # ── per-ticker ride pass ──
@@ -162,7 +162,7 @@ def run(entry_thresh: float = 0.40, save: bool = True):
     for _, r in tout.head(10).iterrows():
         print(f"  {r['ticker']:6s} excess {r['excess']:+.1%}  ride {r['ride_return']:+.1%} BH {r['buy_hold_return']:+.1%}")
     if save:
-        tout.to_csv(OUT_TICKERS, index=False)
+        tout.to_parquet(OUT_TICKERS)
         print(f"\nWrote {OUT_TICKERS}")
     return out, tout
 

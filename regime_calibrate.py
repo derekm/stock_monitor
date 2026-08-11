@@ -39,7 +39,7 @@ from granite_backfill import gd
 from regime_serving import CKPT_DIR, serve_regime_model, current_regime
 
 CONTEXT, HORIZON = gd.CONTEXT, gd.HORIZON
-OUT_CAL = Path(__file__).parent / "regime_calibration.csv"
+OUT_CAL = Path(__file__).parent / "regime_calibration.parquet"
 
 
 def _window_block(s, dates, lo, hi):
@@ -212,7 +212,7 @@ def main():
             })
     df = pd.DataFrame(rows)
     if len(df):
-        df.to_csv(OUT_CAL, index=False)
+        df.to_parquet(OUT_CAL)
         print(df.to_string(index=False))
         ok = df[df["mc_band_cov_z1"].notna()].assign(
             err=lambda d: (d["mc_band_cov_z1"] - 0.683).abs())

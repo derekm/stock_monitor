@@ -18,8 +18,8 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
-OUT = DATA_DIR / "dual_pass_stress.csv"
-OUT_SENS = DATA_DIR / "dual_pass_sensitivity.csv"
+OUT = DATA_DIR / "dual_pass_stress.parquet"
+OUT_SENS = DATA_DIR / "dual_pass_sensitivity.parquet"
 
 
 def latest_fund() -> pd.DataFrame:
@@ -97,7 +97,7 @@ def run(save: bool = True):
             rows.append({
                 "mode": "one_at_a_time",
                 "param": param,
-                "value": val,
+                "value": str(val),
                 "n_pass": n,
                 "delta_vs_base": n - n0,
                 "tickers": ",".join(tickers[:20]),
@@ -146,8 +146,8 @@ def run(save: bool = True):
     out = pd.DataFrame(rows)
     sens_df = pd.DataFrame(sens)
     if save:
-        out.to_csv(OUT, index=False)
-        sens_df.to_csv(OUT_SENS, index=False)
+        out.to_parquet(OUT)
+        sens_df.to_parquet(OUT_SENS)
         print(f"Wrote {OUT}\nWrote {OUT_SENS}")
     return out, sens_df
 

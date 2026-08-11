@@ -40,7 +40,7 @@ def load_regime_map() -> pd.DataFrame:
     path = gb.PRICES.parent / "hmm_regime_states.parquet"
     if not path.exists():
         # fallback to CSV if parquet doesn't exist yet
-        path_csv = gb.PRICES.parent / "hmm_regime_states.csv"
+        path_csv = gb.PRICES.parent / "hmm_regime_states.parquet"
         if path_csv.exists():
             path = path_csv
         else:
@@ -179,9 +179,9 @@ def run(tickers, steps, wname, cap, mode="trainlast", cutoff_frac=0.5):
         results.append(r)
 
     df = pd.DataFrame(results)
-    out_path = gb.PRICES.parent / "regime_forecast_stats.csv"
+    out_path = gb.PRICES.parent / "regime_forecast_stats.parquet"
     if len(df):
-        df.to_csv(out_path, index=False)
+        df.to_parquet(out_path)
         print(f"\nTotal {time.time() - t0:.0f}s → {out_path}")
     else:
         print("No results.")

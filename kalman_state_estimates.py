@@ -20,8 +20,8 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
-OUT = DATA_DIR / "kalman_state_estimates.csv"
-OUT_SUM = DATA_DIR / "kalman_state_summary.csv"
+OUT = DATA_DIR / "kalman_state_estimates.parquet"
+OUT_SUM = DATA_DIR / "kalman_state_summary.parquet"
 
 
 def kalman_2d(obs: np.ndarray, Q_scale=1e-4, R_scale=1e-2):
@@ -128,8 +128,8 @@ def run(save: bool = True):
     }])
 
     if save:
-        df.to_csv(OUT, index=False)
-        summary.to_csv(OUT_SUM, index=False)
+        df.to_parquet(OUT)
+        summary.to_parquet(OUT_SUM)
         print(f"\nWrote {OUT}\nWrote {OUT_SUM}")
     return df
 

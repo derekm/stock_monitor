@@ -29,10 +29,10 @@ DATA_DIR = Path(__file__).parent
 PRICES_FILE = DATA_DIR / "daily_prices.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 SECTOR_PRICES_FILE = DATA_DIR / "sector_prices.parquet"
-SECTOR_CORR_FILE = DATA_DIR / "sector_correlation_matrix.csv"
-ASSET_SECTOR_CORR_FILE = DATA_DIR / "asset_sector_correlations.csv"
-ROLLING_FILE = DATA_DIR / "rolling_cross_asset_correlations.csv"
-STABILITY_FILE = DATA_DIR / "cross_asset_stability.csv"
+SECTOR_CORR_FILE = DATA_DIR / "sector_correlation_matrix.parquet"
+ASSET_SECTOR_CORR_FILE = DATA_DIR / "asset_sector_correlations.parquet"
+ROLLING_FILE = DATA_DIR / "rolling_cross_asset_correlations.parquet"
+STABILITY_FILE = DATA_DIR / "cross_asset_stability.parquet"
 
 
 def load_prices() -> pd.DataFrame:
@@ -106,7 +106,7 @@ def cmd_sectors(args):
     prices, stocks = load_prices(), load_stocks()
     sec = sector_ew_returns(prices, stocks)
     corr = sec.corr()
-    corr.to_csv(SECTOR_CORR_FILE)
+    corr.to_parquet(SECTOR_CORR_FILE)
     print("Sector correlation matrix:")
     print(corr.round(2).to_string())
     print(f"\nWrote {SECTOR_CORR_FILE}")
@@ -169,7 +169,7 @@ def cmd_assets(args):
         })
 
     if rows:
-        pd.DataFrame(rows).to_csv(ASSET_SECTOR_CORR_FILE, index=False)
+        pd.DataFrame(rows).to_parquet(ASSET_SECTOR_CORR_FILE)
         print(f"\nWrote {ASSET_SECTOR_CORR_FILE}")
 
 
@@ -194,7 +194,7 @@ def cmd_rolling(args):
             label = f"{a[:6]}×{b[:6]}_r{w}"
             out[label] = sec[a].rolling(w, min_periods=max(8, w // 2)).corr(sec[b])
     df = pd.DataFrame(out)
-    df.to_csv(ROLLING_FILE)
+    df.to_parquet(ROLLING_FILE)
     print(f"Rolling {w}d cross-sector correlations:")
     print(df.tail(5).round(2).to_string())
     print(f"Wrote {ROLLING_FILE}")
@@ -215,7 +215,7 @@ def cmd_rolling(args):
         })
     if rows:
         stab = pd.DataFrame(rows).sort_values("std", ascending=False)
-        stab.to_csv(STABILITY_FILE, index=False)
+        stab.to_parquet(STABILITY_FILE)
         print("\nStability (highest std = least stable):")
         print(stab.to_string(index=False))
         print(f"Wrote {STABILITY_FILE}")
@@ -232,8 +232,8 @@ def cmd_save_sector_prices(args):
         "sector_name": list(levels.columns),
         "kind": "sector_ew_index",
     })
-    meta.to_csv(DATA_DIR / "sector_tickers.csv", index=False)
-    print(f"Wrote sector_tickers.csv")
+    meta.to_parquet(DATA_DIR / "sector_tickers.parquet")
+    print(f"Wrote sector_tickers.parquet")
 
 
 def cmd_all(args):

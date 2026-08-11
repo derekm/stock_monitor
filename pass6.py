@@ -128,9 +128,9 @@ def _load_event_dates() -> np.ndarray:
     if _EVENT_DATES is not None:
         return _EVENT_DATES
     events: list[pd.Timestamp] = []
-    path = Path(__file__).resolve().parent / "economic_calendar.csv"
+    path = Path(__file__).resolve().parent / "economic_calendar.parquet"
     if path.exists():
-        ec = pd.read_csv(path)
+        ec = pd.read_parquet(path)
         if "date" in ec.columns and "event_type" in ec.columns:
             for _, r in ec.iterrows():
                 et = str(r.get("event_type", ""))
@@ -385,8 +385,8 @@ def run(tickers, steps_list, caps_list, lr_list, regimes, split_frac, resume, ma
     from pathlib import Path
     import os
     data_dir = Path(__file__).resolve().parent
-    OUT_CSV = data_dir / "regime_model_oos.csv"
-    OUT_BEST = data_dir / "regime_model_best.csv"
+    OUT_CSV = data_dir / "regime_model_oos.parquet"
+    OUT_BEST = data_dir / "regime_model_best.parquet"
 
     regime_s = load_regime_map()
     done = set()
@@ -471,12 +471,12 @@ def _finish(results):
         print("No results.")
         return
     df = pd.DataFrame(results)
-    df.to_csv(OUT_CSV, index=False)
+    df.to_parquet(OUT_CSV)
     # best config per (ticker, regime): highest direction accuracy excess over
     # the regime's persistence baseline (the honest regime-selected objective)
     df["excess"] = df["dir_acc"] - df["pers_dir"].fillna(50.0)
     best = df.loc[df.groupby(["ticker", "regime"])["excess"].idxmax()].reset_index(drop=True)
-    best.to_csv(OUT_BEST, index=False)
+    best.to_parquet(OUT_BEST)
     span_cols = [f"dir_acc_h{s}" for s in HORIZON_SPANS if f"dir_acc_h{s}" in df.columns]
     print("=== best per-regime configs (max OOS dir excess over persistence) ===")
     show = ["ticker", "regime", "steps", "cap", "lr", "head_only", "rpt", "exog", "dir_acc", "pers_dir",

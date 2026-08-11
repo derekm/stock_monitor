@@ -71,7 +71,7 @@ def main():
     # 2) IV skew from options_skew.csv (latest per ticker)
     skew = {}
     try:
-        s = pd.read_csv(DATA_DIR / "options_skew.csv")
+        s = pd.read_parquet(DATA_DIR / "options_skew.parquet")
         s = s.sort_values("date") if "date" in s.columns else s
         for t, g in s.groupby("ticker"):
             skew[t] = float(g["skew"].iloc[-1])
@@ -83,12 +83,12 @@ def main():
 
     # 3) gap share + 4) tail alpha from the new Taleb scripts
     try:
-        g = pd.read_csv(DATA_DIR / "gap_risk.csv")
+        g = pd.read_parquet(DATA_DIR / "gap_risk.parquet")
         frag = frag.merge(g[["ticker", "gap_share_of_var", "p_abs_gap_gt_3pct"]], on="ticker", how="left")
     except Exception:
         pass
     try:
-        t = pd.read_csv(DATA_DIR / "tail_index.csv")
+        t = pd.read_parquet(DATA_DIR / "tail_index.parquet")
         frag = frag.merge(t[["ticker", "tail_alpha_hill", "kurtosis"]], on="ticker", how="left")
     except Exception:
         pass

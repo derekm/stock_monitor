@@ -157,11 +157,11 @@ def _build_baskets(have: set[str]) -> dict[str, dict]:
         }
 
     # --- factor groups (table-driven, PIT) ---
-    fg_path = DATA_DIR / "factor_groups.csv"
-    fgm_path = DATA_DIR / "factor_group_members.csv"
+    fg_path = DATA_DIR / "factor_groups.parquet"
+    fgm_path = DATA_DIR / "factor_group_members.parquet"
     if fg_path.exists() and fgm_path.exists():
-        groups = pd.read_csv(fg_path)
-        mem = pd.read_csv(fgm_path)
+        groups = pd.read_parquet(fg_path)
+        mem = pd.read_parquet(fgm_path)
         mem["ticker"] = mem["ticker"].astype(str).str.upper()
         # open-ended membership: valid_to null/NaN/empty
         if "valid_to" in mem.columns:

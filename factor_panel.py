@@ -17,9 +17,9 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
 PREF = DATA_DIR / "preferred_metrics.parquet"
-MOM = DATA_DIR / "momentum_metrics.csv"
-OUT = DATA_DIR / "factor_panel.csv"
-OUT_TOP = DATA_DIR / "factor_panel_top.csv"
+MOM = DATA_DIR / "momentum_metrics.parquet"
+OUT = DATA_DIR / "factor_panel.parquet"
+OUT_TOP = DATA_DIR / "factor_panel_top.parquet"
 
 
 def z(s: pd.Series) -> pd.Series:
@@ -74,8 +74,8 @@ def main():
     ) if c in df.columns]
     print(df[cols].head(15).to_string(index=False))
     if args.save and len(df):
-        df.to_csv(OUT, index=False)
-        df.head(25)[cols].to_csv(OUT_TOP, index=False)
+        df.to_parquet(OUT)
+        df.head(25)[cols].to_parquet(OUT_TOP)
         print(f"Wrote {OUT.name}, {OUT_TOP.name}")
 
 

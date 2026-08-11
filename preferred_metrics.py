@@ -36,10 +36,10 @@ FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 KELLY = DATA_DIR / "kelly_parameters.parquet"
-VOL_T = DATA_DIR / "vol_targets.csv"
-OUT = DATA_DIR / "preferred_metrics.csv"
+VOL_T = DATA_DIR / "vol_targets.parquet"
+OUT = DATA_DIR / "preferred_metrics.parquet"
 OUT_PQ = DATA_DIR / "preferred_metrics.parquet"
-OUT_SCREEN = DATA_DIR / "preferred_screen_hits.csv"
+OUT_SCREEN = DATA_DIR / "preferred_screen_hits.parquet"
 
 # Thresholds (tunable policy) — canonical values live in analytics_common
 from analytics_common import (
@@ -353,7 +353,7 @@ def build_table() -> pd.DataFrame:
 
     vt = {}
     if VOL_T.exists():
-        vdf = pd.read_csv(VOL_T)
+        vdf = pd.read_parquet(VOL_T)
         if "ticker" in vdf.columns and "weight_target" in vdf.columns:
             vt = dict(zip(vdf["ticker"], vdf["weight_target"]))
 
@@ -475,10 +475,10 @@ def main():
     print(both.to_string(index=False) if len(both) else "  (none)")
 
     if args.save or True:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), OUT_PQ)
         hits = df[df["decision"].isin(["INCLUDE_CORE", "INCLUDE_VALUE", "INCLUDE_QUALITY"])]
-        hits.to_csv(OUT_SCREEN, index=False)
+        hits.to_parquet(OUT_SCREEN)
         print(f"\nWrote {OUT} ({len(df)} rows)")
         print(f"Wrote {OUT_SCREEN} ({len(hits)} inclusion candidates)")
 

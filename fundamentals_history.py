@@ -32,7 +32,7 @@ DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 SNAP = DATA_DIR / "preferred_metrics_history.parquet"
 SNAP_CSV = DATA_DIR / "preferred_metrics_history.parquet"
-SCREEN_BT = DATA_DIR / "screen_backtest.csv"
+SCREEN_BT = DATA_DIR / "screen_backtest.parquet"
 
 # thresholds (same as preferred_metrics)
 from analytics_common import (
@@ -168,7 +168,7 @@ def snapshot_all_dates() -> pd.DataFrame:
             **s,
         })
     out = pd.DataFrame(rows).sort_values(["as_of_date", "ticker"])
-    out.to_csv(SNAP_CSV, index=False)
+    out.to_parquet(SNAP_CSV)
     pq.write_table(pa.Table.from_pandas(out, preserve_index=False), SNAP)
     print(f"Snapshot history → {SNAP} ({len(out)} rows, {out.as_of_date.nunique()} dates)")
     return out
@@ -186,7 +186,7 @@ def backtest_screens() -> pd.DataFrame:
         quality=("decision", lambda s: (s == "INCLUDE_QUALITY").sum()),
         median_composite=("composite_score", "median"),
     ).reset_index()
-    g.to_csv(SCREEN_BT, index=False)
+    g.to_parquet(SCREEN_BT)
     print("\n=== Screen membership through time ===")
     print(g.to_string(index=False))
     print(f"\nWrote {SCREEN_BT}")

@@ -71,11 +71,11 @@ def main():
             })
 
     df = pd.DataFrame(rows).sort_values("ticker")
-    df.to_csv(DATA_DIR / "gap_risk.csv", index=False)
+    df.to_parquet(DATA_DIR / "gap_risk.parquet")
 
     ev = (pd.DataFrame(events).sort_values("gap_pct", key=lambda s: s.abs(), ascending=False)
           .head(args.top_events) if events else pd.DataFrame())
-    ev.to_csv(DATA_DIR / "gap_events.csv", index=False)
+    ev.to_parquet(DATA_DIR / "gap_events.parquet")
 
     print(f"gap_risk.csv: {len(df)} tickers")
     print(f"gap_events.csv: {len(ev)} events")

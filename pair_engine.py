@@ -34,9 +34,9 @@ from cost_model import apply_costs_to_trades
 
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-OUT_PAIRS = DATA_DIR / "pair_engine_pairs.csv"
-OUT_TRADES = DATA_DIR / "pair_engine_trades.csv"
-OUT_STATS = DATA_DIR / "pair_engine_stats.csv"
+OUT_PAIRS = DATA_DIR / "pair_engine_pairs.parquet"
+OUT_TRADES = DATA_DIR / "pair_engine_trades.parquet"
+OUT_STATS = DATA_DIR / "pair_engine_stats.parquet"
 
 
 def _groups() -> dict[str, list[str]]:
@@ -350,9 +350,9 @@ def main():
         agg_wr = float((stats["win_rate"] * stats["n_trades"]).sum() / stats["n_trades"].sum())
         print(f"\nAggregate OOS win rate (trade-weighted): {agg_wr:.3f}")
     if args.save:
-        pairs.to_csv(OUT_PAIRS, index=False)
-        trades.to_csv(OUT_TRADES, index=False)
-        stats.to_csv(OUT_STATS, index=False)
+        pairs.to_parquet(OUT_PAIRS)
+        trades.to_parquet(OUT_TRADES)
+        stats.to_parquet(OUT_STATS)
         print(f"\nWrote {OUT_PAIRS}\nWrote {OUT_TRADES}\nWrote {OUT_STATS}")
 
 

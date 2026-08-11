@@ -37,7 +37,7 @@ from index_registry import parse_indexes, tickers_for_index, available_indexes, 
 DATA_DIR = Path(__file__).parent
 PRICES_FILE = DATA_DIR / "daily_prices.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
-ANOMALY_FILE = DATA_DIR / "anomalies_tspulse.csv"
+ANOMALY_FILE = DATA_DIR / "anomalies_tspulse.parquet"
 EXOG_FILE = DATA_DIR / "exogenous_panel.parquet"
 
 # Candidate HF ids (may change as IBM publishes)
@@ -258,7 +258,7 @@ def cmd_scan(args):
         print(f"\nMarket dispersion shocks (|z|>={z}): {len(mkt_flags)} days")
 
     if rows and args.save:
-        pd.DataFrame(rows).to_csv(ANOMALY_FILE, index=False)
+        pd.DataFrame(rows).to_parquet(ANOMALY_FILE)
         print(f"\nWrote {ANOMALY_FILE} ({len(rows)} events)")
     elif rows:
         print(f"\n{len(rows)} anomaly events (pass --save to write CSV)")

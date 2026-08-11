@@ -21,9 +21,9 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
-OUT = DATA_DIR / "regime_corr_breakdown.csv"
-OUT_PAIRS = DATA_DIR / "regime_corr_pair_delta.csv"
-OUT_SEC = DATA_DIR / "regime_sector_corr.csv"
+OUT = DATA_DIR / "regime_corr_breakdown.parquet"
+OUT_PAIRS = DATA_DIR / "regime_corr_pair_delta.parquet"
+OUT_SEC = DATA_DIR / "regime_sector_corr.parquet"
 
 
 def avg_pairwise(corr: pd.DataFrame) -> tuple[float, float]:
@@ -124,9 +124,9 @@ def run(save: bool = True, max_assets: int = 60):
 
     sec_df = pd.DataFrame(sec_rows)
     if save:
-        summary.to_csv(OUT, index=False)
-        ddf.to_csv(OUT_PAIRS, index=False)
-        sec_df.to_csv(OUT_SEC, index=False)
+        summary.to_parquet(OUT)
+        ddf.to_parquet(OUT_PAIRS)
+        sec_df.to_parquet(OUT_SEC)
         print(f"\nWrote {OUT}\nWrote {OUT_PAIRS}\nWrote {OUT_SEC}")
     return summary, ddf
 

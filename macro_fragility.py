@@ -70,13 +70,13 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
 CACHE_DIR = DATA_DIR / "macro_data"
-OUT = DATA_DIR / "macro_fragility.csv"
+OUT = DATA_DIR / "macro_fragility.parquet"
 
 FRED_BASE = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 SERIES = {
-    "TCMDO": "total_credit_market_debt.csv",  # total credit market debt, all sectors
-    "GDP": "gdp.csv",                          # nominal GDP (already annual rate)
-    "M2V": "m2_velocity.csv",                  # velocity of M2 money stock
+    "TCMDO": "total_credit_market_debt.parquet",  # total credit market debt, all sectors
+    "GDP": "gdp.parquet",                          # nominal GDP (already annual rate)
+    "M2V": "m2_velocity.parquet",                  # velocity of M2 money stock
 }
 CACHE_TTL_DAYS = 35  # FRED quarterly with ~1 quarter publication lag
 
@@ -89,7 +89,7 @@ def _fetch_fred(series: str, cache_file: Path) -> pd.DataFrame:
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     fresh = False
     if cache_file.exists():
-        old = pd.read_csv(cache_file)
+        old = pd.read_parquet(cache_file)
         if "observation_date" in old.columns and len(old):
             try:
                 last = pd.to_datetime(old["observation_date"]).max()
@@ -100,16 +100,16 @@ def _fetch_fred(series: str, cache_file: Path) -> pd.DataFrame:
         url = FRED_BASE.format(series=series)
         try:
             df = pd.read_csv(url)
-            df.to_csv(cache_file, index=False)
+            df.to_parquet(cache_file)
             time.sleep(0.5)  # be polite to FRED
         except Exception as e:
             if cache_file.exists():
                 print(f"  FRED fetch failed ({e}); using cached {cache_file.name}")
-                df = pd.read_csv(cache_file)
+                df = pd.read_parquet(cache_file)
             else:
                 raise
     else:
-        df = pd.read_csv(cache_file)
+        df = pd.read_parquet(cache_file)
     df["observation_date"] = pd.to_datetime(df["observation_date"], errors="coerce")
     df = df.dropna(subset=["observation_date"]).sort_values("observation_date")
     return df
@@ -159,7 +159,7 @@ def load_p_stress(quarters: pd.DatetimeIndex) -> pd.Series:
     try:
         from buy_candidates import HMM, regime_stress_prob
         if HMM.exists():
-            h = pd.read_csv(HMM)
+            h = pd.read_parquet(HMM)
             h["date"] = pd.to_datetime(h.get("date"), errors="coerce")
             h = h.dropna(subset=["date"]).sort_values("date")
             if not h.empty:
@@ -254,7 +254,7 @@ def main(save: bool = True):
     df["minsky_signal"] = df["minsky_signal"].round(4)
 
     if save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
 
     # report
     last = df.iloc[-1]

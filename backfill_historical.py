@@ -273,7 +273,7 @@ def generate_synthetic(tickers: list[str], days: int, seed: int = 42) -> pd.Data
 
 
 def import_csv(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
+    df = pd.read_parquet(path)
     required = {"date", "ticker", "open", "close"}
     if not required.issubset(df.columns):
         raise ValueError(f"CSV must contain columns: {required}")

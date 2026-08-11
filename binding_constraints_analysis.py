@@ -20,9 +20,9 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 PRICES = DATA_DIR / "daily_prices.parquet"
-OUT = DATA_DIR / "binding_constraints_impact.csv"
-OUT_NEAR = DATA_DIR / "binding_near_miss_detail.csv"
-OUT_RISK = DATA_DIR / "binding_basket_risk.csv"
+OUT = DATA_DIR / "binding_constraints_impact.parquet"
+OUT_NEAR = DATA_DIR / "binding_near_miss_detail.parquet"
+OUT_RISK = DATA_DIR / "binding_basket_risk.parquet"
 
 BASE = dict(roe_min=0.15, roic_min=0.15, de_max=1.0, ev_max=9.0, pb_max=1.5, mca_max=0.5)
 
@@ -168,9 +168,9 @@ def run(save: bool = True):
     print(risk_df.to_string(index=False))
 
     if save:
-        impact.to_csv(OUT, index=False)
-        near.sort_values("n_fail").to_csv(OUT_NEAR, index=False)
-        risk_df.to_csv(OUT_RISK, index=False)
+        impact.to_parquet(OUT)
+        near.sort_values("n_fail").to_parquet(OUT_NEAR)
+        risk_df.to_parquet(OUT_RISK)
         print(f"\nWrote {OUT}\nWrote {OUT_NEAR}\nWrote {OUT_RISK}")
     return impact, near, risk_df
 

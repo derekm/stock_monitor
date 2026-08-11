@@ -38,7 +38,7 @@ HOLDINGS_FILE = DATA_DIR / "portfolio_holdings.parquet"
 TRADES_FILE = DATA_DIR / "trades.parquet"
 # trades may live one level up (artifacts root) in some layouts
 TRADES_FILE_ALT = DATA_DIR.parent / "trades.parquet"
-SECTOR_META = DATA_DIR / "sector_tickers.csv"
+SECTOR_META = DATA_DIR / "sector_tickers.parquet"
 SECTOR_PRICES = DATA_DIR / "sector_prices.parquet"
 
 # Membership column on monitored_stocks → canonical index name
@@ -101,7 +101,7 @@ def _portfolio_tickers() -> list[str]:
 def _sector_tickers() -> list[str]:
     if SECTOR_META.exists():
         try:
-            return pd.read_csv(SECTOR_META)["ticker"].astype(str).tolist()
+            return pd.read_parquet(SECTOR_META)["ticker"].astype(str).tolist()
         except Exception:
             pass
     if SECTOR_PRICES.exists():

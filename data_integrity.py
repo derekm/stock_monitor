@@ -31,7 +31,7 @@ FUND = DATA_DIR / "fundamentals.parquet"
 FUND_HIST = DATA_DIR / "fundamentals_history.parquet"
 FUND_PIT = DATA_DIR / "fundamentals_pit.parquet"
 SCHEMA_REPORT = DATA_DIR / "schema_check_report.json"
-JUMP_REPORT = DATA_DIR / "price_jump_audit.csv"
+JUMP_REPORT = DATA_DIR / "price_jump_audit.parquet"
 
 
 REQUIRED_SCHEMAS = {
@@ -168,7 +168,7 @@ def schema_check() -> dict:
             if path.suffix == ".parquet":
                 cols = set(pl.scan_parquet(str(path)).collect_schema().names())
             else:
-                cols = set(pl.read_csv(str(path), n_rows=1).columns)
+                cols = set(pl.read_parquet(str(path), n_rows=1).columns)
             missing = sorted(required - cols)
             report["artifacts"][name] = {
                 "exists": True,

@@ -29,9 +29,9 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-OUT = DATA_DIR / "mcmc_regime_means.csv"
-OUT_TRANS = DATA_DIR / "mcmc_transition_draws.csv"
-OUT_SUM = DATA_DIR / "mcmc_regime_summary.csv"
+OUT = DATA_DIR / "mcmc_regime_means.parquet"
+OUT_TRANS = DATA_DIR / "mcmc_transition_draws.parquet"
+OUT_SUM = DATA_DIR / "mcmc_regime_summary.parquet"
 
 
 def _load_rets_and_regimes(tickers: list[str]):
@@ -171,9 +171,9 @@ def main():
     print("\nTransition posterior means:")
     print(out["transitions"].to_string(index=False))
     if args.save:
-        out["means"].to_csv(OUT, index=False)
-        out["transitions"].to_csv(OUT_TRANS, index=False)
-        out["means"].groupby("regime")[["post_mean", "post_std"]].mean().to_csv(OUT_SUM)
+        out["means"].to_parquet(OUT)
+        out["transitions"].to_parquet(OUT_TRANS)
+        out["means"].groupby("regime")[["post_mean", "post_std"]].mean().to_parquet(OUT_SUM)
         print(f"Wrote {OUT}\nWrote {OUT_TRANS}\nWrote {OUT_SUM}")
 
 

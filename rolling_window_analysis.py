@@ -22,8 +22,8 @@ DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
-OUT = DATA_DIR / "rolling_window_metrics.csv"
-OUT_STAB = DATA_DIR / "rolling_screen_stability.csv"
+OUT = DATA_DIR / "rolling_window_metrics.parquet"
+OUT_STAB = DATA_DIR / "rolling_screen_stability.parquet"
 
 
 def resolve(universe: str) -> list[str]:
@@ -94,7 +94,7 @@ def run(universe: str = "portfolio", window: int = 63, save: bool = True):
     print(f"=== Rolling {window}d metrics · {universe} ({len(df)} names) ===")
     print(df.head(15).to_string(index=False))
     if save:
-        df.to_csv(OUT, index=False)
+        df.to_parquet(OUT)
         print(f"Wrote {OUT}")
 
     # rolling dual-screen stability from history if present
@@ -112,7 +112,7 @@ def run(universe: str = "portfolio", window: int = 63, save: bool = True):
             composite_std=("composite_score", "std"),
         ).reset_index()
         g = g.sort_values("median_composite", ascending=False)
-        g.to_csv(OUT_STAB, index=False)
+        g.to_parquet(OUT_STAB)
         print("\n=== Screen stability (through fundamentals history) ===")
         print(g.head(12).to_string(index=False))
         print(f"Wrote {OUT_STAB}")
