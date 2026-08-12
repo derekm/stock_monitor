@@ -240,12 +240,16 @@ auxiliary tables feeding several stages.
 | `inclusion_walkforward.csv` | `research_hygiene.py` | Screen / decision |
 | `index_backtest_stats.csv` | `live_index_backtest.py` | Screen / decision |
 | `index_backtest_stats.csv` | `maintain_analytics.py` | Screen / decision |
-| `momentum_ic.csv` | `momentum_analytics.py` | Screen / decision |
-| `momentum_metrics.csv` | `buy_candidates.py` | Screen / decision |
-| `momentum_metrics.csv` | `factor_panel.py` | Screen / decision |
-| `momentum_metrics.csv` | `momentum_analytics.py` | Screen / decision |
-| `momentum_quintiles.csv` | `momentum_analytics.py` | Screen / decision |
-| `near_dual_candidates.csv` | `inclusion_criteria.py` | Screen / decision |
+|| `momentum_ic.csv` | `momentum_analytics.py` | Screen / decision ||
+|| `momentum_metrics.parquet` | `buy_candidates.py` | Screen / decision ||
+|| `momentum_metrics.parquet` | `factor_panel.py` | Screen / decision ||
+|| `momentum_metrics.parquet` | `momentum_analytics.py` | Screen / decision ||
+|| `momentum_quintiles.parquet` | `momentum_analytics.py` | Screen / decision ||
+|| `momentum_research_backtest.parquet` | `momentum_research_backtest.py` | Screen / decision ||
+|| `momentum_research_confidence.parquet` | `momentum_research_confidence.py` | Screen / decision ||
+|| `fractal_windows_backtest.parquet` | `fractal_windows_backtest.py` | Screen / decision ||
+|| `fractal_windows_backtest.parquet` | `fractal_windows_backtest_gpu.py` | Screen / decision ||
+|| `near_dual_candidates.csv` | `inclusion_criteria.py` | Screen / decision ||
 | `portfolio_risk_summary.csv` | `risk_metrics_ext.py` | Screen / decision |
 | `preferred_screen_hits.csv` | `preferred_metrics.py` | Screen / decision |
 | `risk_metrics_ext.csv` | `buy_candidates.py` | Screen / decision |
@@ -441,16 +445,18 @@ auxiliary tables feeding several stages.
 | `tail_dependence.csv` | `tail_index.py` | Taleb / fat tails |
 | `gap_risk.csv` | `gap_risk.py` | Taleb / fat tails |
 | `gap_events.csv` | `gap_risk.py` | Taleb / fat tails |
-| `ergodicity_ruin.csv` | `ergodicity_ruin.py` | Taleb / fat tails |
-| `portfolio_ergodic.csv` | `ergodicity_ruin.py` | Taleb / fat tails |
-| `fragility_screen.csv` | `fragility_screen.py` | Taleb / fat tails |
-| `macro_fragility.csv` | `macro_fragility.py` | Taleb / fat tails |
-| `macro_shock.csv` | `macro_shock.py` | Taleb / fat tails |
-| `macro_sector_shock.csv` | `macro_sector_shock.py` | Taleb / fat tails (DYNAMIC baskets) |
-| `basket_members.csv` | `macro_sector_shock.py` | Taleb / fat tails |
-| `shock_ride.csv` | `shock_ride.py` | Taleb / fat tails |
-| `shock_ride_tickers.csv` | `shock_ride.py` | Taleb / fat tails |
-| `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails |
-| `subindustry_regime_lead.csv` | `subindustry_regime.py` | Taleb / fat tails |
-| `barbell_check.csv` | `barbell_check.py` | Taleb / fat tails |
-| `hidden_optionality.csv` | `hidden_optionality_audit.py` | Taleb / fat tails |
+|| `ergodicity_ruin.csv` | `ergodicity_ruin.py` | Taleb / fat tails ||
+|| `portfolio_ergodic.csv` | `ergodicity_ruin.py` | Taleb / fat tails ||
+|| `fragility_screen.csv` | `fragility_screen.py` | Taleb / fat tails ||
+|| `macro_fragility.csv` | `macro_fragility.py` | Taleb / fat tails ||
+|| `macro_shock.csv` | `macro_shock.py` | Taleb / fat tails ||
+|| `macro_sector_shock.csv` | `macro_sector_shock.py` | Taleb / fat tails (DYNAMIC baskets) ||
+|| `basket_members.csv` | `macro_sector_shock.py` | Taleb / fat tails ||
+|| `shock_ride.parquet` | `shock_ride.py` | Taleb / fat tails ||
+|| `shock_ride_tickers.parquet` | `shock_ride.py` | Taleb / fat tails ||
+|| `fractal_windows_backtest.parquet` | `fractal_windows_backtest.py` | Taleb / fat tails ||
+|| `fractal_windows_backtest.parquet` | `fractal_windows_backtest_gpu.py` | Taleb / fat tails ||
+|| `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails ||
+|| `subindustry_regime_lead.csv` | `subindustry_regime.py` | Taleb / fat tails ||
+|| `barbell_check.csv` | `barbell_check.py` | Taleb / fat tails ||
+|| `hidden_optionality.csv` | `hidden_optionality_audit.py` | Taleb / fat tails ||

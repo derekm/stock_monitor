@@ -26,14 +26,15 @@ import numpy as np
 import pandas as pd
 
 from macro_sector_shock import _build_baskets, _load_price_matrix, _monthly_returns, _price_universe
+from momentum_research import research_report
+from breakout_detector import fresh_breakout_score
+from fractal_windows import fractal_signal_vec, fractal_consensus
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "shock_ride.parquet"
 OUT_TICKERS = DATA_DIR / "shock_ride_tickers.parquet"
 MIN_TICKER_HISTORY = 36  # months of price history required for a ticker ride
 MAX_TICKERS = 600        # cap for the per-ticker pass (universe is ~583)
-
-from momentum_research import research_report  # noqa: E402
 
 
 def _ride_stats(m: pd.Series, entry_thresh: float) -> dict:
@@ -104,6 +105,14 @@ def run(entry_thresh: float = 0.40, save: bool = True):
         sec = dict(zip(ms["ticker"].astype(str).str.upper(), ms["sector"]))
     except Exception:
         pass
+    # volume matrix for fresh-breakout confirmation (OBV / volume expansion)
+    volmat = None
+    try:
+        vp = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+                             columns=["date", "ticker", "volume"])
+        volmat = vp.pivot(index="date", columns="ticker", values="volume")
+    except Exception:
+        pass
 
     trows = []
     tickers = sorted(t for t in have if t in w.columns)
@@ -114,6 +123,17 @@ def run(entry_thresh: float = 0.40, save: bool = True):
         s = w[t].dropna()
         if len(s) < 3 * 21:  # 3 months floor (Ritter: post-first-month)
             continue
+        # fresh-breakout verdict (near-high, acceleration, volume) on DAILY data
+        vol = volmat[t].dropna() if volmat is not None and t in volmat.columns else None
+        fb = fresh_breakout_score(s, vol) if vol is not None else fresh_breakout_score(s, None)
+        fb_last = fb.iloc[-1] if len(fb) else None
+        # fractal consensus (multi-granularity uptrend agreement), 30x3 = 90d
+        try:
+            fdf = fractal_signal_vec(s, 30, 3)
+            fcons = fractal_consensus(fdf)
+            frac_u = float(fcons["frac_uptrend"].iloc[-1]) if len(fcons) else np.nan
+        except Exception:
+            frac_u = np.nan
         m = np.log(s / s.shift(1))
         m = m.replace([np.inf, -np.inf], np.nan).dropna()
         m = m.resample("ME").sum().dropna()
@@ -146,6 +166,7 @@ def run(entry_thresh: float = 0.40, save: bool = True):
                 "as_of": m.index[-1].strftime("%Y-%m-%d") if len(m) else "",
             }
         # recommendation: use young-gate for young tickers, classic rule otherwise
+        bv = fb_last["verdict"] if fb_last is not None else "NO_SIGNAL"
         if not established:
             if yg["gate_open"]:
                 rec, interp = "BUY", (
@@ -161,10 +182,25 @@ def run(entry_thresh: float = 0.40, save: bool = True):
                 )
         else:
             hot = st["mom12"] > 0.40
-            if st["ride_long"] and hot and st["mom3"] > 0:
+            fresh = bv == "FRESH_BREAKOUT"
+            build = bv == "BUILDING"
+            if st["ride_long"] and hot and st["mom3"] > 0 and (fresh or build):
+                tag = "FRESH" if fresh else "BUILDING"
+                rec, interp = "BUY", (
+                    f"{tag} breakout, explosion accelerating (12m {st['mom12']:+.0%}, "
+                    f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
+                    f"fractal-agreement {frac_u:.0%}, fresh_score {fb_last['fresh_score']:.2f})."
+                )
+            elif st["ride_long"] and hot and st["mom3"] > 0:
                 rec, interp = "BUY", (
                     f"explosion still accelerating (12m {st['mom12']:+.0%}, "
-                    f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%})."
+                    f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
+                    f"fractal-agreement {frac_u:.0%}) — but NOT fresh ({bv})."
+                )
+            elif bv == "EXHAUSTED" and hot:
+                rec, interp = "AVOID", (
+                    f"EXHAUSTED breakout (12m {st['mom12']:+.0%}, near-high, "
+                    f"volume divergence) — buying the top, not fresh."
                 )
             elif st["ride_long"] and hot:
                 rec, interp = "STAND DOWN", (
@@ -196,6 +232,9 @@ def run(entry_thresh: float = 0.40, save: bool = True):
             "gw_high_prox": rr["gw52_high_prox"],
             "young_gate_open": yg["gate_open"],
             "young_gate_reliability": yg["reliability"],
+            "fresh_verdict": bv,
+            "fresh_score": fb_last["fresh_score"] if fb_last is not None else np.nan,
+            "fractal_agreement": frac_u,
             "recommendation": rec,
             "interpretation": interp,
         })

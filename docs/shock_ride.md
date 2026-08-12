@@ -92,14 +92,22 @@ coincident with rollover ~14-17%, not leading).
 - `shock_ride.csv` — per basket: `basket, basket_kind, label, n_members,
   n_trades, in_market_share, buy_hold_return, ride_return, excess,
   max_dd_ride, max_dd_buyhold`
-- `shock_ride_tickers.csv` — **per-ticker** ride pass over the full price
+- `shock_ride_tickers.parquet` — **per-ticker** ride pass over the full price
   universe (min 3mo history; classic rule for names with >=36mo, else the
   young-ticker gate): `ticker, name, sector, n_trades,
   in_market_share, buy_hold_return, ride_return, excess, max_dd_ride,
   max_dd_buyhold, mom1, mom3, mom12, ride_long, recommendation,
   interpretation, as_of`, plus the research-momentum columns:
   `is_young, tsmom_3mo_sharpe, tsmom_6mo_sharpe, tsmom_12mo_sharpe,
-  stmom_1m_ret, gw_high_prox, young_gate_open, young_gate_reliability`
+  stmom_1m_ret, gw_high_prox, young_gate_open, young_gate_reliability`,
+  and the fresh-breakout columns: `fresh_verdict (FRESH_BREAKOUT / BUILDING /
+  MATURING / EXHAUSTED / NO_SIGNAL), fresh_score, fractal_agreement`
+
+The recommendation now layers the **fresh-breakout detector**
+([`breakout_detector.md`](breakout_detector.md)) and **fractal consensus**
+([`fractal_windows.md`](fractal_windows.md)) onto the classic ride rule:
+a BUY requires the breakout to be FRESH (near-high + accelerating) where
+available; EXHAUSTED breakouts (near-high + volume divergence) are AVOID.
 
 ## Young-ticker gate (research-grounded, <36mo history)
 
