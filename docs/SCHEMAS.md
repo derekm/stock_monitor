@@ -453,7 +453,8 @@ auxiliary tables feeding several stages.
 || `macro_sector_shock.csv` | `macro_sector_shock.py` | Taleb / fat tails (DYNAMIC baskets) ||
 || `basket_members.csv` | `macro_sector_shock.py` | Taleb / fat tails ||
 || `shock_ride.parquet` | `shock_ride.py` | Taleb / fat tails ||
-|| `shock_ride_tickers.parquet` | `shock_ride.py` | Taleb / fat tails ||
+|| `shock_ride_tickers.parquet` | `shock_ride.py` | Taleb / fat tails. Per-ticker ride: research momentum (tsmom_*, stmom_1m_ret, gw_high_prox, young_gate_*), fresh breakout (fresh_verdict, fresh_score), fractal (fractal_{90,30}_consensus, fractal_{90,30,15,45}_best_confirmed, fractal_posture, fractal_stack_depth/full/mom), durability (long_ride_score), quality gate (ride_gate_open/horizon/mom), dual exit (ride_exit_flag/kind), recommendation/interpretation ||
+|| `backtest_rides.parquet` | `backtest_rides.py` | Taleb / fat tails. Per-ticker A/B of classic vs quality_gate vs dual_exit vs quality_dual ride strategies ||
 || `fractal_windows_backtest.parquet` | `fractal_windows_backtest.py` | Taleb / fat tails ||
 || `fractal_windows_backtest.parquet` | `fractal_windows_backtest_gpu.py` | Taleb / fat tails ||
 || `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails ||

@@ -115,6 +115,21 @@ conclusion:** fractal multi-granularity agreement is a real signal (hit rate
 `best_span_wins(df)` picks the single strongest span per date (winner-take-all),
 vs `fractal_consensus` which averages all spans. Comparing them answers "broad
 multi-granular breakout vs narrow single-window pop". `fractal_multi_view(close,
-configs)` runs multiple `(a,b)` configs (default 30×3=90d + 10×3=30d).
-`fractal_posture(views)` classifies BROAD / MIXED / NARROW / WEAK plus
-trend/freshness. `shock_ride.py` emits `fractal_posture*` columns per ticker.
+configs)` runs multiple `(a,b)` configs (default 5×3=15d, 10×3=30d, 15×3=45d,
+30×3=90d — the granularity ladder). `fractal_posture(views)` classifies
+BROAD / MIXED / NARROW / WEAK plus trend/freshness. `shock_ride.py` emits
+`fractal_posture*` columns per ticker.
+
+## Momentum stack (chain of differing-length spans)
+
+`momentum_stack(views)` is the chain-of-spans measure: do consecutive
+DIFFERING-LENGTH spans build momentum? The granularity ladder gives windows of
+increasing length (15d→30d→45d→90d). A strong ride requires **monotonic** build —
+confirmation holds across the ladder short→long. A `stack_depth` of 4 (full,
+monotonic) means the impulse (short) AND the trend breadth (long) both confirm —
+the strongest ride case. A broken stack (e.g. 15d down but 90d up) is a
+short-term pullback inside a longer uptrend.
+
+`momentum_stack_series(views)` returns the same `stack_depth` as a full
+per-date time series (used by the ride backtest). This is what `ride_gate` and
+`ride_exit` in `ride_longevity.py` consume as the confidence signal.

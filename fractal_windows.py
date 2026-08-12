@@ -235,11 +235,12 @@ def fractal_multi_view(close: pd.Series, configs: list[tuple[int, int]] = None
                        ) -> dict[str, dict]:
     """Run fractal signal + consensus + best_span for multiple (a,b) configs.
 
-    Default configs: [(30,3), (10,3)] → 90-day view + 30-day view.
+    Default configs span the granularity ladder — each `a*b` is the full window:
+      [(5,3), (10,3), (15,3), (30,3)] -> 15d, 30d, 45d, 90d views.
     Returns: {f"{a}x{b}": {"signal": DataFrame, "consensus": DataFrame, "best": DataFrame}}
     """
     if configs is None:
-        configs = [(30, 3), (10, 3)]
+        configs = [(5, 3), (10, 3), (15, 3), (30, 3)]
     out = {}
     for a, b in configs:
         fdf = fractal_signal_vec(close, a, b)
@@ -317,6 +318,104 @@ def fractal_posture(views: dict[str, dict],
         "trend": "rising" if trend_up > trend_dn else ("falling" if trend_dn > trend_up else "flat"),
         "freshness": freshness,
     }
+
+
+def momentum_stack(views: dict[str, dict]) -> dict:
+    """Chain-of-spans measure: do consecutive DIFFERING-LENGTH spans build momentum?
+
+    The granularity ladder [(5,3)=15d, (10,3)=30d, (15,3)=45d, (30,3)=90d] gives
+    windows of increasing length. A strong ride case requires not just each view
+    confirming, but a MONOTONIC build: the longest window shows the highest
+    (or positive) momentum, and confirmation holds across consecutive lengths.
+
+    A sustained breakout looks like a stack: 15d up, 30d up, 45d up, 90d up —
+    the shorter windows confirm the impulse and the longer windows confirm the
+    trend has breadth. A broken stack (e.g. 15d down, 30d up, 45d up, 90d up)
+    is a short-term pullback inside a longer uptrend.
+
+    Returns:
+      stack_depth  — length of the longest run of views (short->long) where the
+                     best span is confirmed (0..n_views)
+      full_stack   — True if ALL views confirmed (strongest ride case)
+      base_confirmed, mid_confirmed, top_confirmed — 15d, 45d, 90d flags
+      monotonic    — True if confirmation is monotonic across the ladder (once a
+                     view fails, no later view re-confirms — a clean stack)
+      stack_mom    — mean best-span momentum across confirmed views
+    """
+    if not views:
+        return {"stack_depth": 0, "full_stack": False, "base_confirmed": False,
+                "mid_confirmed": False, "top_confirmed": False,
+                "monotonic": True, "stack_mom": 0.0}
+    # order views short->long by full-window length (a*b)
+    ordered = sorted(views.items(), key=lambda kv: int(kv[0].split("x")[0]) * int(kv[0].split("x")[1]))
+    flags = []
+    moms = []
+    for key, v in ordered:
+        best = v["best"]
+        conf = int(best["confirmed"].iloc[-1]) if len(best) else 0
+        mom = float(best["best_momentum"].iloc[-1]) if len(best) else 0.0
+        flags.append(bool(conf))
+        moms.append(mom)
+    # longest run of True from the SHORT end
+    depth = 0
+    for f in flags:
+        if f:
+            depth += 1
+        else:
+            break
+    full = all(flags)
+    # monotonic: once a False appears, no True after it
+    mono = True
+    seen_false = False
+    for f in flags:
+        if not f:
+            seen_false = True
+        elif seen_false:
+            mono = False
+    n = len(ordered)
+    return {
+        "stack_depth": depth,
+        "full_stack": full,
+        "base_confirmed": flags[0] if n else False,
+        "mid_confirmed": flags[n // 2] if n else False,
+        "top_confirmed": flags[-1] if n else False,
+        "monotonic": mono,
+        "stack_mom": float(np.mean([m for m, f in zip(moms, flags) if f])) if any(flags) else 0.0,
+    }
+
+
+def momentum_stack_series(views: dict[str, dict]) -> pd.DataFrame:
+    """Historical per-date stack_depth — the full chain-of-spans time series.
+
+    For every date in the views, counts how many consecutive views (short->long
+    granularity ladder) have their best span confirmed. Returns a DataFrame
+    indexed by date with `stack_depth` (0..n_views) and `full_stack` (bool).
+    Used by the ride backtest to apply the quality gate / dual exit over time.
+    """
+    if not views:
+        return pd.DataFrame(columns=["stack_depth", "full_stack"])
+    # align all best frames on a common date index
+    dates = None
+    series = {}
+    ordered = sorted(views.items(), key=lambda kv: int(kv[0].split("x")[0]) * int(kv[0].split("x")[1]))
+    for key, v in ordered:
+        best = v["best"]
+        if best is None or len(best) == 0:
+            continue
+        conf = best["confirmed"].astype(int)
+        series[key] = conf
+        dates = conf.index if dates is None else dates.union(conf.index)
+    if not series:
+        return pd.DataFrame(columns=["stack_depth", "full_stack"])
+    frame = pd.DataFrame({k: s.reindex(dates) for k, s in series.items()})
+    frame = frame.sort_index().ffill().fillna(0).astype(int)
+    # stack_depth = longest run of 1s from the SHORT end across the ladder
+    keys = [k for k in series]
+    depth = pd.Series(0, index=frame.index, dtype=int)
+    for i, k in enumerate(keys):
+        run = frame[keys[: i + 1]].all(axis=1)   # first i+1 views all confirmed
+        depth = depth.mask(run, i + 1)
+    return pd.DataFrame({"stack_depth": depth, "full_stack": (depth == len(keys)).astype(int)})
 
 
 # ── vectorized fractal signal (no per-day polyfit loops) ─────────────────

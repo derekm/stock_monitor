@@ -30,7 +30,8 @@ from macro_sector_shock import _build_baskets, _load_price_matrix, _monthly_retu
 from momentum_research import research_report
 from breakout_detector import fresh_breakout_score
 from fractal_windows import (fractal_signal_vec, fractal_consensus, best_span_wins,
-                             fractal_multi_view, fractal_posture)
+                             fractal_multi_view, fractal_posture, momentum_stack)
+from ride_longevity import long_ride_score, ride_gate, ride_exit
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "shock_ride.parquet"
@@ -125,9 +126,9 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
         vol = volmat[t].dropna() if volmat is not None and t in volmat.columns else None
         fb = fresh_breakout_score(s, vol) if vol is not None else fresh_breakout_score(s, None)
         fb_last = fb.iloc[-1] if len(fb) else None
-        # fractal multi-view (90-day 30x3 + 30-day 10x3) with consensus + best_span_wins
+        # fractal multi-view: granularity ladder 15d/30d/45d/90d + stack + posture
         try:
-            mv = fractal_multi_view(s, configs=[(30, 3), (10, 3)])
+            mv = fractal_multi_view(s, configs=[(5, 3), (10, 3), (15, 3), (30, 3)])
             fcons_90 = mv["30x3"]["consensus"]
             best_90 = mv["30x3"]["best"]
             fcons_30 = mv["10x3"]["consensus"]
@@ -142,6 +143,15 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
             fposture = fp["posture"]
             fposture_trend = fp["trend"]
             fposture_freshness = fp["freshness"]
+            ms = momentum_stack(mv)
+            stack_depth = ms["stack_depth"]
+            stack_full = ms["full_stack"]
+            stack_mom = ms["stack_mom"]
+            # 15d + 45d best-span confirmation for the ladder
+            best_15 = mv["5x3"]["best"]
+            best_45 = mv["15x3"]["best"]
+            best_confirmed_15 = int(best_15["confirmed"].iloc[-1]) if len(best_15) else 0
+            best_confirmed_45 = int(best_45["confirmed"].iloc[-1]) if len(best_45) else 0
         except Exception:
             frac_u_90 = frac_u_30 = np.nan
             best_confirmed_90 = best_confirmed_30 = 0
@@ -149,6 +159,15 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
             fposture = "WEAK"
             fposture_trend = "flat"
             fposture_freshness = "steady"
+            stack_depth = stack_full = stack_mom = 0
+            best_confirmed_15 = best_confirmed_45 = 0
+
+        # long-ride durability (smoothness, pullback, overshoot, volume acc)
+        try:
+            lr = long_ride_score(s, vol) if vol is not None else long_ride_score(s, None)
+            long_ride_last = float(lr["long_ride_score"].iloc[-1]) if len(lr) else 0.0
+        except Exception:
+            long_ride_last = 0.0
 
         m = np.log(s / s.shift(1))
         m = m.replace([np.inf, -np.inf], np.nan).dropna()
@@ -183,68 +202,82 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
                 "ride_long": int(yg["gate_open"]),
                 "as_of": as_of_date,
             }
-        # recommendation: use young-gate for young tickers, classic rule otherwise
+        # recommendation: quality-based ride gate (no 12mo requirement) + dual exit
         bv = fb_last["verdict"] if fb_last is not None else "NO_SIGNAL"
+        rg = ride_gate(m, entry_thresh=entry_thresh,
+                       stack_depth=stack_depth, long_ride=long_ride_last,
+                       reliability=yg["reliability"])
+        # if currently long, test the confirmed-breakdown exit
+        ex = ride_exit(m, stack_depth=stack_depth, long_ride=long_ride_last,
+                       trailing_stop=-0.25)
+        hot = (st["mom12"] > 0.40) if established else (rg["mom_used"] > entry_thresh if pd.notna(rg["mom_used"]) else False)
+        fresh = bv == "FRESH_BREAKOUT"
+        build = bv == "BUILDING"
+        # fractal confirmation: best span confirmed OR strong consensus in 90d/30d
+        fractal_90_ok = (best_confirmed_90 == 1) or (frac_u_90 >= 0.6 if not np.isnan(frac_u_90) else False)
+        fractal_30_ok = (best_confirmed_30 == 1) or (frac_u_30 >= 0.6 if not np.isnan(frac_u_30) else False)
+
         if not established:
-            if yg["gate_open"]:
+            # young / short-history: quality gate opens on any horizon w/ strong stack
+            if rg["gate_open"]:
                 rec, interp = "BUY", (
-                    f"young-ticker gate OPEN (6m {yg['mom_6m_ann']:+.0%} ann, "
-                    f"1m {yg['mom_1m']:+.0%}, near-high {yg['gw_high_prox']:.2f}, "
-                    f"{yg['reliability']}). Early momentum explosion."
+                    f"quality gate OPEN ({rg['horizon']} mom {rg['mom_used']:+.0%} ann, "
+                    f"stack {stack_depth}/4, durability {long_ride_last:.2f}, "
+                    f"fractal {fposture}/{fposture_trend}). Early durable momentum — "
+                    f"most gains ahead."
                 )
             else:
                 rec, interp = "FLAT", (
-                    f"young-ticker gate closed ({yg['reliability']}): "
-                    f"6m {yg['mom_6m_ann']:+.0%} 1m {yg['mom_1m']:+.0%} "
-                    f"near-high {yg['gw_high_prox']:.2f} — {', '.join(yg['reasons']) or 'no signal'}"
+                    f"quality gate closed ({rg['horizon']}, mom {rg['mom_used']:+.0%} "
+                    f"ann, stack {stack_depth}/4, dur {long_ride_last:.2f}): "
+                    f"{', '.join(rg['reasons']) or 'no signal'}."
                 )
+        elif st["ride_long"] and ex["exit"]:
+            rec, interp = "AVOID", (
+                f"CONFIRMED ride-over ({ex['exit_kind']}: 3m {ex['mom3']:+.0%}, "
+                f"stack {stack_depth}/4, dur {long_ride_last:.2f}) — exit. "
+                f"{', '.join(ex['reasons'])}."
+            )
+        elif st["ride_long"] and hot and (fresh or build) and (fractal_90_ok or fractal_30_ok):
+            tag = "FRESH" if fresh else "BUILDING"
+            rec, interp = "BUY", (
+                f"{tag} breakout, explosion accelerating (12m {st['mom12']:+.0%}, "
+                f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
+                f"fractal={fposture}/{fposture_trend}, stack={stack_depth}/4, "
+                f"dur={long_ride_last:.2f}, 90_cons={frac_u_90:.0%} 30_cons={frac_u_30:.0%}, "
+                f"fresh_score {fb_last['fresh_score']:.2f})."
+            )
+        elif st["ride_long"] and hot and (fractal_90_ok or fractal_30_ok):
+            rec, interp = "BUY", (
+                f"explosion still accelerating (12m {st['mom12']:+.0%}, "
+                f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
+                f"fractal={fposture}/{fposture_trend}, stack={stack_depth}/4, "
+                f"dur={long_ride_last:.2f}, 90_cons={frac_u_90:.0%} 30_cons={frac_u_30:.0%}) "
+                f"— but NOT fresh ({bv})."
+            )
+        elif bv == "EXHAUSTED" and hot:
+            rec, interp = "AVOID", (
+                f"EXHAUSTED breakout (12m {st['mom12']:+.0%}, near-high, "
+                f"volume divergence) — buying the top, not fresh."
+            )
+        elif st["ride_long"] and hot:
+            rec, interp = "STAND DOWN", (
+                f"momentum says long (12m {st['mom12']:+.0%}, 3m {st['mom3']:+.0%}, "
+                f"1m {st['mom1']:+.0%}) — 1m rolling over. Dual exit: hold while "
+                f"stack holds (stack {stack_depth}/4), exit on confirmed breakdown."
+            )
+        elif st["mom12"] > 0.40 and st["mom3"] <= 0:
+            rec, interp = "AVOID", (
+                f"exploded (12m {st['mom12']:+.0%}) but 3m {st['mom3']:+.0%} "
+                f"(1m {st['mom1']:+.0%}) — confirmed rollover; ride exited."
+            )
+        elif st["mom12"] > 0.40:
+            rec, interp = "WATCH", (
+                f"12m {st['mom12']:+.0%} — above threshold but 3m {st['mom3']:+.0%} "
+                f"not yet positive; waiting for entry."
+            )
         else:
-            hot = st["mom12"] > 0.40
-            fresh = bv == "FRESH_BREAKOUT"
-            build = bv == "BUILDING"
-            # fractal confirmation: both views' best spans confirmed, or 90-day consensus strong
-            fractal_90_ok = (best_confirmed_90 == 1) or (frac_u_90 >= 0.6 if not np.isnan(frac_u_90) else False)
-            fractal_30_ok = (best_confirmed_30 == 1) or (frac_u_30 >= 0.6 if not np.isnan(frac_u_30) else False)
-            if st["ride_long"] and hot and st["mom3"] > 0 and (fresh or build) and (fractal_90_ok or fractal_30_ok):
-                tag = "FRESH" if fresh else "BUILDING"
-                rec, interp = "BUY", (
-                    f"{tag} breakout, explosion accelerating (12m {st['mom12']:+.0%}, "
-                    f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
-                    f"fractal={fposture}/{fposture_trend}, "
-                    f"90_cons={frac_u_90:.0%} 30_cons={frac_u_30:.0%} "
-                    f"best90={best_confirmed_90} best30={best_confirmed_30}, "
-                    f"fresh_score {fb_last['fresh_score']:.2f})."
-                )
-            elif st["ride_long"] and hot and st["mom3"] > 0 and (fractal_90_ok or fractal_30_ok):
-                rec, interp = "BUY", (
-                    f"explosion still accelerating (12m {st['mom12']:+.0%}, "
-                    f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
-                    f"fractal={fposture}/{fposture_trend}, "
-                    f"90_cons={frac_u_90:.0%} 30_cons={frac_u_30:.0%} "
-                    f"best90={best_confirmed_90} best30={best_confirmed_30}) — but NOT fresh ({bv})."
-                )
-            elif bv == "EXHAUSTED" and hot:
-                rec, interp = "AVOID", (
-                    f"EXHAUSTED breakout (12m {st['mom12']:+.0%}, near-high, "
-                    f"volume divergence) — buying the top, not fresh."
-                )
-            elif st["ride_long"] and hot:
-                rec, interp = "STAND DOWN", (
-                    f"momentum says long (12m {st['mom12']:+.0%}, 3m {st['mom3']:+.0%}, "
-                    f"1m {st['mom1']:+.0%}) — 1m rolling over. Tighten stop to 3m rollover."
-                )
-            elif st["mom12"] > 0.40 and st["mom3"] <= 0:
-                rec, interp = "AVOID", (
-                    f"exploded (12m {st['mom12']:+.0%}) but 3m {st['mom3']:+.0%} "
-                    f"(1m {st['mom1']:+.0%}) — rolled over; ride exited."
-                )
-            elif st["mom12"] > 0.40:
-                rec, interp = "WATCH", (
-                    f"12m {st['mom12']:+.0%} — above threshold but 3m {st['mom3']:+.0%} "
-                    f"not yet positive; waiting for entry."
-                )
-            else:
-                rec, interp = "FLAT", f"12m {st['mom12']:+.0%} / 3m {st['mom3']:+.0%} — no signal."
+            rec, interp = "FLAT", f"12m {st['mom12']:+.0%} / 3m {st['mom3']:+.0%} — no signal."
         trows.append({
             "ticker": t,
             "name": (meta or {}).get(t, ""),
@@ -264,11 +297,22 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
             "fractal_30_consensus": frac_u_30,
             "fractal_90_best_confirmed": best_confirmed_90,
             "fractal_30_best_confirmed": best_confirmed_30,
+            "fractal_15_best_confirmed": best_confirmed_15,
+            "fractal_45_best_confirmed": best_confirmed_45,
             "fractal_90_best_span": best_span_90,
             "fractal_30_best_span": best_span_30,
             "fractal_posture": fposture,
             "fractal_posture_trend": fposture_trend,
             "fractal_posture_freshness": fposture_freshness,
+            "fractal_stack_depth": stack_depth,
+            "fractal_stack_full": int(stack_full),
+            "fractal_stack_mom": stack_mom,
+            "long_ride_score": long_ride_last,
+            "ride_gate_open": rg["gate_open"],
+            "ride_gate_horizon": rg["horizon"],
+            "ride_gate_mom": rg["mom_used"],
+            "ride_exit_flag": ex["exit"],
+            "ride_exit_kind": ex["exit_kind"],
             "recommendation": rec,
             "interpretation": interp,
         })

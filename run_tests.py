@@ -154,6 +154,59 @@ def test_fractal_posture_distinguishes():
     assert p2["posture"] in ("WEAK", "NARROW", "MIXED"), f"declining series should not be broad, got {p2['posture']}"
 
 
+def test_ride_gate_opens_on_quality_not_history():
+    """ride_gate opens on short history when quality (stack/durability) is high."""
+    from ride_longevity import ride_gate
+    idx = pd.date_range("2026-01-01", periods=4, freq="ME")
+    m = pd.Series([0.05, 0.06, 0.07, 0.08], index=idx)  # 4mo, strong up
+    g = ride_gate(m, stack_depth=4, long_ride=0.5, reliability="building")
+    assert g["gate_open"], f"4mo strong quality should open gate ({g['reasons']})"
+    g2 = ride_gate(m, stack_depth=0, long_ride=0.2)
+    assert not g2["gate_open"], "4mo weak quality should stay closed"
+    assert "quality_too_low" in g2["reasons"]
+
+
+def test_ride_exit_holds_pullback_exits_breakdown():
+    """ride_exit holds a dip when stack is intact, exits when stack breaks."""
+    from ride_longevity import ride_exit
+    idx = pd.date_range("2026-01-01", periods=5, freq="ME")
+    # 3m rollover (negative recent months)
+    m = pd.Series([0.06, 0.07, -0.04, -0.02, -0.01], index=idx)
+    e_hold = ride_exit(m, stack_depth=4, long_ride=0.5)     # stack intact
+    assert not e_hold["exit"], f"dip with strong stack should hold, got {e_hold['reasons']}"
+    e_exit = ride_exit(m, stack_depth=0, long_ride=0.2)     # stack broke
+    assert e_exit["exit"], f"dip with broken stack should exit ({e_exit['reasons']})"
+    assert e_exit["exit_kind"] == "rollover_confirm"
+
+
+def test_long_ride_score_finite_and_discriminates():
+    """long_ride_score is finite (even with NaN volume) and separates up vs flat."""
+    from ride_longevity import long_ride_score
+    idx = pd.date_range("2021-01-01", periods=400, freq="D")
+    up = _accel_series(400)
+    vol = pd.Series(1e6 + np.arange(400) * 1e4, index=idx)
+    d = long_ride_score(up, vol)
+    assert pd.notna(d["long_ride_score"].iloc[-1]), "score must be finite"
+    # declining series should score lower on pullback resilience
+    t = np.arange(400)
+    flat = pd.Series(100 - 0.03 * t, index=idx)
+    df_ = long_ride_score(flat, None)
+    assert df_["long_ride_score"].iloc[-1] < d["long_ride_score"].iloc[-1], \
+        "durable up-trend should outscore a declining series"
+
+
+def test_momentum_stack_series_orders_short_to_long():
+    """momentum_stack_series gives per-date depth, ordered short->long."""
+    from fractal_windows import fractal_multi_view, momentum_stack_series
+    up = _accel_series(400)
+    mv = fractal_multi_view(up, configs=[(5, 3), (10, 3), (15, 3), (30, 3)])
+    s = momentum_stack_series(mv)
+    assert "stack_depth" in s.columns and "full_stack" in s.columns
+    assert s["stack_depth"].max() >= 1, "accelerating series should build a stack"
+    assert (s["stack_depth"] <= 4).all(), "depth bounded by n_views"
+    assert (s["stack_depth"].dtype == int or s["stack_depth"].dtype == np.int64)
+
+
 # ── registry ────────────────────────────────────────────────────────────
 TESTS = {
     "spans": test_spans_generator,
@@ -166,6 +219,10 @@ TESTS = {
     "breakout_detector": test_breakout_detector,
     "breakout_verdict": test_breakout_verdict_distinguishes,
     "fractal_posture": test_fractal_posture_distinguishes,
+    "ride_gate": test_ride_gate_opens_on_quality_not_history,
+    "ride_exit": test_ride_exit_holds_pullback_exits_breakdown,
+    "long_ride": test_long_ride_score_finite_and_discriminates,
+    "stack_series": test_momentum_stack_series_orders_short_to_long,
 }
 
 
