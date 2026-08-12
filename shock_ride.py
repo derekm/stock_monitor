@@ -10,13 +10,14 @@ Rule (per basket or per ticker, monthly, no lookahead):
   position shifts 1 month after signals
 
 Outputs:
-  shock_ride.csv — basket ride stats (dynamic baskets)
-  shock_ride_tickers.csv — per-ticker ride stats + CURRENT position:
+  shock_ride.parquet — basket ride stats (dynamic baskets)
+  shock_ride_tickers.parquet — per-ticker ride stats + CURRENT position:
       ticker, name, sector, n_trades, in_market_share, buy_hold_return,
       ride_return, excess, max_dd_ride, max_dd_buyhold, mom1, mom3, mom12,
       ride_long (current), recommendation, interpretation
 Usage: python shock_ride.py [--save] [--entry 0.40]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,27 +38,31 @@ MIN_TICKER_HISTORY = 36  # months of price history required for a ticker ride
 MAX_TICKERS = 600        # cap for the per-ticker pass (universe is ~583)
 
 
+def max_dd(equity: pd.Series) -> float:
+    peak = equity.cummax()
+    dd = (equity / peak - 1).min()
+    return float(dd)
+
+
 def _ride_stats(m: pd.Series, entry_thresh: float) -> dict:
-    cum = (1 + m).cumprod()
-    mom12 = cum / cum.shift(12) - 1
-    mom3 = cum / cum.shift(3) - 1
-    pos = ((mom12 > entry_thresh) & (mom3 > 0)).astype(int)
+    """Classic ride: enter when 12m mom > entry_thresh, exit when 3m mom <= 0."""
+    if len(m) < 12:
+        return {}
+    mom12 = m.rolling(12).sum()
+    mom3 = m.rolling(3).sum()
+    mom1 = m.rolling(1).sum()
+    pos = (mom12 > entry_thresh).astype(int) & (mom3 > 0).astype(int)
     pos = pos.shift(1).fillna(0)
-    strat = (pos * m).dropna()
-
-    def max_dd(r):
-        c = (1 + r).cumprod()
-        return float((c / c.cummax() - 1).min())
-
-    mom1 = cum / cum.shift(1) - 1
+    ride = (m * pos).sum()
+    bh = m.sum()
     return {
-        "n_trades": int((pos.diff().fillna(0).abs() > 0).sum() // 2),
-        "in_market_share": float(pos.mean()),
-        "buy_hold_return": round(float(m.dropna().sum()), 4),
-        "ride_return": round(float(strat.sum()), 4),
-        "excess": round(float(strat.sum()) - float(m.dropna().sum()), 4),
-        "max_dd_ride": round(max_dd(strat), 4),
-        "max_dd_buyhold": round(max_dd(m.dropna()), 4),
+        "n_trades": int((pos.diff().fillna(0) != 0).sum()),
+        "in_market_share": round(float(pos.mean()), 4),
+        "buy_hold_return": round(float(bh), 4),
+        "ride_return": round(float(ride), 4),
+        "excess": round(float(ride - bh), 4),
+        "max_dd_ride": round(max_dd((1 + m * pos).cumsum()), 4),
+        "max_dd_buyhold": round(max_dd((1 + m).cumsum()), 4),
         "mom1": round(float(mom1.iloc[-1]), 4) if len(mom1) else np.nan,
         "mom3": round(float(mom3.iloc[-1]), 4) if len(mom3) else np.nan,
         "mom12": round(float(mom12.iloc[-1]), 4) if len(mom12) else np.nan,
@@ -66,7 +71,8 @@ def _ride_stats(m: pd.Series, entry_thresh: float) -> dict:
     }
 
 
-def run(entry_thresh: float = 0.40, save: bool = True):
+def run(entry_thresh: float = 0.40, save: bool = True) -> int:
+    # ── basket ride ──
     have = _price_universe()
     baskets = _build_baskets(have)
     rows = []
@@ -77,25 +83,16 @@ def run(entry_thresh: float = 0.40, save: bool = True):
         if m.empty or len(m) < 24:
             continue
         st = _ride_stats(m, entry_thresh)
-        rows.append({
-            "basket": bid,
-            "basket_kind": cfg["kind"],
-            "label": cfg["label"],
-            "n_members": len(cfg["tickers"]),
-            **st,
-        })
-
-    out = pd.DataFrame(rows).sort_values("excess", ascending=False)
-    wins = int((out["excess"] > 0).sum()) if len(out) else 0
-    print(f"\nBaskets where ride beats buy-hold: {wins}/{len(out)}")
-    if len(out):
-        print(f"Mean excess: {out['excess'].mean():+.1%} | "
-              f"mean maxDD ride {out['max_dd_ride'].mean():.1%} vs BH {out['max_dd_buyhold'].mean():.1%}")
+        rows.append({"basket": bid, "basket_kind": "sector", "label": bid, "n_members": len(cfg["tickers"]), **st})
+    bdf = pd.DataFrame(rows)
+    if len(bdf):
+        print(f"  Baskets where ride beats buy-hold: {(bdf['excess'] > 0).sum()}/{len(bdf)}")
+        print(f"  Mean excess: {bdf['excess'].mean()*100:.1f}% | mean maxDD ride {bdf['max_dd_ride'].mean()*100:.1f}% vs BH {bdf['max_dd_buyhold'].mean()*100:.1f}%")
     if save:
-        out.to_parquet(OUT)
+        bdf.to_parquet(OUT, index=False)
         print(f"Wrote {OUT}")
 
-    # ── per-ticker ride pass ──
+    # ── per-ticker ride ──
     print(f"\n=== per-ticker ride (universe {len(have)} tickers, min {MIN_TICKER_HISTORY}mo history) ===")
     w = _load_price_matrix()
     meta = None
@@ -136,6 +133,8 @@ def run(entry_thresh: float = 0.40, save: bool = True):
             frac_u = np.nan
         m = np.log(s / s.shift(1))
         m = m.replace([np.inf, -np.inf], np.nan).dropna()
+        # capture as_of from daily data BEFORE monthly resample (m.index[-1] would be month-end)
+        as_of_date = s.index[-1].strftime("%Y-%m-%d")
         m = m.resample("ME").sum().dropna()
         if len(m) < 3:
             continue
@@ -163,7 +162,7 @@ def run(entry_thresh: float = 0.40, save: bool = True):
                 "mom3": rr.get("mom_3m_ann"),
                 "mom12": rr.get("mom_6m_ann"),
                 "ride_long": int(yg["gate_open"]),
-                "as_of": m.index[-1].strftime("%Y-%m-%d") if len(m) else "",
+                "as_of": as_of_date,
             }
         # recommendation: use young-gate for young tickers, classic rule otherwise
         bv = fb_last["verdict"] if fb_last is not None else "NO_SIGNAL"
@@ -239,27 +238,24 @@ def run(entry_thresh: float = 0.40, save: bool = True):
             "interpretation": interp,
         })
 
-    tout = pd.DataFrame(trows)
-    order = {"BUY": 0, "STAND DOWN": 1, "AVOID": 2, "WATCH": 3, "FLAT": 4}
-    tout["_o"] = tout["recommendation"].map(order)
-    tout = tout.sort_values(["_o", "mom12"], ascending=[True, False]).drop(columns="_o")
-    wins_t = int((tout["excess"] > 0).sum()) if len(tout) else 0
-    print(f"\nTickers where ride beats buy-hold: {wins_t}/{len(tout)}")
-    print(f"Mean excess: {tout['excess'].mean():+.1%} | "
-          f"mean maxDD ride {tout['max_dd_ride'].mean():.1%} vs BH {tout['max_dd_buyhold'].mean():.1%}")
-    print("\nRecommendations:", tout["recommendation"].value_counts().to_dict())
-    print("\nTop 10 by excess:")
-    for _, r in tout.head(10).iterrows():
-        print(f"  {r['ticker']:6s} excess {r['excess']:+.1%}  ride {r['ride_return']:+.1%} BH {r['buy_hold_return']:+.1%}")
+    tdf = pd.DataFrame(trows)
+    if len(tdf):
+        print(f"  Tickers where ride beats buy-hold: {(tdf['excess'] > 0).sum()}/{len(tdf)}")
+        print(f"  Mean excess: {tdf['excess'].mean()*100:.1f}% | mean maxDD ride {tdf['max_dd_ride'].mean()*100:.1f}% vs BH {tdf['max_dd_buyhold'].mean()*100:.1f}%")
+        print(f"  Recommendations: {tdf['recommendation'].value_counts().to_dict()}")
+        print("\nTop 10 by excess:")
+        top = tdf.nlargest(10, "excess")[["ticker", "excess", "ride_return", "buy_hold_return"]]
+        for _, row in top.iterrows():
+            print(f"  {row['ticker']:6s} excess {row['excess']*100:+.1f}%  ride {row['ride_return']*100:+.1f}% BH {row['buy_hold_return']*100:+.1f}%")
     if save:
-        tout.to_parquet(OUT_TICKERS)
-        print(f"\nWrote {OUT_TICKERS}")
-    return out, tout
+        tdf.to_parquet(OUT_TICKERS, index=False)
+        print(f"Wrote {OUT_TICKERS}")
+    return 0
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--entry", type=float, default=0.40)
-    ap.add_argument("--save", action="store_true")
+    ap.add_argument("--entry", type=float, default=0.40, help="12m momentum entry threshold")
+    ap.add_argument("--save", action="store_true", default=True, help="write outputs")
     args = ap.parse_args()
-    run(entry_thresh=args.entry, save=True)
+    exit(run(args.entry, args.save))
