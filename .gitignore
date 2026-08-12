@@ -41,3 +41,4 @@ dashboard_data/data.json
 !docs/*.csv
 *.csv
 !docs/*.csv
+massive_credentials.json

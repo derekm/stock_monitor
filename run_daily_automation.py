@@ -73,6 +73,7 @@ JOBS = {
     "taleb_barbell": (["barbell_check.py"], None),
     "taleb_optionality": (["hidden_optionality_audit.py"], None),
     "polygon_prices": (["update_polygon.py", "--days", "5", "--save"], 300),
+    "polygon_flatfiles": (["update_polygon_flatfiles.py", "--days", "5", "--save"], 300),
     "export": (["export_dashboard_data.py"], None),
 }
 
