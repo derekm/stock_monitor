@@ -246,6 +246,7 @@ Detailed usage for each module:
 - [docs/macro_sector_shock.md](docs/macro_sector_shock.md) — sector shock signals (farming inputs/outputs, materials)
 - [docs/shock_ride.md](docs/shock_ride.md) — ride explosions, exit before crisis (measured)
 - [docs/ride_longevity.md](docs/ride_longevity.md) — early detection of breakouts that become LONG rides; quality gate (no 12mo history needed), dual-condition exit, backtest evidence
+- [docs/ride_history.md](docs/ride_history.md) — point-in-time recommended ride trade history per ticker
 - [docs/fractal_windows.md](docs/fractal_windows.md) — fractal sliding-window momentum (patent US20120253946A1, FIGS 28-29); 15d/30d/45d/90d granularity ladder + momentum stack
 - [docs/subindustry_regime.md](docs/subindustry_regime.md) — per-subsector correlation/crisis regimes
 - [docs/ergodicity_ruin.md](docs/ergodicity_ruin.md) — ergodicity / ruin probability
