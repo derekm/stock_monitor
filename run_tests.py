@@ -102,6 +102,40 @@ def test_research_report_keys():
         assert k in rep, f"missing {k}"
 
 
+def _accel_series(n=400) -> pd.Series:
+    """Price path that accelerates: log-price increases with time^1.5 (concave up),
+    so 6m momentum keeps rising -> fresh acceleration at the end."""
+    t = np.arange(n)
+    logp = 0.5 + 1.5e-3 * t ** 1.5  # convex in time -> rising momentum
+    return pd.Series(np.exp(logp), index=pd.date_range("2021-01-01", periods=n, freq="D"))
+
+
+def test_breakout_detector():
+    """Breakout detector: fresh breakout near high/accelerating vs off-high."""
+    from breakout_detector import fresh_breakout_score
+    close = _accel_series(400)
+    vol = pd.Series(1e6 * (1 + np.random.default_rng(1).random(400) * 0.5), index=close.index)
+    fresh = fresh_breakout_score(close, vol)
+    last = fresh.iloc[-1]
+    # near-high + accelerating on an accelerating series
+    assert last["pth"] >= 0.90, f"accelerating series should be near its high (pth={last['pth']:.2f})"
+    assert last["acceleration_ok"] == 1.0, f"rising momentum should flag acceleration ({last['acceleration_ok']})"
+
+
+def test_breakout_verdict_distinguishes():
+    """FRESH_BREAKOUT vs NO_SIGNAL: accelerating-vs-flat series differ."""
+    from breakout_detector import fresh_breakout_score
+    idx = pd.date_range("2021-01-01", periods=300, freq="D")
+    up = _accel_series(300)  # accelerating up
+    # deterministic range-bound: sine wave, ends mid-range (not near a fresh high)
+    t = np.arange(300)
+    flat = pd.Series(100 + 10 * np.sin(t / 20.0), index=idx)
+    vu = fresh_breakout_score(up, None)
+    vf = fresh_breakout_score(flat, None)
+    assert vu.iloc[-1]["verdict"] in ("FRESH_BREAKOUT", "BUILDING"), f"up-series should be fresh/building, got {vu.iloc[-1]['verdict']}"
+    assert vf.iloc[-1]["verdict"] != "FRESH_BREAKOUT", "flat-series should not be a fresh breakout"
+
+
 # ── registry ────────────────────────────────────────────────────────────
 TESTS = {
     "spans": test_spans_generator,
@@ -111,6 +145,8 @@ TESTS = {
     "cpu_gpu": test_fractal_cpu_gpu_concur,
     "momentum_schema": test_momentum_parquet_schema,
     "research_report": test_research_report_keys,
+    "breakout_detector": test_breakout_detector,
+    "breakout_verdict": test_breakout_verdict_distinguishes,
 }
 
 
