@@ -186,6 +186,69 @@ def breakout_score(consensus: pd.DataFrame,
             (consensus["mean_momentum"] >= momentum_thresh)).astype(int)
 
 
+def best_span_wins(df: pd.DataFrame, metric: str = "momentum") -> pd.DataFrame:
+    """Per `date`, the BEST fractal span — the patent's ranking/selection view.
+
+    Where `fractal_consensus` averages across all spans (self-similarity), this
+    picks the single span with the strongest `metric` at each date (default:
+    risk-adjusted momentum, matching the patent's winner-take-all re-ranking).
+    A breakout is 'confirmed' by the best span if it's in an uptrend AND its
+    momentum is positive — a looser, earlier trigger than consensus (which needs
+    a majority of spans). Comparing the two answers "is this a broad multi-granular
+    breakout, or a narrow single-window pop?"
+
+    Returns per-date: winning span (from, to, len), its ret/slope/momentum/
+    uptrend, plus `confirmed` (best span uptrend AND momentum > 0).
+    """
+    d = df[df[metric].notna()]
+    if d.empty:
+        return pd.DataFrame()
+    try:
+        import polars as pl
+        pdf = pl.from_pandas(d)
+        best = (pdf.sort("date", metric, descending=[False, True])
+                .group_by("date", maintain_order=True)
+                .first())
+        out = best.select([
+            "date",
+            pl.col("span_from").alias("best_span_from"),
+            pl.col("span_to").alias("best_span_to"),
+            pl.col("span_len").alias("best_span_len"),
+            pl.col("ret").alias("best_ret"),
+            pl.col("slope").alias("best_slope"),
+            pl.col("momentum").alias("best_momentum"),
+            pl.col("uptrend").alias("best_uptrend"),
+        ]).sort("date").to_pandas()
+    except Exception:  # noqa: BLE001  (polars unavailable -> pandas)
+        g = d.sort_values(["date", metric], ascending=[True, False])
+        g = g.groupby("date", sort=True).first()
+        out = g[["span_from", "span_to", "span_len", "ret", "slope", "momentum", "uptrend"]]
+        out.columns = ["best_span_from", "best_span_to", "best_span_len",
+                       "best_ret", "best_slope", "best_momentum", "best_uptrend"]
+        out = out.reset_index()
+    out = out.set_index("date")
+    out["confirmed"] = (out["best_uptrend"].astype(bool) & (out["best_momentum"] > 0)).astype(int)
+    return out
+
+
+def fractal_multi_view(close: pd.Series, configs: list[tuple[int, int]] = None
+                       ) -> dict[str, dict]:
+    """Run fractal signal + consensus + best_span for multiple (a,b) configs.
+
+    Default configs: [(30,3), (10,3)] → 90-day view + 30-day view.
+    Returns: {f"{a}x{b}": {"signal": DataFrame, "consensus": DataFrame, "best": DataFrame}}
+    """
+    if configs is None:
+        configs = [(30, 3), (10, 3)]
+    out = {}
+    for a, b in configs:
+        fdf = fractal_signal_vec(close, a, b)
+        cons = fractal_consensus(fdf)
+        best = best_span_wins(fdf)
+        out[f"{a}x{b}"] = {"signal": fdf, "consensus": cons, "best": best}
+    return out
+
+
 # ── vectorized fractal signal (no per-day polyfit loops) ─────────────────
 def fractal_signal_vec(close: pd.Series, a: int, b: int) -> pd.DataFrame:
     """Vectorized fractal signal using rolling-window momentum.

@@ -29,7 +29,7 @@ import pandas as pd
 from macro_sector_shock import _build_baskets, _load_price_matrix, _monthly_returns, _price_universe
 from momentum_research import research_report
 from breakout_detector import fresh_breakout_score
-from fractal_windows import fractal_signal_vec, fractal_consensus
+from fractal_windows import fractal_signal_vec, fractal_consensus, best_span_wins, fractal_multi_view
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "shock_ride.parquet"
@@ -124,13 +124,24 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
         vol = volmat[t].dropna() if volmat is not None and t in volmat.columns else None
         fb = fresh_breakout_score(s, vol) if vol is not None else fresh_breakout_score(s, None)
         fb_last = fb.iloc[-1] if len(fb) else None
-        # fractal consensus (multi-granularity uptrend agreement), 30x3 = 90d
+        # fractal multi-view (90-day 30x3 + 30-day 10x3) with consensus + best_span_wins
         try:
-            fdf = fractal_signal_vec(s, 30, 3)
-            fcons = fractal_consensus(fdf)
-            frac_u = float(fcons["frac_uptrend"].iloc[-1]) if len(fcons) else np.nan
+            mv = fractal_multi_view(s, configs=[(30, 3), (10, 3)])
+            fcons_90 = mv["30x3"]["consensus"]
+            best_90 = mv["30x3"]["best"]
+            fcons_30 = mv["10x3"]["consensus"]
+            best_30 = mv["10x3"]["best"]
+            frac_u_90 = float(fcons_90["frac_uptrend"].iloc[-1]) if len(fcons_90) else np.nan
+            frac_u_30 = float(fcons_30["frac_uptrend"].iloc[-1]) if len(fcons_30) else np.nan
+            best_confirmed_90 = int(best_90["confirmed"].iloc[-1]) if len(best_90) else 0
+            best_confirmed_30 = int(best_30["confirmed"].iloc[-1]) if len(best_30) else 0
+            best_span_90 = int(best_90["best_span_len"].iloc[-1]) if len(best_90) else 0
+            best_span_30 = int(best_30["best_span_len"].iloc[-1]) if len(best_30) else 0
         except Exception:
-            frac_u = np.nan
+            frac_u_90 = frac_u_30 = np.nan
+            best_confirmed_90 = best_confirmed_30 = 0
+            best_span_90 = best_span_30 = 0
+
         m = np.log(s / s.shift(1))
         m = m.replace([np.inf, -np.inf], np.nan).dropna()
         # capture as_of from daily data BEFORE monthly resample (m.index[-1] would be month-end)
@@ -183,18 +194,24 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
             hot = st["mom12"] > 0.40
             fresh = bv == "FRESH_BREAKOUT"
             build = bv == "BUILDING"
-            if st["ride_long"] and hot and st["mom3"] > 0 and (fresh or build):
+            # fractal confirmation: both views' best spans confirmed, or 90-day consensus strong
+            fractal_90_ok = (best_confirmed_90 == 1) or (frac_u_90 >= 0.6 if not np.isnan(frac_u_90) else False)
+            fractal_30_ok = (best_confirmed_30 == 1) or (frac_u_30 >= 0.6 if not np.isnan(frac_u_30) else False)
+            if st["ride_long"] and hot and st["mom3"] > 0 and (fresh or build) and (fractal_90_ok or fractal_30_ok):
                 tag = "FRESH" if fresh else "BUILDING"
                 rec, interp = "BUY", (
                     f"{tag} breakout, explosion accelerating (12m {st['mom12']:+.0%}, "
                     f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
-                    f"fractal-agreement {frac_u:.0%}, fresh_score {fb_last['fresh_score']:.2f})."
+                    f"fractal_90_cons={frac_u_90:.0%} fractal_30_cons={frac_u_30:.0%} "
+                    f"best90={best_confirmed_90} best30={best_confirmed_30}, "
+                    f"fresh_score {fb_last['fresh_score']:.2f})."
                 )
-            elif st["ride_long"] and hot and st["mom3"] > 0:
+            elif st["ride_long"] and hot and st["mom3"] > 0 and (fractal_90_ok or fractal_30_ok):
                 rec, interp = "BUY", (
                     f"explosion still accelerating (12m {st['mom12']:+.0%}, "
                     f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
-                    f"fractal-agreement {frac_u:.0%}) — but NOT fresh ({bv})."
+                    f"fractal_90_cons={frac_u_90:.0%} fractal_30_cons={frac_u_30:.0%} "
+                    f"best90={best_confirmed_90} best30={best_confirmed_30}) — but NOT fresh ({bv})."
                 )
             elif bv == "EXHAUSTED" and hot:
                 rec, interp = "AVOID", (
@@ -233,7 +250,12 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
             "young_gate_reliability": yg["reliability"],
             "fresh_verdict": bv,
             "fresh_score": fb_last["fresh_score"] if fb_last is not None else np.nan,
-            "fractal_agreement": frac_u,
+            "fractal_90_consensus": frac_u_90,
+            "fractal_30_consensus": frac_u_30,
+            "fractal_90_best_confirmed": best_confirmed_90,
+            "fractal_30_best_confirmed": best_confirmed_30,
+            "fractal_90_best_span": best_span_90,
+            "fractal_30_best_span": best_span_30,
             "recommendation": rec,
             "interpretation": interp,
         })
