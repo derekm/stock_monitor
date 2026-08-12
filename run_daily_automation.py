@@ -20,6 +20,7 @@ Usage:
   python run_daily_automation.py --only hmm,rebalance,preferred,export
 """
 from __future__ import annotations
+
 import argparse
 import subprocess
 import sys
@@ -71,6 +72,7 @@ JOBS = {
     "taleb_subindustry_regime": (["subindustry_regime.py", "--save"], None),
     "taleb_barbell": (["barbell_check.py"], None),
     "taleb_optionality": (["hidden_optionality_audit.py"], None),
+    "polygon_prices": (["update_polygon.py", "--days", "5", "--save"], 300),
     "export": (["export_dashboard_data.py"], None),
 }
 
@@ -132,70 +134,90 @@ def run_job(name: str) -> bool:
     print(f"\n══ {name} ══")
     t0 = time.time()
     try:
-        r = subprocess.run(
-            [sys.executable, *cmd],
-            cwd=str(DATA_DIR),
-            timeout=timeout if timeout else None,
+        res = subprocess.run(
+            [sys.executable] + cmd,
+            cwd=DATA_DIR,
+            timeout=timeout,
+            capture_output=True,
+            text=True,
         )
-        dt = time.time() - t0
-        ok = r.returncode == 0
-        print(f"{'OK' if ok else 'FAIL'} {name} in {dt:.1f}s (code={r.returncode})")
-        return ok
+        if res.stdout:
+            for line in res.stdout.strip().splitlines()[-50:]:
+                print(line)
+        if res.returncode != 0:
+            print(f"FAIL: {name} (exit {res.returncode})")
+            if res.stderr:
+                for line in res.stderr.strip().splitlines()[-20:]:
+                    print(f"  stderr: {line}")
+            return False
+        print(f"OK {name} ({time.time() - t0:.1f}s)")
+        return True
     except subprocess.TimeoutExpired:
-        print(f"TIMEOUT {name} (limit={timeout}s)")
+        print(f"TIMEOUT: {name} > {timeout}s")
         return False
-    except Exception as e:  # noqa: BLE001
-        print(f"ERROR {name}: {e}")
+    except Exception as e:
+        print(f"ERROR: {name}: {e}")
         return False
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--only", default=None, help="comma list of job names")
-    ap.add_argument("--sequential", action="store_true", help="force sequential (debug)")
+    ap = argparse.ArgumentParser(description="Run daily analytics automation DAG")
+    ap.add_argument("--only", help="comma-separated job names to run (plus deps)")
+    ap.add_argument("--skip", help="comma-separated job names to skip")
+    ap.add_argument("--max-workers", type=int, default=4)
+    ap.add_argument("--list", action="store_true", help="list valid jobs and exit")
     args = ap.parse_args()
 
-    only = set(args.only.split(",")) if args.only else set(JOBS)
-    only = {j for j in only if j in JOBS}
-    if not only:
-        raise SystemExit("no valid jobs selected")
+    if args.list:
+        for name in sorted(JOBS.keys()):
+            deps = ", ".join(sorted(DEPS.get(name, set()))) or "(none)"
+            print(f"  {name:<30} deps: {deps}")
+        return 0
 
-    waves: dict[int, list[str]] = {}
-    for j in only:
-        w = _wave(j)
-        # include dependency chain when not --only
-        if args.only:
-            for dep in DEPS.get(j, set()):
-                if dep in only:
-                    continue
-        waves.setdefault(w, []).append(j)
-    order = sorted(waves)
-
-    results: dict[str, bool] = {}
-    t_all = time.time()
-    if args.sequential or len(order) == 1:
-        for w in order:
-            for j in waves[w]:
-                results[j] = run_job(j)
+    all_names = set(JOBS.keys())
+    if args.only:
+        requested = {n.strip() for n in args.only.split(",") if n.strip()}
+        # include deps of requested
+        full = set()
+        for n in requested:
+            full.add(n)
+            full.update(DEPS.get(n, set()))
+        run_names = sorted(full, key=lambda n: _wave(n))
     else:
-        import concurrent.futures
-        for w in order:
-            batch = waves[w]
-            if len(batch) == 1:
-                results[batch[0]] = run_job(batch[0])
-                continue
-            print(f"\n── wave {w}: parallel {batch} ──")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(batch)) as ex:
-                futs = {ex.submit(run_job, j): j for j in batch}
-                for f in concurrent.futures.as_completed(futs):
-                    results[futs[f]] = f.result()
+        run_names = sorted(all_names, key=lambda n: _wave(n))
 
-    print(f"\n══ SUMMARY ({time.time() - t_all:.0f}s) ══")
-    for k, v in results.items():
-        print(f"  {'✓' if v else '✗'} {k}")
-    failed = [k for k, v in results.items() if not v]
-    sys.exit(1 if failed else 0)
+    if args.skip:
+        skip = {n.strip() for n in args.skip.split(",") if n.strip()}
+        run_names = [n for n in run_names if n not in skip]
+
+    print(f"Running {len(run_names)} jobs in wave order: {run_names}")
+
+    # Execute in wave order; within a wave, parallel
+    waves = {}
+    for n in run_names:
+        w = _wave(n)
+        waves.setdefault(w, []).append(n)
+
+    ok_all = True
+    for w in sorted(waves.keys()):
+        names = waves[w]
+        if len(names) == 1:
+            ok = run_job(names[0])
+            ok_all = ok_all and ok
+        else:
+            # parallel within wave
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(args.max_workers, len(names))) as ex:
+                fut = {ex.submit(run_job, n): n for n in names}
+                for fu in concurrent.futures.as_completed(fut):
+                    ok_all = ok_all and fu.result()
+
+    if not ok_all:
+        print("\n⚠ Some jobs failed (see above)")
+        return 1
+    print("\n✓ All jobs completed successfully")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

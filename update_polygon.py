@@ -6,11 +6,11 @@ price feed), key-gated.
 Why it exists: the architecture TODO "integrate data sources: Polygon
 (production)". The repo ingests via yfinance (prototyping); Polygon is the
 production alternative. This script pulls daily bars for the monitored
-universe and appends them into daily_prices.parquet (source='polygon').
+universe using the BULK grouped endpoint and appends them into
+daily_prices.parquet (source='polygon').
 
 Key-gated by design: requires POLYGON_API_KEY env var. Without it, the
 script explains how to get a key and exits 0 (no crash in the automation).
-Fills the polygon free-tier bars endpoint (5 requests/sec limit respected).
 
 Usage:
     export POLYGON_API_KEY=...
@@ -30,22 +30,29 @@ import requests
 from analytics_common import DATA_DIR
 
 PRICES = DATA_DIR / "daily_prices.parquet"
-STOCKS = DATA_DIR / "monitored_stocks.parquet"
-BASE = "https://api.polygon.io/v2/aggs/ticker/{t}/range/1/day/{f}/{t}"
+BASE = "https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{date}"
 
 
-def polygon_bars(ticker: str, api_key: str, from_d: date, to_d: date) -> pd.DataFrame:
-    url = BASE.format(ticker, from_d.isoformat(), to_d.isoformat())
-    r = requests.get(url, params={"apiKey": api_key, "adjusted": "true", "limit": 5000}, timeout=30)
+def polygon_bulk_day(day: date, api_key: str) -> pd.DataFrame:
+    """Fetch ALL US stocks for a single trading day via bulk endpoint."""
+    url = BASE.format(date=day.isoformat())
+    r = requests.get(url, params={"apiKey": api_key, "adjusted": "true", "limit": 50000}, timeout=60)
+    if r.status_code == 429:
+        print(f"  {day}: rate limited")
+        return pd.DataFrame()
     r.raise_for_status()
     res = r.json()
     rows = []
     for b in res.get("results", []):
+        ts = pd.Timestamp(b["t"], unit="ms", tz="UTC").tz_convert(None)
         rows.append({
-            "date": pd.Timestamp(b["t"], unit="ms").date(),
-            "ticker": ticker,
+            "date": ts,
+            "ticker": b["T"],
             "open": b.get("o"), "high": b.get("h"), "low": b.get("l"),
             "close": b.get("c"), "volume": b.get("v"),
+            "adj_close": b.get("c"),
+            "source": "polygon",
+            "market_cap": None,
         })
     return pd.DataFrame(rows)
 
@@ -53,7 +60,6 @@ def polygon_bars(ticker: str, api_key: str, from_d: date, to_d: date) -> pd.Data
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--days", type=int, default=5)
-    ap.add_argument("--tickers", default=None, help="comma list; default = monitored universe")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
@@ -63,33 +69,39 @@ def main():
         print("Get a free key at https://polygon.io and export POLYGON_API_KEY, then re-run.")
         return
 
-    if args.tickers:
-        tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
-    else:
-        tickers = sorted(pd.read_parquet(STOCKS)["ticker"].astype(str).str.upper().unique()) if STOCKS.exists() else []
-
-    to_d = date.today()
-    from_d = to_d - timedelta(days=args.days * 2)  # buffer for weekends
+    to_d = date.today() - timedelta(days=1)  # yesterday at most (today's data not ready)
+    from_d = to_d - timedelta(days=args.days * 2)  # buffer for weekends/holidays
     frames = []
-    for t in tickers:
+    for i in range((to_d - from_d).days + 1):
+        day = from_d + timedelta(days=i)
+        # skip weekends
+        if day.weekday() >= 5:
+            continue
         try:
-            df = polygon_bars(t, api_key, from_d, to_d)
+            df = polygon_bulk_day(day, api_key)
             if len(df):
                 frames.append(df)
-                print(f"  {t}: {len(df)} bars")
+                print(f"  {day}: {len(df)} tickers")
+            else:
+                print(f"  {day}: no data (market closed or not finalized)")
         except Exception as e:
-            print(f"  {t}: ERR {e}")
-        time.sleep(0.21)  # free tier = 5 req/s
+            print(f"  {day}: ERR {e}")
+        time.sleep(0.5)  # free tier: 5 req/min for grouped endpoint
+
     if not frames:
         print("No bars fetched.")
         return
+
     new = pd.concat(frames, ignore_index=True)
     if args.save:
         existing = pd.read_parquet(PRICES) if PRICES.exists() else pd.DataFrame()
+        # ensure date column is datetime64[ms] on both sides
+        existing["date"] = pd.to_datetime(existing["date"])
+        new["date"] = pd.to_datetime(new["date"])
         combined = pd.concat([existing, new], ignore_index=True)
         combined = combined.drop_duplicates(["date", "ticker"], keep="last")
         combined.to_parquet(PRICES, index=False)
-        print(f"\nAppended {len(new)} polygon bars → {PRICES} ({len(combined)} total rows)")
+        print(f"\nAppended {len(new)} polygon bars -> {PRICES} ({len(combined)} total rows)")
 
 
 if __name__ == "__main__":
