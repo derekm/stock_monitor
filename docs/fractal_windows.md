@@ -103,9 +103,18 @@ conclusion:** fractal multi-granularity agreement is a real signal (hit rate
 
 ## Files
 
-- `fractal_windows.py` — spans_generator, fractal_signal_vec, fractal_consensus, breakout_score
+- `fractal_windows.py` — spans_generator, fractal_signal_vec, fractal_consensus, breakout_score, best_span_wins, fractal_multi_view, fractal_posture
 - `fractal_windows_gpu.py` — fractal_batch (batched tensor), fractal_consensus_batch (on-device)
 - `fractal_windows_backtest.py` — CPU parallel backtest (single-window vs fractal)
 - `fractal_windows_backtest_gpu.py` — GPU scatter-gather backtest
 - `test_fractal_cpu_gpu.py` — CPU/GPU concurrency test
-- `run_tests.py` — executable test library (includes cpu_gpu, spans, fractal_vec)
+- `run_tests.py` — executable test library (includes cpu_gpu, spans, fractal_vec, fractal_posture)
+
+## Best span wins (patent FIG 29 ranking) + posture
+
+`best_span_wins(df)` picks the single strongest span per date (winner-take-all),
+vs `fractal_consensus` which averages all spans. Comparing them answers "broad
+multi-granular breakout vs narrow single-window pop". `fractal_multi_view(close,
+configs)` runs multiple `(a,b)` configs (default 30×3=90d + 10×3=30d).
+`fractal_posture(views)` classifies BROAD / MIXED / NARROW / WEAK plus
+trend/freshness. `shock_ride.py` emits `fractal_posture*` columns per ticker.

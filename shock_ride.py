@@ -29,7 +29,8 @@ import pandas as pd
 from macro_sector_shock import _build_baskets, _load_price_matrix, _monthly_returns, _price_universe
 from momentum_research import research_report
 from breakout_detector import fresh_breakout_score
-from fractal_windows import fractal_signal_vec, fractal_consensus, best_span_wins, fractal_multi_view
+from fractal_windows import (fractal_signal_vec, fractal_consensus, best_span_wins,
+                             fractal_multi_view, fractal_posture)
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "shock_ride.parquet"
@@ -137,10 +138,17 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
             best_confirmed_30 = int(best_30["confirmed"].iloc[-1]) if len(best_30) else 0
             best_span_90 = int(best_90["best_span_len"].iloc[-1]) if len(best_90) else 0
             best_span_30 = int(best_30["best_span_len"].iloc[-1]) if len(best_30) else 0
+            fp = fractal_posture(mv)
+            fposture = fp["posture"]
+            fposture_trend = fp["trend"]
+            fposture_freshness = fp["freshness"]
         except Exception:
             frac_u_90 = frac_u_30 = np.nan
             best_confirmed_90 = best_confirmed_30 = 0
             best_span_90 = best_span_30 = 0
+            fposture = "WEAK"
+            fposture_trend = "flat"
+            fposture_freshness = "steady"
 
         m = np.log(s / s.shift(1))
         m = m.replace([np.inf, -np.inf], np.nan).dropna()
@@ -202,7 +210,8 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
                 rec, interp = "BUY", (
                     f"{tag} breakout, explosion accelerating (12m {st['mom12']:+.0%}, "
                     f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
-                    f"fractal_90_cons={frac_u_90:.0%} fractal_30_cons={frac_u_30:.0%} "
+                    f"fractal={fposture}/{fposture_trend}, "
+                    f"90_cons={frac_u_90:.0%} 30_cons={frac_u_30:.0%} "
                     f"best90={best_confirmed_90} best30={best_confirmed_30}, "
                     f"fresh_score {fb_last['fresh_score']:.2f})."
                 )
@@ -210,7 +219,8 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
                 rec, interp = "BUY", (
                     f"explosion still accelerating (12m {st['mom12']:+.0%}, "
                     f"3m {st['mom3']:+.0%}, 1m {st['mom1']:+.0%}, "
-                    f"fractal_90_cons={frac_u_90:.0%} fractal_30_cons={frac_u_30:.0%} "
+                    f"fractal={fposture}/{fposture_trend}, "
+                    f"90_cons={frac_u_90:.0%} 30_cons={frac_u_30:.0%} "
                     f"best90={best_confirmed_90} best30={best_confirmed_30}) — but NOT fresh ({bv})."
                 )
             elif bv == "EXHAUSTED" and hot:
@@ -256,6 +266,9 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
             "fractal_30_best_confirmed": best_confirmed_30,
             "fractal_90_best_span": best_span_90,
             "fractal_30_best_span": best_span_30,
+            "fractal_posture": fposture,
+            "fractal_posture_trend": fposture_trend,
+            "fractal_posture_freshness": fposture_freshness,
             "recommendation": rec,
             "interpretation": interp,
         })

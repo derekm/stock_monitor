@@ -136,6 +136,24 @@ def test_breakout_verdict_distinguishes():
     assert vf.iloc[-1]["verdict"] != "FRESH_BREAKOUT", "flat-series should not be a fresh breakout"
 
 
+def test_fractal_posture_distinguishes():
+    """fractal_posture: BROAD (multi-view confirmed) vs NARROW vs MIXED."""
+    from fractal_windows import fractal_multi_view, fractal_posture
+    # broad: strongly accelerating series -> both views' best spans confirm
+    broad = _accel_series(400)
+    mv = fractal_multi_view(broad, configs=[(30, 3), (10, 3)])
+    p = fractal_posture(mv)
+    assert p["posture"] in ("BROAD", "MIXED"), f"accelerating series should be broad/mixed, got {p['posture']}"
+    assert p["n_confirmed"] >= 1, f"should confirm at least one view ({p['n_confirmed']})"
+    # weak: slowly-declining / flat series -> best spans should NOT confirm
+    t = np.arange(400)
+    flat = pd.Series(100 - 0.02 * t + 2 * np.sin(t / 40.0),
+                     index=pd.date_range("2021-01-01", periods=400, freq="D"))
+    mv2 = fractal_multi_view(flat, configs=[(30, 3), (10, 3)])
+    p2 = fractal_posture(mv2)
+    assert p2["posture"] in ("WEAK", "NARROW", "MIXED"), f"declining series should not be broad, got {p2['posture']}"
+
+
 # ── registry ────────────────────────────────────────────────────────────
 TESTS = {
     "spans": test_spans_generator,
@@ -147,6 +165,7 @@ TESTS = {
     "research_report": test_research_report_keys,
     "breakout_detector": test_breakout_detector,
     "breakout_verdict": test_breakout_verdict_distinguishes,
+    "fractal_posture": test_fractal_posture_distinguishes,
 }
 
 

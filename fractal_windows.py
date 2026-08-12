@@ -249,6 +249,76 @@ def fractal_multi_view(close: pd.Series, configs: list[tuple[int, int]] = None
     return out
 
 
+def fractal_posture(views: dict[str, dict],
+                    uptrend_thresh: float = 0.6) -> dict:
+    """Classify a ticker's fractal posture from multi-view results.
+
+    `views` is the output of `fractal_multi_view`. Classifies whether a breakout
+    is BROAD (self-similar — best span confirmed AND consensus high in MOST
+    views) or NARROW (only some views confirm), plus a freshness/aging read:
+
+    posture:
+      BROAD   — best span confirmed + consensus >= thresh in >=2/3 of views
+      MIXED   — best span confirmed in most views but consensus below thresh
+                (trend intact, breadth thinning)
+      NARROW  — best span confirmed in <half of views (single-window pop, not
+                self-similar)
+      WEAK    — no view confirms (not a breakout)
+
+    Returns dict: posture, n_views, n_confirmed, n_broad, trend, freshness.
+    `freshness`: 're-accelerating' (majority of views' consensus rising MoM) /
+                 'stalling' (falling) / 'steady'.
+    """
+    if not views:
+        return {"posture": "WEAK", "n_views": 0, "n_confirmed": 0,
+                "n_broad": 0, "trend": "flat", "freshness": "steady"}
+    n = len(views)
+    n_confirmed = 0
+    n_broad = 0
+    trend_up = 0
+    trend_dn = 0
+    for key, v in views.items():
+        cons = v["consensus"]
+        best = v["best"]
+        if not len(cons) or not len(best):
+            continue
+        conf = int(best["confirmed"].iloc[-1])
+        frac = float(cons["frac_uptrend"].iloc[-1])
+        if conf == 1:
+            n_confirmed += 1
+        if conf == 1 and frac >= uptrend_thresh:
+            n_broad += 1
+        # MoM trend of consensus fraction
+        f = cons["frac_uptrend"]
+        if len(f) >= 2:
+            prev = float(f.iloc[-2]) if f.index[-1] != f.index[-2] else float(f.iloc[max(0, -3)])
+            cur = float(f.iloc[-1])
+            if cur > prev + 1e-6:
+                trend_up += 1
+            elif cur < prev - 1e-6:
+                trend_dn += 1
+    if n_confirmed == 0:
+        posture = "WEAK"
+    elif 2 * n_broad > n:        # strict majority of views fully broad (self-similar)
+        posture = "BROAD"
+    elif 2 * n_confirmed > n:    # best span confirmed in most views but breadth thinning
+        posture = "MIXED"
+    else:
+        posture = "NARROW"
+    if trend_up > trend_dn:
+        freshness = "re-accelerating"
+    elif trend_dn > trend_up:
+        freshness = "stalling"
+    else:
+        freshness = "steady"
+    return {
+        "posture": posture, "n_views": n,
+        "n_confirmed": n_confirmed, "n_broad": n_broad,
+        "trend": "rising" if trend_up > trend_dn else ("falling" if trend_dn > trend_up else "flat"),
+        "freshness": freshness,
+    }
+
+
 # ── vectorized fractal signal (no per-day polyfit loops) ─────────────────
 def fractal_signal_vec(close: pd.Series, a: int, b: int) -> pd.DataFrame:
     """Vectorized fractal signal using rolling-window momentum.
