@@ -42,3 +42,4 @@ dashboard_data/data.json
 *.csv
 !docs/*.csv
 massive_credentials.json
+fractal_profiles.parquet

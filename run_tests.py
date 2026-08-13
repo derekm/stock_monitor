@@ -229,6 +229,34 @@ def test_structural_gate_modes_run_and_discriminate():
         assert p_up.mean() >= p_flat.mean(), f"{mode}: uptrend should hold more than declining"
 
 
+def test_statistical_profiler_wide_and_finite():
+    """statistical_profiler emits the full wide stat set, finite, and sane."""
+    from statistical_profiler import window_profile_stats, STAT_COLS, profile_ticker
+    idx = pd.date_range("2021-01-01", periods=300, freq="D")
+    c = _accel_series(300)
+    c.index = idx
+    vol = pd.Series(1e6 + np.arange(300) * 1e4, index=idx)
+    df = window_profile_stats(c, vol, 30)
+    assert list(df.columns) == ["close"] + STAT_COLS, "profiler must emit close + documented stat columns"
+    last = df.iloc[-1]
+    # an accelerating series ends at/near its window high -> runup high, pctile high
+    assert pd.notna(last["price_mean"]) and last["price_mean"] > 0
+    assert last["runup"] > 0.5, f"accelerating series should end high in range (runup {last['runup']:.2f})"
+    assert last["close_pctile"] > 0.5, f"accelerating series should be at high percentile (pctile {last['close_pctile']:.2f})"
+    assert pd.notna(last["vwap"]) and last["vwap"] > 0
+    assert pd.notna(last["price_skew"]) and pd.notna(last["price_kurtosis"])
+    assert pd.notna(last["momentum"]) and pd.notna(last["log_ret"])
+    # median/mean/mode positive
+    assert last["price_median"] > 0 and last["price_mode"] > 0
+    # window drawdown <= 0 always
+    assert (df["window_drawdown"].dropna() <= 1e-9).all(), "drawdown must be non-positive"
+    # profile_ticker long format
+    pf = profile_ticker(c, vol, [(0, 30, 30), (0, 60, 60)])
+    assert "ticker" not in pf.columns  # no ticker yet (added by caller)
+    assert set(["date", "span_from", "span_to", "span_len", "close"]).issubset(pf.columns)
+    assert pf["span_len"].nunique() == 2
+
+
 # ── registry ────────────────────────────────────────────────────────────
 TESTS = {
     "spans": test_spans_generator,
@@ -246,6 +274,7 @@ TESTS = {
     "long_ride": test_long_ride_score_finite_and_discriminates,
     "stack_series": test_momentum_stack_series_orders_short_to_long,
     "structural_gate": test_structural_gate_modes_run_and_discriminate,
+    "statistical_profiler": test_statistical_profiler_wide_and_finite,
 }
 
 

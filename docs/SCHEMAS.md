@@ -457,6 +457,8 @@ auxiliary tables feeding several stages.
 || `backtest_rides.parquet` | `backtest_rides.py` | Taleb / fat tails. Per-ticker A/B of classic vs quality_gate vs dual_exit vs quality_dual ride strategies ||
 || `backtest_structural.parquet` | `backtest_structural.py` | Taleb / fat tails. Per-ticker daily backtest of structural/risk-scaled gate paradigms: turtle, volscale, regime, recouple, momentum, hybrid, consensus vs buy_hold (ride_return, excess, max_dd_ride, in_market) ||
 || `ride_history.parquet` | `ride_history.py` | Taleb / fat tails. Point-in-time recommended ride trade history per ticker: as_of, mom3/mom12, posture, stack_depth, long_ride_score, ride_gate_open/horizon/mom, ride_exit_flag/kind, recommendation ||
+|| `fractal_profiles.parquet` | `statistical_profiler.py` | Taleb / fat tails. True statistical profiler over fractal windows: long-format (ticker, date, span_from, span_to, span_len, close) + price stats (price_mean/median/mode/max/min/range/std/skew/kurtosis/slope/curvature), position stats (close_z/close_pctile/runup/window_drawdown), volume stats (volume_mean/vwap/volume_z), momentum stats (log_ret/momentum/ret_vol) ||
+|| `backtest_price_vs_momentum.parquet` | `backtest_price_vs_momentum.py` | Taleb / fat tails. Do price-based fractal signals predict forward returns better than momentum-based? Per feature/horizon: hit_rate_on, mean_on/off, spread, annual_spread, base_mean ||
 || `fractal_windows_backtest.parquet` | `fractal_windows_backtest.py` | Taleb / fat tails ||
 || `fractal_windows_backtest.parquet` | `fractal_windows_backtest_gpu.py` | Taleb / fat tails ||
 || `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails ||
