@@ -1,34 +1,29 @@
-# update_fundamentals.py
+# update_fundamentals.py / update_polygon_financials.py / backfill_edgar.py
 
-Maintain P/B, market cap, total assets, and mktcap/assets ratios in
-`fundamentals.parquet`.
+Maintain point-in-time quality/value fundamentals for the **full universe**.
 
-## Why it exists (rationale)
+## Additive rule
 
-The value-trifecta screen needs current P/B, market cap, total assets, and
-mktcap/assets — but yfinance coverage is uneven. This lets you inspect the
-current fundamentals (`show`) and enter/refresh them manually (`manual`) so the
-trifecta legs stay current for the monitored book. Append-only by `as_of_date`.
+Never overwrite a populated cell. New `(ticker, as_of_date)` rows are appended.
+Overlapping dates only **fill NaNs**. Source rank:
 
-## Usage
+`edgar > manual > yfinance_history > polygon_financials > yfinance > synthetic`
+
+## Fetch paths
 
 ```bash
-python update_fundamentals.py show [--ticker CF]
-python update_fundamentals.py manual --ticker CF --market-cap-b 18.2 --total-assets-b 13.8 --pb 2.9
+python update_fundamentals.py fetch-history          # yfinance quarterly (~2y)
+python update_polygon_financials.py                 # Massive/Polygon vX financials
+python update_polygon_financials.py --missing-only
+python backfill_edgar.py                            # SEC XBRL, decades
+python fundamentals_history.py snapshot             # rebuild preferred_metrics_history
+python preferred_metrics.py --save                  # latest snapshot
 ```
 
-Sub-commands: `show`, `manual`. `manual` flags: `--ticker`, `--market-cap-b`,
-`--total-assets-b`, `--pb`, and others (see source).
+`fetch-history`, Polygon, and EDGAR all walk `universe_tickers()` (shock_ride ∪
+prices ∪ monitored), not just the 147-name monitored book.
 
-## Outputs
+Polygon auth: `POLYGON_API_KEY` or gitignored `massive_credentials.json`
+`secret_access_key`. Do not commit the key.
 
-- `fundamentals.parquet` — appended/updated rows (by `as_of_date`)
-
-(Schema family: base_table — see [SCHEMAS.md](SCHEMAS.md).)
-
-## Related programs
-
-- [preferred_metrics.md](preferred_metrics.md) — consumes the ratios
-- [inclusion_criteria.md](inclusion_criteria.md) — trifecta legs
-- [backfill_constituents.md](backfill_constituents.md) — bulk real fundamentals
-- [dupont_analysis.md](dupont_analysis.md)
+ETFs / some ADRs (QQQ, XLE, BTI, BAYRY, …) have no statements — expected.

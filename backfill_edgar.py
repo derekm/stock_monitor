@@ -17,9 +17,9 @@ Market cap = adj_close price × shares at the quarter-end (from
 daily_prices.parquet; shares from EDGAR CommonStockSharesOutstanding /
 OrdinarySharesNumber, fallback to current shares).
 
-Rows are source=edgar and displace BOTH synthetic (fundamentals_history_backfill)
-and shallow yfinance_history rows for the same (ticker, as_of_date) — EDGAR
-is deeper (XBRL mandate ~2009+) and point-in-time, so it wins.
+Rows are source=edgar. Merge is STRICTLY ADDITIVE: new (ticker, date) rows
+are appended; overlapping dates only fill NaN cells. Existing EDGAR cells
+are never overwritten. Synthetic backfill is not bulk-deleted.
 
 Usage:
   python backfill_edgar.py --max-tickers 50
@@ -308,14 +308,18 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="Fetch CIKs and report coverage, write nothing")
     args = ap.parse_args()
 
-    stocks = pd.read_parquet(STOCKS_FILE) if STOCKS_FILE.exists() else pd.DataFrame()
-    if stocks.empty or "ticker" not in stocks.columns:
-        raise SystemExit("monitored_stocks.parquet missing")
-    tickers = sorted(stocks["ticker"].astype(str).str.upper().unique().tolist())
+    from update_fundamentals import universe_tickers
+    tickers = universe_tickers()
+    if not tickers:
+        stocks = pd.read_parquet(STOCKS_FILE) if STOCKS_FILE.exists() else pd.DataFrame()
+        if stocks.empty or "ticker" not in stocks.columns:
+            raise SystemExit("no universe (shock_ride / prices / monitored_stocks)")
+        tickers = sorted(stocks["ticker"].astype(str).str.upper().unique().tolist())
     if args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     elif args.max_tickers:
         tickers = tickers[: args.max_tickers]
+    print(f"EDGAR universe: {len(tickers)} tickers")
 
     print("Loading SEC ticker→CIK map...")
     cik_map = load_cik_map()
@@ -357,28 +361,58 @@ def main():
 
     new_df = pd.DataFrame(all_rows)
     existing = pd.read_parquet(FUND) if FUND.exists() else pd.DataFrame()
-    real_tickers = set(new_df["ticker"])
-    # drop synthetic backfill AND shallow yfinance_history for these tickers
-    existing = existing[
-        ~(
-            existing["ticker"].isin(real_tickers)
-            & (existing.get("source").isin(["fundamentals_history_backfill", "yfinance_history"]))
-        )
+    from update_fundamentals import _as_date
+    new_df["as_of_date"] = new_df["as_of_date"].map(_as_date)
+    if len(existing):
+        existing["as_of_date"] = existing["as_of_date"].map(_as_date)
+    FILL_COLS = [
+        "market_cap", "market_cap_b", "total_assets", "total_assets_b",
+        "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
+        "debt_to_equity", "shares_outstanding", "interest_coverage",
+        "earnings_stability",
     ]
-    keys = set(zip(new_df["ticker"], new_df["as_of_date"]))
-    existing = existing[~existing.apply(lambda r: (r["ticker"], r["as_of_date"]) in keys, axis=1)]
-    combined = pd.concat([existing, new_df], ignore_index=True)
-    # DATE-native as_of_date; normalize last_updated to Timestamp
-    combined["as_of_date"] = pd.to_datetime(combined["as_of_date"]).dt.date
+    idx = ["ticker", "as_of_date"]
+    n_filled = 0
+    if len(existing):
+        ex = existing.set_index(idx)
+        nd = new_df.set_index(idx)
+        overlap = ex.index.intersection(nd.index)
+        if len(overlap):
+            src = nd.loc[overlap]
+            for c in FILL_COLS:
+                if c not in ex.columns or c not in src.columns:
+                    continue
+                missing = ex.loc[overlap, c].isna()
+                if missing.any():
+                    take = src.loc[overlap, c].where(missing)
+                    n_here = int(take.notna().sum())
+                    if n_here:
+                        ex.loc[overlap, c] = ex.loc[overlap, c].fillna(take)
+                        n_filled += n_here
+                        # if we filled from EDGAR and the row wasn't EDGAR, upgrade source
+            # upgrade source to edgar only where the existing source is weaker
+            # and at least one metric was present on the incoming row
+            weaker = ex.loc[overlap, "source"].isin(
+                ["fundamentals_history_backfill", "yfinance", "yfinance_history", "approx_seed_2026-07"]
+            ) if "source" in ex.columns else pd.Series(False, index=overlap)
+            if weaker.any():
+                ex.loc[overlap[weaker.to_numpy()], "source"] = "edgar"
+            existing = ex.reset_index()
+        brand_new = new_df[~new_df.set_index(idx).index.isin(ex.index)].copy()
+        combined = pd.concat([existing, brand_new], ignore_index=True) if len(brand_new) else existing
+    else:
+        combined = new_df
     if "last_updated" in combined.columns:
         combined["last_updated"] = pd.to_datetime(combined["last_updated"], errors="coerce")
     combined = combined.sort_values(["ticker", "as_of_date"]).drop_duplicates(
-        subset=["ticker", "as_of_date"], keep="last"
+        subset=["ticker", "as_of_date"], keep="first"
     )
     import pyarrow as pa
     import pyarrow.parquet as pq
+    before = len(pd.read_parquet(FUND)) if FUND.exists() else 0
     pq.write_table(pa.Table.from_pandas(combined, preserve_index=False), FUND)
-    print(f"EDGAR backfill: {len(new_df)} rows for {len(real_tickers)} tickers → {FUND}")
+    print(f"EDGAR additive: +{len(combined) - before} rows, {n_filled} NaN cells filled, "
+          f"{len(new_df)} fetched for {new_df['ticker'].nunique()} tickers → {FUND}")
     print(f"  total fundamentals rows now: {len(combined)}")
 
 

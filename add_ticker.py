@@ -7,8 +7,9 @@ Adds ticker(s) to the universe and runs the full backfill + analytics chain:
   1. Look up name / sector / industry via yfinance (overridable).
   2. Add to monitored_stocks.parquet (idempotent: skips if present).
   3. Backfill price history with --period max (full available history).
-  4. Backfill fundamentals: EDGAR XBRL when a CIK exists, else yfinance
-     quarterly statements (point-in-time, source=yfinance_history).
+  4. Backfill fundamentals via backfill_preferred_fundamentals.py
+     (EDGAR XBRL → yfinance quarterly → Polygon financials, additive;
+      then rebuild preferred_metrics_history + preferred_metrics).
   5. Compute momentum metrics for the new tickers.
   6. Compute daily market cap (close x shares outstanding).
   7. Run the full analytics pipeline (run_daily_automation.py all jobs).
@@ -112,11 +113,9 @@ def backfill_prices(tickers: list[str]) -> None:
 
 
 def backfill_fundamentals(tickers: list[str]) -> None:
-    """EDGAR first (deep history), then yfinance quarterly fallback for misses."""
-    run([PY, str(DATA_DIR / "backfill_edgar.py"), "--tickers", ",".join(tickers)])
-    # yfinance point-in-time history covers ADRs / tickers without EDGAR CIK
-    run([PY, str(DATA_DIR / "update_fundamentals.py"),
-         "fetch-history", "--tickers", ",".join(tickers)])
+    """Additive EDGAR + yfinance + Polygon, then preferred-metrics snapshot."""
+    run([PY, str(DATA_DIR / "backfill_preferred_fundamentals.py"),
+         "--tickers", ",".join(tickers)])
 
 def backfill_momentum(tickers: list[str]) -> None:
     """Compute momentum metrics for new tickers immediately."""

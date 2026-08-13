@@ -26,6 +26,46 @@ import pyarrow.parquet as pq
 DATA_DIR = Path(__file__).parent
 FUND_FILE = DATA_DIR / "fundamentals.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+SHOCK_FILE = DATA_DIR / "shock_ride_tickers.parquet"
+
+# Source priority for the same (ticker, as_of_date): never demote a better row.
+SOURCE_RANK = {
+    "edgar": 100,
+    "manual": 80,
+    "yfinance_history": 60,
+    "polygon_financials": 55,
+    "yfinance": 40,
+    "fundamentals_history_backfill": 10,
+}
+
+
+def _as_date(v):
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    if hasattr(v, "date") and not isinstance(v, type(pd.Timestamp.now().date())):
+        try:
+            return v.date()
+        except Exception:
+            pass
+    ts = pd.Timestamp(v)
+    return ts.date()
+
+
+def universe_tickers() -> list[str]:
+    """Full research universe: shock_ride ∩ prices, else monitored, else fund."""
+    names: set[str] = set()
+    for path, col in (
+        (SHOCK_FILE, "ticker"),
+        (PRICES_FILE, "ticker"),
+        (STOCKS_FILE, "ticker"),
+    ):
+        if path.exists():
+            df = pd.read_parquet(path, columns=[col])
+            names |= set(df[col].astype(str).str.upper())
+    skip = {".", "^", "=", "-", ":"}
+    out = sorted(t for t in names if t and not any(s in t for s in skip))
+    return out
 
 
 def load() -> pd.DataFrame:
@@ -39,7 +79,19 @@ def load() -> pd.DataFrame:
 
 
 def save(df: pd.DataFrame) -> None:
-    df = df.sort_values("ticker").drop_duplicates(subset=["ticker", "as_of_date"], keep="last")
+    df = df.copy()
+    df["as_of_date"] = df["as_of_date"].map(_as_date)
+    # Keep the higher-priority source on (ticker, date); never let yfinance
+    # displace EDGAR if both somehow remain.
+    if "source" in df.columns:
+        df["_rank"] = df["source"].map(lambda s: SOURCE_RANK.get(s, 30))
+        df = df.sort_values(["ticker", "as_of_date", "_rank"])
+        df = df.drop_duplicates(subset=["ticker", "as_of_date"], keep="last")
+        df = df.drop(columns=["_rank"])
+    else:
+        df = df.sort_values(["ticker", "as_of_date"]).drop_duplicates(
+            subset=["ticker", "as_of_date"], keep="last"
+        )
     table = pa.Table.from_pandas(df, preserve_index=False)
     pq.write_table(table, FUND_FILE)
     print(f"Saved {len(df)} fundamental rows → {FUND_FILE}")
@@ -150,6 +202,9 @@ def cmd_fetch(args):
         tickers = pd.read_parquet(STOCKS_FILE)["ticker"].tolist()
     else:
         tickers = load()["ticker"].tolist()
+    uni = universe_tickers()
+    if uni:
+        tickers = uni
 
     if args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",")]
@@ -241,16 +296,14 @@ def cmd_fetch_history(args):
     """
     import yfinance as yf
 
-    if STOCKS_FILE.exists():
-        tickers = sorted(pd.read_parquet(STOCKS_FILE)["ticker"].astype(str).str.upper().unique().tolist())
-    else:
-        tickers = sorted(load()["ticker"].unique().tolist())
+    tickers = universe_tickers() or sorted(load()["ticker"].unique().tolist())
     skip = {".", "^", "=", "-", ":"}
     tickers = [t for t in tickers if not any(s in t for s in skip)]
     if args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     elif args.max_tickers:
         tickers = tickers[: args.max_tickers]
+    print(f"fetch-history universe: {len(tickers)} tickers")
 
     # price series: ticker -> DataFrame(date, close=adj_close) for mktcap at qend
     try:
@@ -338,39 +391,50 @@ def cmd_fetch_history(args):
         print("No rows fetched.")
         return
     new_df = pd.DataFrame(new_rows)
-    # drop any synthetic backfill rows for these tickers (real data replaces noise)
+    new_df["as_of_date"] = new_df["as_of_date"].map(_as_date)
     existing = load()
-    real_tickers = set(new_df["ticker"])
-    existing = existing[
-        ~(
-            existing["ticker"].isin(real_tickers)
-            & (existing.get("source") == "fundamentals_history_backfill")
-        )
+    existing["as_of_date"] = existing["as_of_date"].map(_as_date)
+
+    # STRICTLY ADDITIVE: never drop an existing row. For overlapping
+    # (ticker, as_of_date) only fill columns that are currently NaN.
+    # Brand-new keys are appended. EDGAR/manual cells stay untouched.
+    FILL_COLS = [
+        "market_cap", "market_cap_b", "total_assets", "total_assets_b",
+        "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
+        "debt_to_equity", "shares_outstanding", "interest_coverage",
+        "earnings_stability",
     ]
-    # ── Source-priority guard: EDGAR is the gold standard (point-in-time,
-    # as-reported XBRL). Never let a yfinance row overwrite an existing EDGAR
-    # row for the same (ticker, as_of_date). Source priority:
-    #   edgar > manual > yfinance_history > yfinance > fundamentals_history_backfill
-    edgar_keys = set(
-        zip(
-            existing.loc[existing.get("source") == "edgar", "ticker"],
-            existing.loc[existing.get("source") == "edgar", "as_of_date"],
-        )
-    )
-    new_df = new_df[
-        ~new_df.apply(lambda r: (r["ticker"], r["as_of_date"]) in edgar_keys, axis=1)
-    ]
-    if len(new_df) != len(new_rows):
-        print(f"  (skipped {len(new_rows) - len(new_df)} rows whose quarter is covered by EDGAR)")
-        if new_df.empty:
-            save(existing)
-            print("  nothing new to add (all quarters already EDGAR)")
-            return
-    keys = set(zip(new_df["ticker"], new_df["as_of_date"]))
-    existing = existing[~existing.apply(lambda r: (r["ticker"], r["as_of_date"]) in keys, axis=1)]
-    combined = pd.concat([existing, new_df], ignore_index=True)
+    idx = ["ticker", "as_of_date"]
+    ex = existing.set_index(idx)
+    nd = new_df.set_index(idx)
+    overlap = ex.index.intersection(nd.index)
+    n_filled = 0
+    if len(overlap):
+        src = nd.loc[overlap]
+        for c in FILL_COLS:
+            if c not in ex.columns:
+                continue
+            if c not in src.columns:
+                continue
+            missing = ex.loc[overlap, c].isna()
+            if missing.any():
+                take = src.loc[overlap, c].where(missing)
+                n_here = int(take.notna().sum())
+                if n_here:
+                    ex.loc[overlap, c] = ex.loc[overlap, c].fillna(take)
+                    n_filled += n_here
+        existing = ex.reset_index()
+    brand_new = new_df[~new_df.set_index(idx).index.isin(ex.index)].copy()
+    if len(brand_new):
+        combined = pd.concat([existing, brand_new], ignore_index=True)
+    else:
+        combined = existing
+    before = len(load())
     save(combined)
-    print(f"Fetched real history: {len(new_df)} rows for {new_df['ticker'].nunique()} tickers")
+    after = len(load())
+    print(f"Additive history: +{after - before} new rows, "
+          f"{n_filled} NaN cells filled, "
+          f"{len(new_df)} fetched for {new_df['ticker'].nunique()} tickers")
 
 
 def main():

@@ -152,25 +152,16 @@ def score_row(r: pd.Series) -> dict:
 
 def snapshot_all_dates() -> pd.DataFrame:
     df = load_fund()
-    rows = []
-    for _, r in df.iterrows():
-        s = score_row(r)
-        rows.append({
-            "as_of_date": r["as_of_date"],
-            "ticker": r["ticker"],
-            "roe": r.get("roe"),
-            "roic": r.get("roic"),
-            "debt_to_equity": r.get("debt_to_equity"),
-            "ev_ebitda": r.get("ev_ebitda"),
-            "pb_ratio": r.get("pb_ratio"),
-            "mktcap_to_assets": r.get("mktcap_to_assets"),
-            "source": r.get("source"),
-            **s,
-        })
-    out = pd.DataFrame(rows).sort_values(["as_of_date", "ticker"])
-    out.to_parquet(SNAP_CSV)
-    pq.write_table(pa.Table.from_pandas(out, preserve_index=False), SNAP)
-    print(f"Snapshot history → {SNAP} ({len(out)} rows, {out.as_of_date.nunique()} dates)")
+    scored = df.apply(score_row, axis=1, result_type="expand")
+    keep = ["as_of_date", "ticker", "roe", "roic", "debt_to_equity",
+            "ev_ebitda", "pb_ratio", "mktcap_to_assets", "source"]
+    keep = [c for c in keep if c in df.columns]
+    out = pd.concat([df[keep].reset_index(drop=True), scored.reset_index(drop=True)], axis=1)
+    out = out.sort_values(["as_of_date", "ticker"])
+    # derived table: rebuild from fundamentals (does not rewrite fundamentals)
+    out.to_parquet(SNAP)
+    print(f"Snapshot history → {SNAP} ({len(out)} rows, "
+          f"{out.as_of_date.nunique()} dates, {out.ticker.nunique()} tickers)")
     return out
 
 

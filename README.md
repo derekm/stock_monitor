@@ -251,6 +251,8 @@ Detailed usage for each module:
 - [docs/statistical_profiler.md](docs/statistical_profiler.md) — true statistical profiler over fractal windows (mean/median/mode/vwap/skew/kurt/percentile/runup/drawdown); persists results
 - [docs/backtest_price_vs_momentum.md](docs/backtest_price_vs_momentum.md) — do price-based fractal signals predict forward returns better than momentum-based?
 - [docs/backfill_ohlcv.md](docs/backfill_ohlcv.md) — backfill full OHLCV history for the whole universe (fills the OHLC gap in close+volume-only data)
+- [docs/backfill_preferred_fundamentals.md](docs/backfill_preferred_fundamentals.md) — additive EDGAR + yfinance + Polygon fundamentals, then preferred-metrics snapshot
+- [docs/add_ticker.md](docs/add_ticker.md) — one-command ticker onboarding (uses the preferred-fundamentals backfill)
 - [docs/backtest_quick_ignition.md](docs/backtest_quick_ignition.md) — 5-day-fractal quick ignition rules vs lagging momentum gate
 - [docs/backtest_long_hold_entry.md](docs/backtest_long_hold_entry.md) — ignition as a long-hold entry (honest vs the +11.8% scratch)
 - [docs/fractal_windows.md](docs/fractal_windows.md) — fractal sliding-window momentum (patent US20120253946A1, FIGS 28-29); 15d/30d/45d/90d granularity ladder + momentum stack
