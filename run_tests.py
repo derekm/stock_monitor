@@ -207,6 +207,28 @@ def test_momentum_stack_series_orders_short_to_long():
     assert (s["stack_depth"].dtype == int or s["stack_depth"].dtype == np.int64)
 
 
+def test_structural_gate_modes_run_and_discriminate():
+    """structural_gate modes produce valid positions on an uptrend vs a flat series."""
+    from ride_longevity import structural_positions, structural_gate, STRUCTURAL_MODES
+    idx = pd.date_range("2021-01-01", periods=400, freq="D")
+    up = _accel_series(400)
+    up.index = idx
+    t = np.arange(400)
+    flat = pd.Series(100 - 0.02 * t, index=idx)
+    for mode in STRUCTURAL_MODES:
+        p_up = structural_positions(up, mode=mode)
+        assert len(p_up) == 400, f"{mode}: position length"
+        assert (p_up >= 0).all(), f"{mode}: positions non-negative"
+        g = structural_gate(up, mode=mode)
+        assert "gate_open" in g and "signal" in g, f"{mode}: gate dict"
+    # an accelerating series should produce higher mean position than a declining one
+    # for the trend-following modes (regime / recouple / momentum)
+    for mode in ["regime", "recouple", "momentum", "volscale"]:
+        p_up = structural_positions(up, mode=mode)
+        p_flat = structural_positions(flat, mode=mode)
+        assert p_up.mean() >= p_flat.mean(), f"{mode}: uptrend should hold more than declining"
+
+
 # ── registry ────────────────────────────────────────────────────────────
 TESTS = {
     "spans": test_spans_generator,
@@ -223,6 +245,7 @@ TESTS = {
     "ride_exit": test_ride_exit_holds_pullback_exits_breakdown,
     "long_ride": test_long_ride_score_finite_and_discriminates,
     "stack_series": test_momentum_stack_series_orders_short_to_long,
+    "structural_gate": test_structural_gate_modes_run_and_discriminate,
 }
 
 

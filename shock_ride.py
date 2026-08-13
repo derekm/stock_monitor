@@ -31,7 +31,9 @@ from momentum_research import research_report
 from breakout_detector import fresh_breakout_score
 from fractal_windows import (fractal_signal_vec, fractal_consensus, best_span_wins,
                              fractal_multi_view, fractal_posture, momentum_stack)
-from ride_longevity import long_ride_score, ride_gate, ride_exit
+from ride_longevity import (long_ride_score, ride_gate, ride_exit,
+                            structural_gate, structural_positions,
+                            STRUCTURAL_MODES)
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "shock_ride.parquet"
@@ -210,6 +212,11 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
         # if currently long, test the confirmed-breakdown exit
         ex = ride_exit(m, stack_depth=stack_depth, long_ride=long_ride_last,
                        trailing_stop=-0.25)
+        # second-generation structural gate (all modes) on the daily series
+        try:
+            stg = {md: structural_gate(s, mode=md) for md in STRUCTURAL_MODES}
+        except Exception:
+            stg = {md: {"gate_open": False, "signal": 0.0} for md in STRUCTURAL_MODES}
         hot = (st["mom12"] > 0.40) if established else (rg["mom_used"] > entry_thresh if pd.notna(rg["mom_used"]) else False)
         fresh = bv == "FRESH_BREAKOUT"
         build = bv == "BUILDING"
@@ -313,6 +320,15 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
             "ride_gate_mom": rg["mom_used"],
             "ride_exit_flag": ex["exit"],
             "ride_exit_kind": ex["exit_kind"],
+            "structural_mode": "hybrid",
+            "structural_signal": stg.get("hybrid", {}).get("signal", 0.0),
+            "structural_gate_open": int(stg.get("hybrid", {}).get("gate_open", False)),
+            "structural_in_market": stg.get("hybrid", {}).get("in_market_fraction", 0.0),
+            "structural_turtle": stg.get("turtle", {}).get("signal", 0.0),
+            "structural_volscale": stg.get("volscale", {}).get("signal", 0.0),
+            "structural_regime": stg.get("regime", {}).get("signal", 0.0),
+            "structural_recouple": stg.get("recouple", {}).get("signal", 0.0),
+            "structural_consensus": stg.get("consensus", {}).get("signal", 0.0),
             "recommendation": rec,
             "interpretation": interp,
         })

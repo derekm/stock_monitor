@@ -309,3 +309,172 @@ def ride_exit(m: pd.Series, *, exit_thresh: float = 0.0,
         "hard_stop": bool(hard_stop_hit),
         "reasons": reasons,
     }
+
+
+# ---------------------------------------------------------------------------
+# structural_gate — second-generation entry gate (structural / risk-scaled).
+#
+# ride_gate (above) is a LAGGING momentum-level detector: it opens after a
+# surge (mom12>thresh), buys the top, then holds through the pullback. On
+# volatile / young names (e.g. RAL) it loses to buy-hold. The structural gate
+# responds to the PRICE/RISK structure instead of a lagging momentum level.
+#
+# Supported modes (all daily, no lookahead):
+#   turtle     — Donchian 55-day breakout entry + 2x ATR chandelier trailing
+#                stop (let winners run, cut losers hard).
+#   volscale   — exposure sized to target annualized vol, gated by SMA200
+#                trend (always partially exposed, never full size into a spike).
+#   regime     — EMA50/EMA200 markup/distribution state machine (enter markup
+#                regime, exit distribution).
+#   recouple   — enter when close re-couples above EMA21 AND EMA50, size by 1/vol.
+#   momentum   — the classic daily momentum gate (mom12>0.40 & mom3>0, exit
+#                mom3<=0), included for comparison.
+#   hybrid     — momentum entry + vol-scaled size + 2x ATR chandelier stop
+#                (best drawdown control across the universe backtest).
+#   consensus  — majority of the four structural signals, vol-scaled size
+#                (best risk-adjusted return among the pure structural modes).
+# ---------------------------------------------------------------------------
+def _ema(x, span: int) -> np.ndarray:
+    return pd.Series(x).ewm(span=span, adjust=False).mean().to_numpy()
+
+
+def _atr(close: np.ndarray, n_atr: int = 14) -> np.ndarray:
+    tr = np.abs(np.diff(close, prepend=close[0]))
+    return pd.Series(tr).ewm(span=n_atr, adjust=False).mean().to_numpy()
+
+
+STRUCTURAL_MODES = ("turtle", "volscale", "regime", "recouple",
+                    "momentum", "hybrid", "consensus")
+
+
+def structural_positions(close: pd.Series, *, mode: str = "hybrid",
+                         target_vol: float = 0.30) -> pd.Series:
+    """Daily position series (0..~1.5) for a structural gate mode.
+
+    close: daily close Series. mode: one of STRUCTURAL_MODES.
+    target_vol: annualized vol target for the vol-scaled modes.
+    Returns a Series (0/partial/full position) aligned to close.index.
+    """
+    if mode not in STRUCTURAL_MODES:
+        raise ValueError(f"mode must be one of {STRUCTURAL_MODES}, got {mode}")
+    c = close.to_numpy(dtype=float)
+    n = len(c)
+    pos = np.zeros(n)
+    a = _atr(c)
+    ret = np.zeros(n); ret[1:] = c[1:] / c[:-1] - 1.0
+    rv = pd.Series(ret).rolling(20).std().to_numpy() * np.sqrt(252)
+    size = np.clip(target_vol / np.where(rv == 0, np.nan, rv), 0, 1.5)
+    size = np.nan_to_num(size, nan=0.0)
+
+    # momentum (daily, classic): mom12>0.40 & mom3>0, exit mom3<=0
+    m12 = pd.Series(ret).rolling(252, min_periods=60).mean().to_numpy() * 252
+    m3 = pd.Series(ret).rolling(63, min_periods=21).mean().to_numpy() * 252
+    mom_long = (m12 > 0.40) & (m3 > 0)
+
+    if mode == "turtle":
+        inpos = False; chand = 0.0
+        for i in range(55, n):
+            if not inpos:
+                if c[i] > np.max(c[i - 55:i]):
+                    inpos = True; chand = c[i] - 2.0 * a[i]
+            else:
+                chand = max(chand, c[i] - 2.0 * a[i])
+                if c[i] < chand:
+                    inpos = False
+            pos[i] = 1.0 if inpos else 0.0
+
+    elif mode == "volscale":
+        sma200 = pd.Series(c).rolling(200).mean().to_numpy()
+        pos = size * (c > sma200)
+
+    elif mode == "regime":
+        e50 = _ema(c, 50); e200 = _ema(c, 200)
+        for i in range(50, n):
+            up = (c[i] > e50[i]) and (e50[i] > e50[i - 1]) and (c[i] > e200[i])
+            down = c[i] < e50[i]
+            if up:
+                pos[i] = 1.0
+            elif down:
+                pos[i] = 0.0
+            else:
+                pos[i] = pos[i - 1] if i > 0 else 0.0
+
+    elif mode == "recouple":
+        e21 = _ema(c, 21); e50 = _ema(c, 50)
+        recoupled = (c > e21) & (c > e50)
+        pos = size * recoupled
+
+    elif mode == "momentum":
+        inpos = False
+        for i in range(1, n):
+            if not inpos:
+                if mom_long[i]:
+                    inpos = True
+            else:
+                if m3[i] <= 0:
+                    inpos = False
+            pos[i] = 1.0 if inpos else 0.0
+
+    elif mode == "hybrid":
+        chand = 0.0; inpos = False
+        for i in range(55, n):
+            if not inpos:
+                if mom_long[i]:
+                    inpos = True; chand = c[i] - 2.0 * a[i]
+            else:
+                chand = max(chand, c[i] - 2.0 * a[i])
+                if c[i] < chand or m3[i] <= 0:
+                    inpos = False
+            pos[i] = size[i] if inpos else 0.0
+
+    elif mode == "consensus":
+        e21 = _ema(c, 21); e50 = _ema(c, 50)
+        sma200 = pd.Series(c).rolling(200).mean().to_numpy()
+        recoupled = (c > e21) & (c > e50)
+        # regime signal (markup/distribution state machine)
+        reg = np.zeros(n)
+        for i in range(50, n):
+            up = (c[i] > e50[i]) and (e50[i] > e50[i - 1]) and (c[i] > sma200[i])
+            if up:
+                reg[i] = 1.0
+            elif c[i] < e50[i]:
+                reg[i] = 0.0
+            else:
+                reg[i] = reg[i - 1] if i > 0 else 0.0
+        # majority of four structural signals, then vol-scale
+        struct = (recoupled.astype(int) + reg + _pos_turtle_like(c, a).astype(int) + (c > sma200).astype(int)) >= 2
+        pos = size * struct.astype(float)
+
+    return pd.Series(pos, index=close.index)
+
+
+def _pos_turtle_like(c: np.ndarray, a: np.ndarray) -> np.ndarray:
+    n = len(c); pos = np.zeros(n); inpos = False; chand = 0.0
+    for i in range(55, n):
+        if not inpos:
+            if c[i] > np.max(c[i - 55:i]):
+                inpos = True; chand = c[i] - 2.0 * a[i]
+        else:
+            chand = max(chand, c[i] - 2.0 * a[i])
+            if c[i] < chand:
+                inpos = False
+        pos[i] = 1.0 if inpos else 0.0
+    return pos
+
+
+def structural_gate(close: pd.Series, *, mode: str = "hybrid",
+                    target_vol: float = 0.30) -> dict:
+    """Current structural-gate signal for a ticker.
+
+    Returns a dict: mode, signal (position 0..~1.5), gate_open (signal>0),
+    in_market_fraction (mean position over series), and the last N positions.
+    """
+    pos = structural_positions(close, mode=mode, target_vol=target_vol)
+    cur = float(pos.iloc[-1])
+    return {
+        "mode": mode,
+        "signal": round(cur, 4),
+        "gate_open": bool(cur > 0),
+        "in_market_fraction": round(float(pos.mean()), 4),
+        "target_vol": target_vol,
+    }

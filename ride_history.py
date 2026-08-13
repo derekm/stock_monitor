@@ -41,6 +41,7 @@ import pandas as pd
 from analytics_common import DATA_DIR
 from fractal_windows import fractal_multi_view, fractal_posture, momentum_stack
 from ride_longevity import ride_gate, ride_exit, long_ride_score
+from ride_longevity import structural_positions, STRUCTURAL_MODES
 from momentum_research import research_report
 
 OUT_CSV = DATA_DIR / "ride_history.csv"
@@ -62,6 +63,17 @@ def _volume_series(ticker: str) -> pd.Series | None:
     except Exception:
         pass
     return None
+
+
+def _load_close(ticker: str) -> pd.Series | None:
+    try:
+        p = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+                            columns=["date", "ticker", "close"])
+        p["date"] = pd.to_datetime(p["date"])
+        s = p[p["ticker"] == ticker].set_index("date")["close"].sort_index().dropna()
+        return s if len(s) else None
+    except Exception:
+        return None
 
 
 def ride_history_for(ticker: str) -> pd.DataFrame:
@@ -149,6 +161,8 @@ def main():
     ap.add_argument("--ticker", required=True,
                     help="Comma-separated tickers to reconstruct (e.g. RAL,NVDA)")
     ap.add_argument("--save", action="store_true")
+    ap.add_argument("--simulate", action="store_true",
+                    help="Also backtest structural-gate paradigms (daily, no lookahead)")
     args = ap.parse_args()
 
     tickers = [t.strip().upper() for t in args.ticker.split(",") if t.strip()]
@@ -181,6 +195,24 @@ def main():
                     "stack_depth", "long_ride_score", "ride_gate_open", "gate_horizon",
                     "ride_exit_flag", "exit_kind", "recommendation"]]
         print(show.to_string(index=False))
+
+    if args.simulate:
+        for t in tickers:
+            s = _load_close(t)
+            if s is None or len(s) < 60:
+                print(f"\n=== {t} — simulate: insufficient data ===")
+                continue
+            print(f"\n=== {t} — structural-gate simulate (daily, no lookahead) ===")
+            ret = s.pct_change().fillna(0.0).to_numpy()
+            bh = float((1 + ret).cumprod()[-1])
+            print(f"  buy-hold {bh-1:+.1%}")
+            for mode in STRUCTURAL_MODES:
+                p = structural_positions(s, mode=mode).to_numpy()
+                p_prev = np.roll(p, 1); p_prev[0] = 0.0
+                r = ret * p_prev
+                eq = (1 + r).cumprod()
+                dd = float((eq / np.maximum.accumulate(eq) - 1).min())
+                print(f"  {mode:10s} ride {eq[-1]-1:+7.1%}  maxDD {dd:7.1%}  in-mkt {p_prev.mean():.0%}")
     return 0
 
 

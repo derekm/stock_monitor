@@ -80,6 +80,52 @@ No standalone output file; consumed by `shock_ride.py` which emits:
 `long_ride_score`, `ride_gate_open`, `ride_gate_horizon`, `ride_gate_mom`,
 `ride_exit_flag`, `ride_exit_kind` per ticker.
 
+## Second-generation entry gate: `structural_gate`
+
+`ride_gate` is a **lagging momentum-level detector** — it opens after a surge
+(mom12>thresh), buys the top, then holds through the pullback (the young path
+suppresses the exit). On volatile / young / whipsaw names (e.g. RAL) it loses to
+buy-and-hold. `structural_gate` responds to the **price/risk structure** instead
+of a lagging momentum level. `structural_positions(close, mode=...)` returns a
+daily position series (0/partial/full); `structural_gate(close, mode=...)` gives
+the current signal.
+
+### Modes (all daily, no lookahead)
+- **`turtle`** — Donchian 55-day breakout entry + 2×ATR chandelier trailing stop
+- **`volscale`** — exposure sized to target annualized vol (default 0.30), gated
+  by SMA200 trend
+- **`regime`** — EMA50/EMA200 markup/distribution state machine
+- **`recouple`** — enter when close re-couples above EMA21 AND EMA50, size by 1/vol
+- **`momentum`** — the classic daily momentum gate (mom12>0.40 & mom3>0, exit
+  mom3≤0), included for comparison
+- **`hybrid`** — momentum entry + vol-scaled size + 2×ATR chandelier stop
+  (best drawdown control across the universe backtest)
+- **`consensus`** — majority of the four structural signals, vol-scaled size
+
+## Backtest evidence (`backtest_structural.py`, 250 tickers, daily, no lookahead)
+
+| paradigm | total ride | mean excess | hit rate | mean maxDD |
+|----------|-----------|-------------|----------|-----------|
+| buy_hold (reference) | 1403.8 | 0.00 | 1.00 | −0.748 |
+| volscale | 727.6 | −2.70 | 0.028 | −0.621 |
+| consensus | 543.6 | −3.44 | 0.012 | −0.608 |
+| recouple | 508.9 | −3.58 | 0.008 | −0.627 |
+| regime | 507.8 | −3.58 | 0.004 | −0.644 |
+| momentum | 344.5 | −4.24 | 0.008 | −0.524 |
+| hybrid | 221.6 | −4.73 | 0.004 | **−0.433** |
+| turtle | 82.1 | −5.29 | 0.008 | −0.564 |
+
+**Honest conclusions:**
+- **No timing approach beats buy-and-hold on raw return** across the broad
+  universe — long-horizon buy-and-hold captures the big secular winners.
+- **The gate's real value is drawdown control:** hybrid cuts max drawdown to
+  **−0.433 vs −0.748 buy-hold** (42% reduction); momentum −0.524; turtle −0.564.
+  Buy-hold's ~75% average max drawdown is the risk the gate exists to avoid.
+- **Best risk-adjusted (Calmar):** volscale 1172 > consensus 894 > recouple 812.
+- On **young / high-beta / whipsaw names (e.g. RAL)**, the structural modes beat
+  the momentum gate on RAL: volscale +32.8%, regime +17.7%, momentum +16.5% vs
+  the momentum-threshold gate's −19% — but still under buy-hold (+50.5%).
+
 ## Related
 
 - `fractal_windows.py` — `momentum_stack` / `momentum_stack_series` (the stack
