@@ -256,6 +256,21 @@ def test_statistical_profiler_wide_and_finite():
     assert set(["date", "span_from", "span_to", "span_len", "close"]).issubset(pf.columns)
     assert pf["span_len"].nunique() == 2
 
+    # true-OHLCV stats: populated when OHLC given, NaN when not
+    o = c * 0.99; h = c * 1.01; lo = c * 0.98
+    df_ohlc = window_profile_stats(c, vol, 30, open_=o, high=h, low=lo)
+    for col in ["vwap_true", "atr", "atr_pct", "gap_mean", "gap_std",
+                "range_hl", "body_mean", "body_std", "upper_wick", "lower_wick"]:
+        assert pd.notna(df_ohlc[col].iloc[-1]), f"{col} should be finite with OHLC"
+        assert df[col].isna().all(), f"{col} should be all-NaN without OHLC"
+    # true VWAP = window Σ(typical·vol)/Σvol, so it lies within the window's
+    # high/low range (typical price (H+L+C)/3 is bounded by H and L)
+    last = df_ohlc.iloc[-1]
+    assert df_ohlc["vwap_true"].dropna().between(
+        df_ohlc["price_min"].dropna(), df_ohlc["price_max"].dropna()).all(), \
+        "true VWAP within window price range"
+    assert last["atr"] >= 0, "ATR non-negative"
+
 
 # ── registry ────────────────────────────────────────────────────────────
 TESTS = {

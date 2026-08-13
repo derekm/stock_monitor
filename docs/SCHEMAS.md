@@ -330,6 +330,7 @@ auxiliary tables feeding several stages.
 | `monitored_stocks.parquet` | `update_fundamentals.py` | Base parquet table |
 | `monitored_stocks.parquet` | `update_prices.py` | Base parquet table |
 | `monitored_stocks.parquet` | `vol_target.py` | Base parquet table |
+| `daily_prices.parquet` (OHLCV backfill) | `backfill_ohlcv.py` | Data maintenance. Backfills full open/high/low/close/volume history for the whole universe via yfinance; fills the OHLC gap in the close+volume-only history; preserves market_cap; resume-safe |
 | `portfolio_holdings.parquet` | `data_access.py` | Base parquet table |
 | `portfolio_holdings.parquet` | `growth_tech_analytics.py` | Base parquet table |
 | `portfolio_holdings.parquet` | `inclusion_criteria.py` | Base parquet table |

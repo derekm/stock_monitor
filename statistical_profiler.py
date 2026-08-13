@@ -48,10 +48,16 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT
 OUT = DATA_DIR / "fractal_profiles.parquet"
-CONFIGS = [(5, 3), (10, 3), (15, 3), (30, 3)]
+# granularity ladder. (3,5) = 15-day full window at base-3 granularity (15 spans
+# of lengths 3,6,9,12,15) — the finest, quickest view. Then (5,3), (10,3),
+# (15,3), (30,3) scale up to 15d/30d/45d/90d coarser full windows.
+CONFIGS = [(3, 5), (5, 3), (10, 3), (15, 3), (30, 3)]
 MIN_DAYS = 60
 
 # stats computed per window (kept in a stable order for schema documentation)
+# The trailing *V columns (vwap_true, atr, atr_pct, gap_mean, gap_std, range_hl,
+# body_mean, body_std, upper_wick, lower_wick) are true-OHLCV stats: they need
+# open/high/low and are NaN where those are missing (old close-only history).
 STAT_COLS = [
     "price_mean", "price_median", "price_mode", "price_max", "price_min",
     "price_range", "price_std", "price_skew", "price_kurtosis",
@@ -59,6 +65,9 @@ STAT_COLS = [
     "price_slope", "price_curvature",
     "volume_mean", "vwap", "volume_z",
     "log_ret", "momentum", "ret_vol",
+    # true-OHLCV stats (require open/high/low; NaN on close-only history)
+    "vwap_true", "atr", "atr_pct", "gap_mean", "gap_std", "range_hl",
+    "body_mean", "body_std", "upper_wick", "lower_wick",
 ]
 
 
@@ -136,12 +145,16 @@ def _rolling_skew_kurt(x: np.ndarray, L: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def window_profile_stats(close: pd.Series, volume: pd.Series | None,
-                         L: int) -> pd.DataFrame:
+                         L: int, open_: pd.Series | None = None,
+                         high: pd.Series | None = None,
+                         low: pd.Series | None = None) -> pd.DataFrame:
     """Full statistical profile of every trailing L-day window.
 
-    close/volume: DatetimeIndexed daily series. Returns a DataFrame indexed by
-    the window END date with one row per day and one column per STAT_COLS entry.
-    All point-in-time (uses only data up to each window end).
+    close/volume: DatetimeIndexed daily series. If open_/high/low are given,
+    true-OHLCV statistics are computed (real VWAP via typical price, ATR,
+    gap, candle-body and wick shape); otherwise those columns are NaN.
+    Returns a DataFrame indexed by the window END date with one row per day
+    and one column per STAT_COLS entry. All point-in-time.
     """
     c = close.to_numpy(dtype=float)
     n = len(c)
@@ -213,10 +226,43 @@ def window_profile_stats(close: pd.Series, volume: pd.Series | None,
         vstd = pd.Series(v).rolling(L).std().to_numpy()
         with np.errstate(divide="ignore", invalid="ignore"):
             volume_z = np.where(vstd > 0, (v - vmean) / vstd, np.nan)
-        # vwap = sum(close*vol)/sum(vol)
+        # vwap = sum(close*vol)/sum(vol)  (close-based approximation)
         vwap = (pd.Series(c * v).rolling(L).sum() / pd.Series(v).rolling(L).sum()).to_numpy()
     else:
         vmean = np.full(n, np.nan); volume_z = np.full(n, np.nan); vwap = np.full(n, np.nan)
+
+    # ── true-OHLCV stats (only where open/high/low present) ───────────────
+    has_ohlc = (open_ is not None and high is not None and low is not None)
+    if has_ohlc:
+        o = open_.reindex(close.index).to_numpy(dtype=float)
+        h = high.reindex(close.index).to_numpy(dtype=float)
+        lo = low.reindex(close.index).to_numpy(dtype=float)
+        v = volume.to_numpy(dtype=float) if volume is not None else np.ones(n)
+        # typical price = (H+L+C)/3 ; true VWAP = sum(typ*vol)/sum(vol)
+        typ = (h + lo + c) / 3.0
+        vwap_true = (pd.Series(typ * v).rolling(L).sum() / pd.Series(v).rolling(L).sum()).to_numpy()
+        # true range = max(H-L, |H-prevC|, |L-prevC|)
+        prev_c = np.roll(c, 1); prev_c[0] = np.nan
+        tr = np.maximum.reduce([h - lo, np.abs(h - prev_c), np.abs(lo - prev_c)])
+        atr = pd.Series(tr).rolling(L).mean().to_numpy()
+        atr_pct = atr / np.where(c > 0, c, np.nan)  # ATR as fraction of price
+        # gap = open vs previous close (fractional)
+        gap = o / np.where(prev_c > 0, prev_c, np.nan) - 1.0
+        gap_mean = pd.Series(gap).rolling(L).mean().to_numpy()
+        gap_std = pd.Series(gap).rolling(L).std().to_numpy()
+        # intraday range (H-L)/C
+        range_hl = pd.Series((h - lo) / np.where(c > 0, c, np.nan)).rolling(L).mean().to_numpy()
+        # candle body (C-O)/C and wicks
+        body = (c - o) / np.where(c > 0, c, np.nan)
+        body_mean = pd.Series(body).rolling(L).mean().to_numpy()
+        body_std = pd.Series(body).rolling(L).std().to_numpy()
+        up_wick = (h - np.maximum(c, o)) / np.where(c > 0, c, np.nan)
+        lo_wick = (np.minimum(c, o) - lo) / np.where(c > 0, c, np.nan)
+        upper_wick = pd.Series(up_wick).rolling(L).mean().to_numpy()
+        lower_wick = pd.Series(lo_wick).rolling(L).mean().to_numpy()
+    else:
+        vwap_true = atr = atr_pct = gap_mean = gap_std = np.full(n, np.nan)
+        range_hl = body_mean = body_std = upper_wick = lower_wick = np.full(n, np.nan)
 
     # momentum stats (existing)
     log_ret = logc - np.concatenate([np.full(L, np.nan), logc[:-L]])
@@ -247,11 +293,25 @@ def window_profile_stats(close: pd.Series, volume: pd.Series | None,
     df["log_ret"] = log_ret
     df["momentum"] = momentum
     df["ret_vol"] = ret_vol
+    # true-OHLCV stats
+    df["vwap_true"] = vwap_true
+    df["atr"] = atr
+    df["atr_pct"] = atr_pct
+    df["gap_mean"] = gap_mean
+    df["gap_std"] = gap_std
+    df["range_hl"] = range_hl
+    df["body_mean"] = body_mean
+    df["body_std"] = body_std
+    df["upper_wick"] = upper_wick
+    df["lower_wick"] = lower_wick
     return df[["close"] + STAT_COLS]
 
 
 def profile_ticker(close: pd.Series, volume: pd.Series | None,
-                   spans: list[tuple[int, int, int]]) -> pd.DataFrame:
+                   spans: list[tuple[int, int, int]],
+                   open_: pd.Series | None = None,
+                   high: pd.Series | None = None,
+                   low: pd.Series | None = None) -> pd.DataFrame:
     """Full long-format statistical profile of one ticker across all spans.
 
     Returns DataFrame: date, span_from, span_to, span_len, + all STAT_COLS.
@@ -259,7 +319,7 @@ def profile_ticker(close: pd.Series, volume: pd.Series | None,
     frames = []
     lens = sorted({L for _, _, L in spans})
     for L in lens:
-        stats = window_profile_stats(close, volume, L)
+        stats = window_profile_stats(close, volume, L, open_=open_, high=high, low=low)
         for f, t, slen in spans:
             if slen != L:
                 continue
@@ -287,10 +347,22 @@ def build_profiles(tickers_cap: int | None = None, window: int = 1500,
     if tickers_cap:
         tickers = tickers[:tickers_cap]
 
-    # volume matrix
-    vp = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "volume"])
+    # OHLCV matrices
+    vp = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+                         columns=["date", "ticker", "volume", "open", "high", "low"])
     vp["date"] = pd.to_datetime(vp["date"])
+    # Reindex OHLCV to complete business-day calendar, then forward-fill
+    # so holiday dates get the prior trading day's values
+    all_dates = pd.date_range(vp["date"].min(), vp["date"].max(), freq="B")
+    vp = vp.pivot(index="date", columns="ticker", values=["volume", "open", "high", "low"])
+    vp = vp.reindex(all_dates)
+    vp = vp.ffill()
+    vp = vp.stack().reset_index()
+    vp.columns = ["date", "ticker", "volume", "open", "high", "low"]
     vm = vp.pivot(index="date", columns="ticker", values="volume")
+    om = vp.pivot(index="date", columns="ticker", values="open")
+    hm = vp.pivot(index="date", columns="ticker", values="high")
+    lm = vp.pivot(index="date", columns="ticker", values="low")
 
     spans = spans_configs()
     frames = []
@@ -300,7 +372,10 @@ def build_profiles(tickers_cap: int | None = None, window: int = 1500,
             continue
         c = c.tail(window)
         vol = vm[t].reindex(c.index).ffill() if t in vm.columns else None
-        pf = profile_ticker(c, vol, spans)
+        op = om[t].reindex(c.index) if t in om.columns else None
+        hi = hm[t].reindex(c.index) if t in hm.columns else None
+        lo = lm[t].reindex(c.index) if t in lm.columns else None
+        pf = profile_ticker(c, vol, spans, open_=op, high=hi, low=lo)
         if pf.empty:
             continue
         pf["ticker"] = t
