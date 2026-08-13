@@ -129,12 +129,15 @@ def seed_quality_into_fundamentals() -> pd.DataFrame:
         if t not in base["ticker"].values:
             continue
         mask = base["ticker"] == t
-        base.loc[mask, "roe"] = roe
-        base.loc[mask, "roic"] = roic
-        base.loc[mask, "debt_to_equity"] = de
-        base.loc[mask, "interest_coverage"] = ic
-        base.loc[mask, "earnings_stability"] = es
-        base.loc[mask, "quality_source"] = "seed_approx_buffett"
+        # ADDITIVE ONLY: never overwrite a real EDGAR/yfinance cell
+        for col, val in (
+            ("roe", roe), ("roic", roic), ("debt_to_equity", de),
+            ("interest_coverage", ic), ("earnings_stability", es),
+        ):
+            empty = mask & base[col].isna()
+            if empty.any():
+                base.loc[empty, col] = val
+                base.loc[empty, "quality_source"] = "seed_approx_buffett"
 
     # merge back: update matching tickers' latest metrics in full fund table
     for col in ["roe", "roic", "debt_to_equity", "interest_coverage", "earnings_stability"]:
@@ -312,7 +315,22 @@ def sizing_hint(ticker: str, composite: float, vol_target_w: float | None) -> di
 def build_table() -> pd.DataFrame:
     fund = pd.read_parquet(FUND)
     if "as_of_date" in fund.columns:
-        fund = fund.sort_values("as_of_date").groupby("ticker", as_index=False).tail(1)
+        fund = fund.sort_values("as_of_date")
+        seed_src = {
+            "seed_approx_buffett", "seed_aero_dual", "seed_starlink_launch",
+            "seed_neardual_spcx", "seed_defensive_etf", "approx_seed_2026-07",
+            "stub_growth", "fundamentals_history_backfill",
+        }
+        if "source" in fund.columns:
+            real = fund[~fund["source"].isin(seed_src)]
+            # latest real row per ticker; fall back to latest any-row if all seed
+            latest_real = real.groupby("ticker", as_index=False).tail(1)
+            latest_any = fund.groupby("ticker", as_index=False).tail(1)
+            have = set(latest_real["ticker"])
+            extra = latest_any[~latest_any["ticker"].isin(have)]
+            fund = pd.concat([latest_real, extra], ignore_index=True)
+        else:
+            fund = fund.groupby("ticker", as_index=False).tail(1)
 
     # Quality-TREND guard (generalized RF-demotion rule): a name whose quality
     # is deteriorating should not hold INCLUDE_CORE even if it still clears the
@@ -439,8 +457,7 @@ def main():
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
-    if args.seed_quality or True:
-        # always ensure quality columns exist
+    if args.seed_quality:
         seed_quality_into_fundamentals()
 
     df = build_table()
