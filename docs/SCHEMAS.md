@@ -462,6 +462,8 @@ auxiliary tables feeding several stages.
 || `backtest_price_vs_momentum.parquet` | `backtest_price_vs_momentum.py` | Taleb / fat tails. Do price-based fractal signals predict forward returns better than momentum-based? Per feature/horizon: hit_rate_on, mean_on/off, spread, annual_spread, base_mean ||
 || `backtest_long_hold_entry.parquet` | `backtest_long_hold_entry.py` | Taleb / fat tails. Long-hold ignition entry: per ticker excess_t0 vs excess_fair, EW CAGR vs universe, event-study forward excess ||
 || `long_hold_entry_screen.parquet` | `backtest_long_hold_entry.py` | Taleb / fat tails. Recent gap+volume ignitions joined to shock_ride posture/stack/gate/rec ||
+|| `rare_ignition_info.parquet` | `rare_ignition_info.py` | Taleb / fat tails. Event-study: raw/fresh/rare/exuberant gap+vol forward excess vs EW ||
+|| `rare_ignition_live.parquet` | `rare_ignition_info.py` | Taleb / fat tails. Live rare/exuberant ignitions joined to preferred_metrics + shock_ride ||
 || `fractal_windows_backtest.parquet` | `fractal_windows_backtest.py` | Taleb / fat tails ||
 || `fractal_windows_backtest.parquet` | `fractal_windows_backtest_gpu.py` | Taleb / fat tails ||
 || `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails ||

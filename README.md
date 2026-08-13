@@ -255,6 +255,7 @@ Detailed usage for each module:
 - [docs/add_ticker.md](docs/add_ticker.md) — one-command ticker onboarding (uses the preferred-fundamentals backfill)
 - [docs/backtest_quick_ignition.md](docs/backtest_quick_ignition.md) — 5-day-fractal quick ignition rules vs lagging momentum gate
 - [docs/backtest_long_hold_entry.md](docs/backtest_long_hold_entry.md) — ignition as a long-hold entry (honest vs the +11.8% scratch)
+- [docs/rare_ignition_info.md](docs/rare_ignition_info.md) — rare volume-backed runs vs quality/value (anti-exuberance loses)
 - [docs/fractal_windows.md](docs/fractal_windows.md) — fractal sliding-window momentum (patent US20120253946A1, FIGS 28-29); 15d/30d/45d/90d granularity ladder + momentum stack
 - [docs/subindustry_regime.md](docs/subindustry_regime.md) — per-subsector correlation/crisis regimes
 - [docs/ergodicity_ruin.md](docs/ergodicity_ruin.md) — ergodicity / ruin probability
