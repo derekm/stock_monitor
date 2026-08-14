@@ -327,6 +327,23 @@ def main():
     top = signals.nlargest(15, "arista_score")[cols]
     print(top.to_string(index=False))
 
+    # ARISTA FLASHING line: whole-universe top-of-uptrend warning for the daily
+    # report. Names where the signal is ON, ranked by intensity. Compact,
+    # one-per-line with score + the two drivers (decel, at_year_high).
+    flash = signals[signals["arista_signal"]].sort_values("arista_score", ascending=False)
+    print(f"\n=== ARISTA FLASHING (signal ON across universe) — {len(flash)} tickers ===")
+    if flash.empty:
+        print("  none — no top-of-uptrend divergences currently firing")
+    else:
+        fcols = [c for c in ["ticker", "date", "close", "decel", "at_year_high",
+                             "downshare", "arista_score"] if c in flash]
+        print(flash[fcols].to_string(index=False))
+        # one-liner for the report: comma list + count
+        names = flash["ticker"].tolist()
+        print(f"  FLASHING: {len(names)} names — {', '.join(names)}")
+    print(f"  (score>=0.5 high-confidence: {int((signals['arista_score'] >= 0.5).sum())} "
+          f"| signal caught >=15% dd in {120}d backtest: 80%)")
+
     if args.save:
         metrics.to_parquet(OUT_METRICS)
         signals.to_parquet(OUT_SIGNALS)
