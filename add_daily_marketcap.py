@@ -58,14 +58,25 @@ def main() -> None:
         fund_dates = fund_dates[["ticker", "as_of_date", "shares_out"]].drop_duplicates(subset=["ticker", "as_of_date"])
         print(f"  Computed shares_out at {len(fund_dates)} fundamental dates (fallback)")
     else:
-        # Use direct EDGAR shares
-        fund_dates = fund[["ticker", "as_of_date", "shares_outstanding"]].copy()
-        fund_dates = fund_dates.dropna(subset=["shares_outstanding"])
+        # Prefer direct EDGAR/yfinance shares; where a fundamental date has
+        # market_cap but no shares_outstanding, derive shares = mcap/close at
+        # that date. This fills tickers whose shares_outstanding was never
+        # recorded (e.g. foreign/ETF/cyber names) using the market_cap that IS
+        # present, instead of dropping the row.
+        fund_dates = fund[["ticker", "as_of_date", "shares_outstanding", "market_cap"]].copy()
+        fund_dates = fund_dates.merge(
+            prices[["ticker", "date", "close"]],
+            left_on=["ticker", "as_of_date"], right_on=["ticker", "date"], how="left"
+        )
+        # derived shares = market_cap / close at that as_of date (only where
+        # shares_outstanding is missing AND we have both mcap and close)
+        derived = fund_dates["market_cap"] / fund_dates["close"]
+        fund_dates["shares_out"] = fund_dates["shares_outstanding"].fillna(derived)
+        fund_dates = fund_dates.dropna(subset=["shares_out"])
         # Sanity: real companies have 1M-200B shares
-        fund_dates = fund_dates[(fund_dates["shares_outstanding"] >= 1e6) & (fund_dates["shares_outstanding"] <= 2e11)]
-        fund_dates = fund_dates[["ticker", "as_of_date", "shares_outstanding"]].drop_duplicates(subset=["ticker", "as_of_date"])
-        fund_dates = fund_dates.rename(columns={"shares_outstanding": "shares_out"})
-        print(f"  Using direct EDGAR shares at {len(fund_dates)} fundamental dates")
+        fund_dates = fund_dates[(fund_dates["shares_out"] >= 1e6) & (fund_dates["shares_out"] <= 2e11)]
+        fund_dates = fund_dates[["ticker", "as_of_date", "shares_out"]].drop_duplicates(subset=["ticker", "as_of_date"])
+        print(f"  Using direct + mcap-derived shares at {len(fund_dates)} fundamental dates")
 
     # Forward-fill shares to all trading dates per ticker
     prices = prices.merge(fund_dates, left_on=["ticker", "date"], right_on=["ticker", "as_of_date"], how="left")

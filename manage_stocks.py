@@ -62,6 +62,73 @@ def cmd_add(args):
     df = pd.concat([df, pd.DataFrame([new])], ignore_index=True)
     save_stocks(df)
     print(f"Added {args.ticker.upper()}")
+    
+    if args.backfill:
+        run_full_backfill(args.ticker.upper(), args.days)
+
+
+def run_full_backfill(ticker: str, days: int = 4000):
+    """Run complete backfill pipeline for a new ticker."""
+    import subprocess
+    import sys
+    
+    print(f"\n{'='*60}")
+    print(f"Running full backfill for {ticker}...")
+    print(f"{'='*60}")
+    
+    # Step 1: Fetch prices
+    print(f"\n[1/4] Fetching {days} days of price data...")
+    result = subprocess.run([
+        sys.executable, "update_prices.py", "fetch", "--days", str(days)
+    ], cwd=DATA_DIR, capture_output=True, text=True)
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+    if result.returncode != 0:
+        print(f"Warning: price fetch returned {result.returncode}")
+    
+    # Step 2: Fetch fundamentals (current snapshot)
+    print(f"\n[2/4] Fetching current fundamentals...")
+    result = subprocess.run([
+        sys.executable, "update_fundamentals.py", "fetch", "--tickers", ticker
+    ], cwd=DATA_DIR, capture_output=True, text=True)
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+    
+    # Step 3: Fetch EDGAR history (deep fundamentals)
+    print(f"\n[3/5] Fetching EDGAR history...")
+    result = subprocess.run([
+        sys.executable, "update_fundamentals.py", "fetch-history", "--tickers", ticker
+    ], cwd=DATA_DIR, capture_output=True, text=True, timeout=300)
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+
+    # Step 4: Compute daily market cap from shares (so market_cap is populated
+    # for the new ticker immediately — otherwise it's NaN until the next full
+    # automation run). Depends on steps 1-3 (prices + shares in fundamentals).
+    print(f"\n[4/5] Computing daily market cap from shares...")
+    result = subprocess.run([
+        sys.executable, "add_daily_marketcap.py"
+    ], cwd=DATA_DIR, capture_output=True, text=True, timeout=300)
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+
+    # Step 5: Run daily automation (preferred, peer, implied_r, momentum, inclusion, aggregate, technical)
+    print(f"\n[5/5] Running analytics pipeline...")
+    result = subprocess.run([
+        sys.executable, "run_daily_automation.py", 
+        "--only", "preferred,peer,implied_r,momentum,inclusion,aggregate,technical"
+    ], cwd=DATA_DIR, capture_output=True, text=True, timeout=600)
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+    
+    print(f"\n{'='*60}")
+    print(f"Full backfill complete for {ticker}")
+    print(f"{'='*60}")
 
 def cmd_set_status(args):
     df = load_stocks()
@@ -105,6 +172,8 @@ def main():
     p_add.add_argument("--status", default="monitored", choices=["active", "monitored", "inactive"])
     p_add.add_argument("--index_member", action="store_true")
     p_add.add_argument("--notes", default="")
+    p_add.add_argument("--backfill", action="store_true", help="Run full backfill pipeline after adding (prices, fundamentals, EDGAR, analytics)")
+    p_add.add_argument("--days", type=int, default=4000, help="Days of price history to fetch (default 4000)")
     p_add.set_defaults(func=cmd_add)
 
     p_status = sub.add_parser("set_status")

@@ -53,7 +53,7 @@ def _as_date(v):
 
 
 def universe_tickers() -> list[str]:
-    """Full research universe: shock_ride ∩ prices, else monitored, else fund."""
+    """Full research universe: shock_ride �� prices, else monitored, else fund."""
     names: set[str] = set()
     for path, col in (
         (SHOCK_FILE, "ticker"),
@@ -215,7 +215,7 @@ def cmd_fetch(args):
             info = yf.Ticker(t).info
             mcap = info.get("marketCap")
             book = info.get("bookValue")  # per share
-            shares = info.get("sharesOutstanding")
+            shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
             total_assets = None  # rarely in .info; would need balance sheet
             pb = info.get("priceToBook")
             if mcap is None:
@@ -232,12 +232,14 @@ def cmd_fetch(args):
                 "total_assets_b": None,
                 "pb_ratio": round(pb, 2) if pb else None,
                 "mktcap_to_assets": None,
+                "shares_outstanding": int(shares) if shares else None,
                 "source": "yfinance",
                 "notes": f"bookValue/share={book}" if book else "",
                 "last_updated": pd.Timestamp.now(),
             }
             rows.append(row)
-            print(f"  {t}: MktCap ${mcap_b:.2f}B  P/B {pb}")
+            print(f"  {t}: MktCap ${mcap_b:.2f}B  P/B {pb}"
+                  + (f"  shares {shares:,}" if shares else "  (no shares)"))
         except Exception as e:
             print(f"  {t}: error {e}")
 
@@ -309,6 +311,7 @@ def cmd_fetch_history(args):
     try:
         from analytics_common import load_adj_prices_pandas
         prices = load_adj_prices_pandas(tickers=tickers)
+        # Use close (which is adj_close where available, NaN elsewhere)
         px = {tk: g.set_index("date")["close"] for tk, g in prices.groupby("ticker")}
     except Exception as e:  # noqa: BLE001
         print(f"  !! price load failed: {e}; market-cap-based rows will be None")
@@ -380,6 +383,7 @@ def cmd_fetch_history(args):
                     "roe": round(roe, 4) if roe else None,
                     "roic": round(roic, 4) if roic else None,
                     "debt_to_equity": round(de, 3) if de else None,
+                    "shares_outstanding": int(shares) if shares else None,
                     "source": "yfinance_history",
                     "notes": "real quarterly statements (TTM income)",
                     "last_updated": pd.Timestamp.now(),
