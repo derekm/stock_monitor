@@ -130,12 +130,51 @@ Our `build_sp500_history.py` already produces:
 
 ---
 
+## ������ CRITICAL CAVEAT: Missing Original 1957 Constituents
+
+### The Gap
+| Source | Original 1957-03-04 Members | Notes |
+|--------|----------------------------|-------|
+| **tickerleague.com** (official S&P announcements) | **205** | Only 205 adds on 1957-03-03/04 |
+| **Wikipedia** (curated changes table) | **205** | Only 205 adds on 1957-03-04 |
+| **Historical fact** (Siegel 2014, NBER, S&P records) | **500** | 425 industrials + 60 utilities + 15 railroads |
+
+**Both our primary public sources are missing 295 original constituents (59% of the launch index).**
+
+### Why the Sources Are Incomplete
+The original 500 list was published in the **Standard & Poor's Security Price Index Record for 1957** — scattered across **91 industry subgroups** (e.g., "Confectionery: American Chicle, Hershey Chocolate, Sweets, Wrigley"). This print publication:
+- Is **not digitized freely** (HathiTrust/Google Books have only "search-only" 1957 edition)
+- Requires **WRDS/COMPUSTAT/CRSP** institutional access for the full constituent list
+- Was the source used by Siegel (2014) and NBER researchers
+
+### Impact on Our Data
+| Artifact | Status | Note |
+|----------|--------|------|
+| `sp500_changes_merged.parquet` | **Accurate for documented changes** | Only 205/500 launch members have public add records |
+| `sp500_membership.parquet` | **Incomplete before 1964** | Only 205 tickers on 1957-03-04; first documented change after launch is 1964 |
+| `sp500_constituents_validated.parquet` | **Current only** | 53 survivors with `date_added=1957-03-04` (matches Wikipedia) |
+
+### Recommended Usage
+```python
+# When using sp500_membership.parquet for pre-1964 research:
+# - KNOWN: 205 members on 1957-03-04 (documented in public sources)
+# - ACTUAL: 500 members on 1957-03-04 (per S&P historical records)
+# - GAP: 295 members with no public add/remove trail
+# - FIRST DOCUMENTED CHANGE: 1964 (per tickerleague)
+# - Use with caution for pre-1964 index composition studies
+```
+
+---
+
 ## References
 
 1. **Primary**: Preston, H. & Soe, A.M. (2021). "What Happened to the Index Effect? A Look at Three Decades of S&P 500 Adds and Drops." S&P Dow Jones Indices Research.
 2. **Coverage**: MarketWatch (Hulbert, 2021), Morningstar (2022), Investopedia (2022), Harvard/Greenwood & Sammon (2024 SSRN-4294297)
-3. **Our Data**: `sp500_changes_merged.parquet` (1,534 events), `sp500_membership.parquet` (9.36M PIT rows), `daily_prices.parquet` (OHLCV)
+3. **Historical Composition**: Siegel, J. (2014). "The Long-term Return on the Original S&P 500 Firms." Wharton/Rodney White Center.
+4. **Original 1957 List**: Standard & Poor's Security Price Index Record, 1957 edition (91 industry subgroups, 500 companies).
+5. **Our Data**: `sp500_changes_merged.parquet` (1,534 events), `sp500_membership.parquet` (9.36M PIT rows), `daily_prices.parquet` (OHLCV)
 
 ---
 
-*Added to stock_monitor research library: 2026-08-13*
+*Added to stock_monitor research library: 2026-08-13*  
+*Updated with missing constituents caveat: 2026-08-13*
