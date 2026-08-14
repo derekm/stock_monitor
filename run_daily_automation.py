@@ -68,6 +68,7 @@ JOBS = {
     "taleb_shock": (["macro_shock.py", "--save"], None),
     "taleb_sector_shock": (["macro_sector_shock.py", "--save"], None),
     "taleb_shock_ride": (["shock_ride.py", "--save"], None),
+    "taleb_arista": (["arista.py", "--save"], None),
     "taleb_ride_now": (["ride_now.py", "--save"], None),
     "taleb_subindustry_regime": (["subindustry_regime.py", "--save"], None),
     "taleb_barbell": (["barbell_check.py"], None),
@@ -111,11 +112,12 @@ DEPS = {
     "taleb_shock": {"hmm"},
     "taleb_sector_shock": {"hmm"},
     "taleb_shock_ride": {"taleb_sector_shock"},
+    "taleb_arista": set(),
     "taleb_subindustry_regime": {"taleb_sector_shock"},
     "taleb_barbell": {"taleb_fragility", "taleb_ergodic"},
     "taleb_optionality": {"aggregate", "preferred"},
     "export": {"aggregate", "technical", "econ_cal", "est_rev", "shadow",
-               "taleb_tail", "taleb_gap", "taleb_iv_skew", "taleb_ergodic", "taleb_fragility", "taleb_minsky", "taleb_shock", "taleb_sector_shock", "taleb_shock_ride", "taleb_subindustry_regime", "taleb_barbell",
+               "taleb_tail", "taleb_gap", "taleb_iv_skew", "taleb_ergodic", "taleb_fragility", "taleb_minsky", "taleb_shock", "taleb_sector_shock", "taleb_shock_ride", "taleb_arista", "taleb_subindustry_regime", "taleb_barbell",
                "taleb_optionality"},
 }
 
