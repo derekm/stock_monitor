@@ -33,9 +33,12 @@ def main() -> None:
     fund = fund.sort_values(["ticker", "as_of_date"])
     print(f"  {len(fund):,} rows, {fund['ticker'].nunique()} tickers")
 
-    # Normalize date dtypes: prices are datetime64[ms], fundamentals'
-    # as_of_date can arrive as datetime.date objects (fresh EDGAR/yfinance).
-    fund["as_of_date"] = pd.to_datetime(fund["as_of_date"], errors="coerce")
+    # Normalize date dtypes to a common type for the merge. daily_prices'
+    # `date` is DATE-native (datetime.date objects, stored as date32[day]),
+    # while fundamentals' as_of_date arrives as datetime64 (fresh EDGAR/yfinance).
+    # Merging object-vs-datetime64 raises "cannot merge object and datetime64".
+    # Convert as_of_date to datetime.date objects to match prices' date column.
+    fund["as_of_date"] = pd.to_datetime(fund["as_of_date"], errors="coerce").dt.date
 
     # Check shares_outstanding column
     if "shares_outstanding" not in fund.columns:
