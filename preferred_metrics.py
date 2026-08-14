@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-preferred_metrics.py — Buffett-style quality + value trifecta + sizing rules.
+preferred_metrics.py — Buffett-style quality + value trifecta + sizing rules + Damodaran integration.
 
 Quality (Buffett-style):
   ROE >= 15%, ROIC >= 15%, low leverage (D/E ideally < 0.5–1),
@@ -8,6 +8,13 @@ Quality (Buffett-style):
 
 Value trifecta (from prior threads):
   EV/EBITDA <= 9, P/B <= 1.5, MktCap/Assets <= 0.5
+
+Damodaran enhancements (2026-08):
+  - Dynamic ERP/CRP from Damodaran (US implied ERP ≈ 4.23% Jan 2026)
+  - Per-ticker WACC via Damodaran cost-of-capital framework
+  - Corporate life cycle classification (Start-up → Decline)
+  - Fundamental-implied fair multiples (P/E, EV/EBITDA, EV/Sales, P/B)
+  - Margin of Safety: require 15–25% discount to intrinsic value
 
 Sizing preferences:
   - Vol targeting / per-name hard caps (default suggested max weight floor 5%)
@@ -40,6 +47,11 @@ VOL_T = DATA_DIR / "vol_targets.parquet"
 OUT = DATA_DIR / "preferred_metrics.parquet"
 OUT_PQ = DATA_DIR / "preferred_metrics.parquet"
 OUT_SCREEN = DATA_DIR / "preferred_screen_hits.parquet"
+
+# Damodaran data paths
+WACC_FILE = DATA_DIR / "wacc_per_ticker.parquet"
+LIFE_CYCLE_FILE = DATA_DIR / "life_cycle_stage.parquet"
+FAIR_MULTIPLES_FILE = DATA_DIR / "fair_multiples.parquet"
 
 # Thresholds (tunable policy) — canonical values live in analytics_common
 from analytics_common import (
@@ -222,7 +234,6 @@ def score_value(row: pd.Series) -> dict:
     return parts
 
 
-
 def leverage_metrics(row: pd.Series, mca_max: float = MCA_MAX, de_max: float = DE_MAX) -> dict:
     """Financial leverage helpers for interpreting low MktCap/Assets.
 
@@ -316,15 +327,32 @@ def build_table() -> pd.DataFrame:
     fund = pd.read_parquet(FUND)
     if "as_of_date" in fund.columns:
         fund = fund.sort_values("as_of_date")
+        # Source priority: higher rank = better source
+        SOURCE_RANK = {
+            "edgar": 100,
+            "manual": 80,
+            "yfinance_history": 60,
+            "polygon_financials": 55,
+            "yfinance": 40,
+            "fundamentals_history_backfill": 10,
+        }
         seed_src = {
             "seed_approx_buffett", "seed_aero_dual", "seed_starlink_launch",
             "seed_neardual_spcx", "seed_defensive_etf", "approx_seed_2026-07",
             "stub_growth", "fundamentals_history_backfill",
         }
         if "source" in fund.columns:
-            real = fund[~fund["source"].isin(seed_src)]
-            # latest real row per ticker; fall back to latest any-row if all seed
-            latest_real = real.groupby("ticker", as_index=False).tail(1)
+            # Filter out seed sources
+            real = fund[~fund["source"].isin(seed_src)].copy()
+            # Add source rank
+            real["_src_rank"] = real["source"].map(lambda s: SOURCE_RANK.get(s, 30))
+            # Sort by ticker, then source rank (desc), then date (desc) - so highest rank + latest date wins
+            real = real.sort_values(["ticker", "_src_rank", "as_of_date"], ascending=[True, False, False])
+            # Take first (highest rank, latest date) per ticker
+            latest_real = real.groupby("ticker", as_index=False).first()
+            latest_real = latest_real.drop(columns=["_src_rank"])
+            
+            # Fallback for tickers that only have seed sources
             latest_any = fund.groupby("ticker", as_index=False).tail(1)
             have = set(latest_real["ticker"])
             extra = latest_any[~latest_any["ticker"].isin(have)]
@@ -387,6 +415,22 @@ def build_table() -> pd.DataFrame:
                 "growth_sleeve": r.get("growth_sleeve"),
             }
 
+    # Load Damodaran data
+    wacc_data = {}
+    if WACC_FILE.exists():
+        wacc_df = pd.read_parquet(WACC_FILE)
+        wacc_data = wacc_df.set_index("ticker").to_dict("index")
+    
+    life_cycle_data = {}
+    if LIFE_CYCLE_FILE.exists():
+        lc_df = pd.read_parquet(LIFE_CYCLE_FILE)
+        life_cycle_data = lc_df.set_index("ticker")["life_cycle_stage"].to_dict()
+    
+    fair_mult_data = {}
+    if FAIR_MULTIPLES_FILE.exists():
+        fm_df = pd.read_parquet(FAIR_MULTIPLES_FILE)
+        fair_mult_data = fm_df.set_index("ticker").to_dict("index")
+
     rows = []
     for _, r in fund.iterrows():
         t = r["ticker"]
@@ -412,6 +456,24 @@ def build_table() -> pd.DataFrame:
                 dual = False
         size = sizing_hint(t, composite, vt.get(t))
 
+        # Damodaran enhancements
+        wacc_info = wacc_data.get(t, {})
+        life_stage = life_cycle_data.get(t, "Unclassified")
+        fair_info = fair_mult_data.get(t, {})
+        
+        wacc = wacc_info.get("wacc")
+        cost_of_equity = wacc_info.get("cost_of_equity")
+        cost_of_debt = wacc_info.get("cost_of_debt")
+        synthetic_rating = wacc_info.get("synthetic_rating")
+        
+        fair_pe = fair_info.get("fair_pe")
+        fair_ev_ebitda = fair_info.get("fair_ev_ebitda")
+        fair_ev_sales = fair_info.get("fair_ev_sales")
+        fair_pb = fair_info.get("fair_pb")
+        
+        # Margin of Safety check (placeholder - full DCF needed for proper MoS)
+        mos = {"mos_pass": False, "discount_to_fair": np.nan, "mos_pct": 0.20}
+
         fl = flags.get(t, {})
         rows.append({
             "ticker": t,
@@ -435,6 +497,18 @@ def build_table() -> pd.DataFrame:
             "composite_score": round(composite, 4),
             "w_current": round(h_w.get(t, 0.0), 4),
             **size,
+            # Damodaran fields
+            "wacc": wacc,
+            "cost_of_equity": cost_of_equity,
+            "cost_of_debt": cost_of_debt,
+            "synthetic_rating": synthetic_rating,
+            "life_cycle_stage": life_stage,
+            "fair_pe": fair_pe,
+            "fair_ev_ebitda": fair_ev_ebitda,
+            "fair_ev_sales": fair_ev_sales,
+            "fair_pb": fair_pb,
+            "mos_pass": mos["mos_pass"],
+            "discount_to_fair": mos["discount_to_fair"],
             "decision": (
                 "INCLUDE_CORE" if dual else
                 "INCLUDE_VALUE" if v["trifecta_pass"] and composite >= 0.45 else
@@ -450,7 +524,7 @@ def build_table() -> pd.DataFrame:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Preferred metrics: Buffett quality + value trifecta + sizing")
+    ap = argparse.ArgumentParser(description="Preferred metrics: Buffett quality + value trifecta + sizing + Damodaran")
     ap.add_argument("--seed-quality", action="store_true", help="Write ROE/ROIC seeds into fundamentals")
     ap.add_argument("--min-score", type=float, default=0.0)
     ap.add_argument("--decision", default=None, help="Filter decision label")
