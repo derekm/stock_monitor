@@ -20,6 +20,11 @@ def load_cik_ticker_map():
     cik_to_ticker = {v: k for k, v in ticker_to_cik.items()}
     return ticker_to_cik, cik_to_ticker
 
+def load_cusip_ticker_map():
+    """Load CUSIP -> ticker mapping"""
+    with open("cusip_ticker_map.json") as f:
+        return json.load(f)
+
 def parse_member_to_ticker(member: str, cik_to_ticker: dict) -> tuple:
     """
     Parse XBRL dimension member to extract ticker/CIK.
@@ -166,6 +171,16 @@ def extract_issuer_from_dimensions(dimensions_json: str, cik_to_ticker: dict) ->
             if ticker:
                 return ticker, cik
     
+    # Check for 13F-HR specific fields in dimensions
+    if 'nameOfIssuer' in dims and dims['nameOfIssuer']:
+        # Try to map the issuer name to ticker
+        issuer_name = dims['nameOfIssuer']
+        # Try direct lookup from a mapping (would need to be built)
+        # For now, try to match using CUSIP if available
+        if 'cusip' in dims and dims['cusip']:
+            # We'd need a CUSIP->ticker mapping
+            pass
+    
     return None, None
 
 def process_holdings(detailed_path: str, output_path: str):
@@ -174,17 +189,44 @@ def process_holdings(detailed_path: str, output_path: str):
     
     # Load CIK mapping
     ticker_to_cik, cik_to_ticker = load_cik_ticker_map()
+    # Load CUSIP mapping
+    cusip_to_ticker = load_cusip_ticker_map()
     
-    # Instead of filtering by concept first, extract issuer from ALL rows that have issuer dimensions
-    # Then filter for meaningful holding concepts
+    # Handle 13F-HR rows which have issuer info in dimensions JSON
+    if 'source_form_type' in df.columns:
+        mask_13f = df['source_form_type'] == '13F-HR'
+        if mask_13f.any():
+            print(f"Extracting issuer information from {mask_13f.sum()} 13F-HR rows...")
+            # Parse dimensions JSON for 13F-HR rows to extract CUSIP and name
+            def extract_13f_issuer(dimensions_json):
+                try:
+                    dims = json.loads(dimensions_json)
+                except:
+                    return None, None
+                # Try CUSIP first
+                if 'cusip' in dims and dims['cusip']:
+                    cusip = dims['cusip'].strip()
+                    if cusip in cusip_to_ticker:
+                        return cusip_to_ticker[cusip], None
+                # Try nameOfIssuer
+                if 'nameOfIssuer' in dims and dims['nameOfIssuer']:
+                    name = dims['nameOfIssuer'].strip()
+                    # Could do fuzzy matching here
+                    pass
+                return None, None
+            
+            issuers_13f = df.loc[mask_13f, 'dimensions'].apply(extract_13f_issuer)
+            df.loc[mask_13f, 'held_ticker'] = [x[0] for x in issuers_13f]
+            df.loc[mask_13f, 'held_cik'] = [x[1] for x in issuers_13f]
+            print(f"  Identified issuers from 13F-HR: {df.loc[mask_13f, 'held_ticker'].notna().sum()}")
     
-    # Extract issuer information from ALL rows
-    print("Extracting issuer information from all rows...")
+    # Extract issuer information from ALL rows (including XBRL dimensions)
+    print("Extracting issuer information from XBRL dimensions...")
     issuers = df["dimensions"].apply(lambda x: extract_issuer_from_dimensions(x, cik_to_ticker))
-    df["held_ticker"] = [x[0] for x in issuers]
-    df["held_cik"] = [x[1] for x in issuers]
+    df["held_ticker"] = df["held_ticker"].combine_first(pd.Series([x[0] for x in issuers], index=df.index))
+    df["held_cik"] = df["held_cik"].combine_first(pd.Series([x[1] for x in issuers], index=df.index))
     
-    print(f"Rows with identified issuers: {df['held_ticker'].notna().sum()} / {len(df)}")
+    print(f"Rows with identified issuers from XBRL dimensions: {df['held_ticker'].notna().sum()} / {len(df)}")
     
     # Now filter for concepts that represent actual holdings (not gains/losses, not percentages)
     holding_concepts = [
@@ -335,6 +377,18 @@ def enrich_with_prices(holdings_panel_path: str, prices_path: str, output_path: 
     
     if len(shares_rows) == 0:
         print("No share-based holdings to enrich with prices")
+        # Still need to set market_value for USD holdings
+        holdings["market_value"] = None
+        holdings["price_date"] = None
+        holdings["price_used"] = None
+        usd_mask = holdings["value_type"] == "market_value"
+        holdings.loc[usd_mask, "market_value"] = holdings.loc[usd_mask, "value"]
+        holdings.loc[usd_mask, "price_date"] = holdings.loc[usd_mask, "as_of_date"]
+        holdings.loc[usd_mask, "price_used"] = 1.0
+        
+        holdings.to_parquet(output_path, index=False)
+        print(f"Saved enriched panel to {output_path}: {len(holdings)} rows")
+        print(f"  Rows with market_value: {holdings['market_value'].notna().sum()}")
         return holdings
     
     # Merge with prices on held_ticker and as_of_date
