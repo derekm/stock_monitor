@@ -104,13 +104,23 @@ def cmd_fetch(args):
         return
 
     print(f"Fetching last {args.days} days for {len(tickers)} tickers...")
-    data = yf.download(tickers, period=f"{args.days}d", group_by="ticker", auto_adjust=False, progress=False)
+    # Fetch unadjusted (raw) prices
+    data_raw = yf.download(tickers, period=f"{args.days}d", group_by="ticker", auto_adjust=False, progress=False)
+    # Fetch adjusted prices (for returns calculations)
+    data_adj = yf.download(tickers, period=f"{args.days}d", group_by="ticker", auto_adjust=True, progress=False)
 
     rows = []
     if len(tickers) == 1:
         # Single ticker shape
         t = tickers[0]
-        for idx, row in data.iterrows():
+        for idx, row in data_raw.iterrows():
+            # Get adjusted close for same date if available
+            adj_close = None
+            if t in data_adj.columns.get_level_values(0):
+                adj_row = data_adj[t].loc[idx] if idx in data_adj[t].index else None
+                if adj_row is not None and not adj_row.isna().all():
+                    adj_close = float(adj_row["Close"])
+            
             rows.append({
                 "date": idx.date() if hasattr(idx, "date") else idx,
                 "ticker": t,
@@ -118,16 +128,24 @@ def cmd_fetch(args):
                 "high": float(row["High"]),
                 "low": float(row["Low"]),
                 "close": float(row["Close"]),
+                "adj_close": adj_close,
                 "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
                 "source": "yfinance",
             })
     else:
         for t in tickers:
-            if t not in data.columns.get_level_values(0):
+            if t not in data_raw.columns.get_level_values(0):
                 print(f"  Warning: no data for {t}")
                 continue
-            sub = data[t].dropna(how="all")
-            for idx, row in sub.iterrows():
+            sub_raw = data_raw[t].dropna(how="all")
+            sub_adj = data_adj[t].dropna(how="all") if t in data_adj.columns.get_level_values(0) else pd.DataFrame()
+            for idx, row in sub_raw.iterrows():
+                adj_close = None
+                if len(sub_adj) and idx in sub_adj.index:
+                    adj_row = sub_adj.loc[idx]
+                    if not adj_row.isna().all():
+                        adj_close = float(adj_row["Close"])
+                
                 rows.append({
                     "date": idx.date() if hasattr(idx, "date") else idx,
                     "ticker": t,
@@ -135,6 +153,7 @@ def cmd_fetch(args):
                     "high": float(row["High"]),
                     "low": float(row["Low"]),
                     "close": float(row["Close"]),
+                    "adj_close": adj_close,
                     "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
                     "source": "yfinance",
                 })
