@@ -1,0 +1,33 @@
+{
+  "n_filers": 16,
+  "n_held": 56,
+  "bipartite_edges": 608,
+  "filer_overlap_edges": 110,
+  "filer_network_density": 0.9166666666666666,
+  "filer_sccs": 1,
+  "core_size": 16,
+  "core_filers": [
+    "BLK",
+    "JPM",
+    "PNC",
+    "BRK-B",
+    "PRU",
+    "AFG",
+    "MS",
+    "FNF",
+    "NVDA",
+    "WFC",
+    "ALL",
+    "CINF",
+    "WRB",
+    "GS",
+    "BAC",
+    "USB"
+  ],
+  "in_size": 0,
+  "out_size": 0,
+  "tnt_size": 0,
+  "total_holdings_value": 4833498684390.0,
+  "top_filer_control_share": 0.07390927942204839,
+  "top5_filer_control_share": 0.36363747373115857
+}

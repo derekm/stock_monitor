@@ -1,0 +1,19 @@
+{
+  "total_nodes": 70,
+  "total_edges": 608,
+  "lcc_nodes": 70,
+  "lcc_edges": 608,
+  "num_sccs": 70,
+  "core_size": 1,
+  "in_size": 13,
+  "out_size": 0,
+  "tnt_size": 56,
+  "total_cycles": 1,
+  "cycles_2": 0,
+  "total_net_control": 2.0,
+  "total_control_value": 573562499584.547,
+  "core_net_control_share": 0.0,
+  "core_control_value_share": 0.0,
+  "top50_net_control_share": 1.0,
+  "top50_control_value_shade": 1.0
+}
