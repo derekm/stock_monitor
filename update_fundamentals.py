@@ -1,35 +1,31 @@
 #!/usr/bin/env python3
 """
-update_fundamentals.py - Maintain P/B, market cap, total assets, and mktcap/assets ratios.
+update_fundamentals.py — Update P/B, market cap, total assets, and quarterly fundamentals.
 
-Usage:
-  python update_fundamentals.py show
-  python update_fundamentals.py show --ticker CF
-  python update_fundamentals.py manual --ticker CF --market-cap-b 18.2 --total-assets-b 13.8 --pb 2.9
-  python update_fundamentals.py from-csv fundamentals.csv
-  python update_fundamentals.py fetch          # yfinance attempt (marketCap + bookValue when available)
-
-CSV expected columns (minimum):
-  ticker, market_cap_b, total_assets_b, pb_ratio
-Optional: as_of_date, notes
+Commands:
+  fetch          — snapshot from yfinance .info (daily)
+  fetch-history  — REAL point-in-time quarterly fundamentals from yfinance quarterly statements
+  manual         — manual entry
+  from-csv       — bulk load from CSV
+  show           — inspect latest
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from datetime import date
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 DATA_DIR = Path(__file__).parent
-FUND_FILE = DATA_DIR / "fundamentals.parquet"
-STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
-SHOCK_FILE = DATA_DIR / "shock_ride_tickers.parquet"
+FUND = DATA_DIR / "fundamentals.parquet"
+MONITORED = DATA_DIR / "monitored_stocks.parquet"
 
-# Source priority for the same (ticker, as_of_date): never demote a better row.
+# Source priority (higher = better) — used by preferred_metrics.py
 SOURCE_RANK = {
     "edgar": 100,
     "manual": 80,
@@ -40,258 +36,180 @@ SOURCE_RANK = {
 }
 
 
-def _as_date(v):
-    if v is None or (isinstance(v, float) and pd.isna(v)):
-        return None
-    if hasattr(v, "date") and not isinstance(v, type(pd.Timestamp.now().date())):
-        try:
-            return v.date()
-        except Exception:
-            pass
-    ts = pd.Timestamp(v)
-    return ts.date()
-
-
-def universe_tickers() -> list[str]:
-    """Full research universe: shock_ride �� prices, else monitored, else fund."""
-    names: set[str] = set()
-    for path, col in (
-        (SHOCK_FILE, "ticker"),
-        (PRICES_FILE, "ticker"),
-        (STOCKS_FILE, "ticker"),
-    ):
-        if path.exists():
-            df = pd.read_parquet(path, columns=[col])
-            names |= set(df[col].astype(str).str.upper())
-    skip = {".", "^", "=", "-", ":"}
-    out = sorted(t for t in names if t and not any(s in t for s in skip))
-    return out
+def _as_date(x):
+    if isinstance(x, date) and not isinstance(x, pd.Timestamp):
+        return x
+    if isinstance(x, pd.Timestamp):
+        return x.date()
+    if isinstance(x, str):
+        return pd.Timestamp(x).date()
+    if pd.isna(x):
+        return pd.NaT
+    return pd.Timestamp(x).date()
 
 
 def load() -> pd.DataFrame:
-    if FUND_FILE.exists():
-        return pd.read_parquet(FUND_FILE)
-    return pd.DataFrame(columns=[
-        "ticker", "as_of_date", "market_cap", "market_cap_b", "shares_outstanding",
-        "total_assets", "total_assets_b", "pb_ratio", "mktcap_to_assets", "source",
-        "notes", "last_updated"
-    ])
+    if FUND.exists():
+        df = pd.read_parquet(FUND)
+        if "as_of_date" in df.columns:
+            df["as_of_date"] = df["as_of_date"].map(_as_date)
+        return df
+    return pd.DataFrame()
 
 
 def save(df: pd.DataFrame) -> None:
     df = df.copy()
-    df["as_of_date"] = df["as_of_date"].map(_as_date)
-    # Keep the higher-priority source on (ticker, date); never let yfinance
-    # displace EDGAR if both somehow remain.
-    if "source" in df.columns:
-        df["_rank"] = df["source"].map(lambda s: SOURCE_RANK.get(s, 30))
-        df = df.sort_values(["ticker", "as_of_date", "_rank"])
-        df = df.drop_duplicates(subset=["ticker", "as_of_date"], keep="last")
-        df = df.drop(columns=["_rank"])
-    else:
-        df = df.sort_values(["ticker", "as_of_date"]).drop_duplicates(
-            subset=["ticker", "as_of_date"], keep="last"
-        )
-    table = pa.Table.from_pandas(df, preserve_index=False)
-    pq.write_table(table, FUND_FILE)
-    print(f"Saved {len(df)} fundamental rows → {FUND_FILE}")
+    if "as_of_date" in df.columns:
+        df["as_of_date"] = df["as_of_date"].map(_as_date)
+    pq.write_table(pa.Table.from_pandas(df, preserve_index=False), FUND)
+
+
+def universe_tickers() -> list[str] | None:
+    if MONITORED.exists():
+        df = pd.read_parquet(MONITORED)
+        return df["ticker"].dropna().unique().tolist()
+    return None
 
 
 def cmd_show(args):
     df = load()
+    if df.empty:
+        print("No data")
+        return
     if args.ticker:
         df = df[df["ticker"] == args.ticker.upper()]
-    cols = ["ticker", "as_of_date", "market_cap_b", "total_assets_b", "pb_ratio", "mktcap_to_assets", "source"]
-    print(df[cols].round(3).to_string(index=False))
-    print(f"\n{len(df)} rows")
+    print(df.sort_values("as_of_date", ascending=False).head(20).to_string(index=False))
 
 
 def cmd_manual(args):
-    df = load()
-    t = args.ticker.upper()
-    mcap_b = float(args.market_cap_b)
-    assets_b = float(args.total_assets_b)
-    pb = float(args.pb) if args.pb is not None else None
-    ev = float(args.ev_ebitda) if args.ev_ebitda is not None else None
-    as_of = pd.to_datetime(args.as_of) if args.as_of else pd.Timestamp.now().normalize()
-
-    # Remove prior row for same ticker+date if present
-    df = df[~((df["ticker"] == t) & (df["as_of_date"] == as_of))]
-
-    # shares_outstanding: direct count if the price at as_of is available,
-    # else derived from market cap (mcap / close). Prefer an explicit count.
-    shares = None
-    px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker", "date", "close"])
-    px = px[px["ticker"] == t]
-    px["date"] = pd.to_datetime(px["date"])
-    row_close = px[px["date"] <= pd.Timestamp(as_of)]
-    if len(row_close):
-        shares = (mcap_b * 1e9) / float(row_close["close"].iloc[-1])
-
+    ticker = args.ticker.upper()
+    as_of = _as_date(args.as_of) if args.as_of else date.today()
     row = {
-        "ticker": t,
+        "ticker": ticker,
         "as_of_date": as_of,
-        "market_cap": int(mcap_b * 1e9),
-        "market_cap_b": mcap_b,
-        "shares_outstanding": shares,
-        "total_assets": int(assets_b * 1e9),
-        "total_assets_b": assets_b,
-        "pb_ratio": pb,
-        "ev_ebitda": ev,
-        "mktcap_to_assets": round(mcap_b / assets_b, 3) if assets_b else None,
+        "market_cap_b": args.market_cap_b,
+        "total_assets_b": args.total_assets_b,
+        "market_cap": int(args.market_cap_b * 1e9),
+        "total_assets": int(args.total_assets_b * 1e9),
+        "pb_ratio": args.pb,
+        "ev_ebitda": args.ev_ebitda,
         "source": "manual",
-        "notes": args.notes or "",
+        "notes": args.notes,
         "last_updated": pd.Timestamp.now(),
     }
-    df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+    df = load()
+    df["as_of_date"] = df["as_of_date"].map(_as_date)
+    idx = df.index[(df["ticker"] == ticker) & (df["as_of_date"] == as_of)].tolist()
+    if idx:
+        df.loc[idx[0]] = row
+    else:
+        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
     save(df)
-    print(f"Updated {t}: MktCap ${mcap_b:.2f}B | Assets ${assets_b:.2f}B | P/B {pb} | Mkt/Assets {row['mktcap_to_assets']}")
+    print(f"Manual entry for {ticker} @ {as_of} saved")
 
 
 def cmd_from_csv(args):
-    csv_df = pd.read_csv(args.csv)
+    df_csv = pd.read_csv(args.csv)
+    df_csv.columns = [c.strip().lower().replace(" ", "_") for c in df_csv.columns]
     required = {"ticker", "market_cap_b", "total_assets_b"}
-    if not required.issubset(csv_df.columns):
-        raise SystemExit(f"CSV must contain at least: {required}")
-    csv_df["ticker"] = csv_df["ticker"].str.upper()
-    if "as_of_date" not in csv_df.columns:
-        csv_df["as_of_date"] = pd.Timestamp.now().normalize()
+    if not required.issubset(df_csv.columns):
+        raise ValueError(f"CSV must have columns: {required}")
+    df_csv["ticker"] = df_csv["ticker"].str.upper()
+    if "as_of_date" in df_csv.columns:
+        df_csv["as_of_date"] = df_csv["as_of_date"].map(_as_date)
     else:
-        csv_df["as_of_date"] = pd.to_datetime(csv_df["as_of_date"])
-    if "pb_ratio" not in csv_df.columns:
-        csv_df["pb_ratio"] = None
-    csv_df["market_cap"] = (csv_df["market_cap_b"] * 1e9).astype("int64")
-    csv_df["total_assets"] = (csv_df["total_assets_b"] * 1e9).astype("int64")
-    csv_df["mktcap_to_assets"] = (csv_df["market_cap_b"] / csv_df["total_assets_b"]).round(3)
-    # shares_outstanding: explicit column if provided, else derive from mcap/close
-    if "shares_outstanding" not in csv_df.columns:
-        px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker", "date", "close"])
-        px["date"] = pd.to_datetime(px["date"])
-        def _shares(t, asof):
-            sub = px[(px["ticker"] == t) & (px["date"] <= pd.Timestamp(asof))]
-            if not len(sub):
-                return None
-            mcap_b = csv_df.loc[csv_df["ticker"] == t, "market_cap_b"].iloc[0]
-            return (float(mcap_b) * 1e9) / float(sub["close"].iloc[-1])
-        csv_df["shares_outstanding"] = [None] * len(csv_df)
-        for i, r in csv_df.iterrows():
-            csv_df.at[i, "shares_outstanding"] = _shares(r["ticker"], r["as_of_date"])
-    if "source" not in csv_df.columns:
-        csv_df["source"] = "csv"
-    if "notes" not in csv_df.columns:
-        csv_df["notes"] = ""
-    csv_df["last_updated"] = pd.Timestamp.now()
-
+        df_csv["as_of_date"] = date.today()
+    df_csv["market_cap"] = (df_csv["market_cap_b"] * 1e9).astype(int)
+    df_csv["total_assets"] = (df_csv["total_assets_b"] * 1e9).astype(int)
+    df_csv["source"] = "from_csv"
+    df_csv["last_updated"] = pd.Timestamp.now()
     existing = load()
-    # Drop overlapping ticker+date
-    keys = set(zip(csv_df["ticker"], csv_df["as_of_date"]))
-    existing = existing[~existing.apply(lambda r: (r["ticker"], r["as_of_date"]) in keys, axis=1)]
-    combined = pd.concat([existing, csv_df], ignore_index=True)
+    existing["as_of_date"] = existing["as_of_date"].map(_as_date)
+    combined = pd.concat([existing, df_csv], ignore_index=True)
     save(combined)
+    print(f"Loaded {len(df_csv)} rows from {args.csv}")
 
 
 def cmd_fetch(args):
-    """Best-effort yfinance pull for marketCap and bookValue → approximate P/B."""
-    try:
-        import yfinance as yf
-    except ImportError:
-        print("yfinance not installed. Use manual or from-csv.")
-        return
+    """Snapshot from yfinance .info — daily, not historical."""
+    import yfinance as yf
 
-    if STOCKS_FILE.exists():
-        tickers = pd.read_parquet(STOCKS_FILE)["ticker"].tolist()
-    else:
-        tickers = load()["ticker"].tolist()
-    uni = universe_tickers()
-    if uni:
-        tickers = uni
-
+    tickers = universe_tickers() or sorted(load()["ticker"].unique().tolist())
+    skip = {".", "^", "=", "-", ":"}
+    tickers = [t for t in tickers if not any(s in t for s in skip)]
     if args.tickers:
-        tickers = [t.strip().upper() for t in args.tickers.split(",")]
+        tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+    print(f"Fetching snapshot for {len(tickers)} tickers...")
 
-    rows = []
+    new_rows = []
     for t in tickers:
         try:
-            info = yf.Ticker(t).info
+            tk = yf.Ticker(t)
+            info = tk.get_info()
             mcap = info.get("marketCap")
-            book = info.get("bookValue")  # per share
-            shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
-            total_assets = None  # rarely in .info; would need balance sheet
-            pb = info.get("priceToBook")
-            if mcap is None:
-                print(f"  {t}: no marketCap")
-                continue
-            mcap_b = mcap / 1e9
-            # If we have bookValue * shares we can estimate equity, not total assets
-            row = {
-                "ticker": t,
-                "as_of_date": pd.Timestamp.now().normalize(),
-                "market_cap": int(mcap),
-                "market_cap_b": round(mcap_b, 2),
-                "total_assets": None,
-                "total_assets_b": None,
-                "pb_ratio": round(pb, 2) if pb else None,
-                "mktcap_to_assets": None,
-                "shares_outstanding": int(shares) if shares else None,
-                "source": "yfinance",
-                "notes": f"bookValue/share={book}" if book else "",
-                "last_updated": pd.Timestamp.now(),
-            }
-            rows.append(row)
-            print(f"  {t}: MktCap ${mcap_b:.2f}B  P/B {pb}"
-                  + (f"  shares {shares:,}" if shares else "  (no shares)"))
-        except Exception as e:
-            print(f"  {t}: error {e}")
+            assets = info.get("totalAssets")
+            if mcap and assets:
+                new_rows.append({
+                    "ticker": t,
+                    "as_of_date": date.today(),
+                    "market_cap": int(mcap),
+                    "market_cap_b": round(mcap / 1e9, 2),
+                    "total_assets": int(assets),
+                    "total_assets_b": round(assets / 1e9, 2),
+                    "pb_ratio": info.get("priceToBook"),
+                    "ev_ebitda": info.get("enterpriseToEbitda"),
+                    "roe": info.get("returnOnEquity"),
+                    "roic": info.get("returnOnInvestedCapital"),
+                    "debt_to_equity": info.get("debtToEquity"),
+                    "interest_coverage": None,
+                    "earnings_stability": None,
+                    "shares_outstanding": info.get("sharesOutstanding"),
+                    "source": "yfinance",
+                    "notes": "yfinance .info snapshot",
+                    "last_updated": pd.Timestamp.now(),
+                })
+                print(f"  {t}: mcap={mcap/1e9:.2f}B, assets={assets/1e9:.2f}B")
+        except Exception as e:  # noqa: BLE001
+            print(f"  !! {t}: {e}")
 
-    if not rows:
-        print("No data retrieved.")
+    if not new_rows:
+        print("No rows fetched.")
         return
 
-    new_df = pd.DataFrame(rows)
+    new_df = pd.DataFrame(new_rows)
+    new_df["as_of_date"] = new_df["as_of_date"].map(_as_date)
     existing = load()
-    # Prefer keeping existing total_assets if new fetch lacks them
-    for _, r in new_df.iterrows():
-        prior = existing[existing["ticker"] == r["ticker"]]
-        if not prior.empty and r["total_assets"] is None:
-            last = prior.sort_values("as_of_date").iloc[-1]
-            new_df.loc[new_df["ticker"] == r["ticker"], "total_assets"] = last["total_assets"]
-            new_df.loc[new_df["ticker"] == r["ticker"], "total_assets_b"] = last["total_assets_b"]
-            if last["total_assets"] and r["market_cap"]:
-                new_df.loc[new_df["ticker"] == r["ticker"], "mktcap_to_assets"] = round(
-                    r["market_cap"] / last["total_assets"], 3
-                )
+    existing["as_of_date"] = existing["as_of_date"].map(_as_date)
 
-    # Source-priority: don't overwrite EDGAR rows with same-day yfinance info
-    edgar_keys = set(
-        zip(
-            existing.loc[existing.get("source") == "edgar", "ticker"],
-            existing.loc[existing.get("source") == "edgar", "as_of_date"],
-        )
-    )
-    new_df = new_df[
-        ~new_df.apply(lambda r: (r["ticker"], r["as_of_date"]) in edgar_keys, axis=1)
-    ]
-    if len(new_df) != len(rows):
-        print(f"  (skipped {len(rows) - len(new_df)} rows whose date is covered by EDGAR)")
-        if new_df.empty:
-            save(existing)
-            print("  nothing new to add (all rows already EDGAR)")
-            return
-
-    keys = set(zip(new_df["ticker"], new_df["as_of_date"]))
-    existing = existing[~existing.apply(lambda r: (r["ticker"], r["as_of_date"]) in keys, axis=1)]
-    combined = pd.concat([existing, new_df], ignore_index=True)
+    # Merge: upsert by (ticker, as_of_date)
+    idx = ["ticker", "as_of_date"]
+    ex = existing.set_index(idx)
+    nd = new_df.set_index(idx)
+    overlap = ex.index.intersection(nd.index)
+    if len(overlap):
+        for c in new_df.columns:
+            if c not in ex.columns:
+                continue
+            missing = ex.loc[overlap, c].isna()
+            if missing.any():
+                ex.loc[overlap, c] = ex.loc[overlap, c].fillna(nd.loc[overlap, c])
+    brand_new = new_df[~new_df.set_index(idx).index.isin(ex.index)].copy()
+    combined = pd.concat([ex.reset_index(), brand_new], ignore_index=True) if len(brand_new) else ex.reset_index()
     save(combined)
+    print(f"Fetch done: {len(new_df)} rows fetched")
 
 
 def cmd_fetch_history(args):
-    """Real point-in-time fundamentals: quarterly statements from yfinance.
+    """Real point-in-time fundamentals: quarterly AND annual statements from yfinance.
 
-    For each ticker pulls quarterly income statement + balance sheet and
-    computes as-of-quarter-end: ROE (TTM NI / equity), ROIC (TTM NOPAT /
+    For each ticker pulls quarterly + annual income statement, balance sheet, cash flow
+    and computes as-of-period-end: ROE (TTM NI / equity), ROIC (TTM NOPAT /
     invested capital), D/E, EV/EBITDA (mktcap + debt - cash)/TTM EBITDA,
     P/B (mktcap / equity), MktCap/Assets. Market cap = price × shares at the
-    quarter end (from daily_prices.parquet adj_close, last price <= qend).
+    period end (from daily_prices.parquet adj_close, last price <= period end).
+
+    Also extracts: TotalRevenue, FreeCashFlow, CapitalExpenditure for
+    Damodaran life cycle / fair multiple calculations.
 
     These are REAL dated rows (source=yfinance_history), replacing the
     synthetic mean-reverting backfill that fundamentals_history.py generates.
@@ -307,11 +225,10 @@ def cmd_fetch_history(args):
         tickers = tickers[: args.max_tickers]
     print(f"fetch-history universe: {len(tickers)} tickers")
 
-    # price series: ticker -> DataFrame(date, close=adj_close) for mktcap at qend
+    # price series: ticker -> DataFrame(date, close=adj_close) for mktcap at period end
     try:
         from analytics_common import load_adj_prices_pandas
         prices = load_adj_prices_pandas(tickers=tickers)
-        # Use close (which is adj_close where available, NaN elsewhere)
         px = {tk: g.set_index("date")["close"] for tk, g in prices.groupby("ticker")}
     except Exception as e:  # noqa: BLE001
         print(f"  !! price load failed: {e}; market-cap-based rows will be None")
@@ -321,43 +238,112 @@ def cmd_fetch_history(args):
     for t in tickers:
         try:
             tk = yf.Ticker(t)
-            inc = tk.get_income_stmt(freq="quarterly")
-            bal = tk.get_balance_sheet(freq="quarterly")
-            if inc is None or bal is None or inc.empty or bal.empty:
-                print(f"  !! {t}: no statements")
+            
+            # Fetch BOTH quarterly (new API) and annual (old API) for maximum history
+            inc_q = tk.get_income_stmt(freq="quarterly")
+            bal_q = tk.get_balance_sheet(freq="quarterly")
+            cf_q = tk.get_cashflow(freq="quarterly")
+            
+            inc_a = tk.financials  # annual
+            bal_a = tk.balance_sheet
+            cf_a = tk.cashflow
+            
+            if inc_q is None or bal_q is None or inc_q.empty or bal_q.empty:
+                print(f"  !! {t}: no quarterly statements")
                 continue
-            # quarter-end dates = columns (tz-aware); use both frames' union
-            dates = sorted(set(inc.columns) | set(bal.columns))
-            for d in dates:
-                qend = d.date() if hasattr(d, "date") else pd.Timestamp(d).date()
-                # TTM income over 4 quarters ending at d
-                qi = inc.loc[:, inc.columns <= d]
-                qb = bal.loc[:, bal.columns <= d]
-                if qi.shape[1] == 0 or qb.shape[1] == 0:
+
+            # Build unified frames: combine quarterly + annual
+            # Quarterly columns
+            dates_q = sorted(set(inc_q.columns) | set(bal_q.columns) | (set(cf_q.columns) if cf_q is not None else set()))
+            # Annual columns
+            dates_a = sorted(set(inc_a.columns) | set(bal_a.columns) | (set(cf_a.columns) if cf_a is not None else set()))
+            all_dates = sorted(set(dates_q) | set(dates_a))
+            
+            for d in all_dates:
+                pend = d.date() if hasattr(d, "date") else pd.Timestamp(d).date()
+                
+                # Determine which frame to use
+                use_quarterly = d in inc_q.columns
+                use_annual = d in inc_a.columns
+                
+                # TTM requires 4 quarters - only works with quarterly data
+                if use_quarterly:
+                    qi = inc_q.loc[:, inc_q.columns <= d]
+                    qb = bal_q.loc[:, bal_q.columns <= d]
+                    qc = cf_q.loc[:, cf_q.columns <= d] if cf_q is not None else None
+                    if qi.shape[1] == 0 or qb.shape[1] == 0:
+                        continue
+                elif use_annual:
+                    # For annual, we don't do TTM - just use the single year
+                    qi = inc_a.loc[:, inc_a.columns <= d]
+                    qb = bal_a.loc[:, bal_a.columns <= d]
+                    qc = cf_a.loc[:, cf_a.columns <= d] if cf_a is not None else None
+                    if qi.shape[1] == 0 or qb.shape[1] == 0:
+                        continue
+                else:
                     continue
+                
                 def ttm(row_name: str) -> float | None:
                     if row_name not in qi.index:
                         return None
                     s = qi.loc[row_name].dropna().tail(4)
                     return float(s.sum()) if len(s) else None
-                def balv(row_name: str) -> float | None:
-                    if row_name not in qb.index:
+                
+                def single(row_name: str) -> float | None:
+                    """Get single period value (for annual data)"""
+                    if row_name not in qi.index:
                         return None
-                    s = qb.loc[row_name].dropna()
-                    return float(s.iloc[-1]) if len(s) else None
-                ni = ttm("NetIncomeCommonStockholders")
-                oi = ttm("OperatingIncome")
-                ebitda = ttm("EBITDA")
+                    s = qi.loc[row_name].dropna()
+                    return float(s.iloc[0]) if len(s) else None
+                
+                def balv(row_name: str) -> float | None:
+                    if use_quarterly:
+                        # Use quarterly balance sheet
+                        frame = qb
+                    else:
+                        # Use annual balance sheet
+                        frame = qb
+                    if row_name not in frame.index:
+                        return None
+                    s = frame.loc[row_name].dropna()
+                    return float(s.iloc[0]) if len(s) else None
+                
+                def cfv(row_name: str) -> float | None:
+                    if qc is None or row_name not in qc.index:
+                        return None
+                    s = qc.loc[row_name].dropna()
+                    if use_quarterly:
+                        return float(s.tail(4).sum()) if len(s) else None
+                    else:
+                        return float(s.iloc[0]) if len(s) else None
+                
+                # For quarterly: TTM. For annual: single period.
+                if use_quarterly:
+                    ni = ttm("NetIncomeCommonStockholders")
+                    oi = ttm("OperatingIncome")
+                    ebitda = ttm("EBITDA")
+                    revenue = ttm("TotalRevenue")
+                    fcf = cfv("FreeCashFlow")
+                    capex = cfv("CapitalExpenditure")
+                else:
+                    ni = single("NetIncomeCommonStockholders")
+                    oi = single("OperatingIncome")
+                    ebitda = single("EBITDA")
+                    revenue = single("TotalRevenue")
+                    fcf = cfv("FreeCashFlow")
+                    capex = cfv("CapitalExpenditure")
+                
                 equity = balv("StockholdersEquity")
                 total_assets = balv("TotalAssets")
                 debt = balv("TotalDebt")
                 cash = balv("CashAndCashEquivalents")
                 shares = balv("OrdinarySharesNumber")
-                # market cap at qend from price × shares (last close <= qend)
+                
+                # market cap at period end from price × shares (last close <= period end)
                 mcap = None
                 if t in px and shares:
                     p = px[t]
-                    avail = p[p.index <= pd.Timestamp(qend)]
+                    avail = p[p.index <= pd.Timestamp(pend)]
                     if len(avail):
                         mcap = float(avail.iloc[-1]) * shares
                 mcap_b = mcap / 1e9 if mcap else None
@@ -370,9 +356,13 @@ def cmd_fetch_history(args):
                 ev_ebitda = ev / ebitda if ev and ebitda else None
                 pb = mcap / equity if mcap and equity else None
                 mca = mcap / total_assets if mcap and total_assets else None
+                # New Damodaran fields
+                rev_growth = None  # will compute later per ticker
+                fcf_margin = fcf / revenue if fcf and revenue else None
+                reinvestment_rate = capex / oi if capex and oi else None
                 new_rows.append({
                     "ticker": t,
-                    "as_of_date": qend,
+                    "as_of_date": pend,
                     "market_cap": int(mcap) if mcap else None,
                     "market_cap_b": round(mcap_b, 2) if mcap_b else None,
                     "total_assets": int(total_assets) if total_assets else None,
@@ -384,11 +374,18 @@ def cmd_fetch_history(args):
                     "roic": round(roic, 4) if roic else None,
                     "debt_to_equity": round(de, 3) if de else None,
                     "shares_outstanding": int(shares) if shares else None,
+                    "total_revenue": int(revenue) if revenue else None,
+                    "free_cash_flow": int(fcf) if fcf else None,
+                    "capital_expenditure": int(capex) if capex else None,
+                    "fcf_margin": round(fcf_margin, 4) if fcf_margin else None,
+                    "reinvestment_rate": round(reinvestment_rate, 4) if reinvestment_rate else None,
                     "source": "yfinance_history",
-                    "notes": "real quarterly statements (TTM income)",
+                    "notes": "real quarterly/annual statements",
                     "last_updated": pd.Timestamp.now(),
                 })
-            print(f"  {t}: {len([r for r in new_rows if r['ticker'] == t])} quarters")
+            # Count real quarters (not annual)
+            real_q = len([r for r in new_rows if r['ticker'] == t and use_quarterly]) if new_rows else 0
+            print(f"  {t}: {len([r for r in new_rows if r['ticker'] == t])} periods")
         except Exception as e:  # noqa: BLE001
             print(f"  !! {t}: {e}")
     if not new_rows:
@@ -407,6 +404,8 @@ def cmd_fetch_history(args):
         "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
         "debt_to_equity", "shares_outstanding", "interest_coverage",
         "earnings_stability",
+        "total_revenue", "free_cash_flow", "capital_expenditure",
+        "fcf_margin", "reinvestment_rate",
     ]
     idx = ["ticker", "as_of_date"]
     ex = existing.set_index(idx)
@@ -433,6 +432,10 @@ def cmd_fetch_history(args):
         combined = pd.concat([existing, brand_new], ignore_index=True)
     else:
         combined = existing
+    # Ensure new columns exist in combined
+    for c in new_df.columns:
+        if c not in combined.columns:
+            combined[c] = np.nan
     before = len(load())
     save(combined)
     after = len(load())
