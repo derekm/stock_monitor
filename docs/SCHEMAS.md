@@ -83,7 +83,31 @@ auxiliary tables feeding several stages.
   vol, sharpe, avg corr, pass counts, reliability ranks), or long-form `name,value`.
   The dashboards and `research_hygiene` / `forecast_reliability` consume these.
 
-### Auxiliary table  (`aux_table`)
+### Lookthrough / pro forma  (`lookthrough`)
+
+Pro forma combined financials during acquisition windows. Two provenance columns:
+`data_provenance` (standalone | lookthrough_proforma) and `lookthrough_source`
+(comma-separated list of combined tickers, or None for standalone). Produced by
+`lookthrough_engine.py` from `fundamentals.parquet` + `corporate_actions.parquet`.
+
+### Corporate actions  (`corporate_actions`)
+
+Acquisition, merger, and delisting records. Tracks acquirer/target tickers,
+announcement and completion dates, purchase terms, and lookthrough window
+boundaries. Produced by `acquisition_backfill.py` and consumed by
+`lookthrough_engine.py`.
+
+### Fiscal year map  (`fiscal_year_map`)
+
+Per-ticker fiscal year end month (1-12) detected from equity series dates.
+Used to align calendar-quarter EDGAR frames to the filer's fiscal calendar.
+Produced by `edgar_companyfacts_v2.py` and `acquisition_backfill.py`.
+
+### Expired price history  (`expired_prices`)
+
+Preserved daily price history for delisted/acquired tickers. Kept out of the
+main `daily_prices.parquet` to keep the active universe clean, but retained
+for backtesting and analytics. Produced by `data_validation.py` cleanup.
 
 - Supporting tables: `sector_tickers` (ticker,sector,SECT_* slug), `vix_term_structure`
   (tenor, iv), membership/catalog listings. Feed the screen layer and the
@@ -472,4 +496,10 @@ auxiliary tables feeding several stages.
 || `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails ||
 || `subindustry_regime_lead.csv` | `subindustry_regime.py` | Taleb / fat tails ||
 || `barbell_check.csv` | `barbell_check.py` | Taleb / fat tails ||
-|| `hidden_optionality.csv` | `hidden_optionality_audit.py` | Taleb / fat tails ||
+||| `hidden_optionality.csv` | `hidden_optionality_audit.py` | Taleb / fat tails ||
+| `corporate_actions.parquet` | `acquisition_backfill.py` | Corporate actions |
+| `fiscal_year_end_map.parquet` | `acquisition_backfill.py` | Fiscal year map |
+| `daily_prices_expired.parquet` | `data_validation.py` | Expired price history |
+| `quarterly_lookthrough_fundamentals.parquet` | `lookthrough_engine.py` | Lookthrough / pro forma |
+| `quarterly_lookthrough_fundamentals_extended.parquet` | `lookthrough_engine.py` | Lookthrough / pro forma |
+| `backfill_checkpoints/*.json` | `full_universe_backfill.py` | Checkpoints (resumable) |

@@ -2,31 +2,9 @@
 """
 backfill_edgar.py — Real decades-long point-in-time fundamentals from SEC EDGAR.
 
-Pulls XBRL companyfacts per monitored ticker (via SEC's public JSON API,
-no key — UA header required, 10 req/s limit) and computes as-of-quarter-end:
-
-  ROE  = TTM NetIncomeLoss / StockholdersEquity
-  ROIC = TTM NOPAT / InvestedCapital (NOPAT = OperatingIncomeLoss * 0.75)
-  D/E  = TotalDebt / StockholdersEquity
-  EV/EBITDA = (mktcap + debt - cash) / TTM EBITDA (EBITDA = OI + D&A)
-  P/B  = mktcap / StockholdersEquity
-  MktCap/Assets = mktcap / Assets
-  interest_coverage = TTM OperatingIncomeLoss / TTM InterestExpenseNonOperating
-
-Market cap = adj_close price × shares at the quarter-end (from
-daily_prices.parquet; shares from EDGAR CommonStockSharesOutstanding /
-OrdinarySharesNumber, fallback to current shares).
-
-Rows are source=edgar. Merge is STRICTLY ADDITIVE: new (ticker, date) rows
-are appended; overlapping dates only fill NaN cells. Existing EDGAR cells
-are never overwritten. Synthetic backfill is not bulk-deleted.
-
-Usage:
-  python backfill_edgar.py --max-tickers 50
-  python backfill_edgar.py --tickers AAPL,MSFT
-  python backfill_edgar.py --dry-run
+Uses edgar_companyfacts_v2.py for extraction (with quarterly differencing, FCF proxy,
+and M&A data). Overwrites existing rows unless source is edgar_v2 or html_10q.
 """
-from __future__ import annotations
 
 import argparse
 import json
@@ -43,19 +21,8 @@ FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 UA = {"User-Agent": "personal-research derek.moore@example.com"}
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
-FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 
-# Overrides: SEC's ticker->CIK map is sometimes stale/wrong. Known cases where
-# the map points to a shell/related entity with thin XBRL history while the
-# operating company's CIK holds the full history:
-#   XOM -> 2115436 is 'ExxonMobil Holdings Corp' (shell); real opco is 34088.
-#   AEP -> missing from map; real opco CIK 4904.
-# Resolved via EDGAR full-text search (efts.sec.gov) for names the standard
-# maps lack:
-#   SATS -> EchoStar Corp CIK 1415404 (33 quarters)
-#   SPR  -> Spirit AeroSystems Holdings CIK 1364885 (61 quarters)
-# NOTE: BAYRY (Bayer ADR, CIK 1144145) has NO XBRL companyfacts on EDGAR
-# (German issuer, 20-F filing) — permanently skipped, do not re-probe.
+# Overrides: SEC's ticker->CIK map is sometimes stale/wrong.
 CIK_OVERRIDES = {
     "XOM": "0000034088",
     "AEP": "0000004904",
@@ -64,22 +31,23 @@ CIK_OVERRIDES = {
 }
 NO_COMPANYFACTS = {"BAYRY"}
 
-# income tags we can use for TTM (in priority order)
-NI_TAGS = ["NetIncomeLoss"]
-OI_TAGS = ["OperatingIncomeLoss", "OperatingIncome"]
-DA_TAGS = ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet"]
-INT_TAGS = ["InterestExpenseNonOperating", "InterestExpense", "InterestAndDebtExpense"]
-TAX_TAGS = ["IncomeTaxExpenseBenefit", "IncomeTaxExpenseBenefitCurrentFederal", "IncomeTaxesPaid"]
-PRETAX_TAGS = ["PretaxIncomeLoss", "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"]
-EQ_TAGS = ["StockholdersEquity", "CommonStockholdersEquity"]
-ASSET_TAGS = ["Assets"]
-DEBT_TAGS = ["LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "Debt"]
-CASH_TAGS = ["CashAndCashEquivalents", "CashCashEquivalentsAndShortTermInvestments"]
-SHARES_TAGS = ["CommonStockSharesOutstanding", "OrdinarySharesNumber", "EntityCommonStockSharesOutstanding"]
-INVESTED_TAGS = ["InvestedCapital"]
+# M&A tags to extract
+MA_TAGS = [
+    'BusinessCombinationConsiderationTransferred',
+    'BusinessCombinationConsiderationTransferredEquityInterestsIssuedAndIssuable',
+    'BusinessAcquisitionPurchasePriceAllocationGoodwillAmount',
+    'BusinessAcquisitionPurchasePriceAllocationAssetsAcquiredLiabilitiesAssumedNet',
+    'BusinessCombinationRecognizedIdentifiableAssetsAcquiredGoodwillAndLiabilitiesAssumedNet',
+    'BusinessCombinationContingentConsiderationLiabilityCurrent',
+    'BusinessCombinationContingentConsiderationLiabilityNoncurrent',
+    'PaymentsOfMergerRelatedCostsFinancingActivities',
+    'StockIssuedDuringPeriodValueAcquisitions',
+    'NoncashOrPartNoncashAcquisitionFixedAssetsAcquired1',
+    'GoodwillPurchaseAccountingAdjustments',
+]
 
 
-def load_cik_map() -> dict[str, str]:
+def load_cik_map() -> dict:
     r = requests.get(TICKERS_URL, headers=UA, timeout=30)
     r.raise_for_status()
     out = {}
@@ -89,215 +57,62 @@ def load_cik_map() -> dict[str, str]:
     return out
 
 
-def _facts(d: dict) -> dict:
-    return d.get("facts", {}).get("us-gaap", {})
-
-
-def _quarterly(tag_data: dict) -> pd.DataFrame:
-    """Single-quarter rows from a us-gaap tag's USD entries.
-
-    Income rows: keep only entries with a CYyyyyQn frame (single quarter);
-    dedupe to one value per quarter (last filed wins). Balance rows: keep
-    'end' as the as-of date.
-    """
-    rows = []
-    for e in tag_data.get("units", {}).get("USD", []):
-        f = e.get("frame", "")
-        if "CY" in f and "Q" in f:  # single-quarter income frame
-            q = f.split("CY")[1]  # e.g. 2026Q1
-            rows.append({"end": e["end"], "frame": q, "val": e["val"], "filed": e.get("filed", "")})
-    if not rows:
-        return pd.DataFrame()
-    df = pd.DataFrame(rows)
-    df["end"] = pd.to_datetime(df["end"])
-    df = df.sort_values(["end", "filed"]).drop_duplicates(subset=["end"], keep="last")
-    return df.set_index("end")["val"]
-
-
-def _balance_series(tag_data: dict) -> pd.Series:
-    rows = []
-    # shares are reported in 'shares' units, everything else in USD
-    units = tag_data.get("units", {})
-    for unit in ("USD", "shares"):
-        for e in units.get(unit, []):
-            rows.append({"end": e["end"], "val": e["val"], "filed": e.get("filed", "")})
-    if not rows:
-        return pd.Series(dtype=float)
-    df = pd.DataFrame(rows)
-    df["end"] = pd.to_datetime(df["end"])
-    df = df.sort_values(["end", "filed"]).drop_duplicates(subset=["end"], keep="last")
-    return df.set_index("end")["val"]
-
-
-def fetch_ticker(ticker: str, cik: str) -> list[dict]:
-    url = FACTS_URL.format(cik=cik)
-    r = requests.get(url, headers=UA, timeout=30)
-    r.raise_for_status()
-    d = r.json()
-    facts = _facts(d)
-
-    def first_tag(tags: list[str]):
-        for t in tags:
-            if t in facts:
-                return facts[t]
-        return None
-
-    def q(tags: list[str]) -> pd.DataFrame:
-        td = first_tag(tags)
-        return _quarterly(td) if td is not None else pd.DataFrame()
-
-    def bal(tags: list[str]) -> pd.Series:
-        td = first_tag(tags)
-        return _balance_series(td) if td is not None else pd.Series(dtype=float)
-
-    ni = q(NI_TAGS)
-    oi = q(OI_TAGS)
-    da = q(DA_TAGS)
-    intexp = q(INT_TAGS)
-    tax = q(TAX_TAGS)
-    pretax = q(PRETAX_TAGS)
-    eq = bal(EQ_TAGS)
-    assets = bal(ASSET_TAGS)
-    debt = bal(DEBT_TAGS)
-    cash = bal(CASH_TAGS)
-    shares = bal(SHARES_TAGS)
-    invested = bal(INVESTED_TAGS)
-
-    if ni.empty or eq.empty:
+def fetch_ma_data(cik: str) -> list[dict]:
+    """Fetch M&A-related XBRL facts from SEC EDGAR companyfacts."""
+    url = f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+    try:
+        r = requests.get(url, headers=UA, timeout=30)
+        if r.status_code != 200:
+            return []
+        d = r.json()
+        facts = d.get("facts", {}).get("us-gaap", {})
+        
+        ma_records = []
+        for tag in MA_TAGS:
+            if tag not in facts:
+                continue
+            units = facts[tag].get("units", {}).get("USD", [])
+            for entry in units:
+                val = entry.get("val", 0)
+                if val and abs(val) > 1_000_000:
+                    ma_records.append({
+                        "tag": tag,
+                        "end": entry.get("end"),
+                        "value": val,
+                        "frame": entry.get("frame", ""),
+                        "fy": entry.get("fy"),
+                        "fp": entry.get("fp"),
+                    })
+        return ma_records
+    except Exception:
         return []
 
-    # TTM income: sum of up to 4 consecutive quarters ending at each balance date
-    ni_ttm = ni.rolling(4, min_periods=1).sum()
-    oi_ttm = oi.rolling(4, min_periods=1).sum() if not oi.empty else pd.Series(dtype=float)
-    da_ttm = da.rolling(4, min_periods=1).sum() if not da.empty else pd.Series(dtype=float)
-    int_ttm = intexp.rolling(4, min_periods=1).sum() if not intexp.empty else pd.Series(dtype=float)
-    tax_ttm = tax.rolling(4, min_periods=1).sum() if not tax.empty else pd.Series(dtype=float)
-    pretax_ttm = pretax.rolling(4, min_periods=1).sum() if not pretax.empty else pd.Series(dtype=float)
 
-    def ttm_at(series: pd.Series, qend) -> float | None:
-        if series is None or series.empty:
-            return None
-        s = series[series.index <= qend].dropna()
-        return float(s.iloc[-1]) if len(s) else None
-
-    rows = []
-    for qend, equity in eq.items():
-        ttm_ni = ni_ttm.reindex(ni_ttm.index[ni_ttm.index <= qend]).dropna()
-        ttm_ni = float(ttm_ni.iloc[-1]) if len(ttm_ni) else None
-        ttm_oi = None
-        if not oi_ttm.empty:
-            s = oi_ttm[oi_ttm.index <= qend].dropna()
-            ttm_oi = float(s.iloc[-1]) if len(s) else None
-        ttm_da = None
-        if not da_ttm.empty:
-            s = da_ttm[da_ttm.index <= qend].dropna()
-            ttm_da = float(s.iloc[-1]) if len(s) else None
-        ttm_int = None
-        if not int_ttm.empty:
-            s = int_ttm[int_ttm.index <= qend].dropna()
-            ttm_int = float(s.iloc[-1]) if len(s) else None
-
-        def bal_at(series: pd.Series):
-            if series is None or series.empty:
-                return None
-            s = series[series.index <= qend].dropna()
-            return float(s.iloc[-1]) if len(s) else None
-
-        e = bal_at(eq)
-        a = bal_at(assets)
-        db = bal_at(debt)
-        ca = bal_at(cash)
-        sh = bal_at(shares)
-        inv = bal_at(invested)
-        if e is None or e <= 0:
-            continue
-        # per-period effective tax rate: TTM tax / TTM pretax, clamped [0, 0.5];
-        # fall back to 25% proxy when either side is unavailable.
-        ttax = ttm_at(tax_ttm, qend)
-        tpre = ttm_at(pretax_ttm, qend)
-        eff_rate = None
-        if ttax is not None and tpre and abs(tpre) > 1e-9:
-            eff_rate = float(np.clip(ttax / tpre, 0.0, 0.5))
-        rows.append({
-            "qend": qend,
-            "equity": e,
-            "assets": a,
-            "debt": db,
-            "cash": ca,
-            "shares": sh,
-            "invested": inv,
-            "ttm_ni": ttm_ni,
-            "ttm_oi": ttm_oi,
-            "ttm_da": ttm_da,
-            "ttm_int": ttm_int,
-            "eff_tax_rate": eff_rate,
-        })
-    return rows
-
-
-def build_rows(ticker: str, frames: list[dict], px: dict[str, pd.Series]) -> list[dict]:
-    rows = []
-    for fr in frames:
-        qend = pd.Timestamp(fr["qend"])
-        equity, assets, debt, cash = fr["equity"], fr["assets"], fr["debt"], fr["cash"]
-        shares = fr["shares"]
-        ttm_ni, ttm_oi, ttm_da = fr["ttm_ni"], fr["ttm_oi"], fr["ttm_da"]
-        # market cap = price at qend × shares
-        mcap = None
-        if ticker in px and shares:
-            p = px[ticker]
-            avail = p[p.index <= qend]
-            if len(avail):
-                mcap = float(avail.iloc[-1]) * shares
-        mcap_b = mcap / 1e9 if mcap else None
-        # Unit sanity: EDGAR XBRL shares/price parsing occasionally yields
-        # 1e6x-too-big or 1e3x-too-small market caps. Null them at ingestion so
-        # they never propagate into daily_prices.market_cap.
-        if mcap_b is not None and (mcap_b > 100_000 or (mcap_b > 0 and mcap_b < 0.05)):
-            mcap_b = None
-            mcap = None
-        # Shares outstanding (direct EDGAR count) — sanity: a real company has
-        # between 1M and 200B shares. Null absurd counts so they never poison
-        # the direct daily market-cap derivation.
-        if shares is not None and not (1e6 <= shares <= 2e11):
-            shares = None
-        roe = ttm_ni / equity if ttm_ni and equity else None
-        rate = fr.get("eff_tax_rate") if fr.get("eff_tax_rate") is not None else 0.25
-        if ttm_oi:
-            nopat = ttm_oi * (1 - rate)
-        elif ttm_ni is not None and fr.get("ttm_int"):
-            # banks/energy often omit OperatingIncome; use NI + interest(1-t)
-            nopat = ttm_ni + fr["ttm_int"] * (1 - rate)
-        else:
-            nopat = None
-        invested = fr["invested"] if fr["invested"] else ((debt or 0) + equity)
-        roic = nopat / invested if nopat and invested else None
-        de = debt / equity if debt and equity else None
-        ebitda = (ttm_oi + ttm_da) if ttm_oi is not None and ttm_da is not None else (ttm_oi if ttm_oi is not None else None)
-        ev = (mcap + debt - cash) if mcap and debt is not None and cash is not None else None
-        ev_ebitda = ev / ebitda if ev and ebitda else None
-        pb = mcap / equity if mcap and equity else None
-        mca = mcap / assets if mcap and assets else None
-        icov = ttm_oi / fr["ttm_int"] if ttm_oi and fr["ttm_int"] else None
-        rows.append({
-            "ticker": ticker,
-            "as_of_date": qend.date(),
-            "market_cap": int(mcap) if mcap else None,
-            "market_cap_b": round(mcap_b, 2) if mcap_b else None,
-            "shares_outstanding": shares,
-            "total_assets": int(assets) if assets else None,
-            "total_assets_b": round(assets / 1e9, 2) if assets else None,
-            "pb_ratio": round(pb, 3) if pb else None,
-            "mktcap_to_assets": round(mca, 3) if mca else None,
-            "ev_ebitda": round(ev_ebitda, 2) if ev_ebitda else None,
-            "roe": round(roe, 4) if roe else None,
-            "roic": round(roic, 4) if roic else None,
-            "debt_to_equity": round(de, 3) if de else None,
-            "interest_coverage": round(icov, 3) if icov else None,
-            "source": "edgar",
-            "notes": "SEC XBRL companyfacts (TTM income)",
-            "last_updated": pd.Timestamp.now(),
-        })
+def fetch_and_build(ticker: str, cik: str, px: dict[str, pd.Series]) -> list[dict]:
+    """Fetch companyfacts and build rows using edgar_v2 logic."""
+    from edgar_companyfacts_v2 import extract_raw_financials, compute_quarterly_fundamentals
+    
+    financials = extract_raw_financials(cik)
+    if financials is None:
+        return []
+    
+    rows = compute_quarterly_fundamentals(financials, ticker, px)
+    
+    # Also fetch M&A data
+    ma_data = fetch_ma_data(cik)
+    
+    # Enrich rows with M&A flags
+    if ma_data:
+        ma_dates = set()
+        for ma in ma_data:
+            ma_dates.add(ma.get("end", "")[:7])
+        
+        for row in rows:
+            row_date = str(row.get("as_of_date", ""))[:7]
+            if row_date in ma_dates:
+                row["has_ma_activity"] = True
+                row["ma_source"] = "companyfacts"
+    
     return rows
 
 
@@ -313,7 +128,7 @@ def main():
     if not tickers:
         stocks = pd.read_parquet(STOCKS_FILE) if STOCKS_FILE.exists() else pd.DataFrame()
         if stocks.empty or "ticker" not in stocks.columns:
-            raise SystemExit("no universe (shock_ride / prices / monitored_stocks)")
+            raise SystemExit("no universe")
         tickers = sorted(stocks["ticker"].astype(str).str.upper().unique().tolist())
     if args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
@@ -328,11 +143,8 @@ def main():
     unmatched = [t for t in tickers if t not in cik_map]
     print(f"  {len(matched)}/{len(tickers)} tickers have a CIK")
     if unmatched:
-        print(f"  no CIK ({len(unmatched)}): {', '.join(unmatched)}")
-        print("    (ETFs/funds and delisted ADRs have no XBRL statements; expected gaps)")
+        print(f"  no CIK ({len(unmatched)}): {', '.join(unmatched[:20])}...")
     matched = [(t, c) for t, c in matched if t not in NO_COMPANYFACTS]
-    if NO_COMPANYFACTS & {t for t, _ in matched}:
-        print(f"  skipped (no XBRL companyfacts): {', '.join(sorted(NO_COMPANYFACTS & {t for t, _ in matched}))}")
     if args.dry_run:
         return
 
@@ -345,14 +157,13 @@ def main():
     ok = 0
     for t, cik in matched:
         try:
-            frames = fetch_ticker(t, cik)
-            rows = build_rows(t, frames, px)
+            rows = fetch_and_build(t, cik, px)
             if rows:
                 all_rows.extend(rows)
                 ok += 1
                 print(f"  {t}: {len(rows)} quarters (cik={cik})")
             time.sleep(0.12)  # SEC: ≤10 req/s
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"  !! {t}: {e}")
             time.sleep(0.12)
     if not all_rows:
@@ -360,59 +171,93 @@ def main():
         return
 
     new_df = pd.DataFrame(all_rows)
+    new_df["source"] = "edgar_v2"
     existing = pd.read_parquet(FUND) if FUND.exists() else pd.DataFrame()
+    
     from update_fundamentals import _as_date
     new_df["as_of_date"] = new_df["as_of_date"].map(_as_date)
     if len(existing):
         existing["as_of_date"] = existing["as_of_date"].map(_as_date)
-    FILL_COLS = [
-        "market_cap", "market_cap_b", "total_assets", "total_assets_b",
-        "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
-        "debt_to_equity", "shares_outstanding", "interest_coverage",
-        "earnings_stability",
-    ]
+    
     idx = ["ticker", "as_of_date"]
-    n_filled = 0
+    PROTECTED_SOURCES = {"edgar_v2", "html_10q"}
+    
     if len(existing):
-        ex = existing.set_index(idx)
-        nd = new_df.set_index(idx)
-        overlap = ex.index.intersection(nd.index)
-        if len(overlap):
-            src = nd.loc[overlap]
-            for c in FILL_COLS:
-                if c not in ex.columns or c not in src.columns:
+        # Reset index to avoid MultiIndex dtype issues
+        ex = existing.reset_index() if not isinstance(existing.index, pd.RangeIndex) else existing.copy()
+        nd = new_df.reset_index() if not isinstance(new_df.index, pd.RangeIndex) else new_df.copy()
+        
+        # Cast ALL numeric columns to float64 BEFORE merge to avoid parquet overflow
+        # (int64 can't hold values > 2^63, and merge with NaN produces object dtype)
+        for df in [ex, nd]:
+            for col in df.columns:
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    df[col] = df[col].astype('float64')
+        
+        # For overlapping rows: overwrite unless existing is from edgar_v2 or html_10q
+        merged = ex.merge(nd, on=idx, how='left', suffixes=('_old', '_new'))
+        
+        # Find overlapping rows
+        overlap_mask = merged['source_new'].notna()
+        
+        if overlap_mask.any():
+            # Find rows we CAN overwrite (not protected)
+            protected_mask = merged.loc[overlap_mask, 'source_old'].isin(PROTECTED_SOURCES)
+            overwrite_mask = overlap_mask & ~protected_mask
+            
+            # For overwriting rows: replace all columns from new data
+            for col in nd.columns:
+                if col == 'source':
                     continue
-                missing = ex.loc[overlap, c].isna()
+                new_col = f"{col}_new"
+                if new_col in merged.columns:
+                    merged.loc[overwrite_mask, col] = merged.loc[overwrite_mask, new_col]
+            
+            n_overwritten = overwrite_mask.sum()
+            n_protected = protected_mask.sum()
+            print(f"  Overwritten: {n_overwritten}, Protected: {n_protected}")
+            
+            # Also fill NaN cells in remaining overlap where existing is weaker
+            remaining_mask = overlap_mask & protected_mask
+            FILL_COLS = [
+                "market_cap", "market_cap_b", "total_assets", "total_assets_b",
+                "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
+                "debt_to_equity", "shares_outstanding", "interest_coverage",
+                "earnings_stability", "total_revenue", "operating_income", "net_income",
+                "free_cash_flow", "operating_cash_flow", "capital_expenditure",
+            ]
+            n_filled = 0
+            for c in FILL_COLS:
+                old_col = f"{col}_old"
+                new_col = f"{col}_new"
+                if old_col not in merged.columns or new_col not in merged.columns:
+                    continue
+                missing = merged.loc[remaining_mask, old_col].isna() & merged.loc[remaining_mask, new_col].notna()
                 if missing.any():
-                    take = src.loc[overlap, c].where(missing)
-                    n_here = int(take.notna().sum())
-                    if n_here:
-                        ex.loc[overlap, c] = ex.loc[overlap, c].fillna(take)
-                        n_filled += n_here
-                        # if we filled from EDGAR and the row wasn't EDGAR, upgrade source
-            # upgrade source to edgar only where the existing source is weaker
-            # and at least one metric was present on the incoming row
-            weaker = ex.loc[overlap, "source"].isin(
-                ["fundamentals_history_backfill", "yfinance", "yfinance_history", "approx_seed_2026-07"]
-            ) if "source" in ex.columns else pd.Series(False, index=overlap)
-            if weaker.any():
-                ex.loc[overlap[weaker.to_numpy()], "source"] = "edgar"
-            existing = ex.reset_index()
-        brand_new = new_df[~new_df.set_index(idx).index.isin(ex.index)].copy()
+                    merged.loc[missing, c] = merged.loc[missing, new_col]
+                    n_filled += missing.sum()
+            print(f"  NaN cells filled: {n_filled}")
+            
+            # Drop _old and _new suffix columns
+            cols_to_drop = [c for c in merged.columns if c.endswith('_old') or c.endswith('_new')]
+            existing = merged.drop(columns=cols_to_drop)
+        
+        brand_new = new_df[~new_df.set_index(idx).index.isin(ex.set_index(idx).index)].copy()
         combined = pd.concat([existing, brand_new], ignore_index=True) if len(brand_new) else existing
     else:
         combined = new_df
+    
     if "last_updated" in combined.columns:
         combined["last_updated"] = pd.to_datetime(combined["last_updated"], errors="coerce")
+    
+    # Deduplicate
     combined = combined.sort_values(["ticker", "as_of_date"]).drop_duplicates(
-        subset=["ticker", "as_of_date"], keep="first"
+        subset=["ticker", "as_of_date"], keep="last"
     )
-    import pyarrow as pa
-    import pyarrow.parquet as pq
+    
     before = len(pd.read_parquet(FUND)) if FUND.exists() else 0
-    pq.write_table(pa.Table.from_pandas(combined, preserve_index=False), FUND)
-    print(f"EDGAR additive: +{len(combined) - before} rows, {n_filled} NaN cells filled, "
-          f"{len(new_df)} fetched for {new_df['ticker'].nunique()} tickers → {FUND}")
+    combined.to_parquet(FUND, index=False)
+    print(f"EDGAR v2: +{len(combined) - before} rows, {len(new_df)} fetched for {new_df['ticker'].nunique()} tickers → {FUND}")
     print(f"  total fundamentals rows now: {len(combined)}")
 
 

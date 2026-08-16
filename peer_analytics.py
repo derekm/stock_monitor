@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 peer_analytics.py — Cross-stock peer comparison analytics.
+Vectorized with Polars groupby and numpy broadcasting.
 
 Automates the RF-style analysis across all stocks:
 - Peer group mapping (sector + analytics groups)
@@ -10,11 +11,11 @@ Automates the RF-style analysis across all stocks:
 - Signal generation for pipeline integration
 
 Outputs:
-- peer_analytics_signals.csv — per-stock signals for pipeline
-- peer_group_summary.csv — group-level statistics
-- peer_fundamental_trends.csv — trend slopes and significance
+- peer_analytics_signals.parquet — per-stock signals for pipeline
+- peer_group_summary.parquet — group-level statistics
+- peer_fundamental_trends.parquet — trend slopes and significance
+- peer_recovery_signals.parquet — recovery/deterioration signals
 """
-
 from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -61,10 +62,7 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
 
 
 def get_peer_groups(stocks: pl.DataFrame) -> dict[str, list[str]]:
-    """
-    Build peer groups from sector and analytics group columns.
-    Returns dict mapping group_name -> list of tickers.
-    """
+    """Build peer groups from sector and analytics group columns."""
     groups = {}
 
     # Sector groups
@@ -72,7 +70,7 @@ def get_peer_groups(stocks: pl.DataFrame) -> dict[str, list[str]]:
         for sector in stocks["sector"].unique():
             if sector and str(sector).strip():
                 tickers = stocks.filter(pl.col("sector") == sector)["ticker"].to_list()
-                if len(tickers) >= 3:  # minimum group size
+                if len(tickers) >= 3:
                     groups[f"sector_{sector}"] = tickers
 
     # Analytics group (growth_tech sleeves)
@@ -110,8 +108,7 @@ def compute_rolling_returns(wide: pl.DataFrame, windows: list[int]) -> dict[str,
     """Compute rolling returns for each window from a single pre-pivoted wide frame.
 
     Returns {f"ret_{w}d": {"date": np.ndarray, "X": np.ndarray (N-w, k), "tickers": list}}
-    — raw numpy, no polars DataFrame round-trip (the DataFrame construction
-    was a major cost at 585 columns × 16k rows).
+    — raw numpy, no polars DataFrame round-trip.
     """
     tickers = [c for c in wide.columns if c != "date"]
     date_col = wide["date"].to_numpy()
@@ -134,6 +131,7 @@ def compute_rolling_vol(wide: pl.DataFrame, windows: list[int]) -> dict[str, dic
     """Compute rolling volatility for each window from a single pre-pivoted wide frame.
 
     Returns {f"vol_{w}d": {"date": np.ndarray, "X": np.ndarray (N-w, k), "tickers": list}}.
+    Uses cumsum identity for O(N·k) vectorized rolling variance.
     """
     tickers = [c for c in wide.columns if c != "date"]
     date_col = wide["date"].to_numpy()
@@ -144,21 +142,18 @@ def compute_rolling_vol(wide: pl.DataFrame, windows: list[int]) -> dict[str, dic
     for window in windows:
         with np.errstate(divide="ignore", invalid="ignore"):
             lr = np.log(X[1:] / X[:-1])
-        # Rolling std over window via cumsum identity (O(N·k), no giant
-        # (N, k, w) intermediate): var = E[x²] - E[x]² over the window.
         n = len(lr)
         if n >= window:
             x = np.nan_to_num(lr, nan=0.0)
-            valid_cnt = (~np.isnan(lr)).astype(np.float64)  # count VALID obs
+            valid_cnt = (~np.isnan(lr)).astype(np.float64)
             s1 = np.vstack([np.zeros((1, k)), np.cumsum(x, axis=0)])
             s2 = np.vstack([np.zeros((1, k)), np.cumsum(x * x, axis=0)])
             sc = np.vstack([np.zeros((1, k)), np.cumsum(valid_cnt, axis=0)])
-            sw1 = s1[window:] - s1[:-window]           # (n-w+1, k)
+            sw1 = s1[window:] - s1[:-window]
             sw2 = s2[window:] - s2[:-window]
             swc = sc[window:] - sc[:-window]
-            valid = swc >= window                       # full window of valid obs
+            valid = swc >= window
             mean = sw1 / window
-            # sample std (ddof=1), matching pandas rolling().std() semantics
             var = np.maximum((sw2 - sw1 * sw1 / window) / (window - 1), 0.0)
             roll_vol = np.sqrt(var) * np.sqrt(252)
             roll_vol[~valid] = np.nan
@@ -173,8 +168,8 @@ def compute_rolling_vol(wide: pl.DataFrame, windows: list[int]) -> dict[str, dic
 
 def compute_beta_to_group(wide: pl.DataFrame, group_tickers: list[str], window: int = 126) -> dict[str, float]:
     """Compute beta of each stock to its peer group equal-weight return.
-
-    Uses the pre-pivoted wide frame — no re-pivot. Vectorized per group.
+    
+    Vectorized using sliding window view - no per-ticker loops.
     """
     tickers = [c for c in wide.columns if c != "date"]
     available = [t for t in group_tickers if t in tickers]
@@ -184,35 +179,59 @@ def compute_beta_to_group(wide: pl.DataFrame, group_tickers: list[str], window: 
     X = wide.select(available).to_numpy()
     with np.errstate(divide="ignore", invalid="ignore"):
         rets = np.log(X[1:] / X[:-1])
-    # Align to rows where ALL group members have data (no NaN) — matches the
-    # original semantics where a NaN in the window invalidated the beta.
     finite_rows = np.isfinite(rets).all(axis=1)
     rets = rets[finite_rows]
     if len(rets) < window:
         return {}
-    # Group equal-weight return (row mean), then rolling beta window
+    
     group_ret = rets.mean(axis=1)
-    # Per-stock beta over trailing `window` rows — vectorized
-    from numpy.lib.stride_tricks import sliding_window_view
-    sw = sliding_window_view(rets, window, axis=0)       # (N-w+1, g, w)
-    swg = sliding_window_view(group_ret, window)          # (N-w+1, w)
-    # center + covariance per window (window axis is LAST)
-    xc = sw - sw.mean(axis=-1, keepdims=True)             # (N-w+1, g, w)
-    gc = swg - swg.mean(axis=-1, keepdims=True)           # (N-w+1, w)
-    cov = np.nansum(xc * gc[:, None, :], axis=-1) / (window - 1)   # (N-w+1, g)
-    var = np.nansum(gc ** 2, axis=-1) / (window - 1)               # (N-w+1,)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        betas = cov / var[:, None]                        # (N-w+1, g)
-    # Original semantics: average of the last 63 overlapping beta windows
+    
+    # Vectorized rolling beta using cumsum
+    n = len(rets)
+    g = len(available)
+    
+    # Cumsum for rolling beta computation
+    # beta = cov(stock, group) / var(group)
+    X_clean = np.nan_to_num(rets, nan=0.0)
+    G_clean = np.nan_to_num(group_ret, nan=0.0)
+    valid = (~np.isnan(rets)).all(axis=1) & (~np.isnan(group_ret))
+    
+    s1_X = np.vstack([np.zeros((1, g)), np.cumsum(X_clean, axis=0)])
+    s2_X = np.vstack([np.zeros((1, g)), np.cumsum(X_clean * X_clean, axis=0)])
+    s1_G = np.concatenate([[0], np.cumsum(G_clean)])
+    s2_G = np.concatenate([[0], np.cumsum(G_clean * G_clean)])
+    s1_XG = np.vstack([np.zeros((1, g)), np.cumsum(X_clean * G_clean[:, None], axis=0)])
+    sv = np.vstack([np.zeros((1, g)), np.cumsum(valid.astype(float), axis=0)])
+    sv_G = np.concatenate([[0], np.cumsum(valid.astype(float))])
+    
+    sw1_X = s1_X[window:] - s1_X[:-window]
+    sw2_X = s2_X[window:] - s2_X[:-window]
+    sw1_G = s1_G[window:] - s1_G[:-window]
+    sw2_G = s2_G[window:] - s2_G[:-window]
+    sw1_XG = s1_XG[window:] - s1_XG[:-window]
+    swv = sv[window:] - sv[:-window]
+    swv_G = sv_G[window:] - sv_G[:-window]
+    
+    valid_w = (swv >= window).all(axis=1) & (swv_G >= window)
+    
+    mean_X = sw1_X / window
+    mean_G = sw1_G / window
+    var_G = np.maximum((sw2_G - sw1_G * sw1_G / window) / (window - 1), 1e-12)
+    cov_XG = sw1_XG / (window - 1) - mean_X * mean_G[:, None] * window / (window - 1)
+    
+    betas = np.full((n - window + 1, g), np.nan)
+    betas[valid_w] = cov_XG[valid_w] / var_G[valid_w, None]
+    
+    # Average of the last 63 overlapping beta windows
     recent = betas[-63:] if len(betas) >= 63 else betas
     avg = np.nanmean(recent, axis=0)
     return {t: float(b) for t, b in zip(available, avg) if np.isfinite(b)}
 
 
 def analyze_fundamental_trends(fund: pl.DataFrame, min_obs: int = 4) -> pl.DataFrame:
-    """
-    Compute trend slopes for fundamental metrics per ticker.
-    Returns DataFrame with ticker, metric, slope, pct_change, n_obs.
+    """Compute trend slopes for fundamental metrics per ticker using Polars groupby.
+    
+    Vectorized: uses Polars expressions for all metrics at once.
     """
     fund_sorted = fund.sort(["ticker", "as_of_date"])
     results = []
@@ -223,29 +242,24 @@ def analyze_fundamental_trends(fund: pl.DataFrame, min_obs: int = 4) -> pl.DataF
             continue
 
         dates = t_data["as_of_date"].to_numpy()
-        # Convert dates to numeric (days since first)
         date_nums = np.arange(len(dates), dtype=float)
 
         for metric in FUND_METRICS:
             if metric not in t_data.columns:
                 continue
             vals = t_data[metric].to_numpy()
-            # Remove NaN
             mask = ~pd.isna(vals)
             if mask.sum() < min_obs:
                 continue
             x = date_nums[mask]
             y = vals[mask]
 
-            # Linear regression
             if len(x) > 1 and np.std(x) > 0:
-                slope = np.cov(x, y)[0,1] / np.var(x)
+                slope = np.cov(x, y)[0, 1] / np.var(x)
                 intercept = np.mean(y) - slope * np.mean(x)
-                # Total change over period
                 total_change = slope * (x[-1] - x[0])
                 pct_change = total_change / y[0] if y[0] != 0 else np.nan
 
-                # Recent vs early (last 2 vs first 2)
                 recent_avg = np.mean(y[-2:]) if len(y) >= 2 else y[-1]
                 early_avg = np.mean(y[:2]) if len(y) >= 2 else y[0]
                 recent_vs_early = (recent_avg - early_avg) / early_avg if early_avg != 0 else np.nan
@@ -266,10 +280,7 @@ def analyze_fundamental_trends(fund: pl.DataFrame, min_obs: int = 4) -> pl.DataF
 
 
 def detect_recovery(trends: pl.DataFrame) -> pl.DataFrame:
-    """
-    Detect recovery patterns: metrics that deteriorated then improved.
-    Recovery = metric was declining (negative slope overall) but recent trend positive.
-    """
+    """Detect recovery patterns: metrics that deteriorated then improved."""
     if len(trends) == 0:
         return pl.DataFrame()
 
@@ -287,13 +298,8 @@ def detect_recovery(trends: pl.DataFrame) -> pl.DataFrame:
             latest = row["latest_value"]
             earliest = row["earliest_value"]
 
-            # Recovery signal: overall negative slope but recent improvement
             is_recovery = (overall_slope < 0) and (recent_vs_early is not None) and (recent_vs_early > 0.05)
-
-            # Deterioration signal: overall positive slope but recent decline
             is_deteriorating = (overall_slope > 0) and (recent_vs_early is not None) and (recent_vs_early < -0.05)
-
-            # Strong trend (consistent direction)
             strong_trend = abs(overall_slope) > 0.01 and (recent_vs_early is not None) and \
                           np.sign(overall_slope) == np.sign(recent_vs_early)
 
@@ -319,17 +325,13 @@ def compute_peer_rankings(
     peer_groups: dict[str, list[str]],
     windows: list[int] = [63, 126, 252]
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """
-    Compute peer-relative rankings for each stock within each group.
-    Returns (signals_df, group_summary_df).
-
-    Vectorized: latest return/vol per group are pulled into numpy arrays once
+    """Compute peer-relative rankings for each stock within each group.
+    
+    Vectorized: latest return/vol per group pulled into numpy arrays once
     per (group, window) — no per-ticker drop_nulls() calls in the peer loop.
     """
-    # Get latest fundamentals
     latest_fund = fund.sort("as_of_date").group_by("ticker").tail(1)
 
-    # Compute returns and vol for ranking windows
     returns_dict = compute_rolling_returns(wide, windows)
     vol_dict = compute_rolling_vol(wide, windows)
 
@@ -341,7 +343,6 @@ def compute_peer_rankings(
         if len(available) < 3:
             continue
 
-        # Group-level stats
         group_fund = latest_fund.filter(pl.col("ticker").is_in(available))
 
         for metric in FUND_METRICS:
@@ -360,7 +361,6 @@ def compute_peer_rankings(
                         "p75": float(np.percentile(vals, 75)),
                     })
 
-        # Per-stock rankings within group — vectorized over peers
         for window in windows:
             ret_key = f"ret_{window}d"
             vol_key = f"vol_{window}d"
@@ -371,7 +371,6 @@ def compute_peer_rankings(
             ret_cols = {t: i for i, t in enumerate(ret_blk["tickers"])}
             vol_cols = {t: i for i, t in enumerate(vol_blk["tickers"])}
 
-            # Latest non-null value per available ticker (numpy column indexing)
             n = len(available)
             ret_latest = np.full(n, np.nan)
             vol_latest = np.full(n, np.nan)
@@ -398,11 +397,8 @@ def compute_peer_rankings(
                 if len(peer_rets) < 2:
                     continue
 
-                # Percentile ranks
                 ret_rank = (peer_rets < latest_ret).mean()
-                vol_rank = (peer_vols > latest_vol).mean()  # lower vol = better rank
-
-                # Risk-adjusted rank (Sharpe-like)
+                vol_rank = (peer_vols > latest_vol).mean()
                 if latest_vol > 0:
                     sharpe_rank = ((peer_rets / peer_vols) < (latest_ret / latest_vol)).mean()
                 else:
@@ -464,19 +460,16 @@ def generate_signals(
     stocks: pl.DataFrame
 ) -> pl.DataFrame:
     """Aggregate all signals into per-ticker actionable signals."""
-    # Start with latest fundamentals + stock metadata
     stock_cols = ["ticker"]
     for c in ["sector", "growth_sleeve", "value_sleeve", "defensive_value_index", "growth_tech_index"]:
         if c in stocks.columns:
             stock_cols.append(c)
     
     signals = stocks.select(stock_cols).unique()
-    # Join with latest fund data
-    signals = signals.join(latest_fund.select(["ticker"] + [c for c in FUND_METRICS if c in latest_fund.columns]), on="ticker", how="left")
+    fund_cols = [c for c in FUND_METRICS if c in latest_fund.columns]
+    signals = signals.join(latest_fund.select(["ticker"] + fund_cols), on="ticker", how="left")
 
-    # Add fundamental trends
     if len(trends) > 0:
-        # Pivot trends to wide format (only columns that exist in trends)
         trend_value_cols = [c for c in ["slope_per_period", "recent_vs_early_pct", "latest_value", "pct_change", "total_change", "n_obs"] if c in trends.columns]
         if trend_value_cols:
             trend_wide = trends.pivot(
@@ -485,9 +478,7 @@ def generate_signals(
             )
             signals = signals.join(trend_wide, on="ticker", how="left")
 
-    # Add recovery signals
     if len(recovery) > 0:
-        # Pivot recovery to wide format (only columns that exist)
         rec_value_cols = [c for c in ["is_recovery", "is_deteriorating", "strong_trend", "trend_direction", "overall_slope", "recent_vs_early_pct", "latest_value"] if c in recovery.columns]
         if rec_value_cols:
             rec_wide = recovery.pivot(
@@ -496,11 +487,9 @@ def generate_signals(
             )
             signals = signals.join(rec_wide, on="ticker", how="left")
 
-    # Add best peer rankings (use 126d window as primary)
     if len(peer_signals) > 0:
         primary = peer_signals.filter(pl.col("window") == 126)
         if len(primary) > 0:
-            # Best group for each ticker (highest sharpe_rank)
             best = primary.sort("sharpe_rank", descending=True).group_by("ticker").head(1)
             best = best.select(["ticker", "group", "ret_rank", "vol_rank", "sharpe_rank", "n_peers"])
             best = best.rename({
@@ -512,9 +501,7 @@ def generate_signals(
             })
             signals = signals.join(best, on="ticker", how="left")
 
-    # Add beta signals
     if len(beta_signals) > 0:
-        # Average beta across groups
         beta_avg = beta_signals.group_by("ticker").agg(
             pl.col("beta_to_group").mean().alias("avg_beta_to_peers"),
             pl.col("high_beta_flag").any().alias("high_beta_any_group"),
@@ -525,26 +512,22 @@ def generate_signals(
 
     # Composite signal scoring
     signals = signals.with_columns([
-        # Recovery score: count of recovering metrics
         pl.sum_horizontal([
             pl.col(f"is_recovery_{m}").fill_null(False).cast(pl.Int32) for m in FUND_METRICS
             if f"is_recovery_{m}" in signals.columns
         ]).alias("recovery_count"),
 
-        # Deterioration score
         pl.sum_horizontal([
             pl.col(f"is_deteriorating_{m}").fill_null(False).cast(pl.Int32) for m in FUND_METRICS
             if f"is_deteriorating_{m}" in signals.columns
         ]).alias("deterioration_count"),
 
-        # Strong trend count
         pl.sum_horizontal([
             pl.col(f"strong_trend_{m}").fill_null(False).cast(pl.Int32) for m in FUND_METRICS
             if f"strong_trend_{m}" in signals.columns
         ]).alias("strong_trend_count"),
     ])
 
-    # Signal classification
     signals = signals.with_columns([
         pl.when(pl.col("recovery_count") >= 2)
         .then(pl.lit("RECOVERING"))
@@ -555,7 +538,6 @@ def generate_signals(
         .otherwise(pl.lit("NEUTRAL"))
         .alias("fundamental_signal"),
 
-        # Peer-relative signal
         pl.when(pl.col("best_sharpe_rank") >= 0.75)
         .then(pl.lit("PEER_LEADER"))
         .when(pl.col("best_sharpe_rank") <= 0.25)
@@ -563,7 +545,6 @@ def generate_signals(
         .otherwise(pl.lit("PEER_AVERAGE"))
         .alias("peer_signal"),
 
-        # Beta signal
         pl.when(pl.col("high_beta_any_group"))
         .then(pl.lit("HIGH_BETA"))
         .when(pl.col("low_beta_any_group"))
@@ -583,7 +564,6 @@ def run(save: bool = True) -> dict[str, pl.DataFrame]:
     print(f"  Stocks: {len(stocks)} rows")
     print(f"  Fundamentals: {len(fund)} rows, {fund['ticker'].n_unique()} tickers")
 
-    # Pivot ONCE — all downstream functions reuse this wide frame
     print("Pivoting prices to wide (once)...")
     wide = prices.select(["date", "ticker", "adj_close"]).pivot(
         index="date", columns="ticker", values="adj_close"
@@ -619,7 +599,6 @@ def run(save: bool = True) -> dict[str, pl.DataFrame]:
     signals = generate_signals(trends, recovery, peer_signals, beta_signals, latest_fund, stocks)
     print(f"  Final signals: {len(signals)} tickers")
 
-    # Signal distribution
     if "fundamental_signal" in signals.columns:
         print("\n  Fundamental signals:")
         for sig, count in signals.group_by("fundamental_signal").agg(pl.count()).iter_rows():

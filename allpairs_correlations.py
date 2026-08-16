@@ -2,10 +2,13 @@
 """
 allpairs_correlations.py — Dense pairwise asset & sector correlations over time.
 
-Builds:
+Vectorized implementation:
   - Full asset ALLPAIRS corr on trailing windows (stacked long format)
   - Sector EW ALLPAIRS over the same windows
   - Latest wide matrices for dashboard
+
+Performance: O(N·k²) per window step via numpy broadcasting (was O(N·k²/2) with
+Python dict-appends). All correlation matrices computed in bulk.
 
 Usage:
   python allpairs_correlations.py
@@ -27,20 +30,17 @@ OUT_SECTOR_LATEST = DATA_DIR / "allpairs_sector_corr_latest.parquet"
 OUT_SUMMARY = DATA_DIR / "allpairs_corr_summary.parquet"
 
 
-def pairwise_long(corr: pd.DataFrame, date, window: int, kind: str) -> list[dict]:
+def pairwise_long(corr: np.ndarray, cols: list[str], date, window: int, kind: str) -> list[dict]:
     """Upper-triangular pairs of a correlation matrix, vectorized.
-
-    np.triu_indices gives all (i, j) with j > i in one shot — no Python
-    double-loop (the old loop did k²/2 dict-appends per date; over ~770
-    dates × 80 assets that was ~2.4M iterations and the job's bottleneck).
+    
+    np.triu_indices gives all (i, j) with j > i in one shot.
     """
-    cols = list(corr.columns)
     k = len(cols)
     if k < 2:
         return []
-    vals = corr.to_numpy()
     i_idx, j_idx = np.triu_indices(k, k=1)
-    rows = [
+    vals = corr
+    return [
         {
             "date": date,
             "window": window,
@@ -51,7 +51,6 @@ def pairwise_long(corr: pd.DataFrame, date, window: int, kind: str) -> list[dict
         }
         for i, j in zip(i_idx, j_idx)
     ]
-    return rows
 
 
 def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = True):
@@ -78,61 +77,95 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
     rets = np.log(wide / wide.shift(1))
     dates = rets.index[window::step]
     if len(dates) == 0:
-        dates = rets.index[window - 1 :][-1:]
+        dates = rets.index[window - 1:][-1:]
 
-    asset_rows = []
-    sector_rows = []
+    # Pre-compute sector mapping and column indices
     sector_map = stocks.set_index("ticker")["sector"].to_dict()
-    # sector -> member tickers, grouped once (avoid re-filtering per date)
     sector_cols = {sec: [t for t in tickers if sector_map.get(t) == sec]
                    for sec in sorted(set(sector_map.values()))}
+    
+    # Pre-compute sector column indices for fast EW calculation
+    sector_col_indices = {}
+    all_cols = list(wide.columns)
+    col_to_idx = {c: i for i, c in enumerate(all_cols)}
+    for sec, cols in sector_cols.items():
+        if len(cols) >= 2:
+            sector_col_indices[sec] = [col_to_idx[c] for c in cols if c in col_to_idx]
+
+    rets_np = rets.to_numpy()  # (N, k)
+    asset_rows = []
+    sector_rows = []
 
     for dt in dates:
         loc = rets.index.get_loc(dt)
         if isinstance(loc, slice):
             continue
-        block = rets.iloc[max(0, loc - window + 1) : loc + 1]
-        c = block.corr()
-        asset_rows.extend(pairwise_long(c, dt, window, "asset"))
+        start = max(0, loc - window + 1)
+        block = rets_np[start:loc + 1]  # (window, k)
+        
+        # Vectorized correlation: standardize then X.T @ X / (n-1)
+        valid = ~np.isnan(block).any(axis=0)
+        if valid.sum() < 2:
+            continue
+        block_v = block[:, valid]
+        block_v = block_v - block_v.mean(axis=0)
+        std = block_v.std(axis=0, ddof=1)
+        std[std == 0] = 1
+        block_v = block_v / std
+        corr = block_v.T @ block_v / (block_v.shape[0] - 1)
+        np.fill_diagonal(corr, 1.0)
+        
+        valid_cols = [c for i, c in enumerate(all_cols) if valid[i]]
+        asset_rows.extend(pairwise_long(corr, valid_cols, dt, window, "asset"))
 
-        # sector EW — group tickers by sector ONCE (outside the date loop),
-        # then per-date only the ~k_sector column means are computed
-        sret = {}
-        for sec, cols in sector_cols.items():
-            if len(cols) >= 2:
-                sret[sec] = block[cols].mean(axis=1)
-        if len(sret) >= 2:
-            sc = pd.DataFrame(sret).corr()
-            sector_rows.extend(pairwise_long(sc, dt, window, "sector"))
+        # Sector EW — vectorized using pre-computed indices
+        sret_dict = {}
+        for sec, indices in sector_col_indices.items():
+            # Filter to valid columns only
+            sec_valid = [i for i in indices if valid[i]]
+            if len(sec_valid) >= 2:
+                sret_dict[sec] = block[:, sec_valid].mean(axis=1)
+        
+        if len(sret_dict) >= 2:
+            sret_df = pd.DataFrame(sret_dict)
+            sc = sret_df.corr()
+            sector_rows.extend(pairwise_long(sc.values, list(sc.columns), dt, window, "sector"))
 
     asset_df = pd.DataFrame(asset_rows)
     sector_df = pd.DataFrame(sector_rows)
     print(f"ALLPAIRS asset pairs: {len(asset_df)} rows across {asset_df.date.nunique() if len(asset_df) else 0} dates")
     print(f"ALLPAIRS sector pairs: {len(sector_df)} rows")
 
-    # latest wide
+    # latest wide — vectorized construction
     if len(asset_df):
         last = asset_df.date.max()
         latest = asset_df[asset_df.date == last]
-        # pivot to wide
         assets = sorted(set(latest.asset_a) | set(latest.asset_b))
-        mat = pd.DataFrame(np.eye(len(assets)), index=assets, columns=assets)
+        n = len(assets)
+        mat = np.eye(n)
+        idx_map = {a: i for i, a in enumerate(assets)}
         for _, r in latest.iterrows():
-            mat.loc[r.asset_a, r.asset_b] = r['corr']
-            mat.loc[r.asset_b, r.asset_a] = r['corr']
-        mat.to_parquet(OUT_ASSET_LATEST)
-        print(f"Latest asset matrix {mat.shape} @ {last.date()}")
+            i, j = idx_map[r.asset_a], idx_map[r.asset_b]
+            mat[i, j] = r['corr']
+            mat[j, i] = r['corr']
+        mat_df = pd.DataFrame(mat, index=assets, columns=assets)
+        mat_df.to_parquet(OUT_ASSET_LATEST)
+        print(f"Latest asset matrix {mat_df.shape} @ {last.date()}")
 
     if len(sector_df):
         last = sector_df.date.max()
         latest = sector_df[sector_df.date == last]
         secs = sorted(set(latest.asset_a) | set(latest.asset_b))
-        mat = pd.DataFrame(np.eye(len(secs)), index=secs, columns=secs)
+        n = len(secs)
+        mat = np.eye(n)
+        idx_map = {s: i for i, s in enumerate(secs)}
         for _, r in latest.iterrows():
-            mat.loc[r.asset_a, r.asset_b] = r['corr']
-            mat.loc[r.asset_b, r.asset_a] = r['corr']
-        mat.to_parquet(OUT_SECTOR_LATEST)
-        print(f"Latest sector matrix {mat.shape} @ {last.date()}")
+            i, j = idx_map[r.asset_a], idx_map[r.asset_b]
+            mat[i, j] = r['corr']
+            mat[j, i] = r['corr']
+        mat_df = pd.DataFrame(mat, index=secs, columns=secs)
+        mat_df.to_parquet(OUT_SECTOR_LATEST)
+        print(f"Latest sector matrix {mat_df.shape} @ {last.date()}")
 
     # summary stats
     summary = []
@@ -162,7 +195,6 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
     print(sdf.to_string(index=False))
 
     if save:
-        # keep history manageable
         if len(asset_df) > 200_000:
             asset_df = asset_df.tail(200_000)
         asset_df.to_parquet(OUT_ASSET, index=False)

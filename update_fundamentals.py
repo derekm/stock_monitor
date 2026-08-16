@@ -24,6 +24,7 @@ import pyarrow.parquet as pq
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 MONITORED = DATA_DIR / "monitored_stocks.parquet"
+PRICES = DATA_DIR / "daily_prices.parquet"
 
 # Source priority (higher = better) — used by preferred_metrics.py
 SOURCE_RANK = {
@@ -65,8 +66,9 @@ def save(df: pd.DataFrame) -> None:
 
 
 def universe_tickers() -> list[str] | None:
-    if MONITORED.exists():
-        df = pd.read_parquet(MONITORED)
+    """Get universe tickers from daily_prices (NOT monitored_stocks)."""
+    if PRICES.exists():
+        df = pd.read_parquet(PRICES, columns=["ticker"])
         return df["ticker"].dropna().unique().tolist()
     return None
 

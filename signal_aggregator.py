@@ -50,57 +50,61 @@ def _norm(s: pd.Series) -> pd.Series:
 
 
 def load_scores() -> pd.DataFrame:
-    """One row per ticker with a raw score per family (higher = better)."""
-    tickers: set[str] = set()
-
-    def _add(df: pd.DataFrame):
-        if not df.empty and "ticker" in df.columns:
-            tickers.update(df["ticker"].astype(str).str.upper())
-
+    """One row per ticker with a raw score per family (higher = better).
+    Vectorized: single pass merges instead of per-ticker filtering."""
     pref = pd.read_parquet(PREF) if PREF.exists() else pd.DataFrame()
     peer = pd.read_parquet(PEER) if PEER.exists() else pd.DataFrame()
     cross = pd.read_parquet(CROSS) if CROSS.exists() else pd.DataFrame()
     pair = pd.read_parquet(PAIR) if PAIR.exists() else pd.DataFrame()
     earn = pd.read_parquet(EARN) if EARN.exists() else pd.DataFrame()
-    _add(pref); _add(peer); _add(cross); _add(pair); _add(earn)
 
-    rows = []
-    for tk in sorted(tickers):
-        row = {"ticker": tk}
+    tickers: set[str] = set()
+    for df in (pref, peer, cross, pair, earn):
+        if not df.empty and "ticker" in df.columns:
+            tickers.update(df["ticker"].astype(str).str.upper())
 
-        # preferred: composite_score already [0,1]-ish; decision boosts core
-        if not pref.empty:
-            p = pref[pref["ticker"] == tk]
-            if len(p):
-                cs = p["composite_score"].iloc[0] if "composite_score" in p else np.nan
-                row["preferred"] = float(cs) if pd.notna(cs) else np.nan
-        # peer: best_sharpe_rank (percentile 0..1, higher = better)
-        if not peer.empty:
-            q = peer[peer["ticker"] == tk]
-            if len(q) and "best_sharpe_rank" in q:
-                row["peer"] = float(q["best_sharpe_rank"].iloc[0])
-        # cross_section: bucket 1..5 → (bucket-1)/4
-        if not cross.empty:
-            c = cross[cross["ticker"] == tk]
-            if len(c) and "bucket" in c:
-                b = c["bucket"].dropna().iloc[-1]
-                row["cross"] = float((b - 1) / 4) if pd.notna(b) else np.nan
-        # pair_engine: z_now → |z| strength; mean-reversion favors extremes.
-        # Score = min(|z|/2, 1): a spread at ±2 = full conviction.
-        if not pair.empty and "z_now" in pair.columns:
-            pr = pair[pair["asset_a"] == tk]
-            pb = pair[pair["asset_b"] == tk]
-            zs = pd.concat([pr["z_now"], pb["z_now"]]).dropna()
-            if len(zs):
-                row["pair"] = float(np.clip(np.abs(zs.iloc[-1]) / 2.0, 0, 1))
-        # earnings: catalyst_score → scale from raw to [0,1] by rank across names
-        if not earn.empty:
-            e = earn[earn["ticker"] == tk]
-            if len(e) and "catalyst_score" in e:
-                row["earnings"] = float(e["catalyst_score"].iloc[0])
+    # Start with all tickers as index
+    idx = pd.Index(sorted(tickers), name="ticker")
+    out = pd.DataFrame(index=idx)
 
-        rows.append(row)
-    return pd.DataFrame(rows).set_index("ticker")
+    # preferred: composite_score
+    if not pref.empty and "composite_score" in pref.columns:
+        p = pref[["ticker", "composite_score"]].copy()
+        p["ticker"] = p["ticker"].astype(str).str.upper()
+        p = p.groupby("ticker")["composite_score"].last()
+        out["preferred"] = p.reindex(idx)
+
+    # peer: best_sharpe_rank
+    if not peer.empty and "best_sharpe_rank" in peer.columns:
+        p = peer[["ticker", "best_sharpe_rank"]].copy()
+        p["ticker"] = p["ticker"].astype(str).str.upper()
+        p = p.groupby("ticker")["best_sharpe_rank"].last()
+        out["peer"] = p.reindex(idx)
+
+    # cross_section: bucket 1..5 → (bucket-1)/4
+    if not cross.empty and "bucket" in cross.columns:
+        c = cross[["ticker", "bucket"]].copy()
+        c["ticker"] = c["ticker"].astype(str).str.upper()
+        c = c.groupby("ticker")["bucket"].last()
+        out["cross"] = ((c - 1) / 4).reindex(idx)
+
+    # pair_engine: z_now → min(|z|/2, 1)
+    if not pair.empty and "z_now" in pair.columns:
+        pa = pair[["asset_a", "z_now"]].rename(columns={"asset_a": "ticker"})
+        pb = pair[["asset_b", "z_now"]].rename(columns={"asset_b": "ticker"})
+        p = pd.concat([pa, pb])
+        p["ticker"] = p["ticker"].astype(str).str.upper()
+        p = p.groupby("ticker")["z_now"].last()
+        out["pair"] = np.clip(np.abs(p.reindex(idx)) / 2.0, 0, 1)
+
+    # earnings: catalyst_score
+    if not earn.empty and "catalyst_score" in earn.columns:
+        e = earn[["ticker", "catalyst_score"]].copy()
+        e["ticker"] = e["ticker"].astype(str).str.upper()
+        e = e.groupby("ticker")["catalyst_score"].last()
+        out["earnings"] = e.reindex(idx)
+
+    return out
 
 
 def forward_returns(cutoff: pd.Timestamp) -> pd.Series:
@@ -255,6 +259,7 @@ def estimate_ic_by_regime(scores: pd.DataFrame, fwd_series: pd.DataFrame,
 
 def build(cutoff: pd.Timestamp | None = None, lindy: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
     scores = load_scores()
+    # Load prices once, derive both cutoff and forward series
     prices = load_adj_prices_pandas()
     if cutoff is None:
         cutoff = prices["date"].max()
@@ -277,6 +282,7 @@ def build(cutoff: pd.Timestamp | None = None, lindy: bool = False) -> tuple[pd.D
             normed[family] = _norm(normed[family])
     wmap = dict(zip(ic_df["family"], ic_df["weight_norm"]))
 
+    # Vectorized composite calculation
     comp = pd.Series(0.0, index=normed.index)
     wsum = 0.0
     for family, w in wmap.items():

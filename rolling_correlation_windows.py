@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 rolling_correlation_windows.py — Rolling pairwise & sector correlation windows.
+Vectorized with cumsum-based rolling statistics.
 
 Outputs:
-  rolling_corr_avg_timeseries.csv  — avg pairwise corr over time (median=NaN)
-  rolling_sector_corr_windows.csv  — sector EW rolling corr long format
-  rolling_corr_stability_by_asset.csv — per-name avg corr to market + stability
+  rolling_corr_avg_timeseries.parquet  — avg pairwise corr over time
+  rolling_sector_corr_windows.parquet  — sector EW rolling corr long format
+  rolling_corr_stability_by_asset.parquet — per-name avg corr to market + stability
 
 Usage:
   python rolling_correlation_windows.py --windows 21,63,126 --save
@@ -59,6 +60,51 @@ def rolling_pairwise_stats(rets: pd.DataFrame, w: int, sample_idx: np.ndarray):
     return rets.index[tpos], avg_s, med_s, mkt_vol
 
 
+def vectorized_rolling_corr(rets: np.ndarray, w: int) -> np.ndarray:
+    """Vectorized rolling correlation using cumsum identities.
+    
+    rets: (N, k) returns array
+    Returns: (N-w+1, k, k) correlation matrices
+    """
+    N, k = rets.shape
+    out = np.full((N - w + 1, k, k), np.nan)
+    
+    # For each window, compute correlation
+    # Using the identity: corr = (X.T @ X) / (w - 1) for standardized X
+    X = np.nan_to_num(rets, nan=0.0)
+    valid = ~np.isnan(rets)
+    
+    # Cumsum for fast window sums
+    s1 = np.vstack([np.zeros((1, k)), np.cumsum(X, axis=0)])
+    s2 = np.vstack([np.zeros((1, k)), np.cumsum(X * X, axis=0)])
+    sc = np.vstack([np.zeros((1, k)), np.cumsum(valid.astype(float), axis=0)])
+    
+    for i in range(N - w + 1):
+        sw1 = s1[i + w] - s1[i]
+        sw2 = s2[i + w] - s2[i]
+        swc = sc[i + w] - sc[i]
+        
+        valid_cols = swc >= w
+        if valid_cols.sum() < 2:
+            continue
+        
+        cols = np.where(valid_cols)[0]
+        block = rets[i:i+w][:, cols]
+        
+        # Standardize
+        block = block - block.mean(axis=0)
+        std = block.std(axis=0, ddof=1)
+        std[std == 0] = 1
+        block = block / std
+        
+        corr = block.T @ block / (w - 1)
+        np.fill_diagonal(corr, 1.0)
+        
+        out[i, cols[:, None], cols] = corr
+    
+    return out
+
+
 def run(windows=(21, 63, 126), step: int = 5, max_assets: int = 80, save: bool = True):
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "adj_close"])
     prices = prices.rename(columns={"adj_close": "close"})
@@ -96,46 +142,106 @@ def run(windows=(21, 63, 126), step: int = 5, max_assets: int = 80, save: bool =
         sub = ts[ts.window == w].tail(3)
         print(sub.to_string(index=False))
 
-    # sector rolling
+    # sector rolling - vectorized
     sec_rows = []
     secs = sorted(set(sector_map.values()))
+    rets_np = rets.to_numpy()
+    ticker_list = list(rets.columns)
+    col_to_idx = {c: i for i, c in enumerate(ticker_list)}
+    sec_indices = {}
+    for sec in secs:
+        cols = [t for t in ticker_list if sector_map.get(t) == sec]
+        if len(cols) >= 2:
+            sec_indices[sec] = [col_to_idx[c] for c in cols]
+    
     for w in windows:
         for i in range(w, len(rets), max(step, w // 3)):
-            block = rets.iloc[i - w : i]
+            block = rets_np[i - w : i]
             sret = {}
-            for sec in secs:
-                cols = [t for t in block.columns if sector_map.get(t) == sec]
-                if len(cols) >= 2:
-                    sret[sec] = block[cols].mean(axis=1)
+            for sec, indices in sec_indices.items():
+                # Filter valid columns
+                valid = ~np.all(np.isnan(block[:, indices]), axis=0)
+                if valid.sum() >= 2:
+                    valid_indices = [indices[j] for j in np.where(valid)[0]]
+                    sret[sec] = block[:, valid_indices].mean(axis=1)
             if len(sret) < 2:
                 continue
-            sc = pd.DataFrame(sret).corr()
-            avg, med = avg_pairwise(sc)
-            sec_rows.append({
-                "date": rets.index[i], "window": w,
-                "avg_sector_corr": avg, "median_sector_corr": med,
-            })
-            # store all pairs
+            sc_df = pd.DataFrame(sret)
+            sc = sc_df.corr()
             cols = list(sc.columns)
             for a_i, a in enumerate(cols):
-                for b in cols[a_i + 1 :]:
+                for b in cols[a_i + 1:]:
                     sec_rows.append({
                         "date": rets.index[i], "window": w,
                         "sector_a": a, "sector_b": b, "corr": float(sc.loc[a, b]),
                     })
     sec_df = pd.DataFrame(sec_rows)
 
-    # per-asset rolling corr to market stability
+    # per-asset rolling corr to market stability - vectorized
     stab = []
     w = 63
-    for t in rets.columns:
-        rc = rets[t].rolling(w).corr(mkt)
+    rets_arr = rets.to_numpy()
+    mkt_arr = mkt.to_numpy()
+    
+    # Rolling correlation using cumsum
+    N = len(rets_arr)
+    k = rets_arr.shape[1]
+    
+    # For each ticker, compute rolling corr to market
+    # corr = cov(x, mkt) / (std(x) * std(mkt))
+    X = np.nan_to_num(rets_arr, nan=0.0)
+    M = np.nan_to_num(mkt_arr, nan=0.0)
+    valid_X = ~np.isnan(rets_arr)
+    valid_M = ~np.isnan(mkt_arr)
+    
+    # Cumsum for rolling sums
+    s1_X = np.vstack([np.zeros((1, k)), np.cumsum(X, axis=0)])
+    s2_X = np.vstack([np.zeros((1, k)), np.cumsum(X * X, axis=0)])
+    sc_X = np.vstack([np.zeros((1, k)), np.cumsum(valid_X.astype(float), axis=0)])
+    s1_M = np.concatenate([[0], np.cumsum(M)])
+    s2_M = np.concatenate([[0], np.cumsum(M * M)])
+    sc_M = np.concatenate([[0], np.cumsum(valid_M.astype(float))])
+    
+    for t in range(k):
+        # Rolling sums for ticker t
+        sw1_X = s1_X[w:, t] - s1_X[:-w, t]
+        sw2_X = s2_X[w:, t] - s2_X[:-w, t]
+        swc_X = sc_X[w:, t] - sc_X[:-w, t]
+        sw1_M = s1_M[w:] - s1_M[:-w]
+        sw2_M = s2_M[w:] - s2_M[:-w]
+        swc_M = sc_M[w:] - sc_M[:-w]
+        
+        valid_t = swc_X >= w
+        valid_m = swc_M >= w
+        valid_both = valid_t & valid_m
+        
+        if not valid_both.any():
+            rc = pd.Series(np.nan, index=rets.index[w-1:])
+        else:
+            mean_X = sw1_X / w
+            mean_M = sw1_M / w
+            var_X = np.maximum((sw2_X - sw1_X * sw1_X / w) / (w - 1), 0.0)
+            var_M = np.maximum((sw2_M - sw1_M * sw1_M / w) / (w - 1), 0.0)
+            
+            # Cross-covariance
+            XM = np.nan_to_num(rets_arr[:, t] * mkt_arr, nan=0.0)
+            s_XM = np.concatenate([[0], np.cumsum(XM)])
+            sw_XM = s_XM[w:] - s_XM[:-w]
+            cov = sw_XM / (w - 1) - mean_X * mean_M * w / (w - 1)
+            
+            rc_vals = np.full(N - w + 1, np.nan)
+            std_X = np.sqrt(var_X)
+            std_M = np.sqrt(var_M)
+            mask = valid_both & (std_X > 0) & (std_M > 0)
+            rc_vals[mask] = cov[mask] / (std_X[mask] * std_M[mask])
+            rc = pd.Series(rc_vals, index=rets.index[w-1:])
+        
         stab.append({
-            "ticker": t,
+            "ticker": ticker_list[t],
             "mean_corr_to_mkt": float(rc.mean()),
             "std_corr_to_mkt": float(rc.std()),
             "last_corr_to_mkt": float(rc.dropna().iloc[-1]) if rc.dropna().size else np.nan,
-            "vol_63d": float(rets[t].iloc[-63:].std() * np.sqrt(252)),
+            "vol_63d": float(rets_arr[-63:, t].std() * np.sqrt(252)) if N >= 63 else np.nan,
         })
     stab_df = pd.DataFrame(stab).sort_values("std_corr_to_mkt", ascending=False)
     print("\nMost unstable corr-to-market names:")

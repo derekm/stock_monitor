@@ -59,7 +59,7 @@ def polygon_bulk_day(day: date, api_key: str) -> pd.DataFrame:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--days", type=int, default=5)
+    ap.add_argument("--days", type=int, default=252*5, help="Days of history to pull (default: 5 years)")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
@@ -70,7 +70,7 @@ def main():
         return
 
     to_d = date.today() - timedelta(days=1)  # yesterday at most (today's data not ready)
-    from_d = to_d - timedelta(days=args.days * 2)  # buffer for weekends/holidays
+    from_d = to_d - timedelta(days=args.days)
     frames = []
     for i in range((to_d - from_d).days + 1):
         day = from_d + timedelta(days=i)

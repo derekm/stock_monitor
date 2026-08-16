@@ -54,6 +54,8 @@ def hill_alpha(x, k_frac=0.10):
     x = np.asarray(x, dtype=float)
     x = x[np.isfinite(x) & (x > 0)]
     n = len(x)
+    if n < 10:
+        return np.nan
     k = max(5, int(k_frac * n))
     k = min(k, n - 1)
     xs = np.sort(x)[::-1][:k]

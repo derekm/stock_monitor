@@ -2,10 +2,7 @@
 """
 rolling_window_analysis.py — Rolling vol, beta, Sharpe, max-DD, dual-screen stability.
 
-Usage:
-  python rolling_window_analysis.py
-  python rolling_window_analysis.py --window 63 --universe growth
-  python rolling_window_analysis.py --save
+Vectorized implementation using cumsum-based rolling on wide [dates x tickers] matrix.
 """
 from __future__ import annotations
 import argparse
@@ -28,6 +25,9 @@ OUT_STAB = DATA_DIR / "rolling_screen_stability.parquet"
 
 def resolve(universe: str) -> list[str]:
     stocks = pd.read_parquet(STOCKS)
+    if universe == "all":
+        prices = pd.read_parquet(PRICES, columns=["ticker"])
+        return prices["ticker"].unique().tolist()
     if universe == "portfolio" and HOLDINGS.exists():
         return pd.read_parquet(HOLDINGS)["ticker"].tolist()
     if universe in ("growth", "growth_tech"):
@@ -43,20 +43,75 @@ def resolve(universe: str) -> list[str]:
     return stocks["ticker"].tolist()
 
 
-def rolling_metrics(rets: pd.Series, window: int) -> pd.DataFrame:
-    r = rets.dropna()
-    out = pd.DataFrame(index=r.index)
-    out["vol"] = r.rolling(window).std() * np.sqrt(252)
-    out["ret"] = r.rolling(window).mean() * 252
-    out["sharpe"] = out["ret"] / out["vol"].replace(0, np.nan)
-    # rolling max drawdown on price path
-    px = np.exp(r.cumsum())
-    roll_max = px.rolling(window, min_periods=1).max()
-    out["max_dd"] = (px / roll_max - 1).rolling(window).min()
-    return out
+def rolling_cumsum_2d(arr: np.ndarray, window: int) -> np.ndarray:
+    """Rolling sum for 2D array [dates x tickers] using cumsum."""
+    n_dates, n_tickers = arr.shape
+    if n_dates < window:
+        return np.full_like(arr, np.nan)
+    cumsum = np.nancumsum(arr, axis=0)
+    result = np.full_like(arr, np.nan)
+    result[window-1:] = cumsum[window-1:] - np.vstack([np.zeros((1, n_tickers)), cumsum[:-window]])
+    return result
 
 
-def run(universe: str = "portfolio", window: int = 63, save: bool = True):
+def rolling_mean_2d(arr: np.ndarray, window: int) -> np.ndarray:
+    """Rolling mean for 2D array."""
+    return rolling_cumsum_2d(arr, window) / window
+
+
+def rolling_std_2d(arr: np.ndarray, window: int) -> np.ndarray:
+    """Rolling std for 2D array using cumsum of values and squared values."""
+    n_dates, n_tickers = arr.shape
+    if n_dates < window:
+        return np.full_like(arr, np.nan)
+    cumsum = np.nancumsum(arr, axis=0)
+    sum_w = np.full_like(arr, np.nan)
+    sum_w[window-1:] = cumsum[window-1:] - np.vstack([np.zeros((1, n_tickers)), cumsum[:-window]])
+    cumsum_sq = np.nancumsum(arr * arr, axis=0)
+    sum_sq_w = np.full_like(arr, np.nan)
+    sum_sq_w[window-1:] = cumsum_sq[window-1:] - np.vstack([np.zeros((1, n_tickers)), cumsum_sq[:-window]])
+    mean = sum_w / window
+    var = (sum_sq_w / window) - (mean * mean)
+    return np.sqrt(np.maximum(var, 0))
+
+
+def rolling_beta_2d(ret: np.ndarray, mkt_ret: np.ndarray, window: int) -> np.ndarray:
+    """Rolling beta for each ticker vs market return."""
+    n_dates, n_tickers = ret.shape
+    if n_dates < window:
+        return np.full_like(ret, np.nan)
+    mkt = mkt_ret.reshape(-1, 1) if mkt_ret.ndim == 1 else mkt_ret
+    mean_ret = rolling_mean_2d(ret, window)
+    mean_mkt = rolling_mean_2d(mkt, window)
+    d_ret = ret - mean_ret
+    d_mkt = mkt - mean_mkt
+    cumsum_cov = np.nancumsum(d_ret * d_mkt, axis=0)
+    cov = np.full_like(ret, np.nan)
+    cov[window-1:] = (cumsum_cov[window-1:] - np.vstack([np.zeros((1, n_tickers)), cumsum_cov[:-window]])) / window
+    mkt_var_1d = rolling_std_2d(mkt, window) ** 2
+    mkt_var = np.broadcast_to(mkt_var_1d, (n_dates, n_tickers))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        beta = np.where(mkt_var > 1e-12, cov / mkt_var, np.nan)
+    return beta
+
+
+def rolling_max_dd_2d(cum_ret: np.ndarray, window: int) -> np.ndarray:
+    """Rolling max drawdown from cumulative returns."""
+    n_dates, n_tickers = cum_ret.shape
+    if n_dates < window:
+        return np.full_like(cum_ret, np.nan)
+    result = np.full_like(cum_ret, np.nan)
+    from numpy.lib.stride_tricks import sliding_window_view
+    windows = sliding_window_view(cum_ret, window_shape=window, axis=0)
+    peak = np.nanmax(windows, axis=2)
+    current = windows[:, :, -1]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        dd = (current - peak) / np.where(peak != 0, peak, np.nan)
+    result[window-1:] = dd
+    return result
+
+
+def run(universe: str = "all", window: int = 63, save: bool = True):
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "adj_close"])
     prices = prices.rename(columns={"adj_close": "close"})
     prices["date"] = pd.to_datetime(prices["date"])
@@ -66,30 +121,44 @@ def run(universe: str = "portfolio", window: int = 63, save: bool = True):
             .sort_index().ffill())
     rets = np.log(wide / wide.shift(1))
 
-    # market proxy: equal-weight of available
-    mkt = rets.mean(axis=1)
+    # Filter to tickers with sufficient data
+    valid_tickers = [c for c in wide.columns if wide[c].notna().sum() >= 252]
+    wide = wide[valid_tickers]
+    rets = np.log(wide / wide.shift(1))
 
+    # Market proxy: equal-weight of available
+    mkt = rets.mean(axis=1).values
+
+    # Vectorized rolling metrics
+    roll_mean = rolling_mean_2d(rets.values, window)
+    roll_std = rolling_std_2d(rets.values, window)
+    ann_vol = roll_std * np.sqrt(252)
+    ann_ret = roll_mean * 252
+    sharpe = np.where(ann_vol > 1e-12, ann_ret / ann_vol, np.nan)
+    beta = rolling_beta_2d(rets.values, mkt, window)
+    cum_ret = np.nancumsum(rets.values, axis=0)
+    max_dd = rolling_max_dd_2d(cum_ret, window)
+
+    # Build results DataFrame
     rows = []
-    for t in rets.columns:
-        rm = rolling_metrics(rets[t], window)
-        # beta vs equal-weight
-        cov = rets[t].rolling(window).cov(mkt)
-        var = mkt.rolling(window).var()
-        beta = cov / var.replace(0, np.nan)
-        last = rm.dropna().iloc[-1] if len(rm.dropna()) else None
-        if last is None:
+    for i, t in enumerate(valid_tickers):
+        vol_col = ann_vol[:, i]
+        valid_idx = np.where(~np.isnan(vol_col))[0]
+        if len(valid_idx) == 0:
             continue
+        last_idx = valid_idx[-1]
         rows.append({
             "universe": universe,
             "ticker": t,
             "window": window,
-            "vol": float(last["vol"]),
-            "ann_ret": float(last["ret"]),
-            "sharpe": float(last["sharpe"]) if pd.notna(last["sharpe"]) else np.nan,
-            "max_dd": float(last["max_dd"]),
-            "beta": float(beta.dropna().iloc[-1]) if beta.dropna().size else np.nan,
-            "vol_stability": float(rm["vol"].dropna().std()) if rm["vol"].dropna().size > 5 else np.nan,
+            "vol": float(ann_vol[last_idx, i]),
+            "ann_ret": float(ann_ret[last_idx, i]),
+            "sharpe": float(sharpe[last_idx, i]) if not np.isnan(sharpe[last_idx, i]) else np.nan,
+            "max_dd": float(max_dd[last_idx, i]),
+            "beta": float(beta[last_idx, i]) if not np.isnan(beta[last_idx, i]) else np.nan,
+            "vol_stability": float(np.nanstd(roll_std[:, i])) if np.sum(~np.isnan(roll_std[:, i])) > 5 else np.nan,
         })
+
     df = pd.DataFrame(rows).sort_values("vol")
     print(f"=== Rolling {window}d metrics · {universe} ({len(df)} names) ===")
     print(df.head(15).to_string(index=False))
@@ -102,7 +171,6 @@ def run(universe: str = "portfolio", window: int = 63, save: bool = True):
     if hist.exists():
         h = pd.read_parquet(hist)
         h["as_of_date"] = pd.to_datetime(h["as_of_date"])
-        # for each ticker, fraction of dates passing each screen
         g = h.groupby("ticker").agg(
             n_dates=("as_of_date", "count"),
             buffett_rate=("buffett_pass", "mean"),
@@ -121,11 +189,11 @@ def run(universe: str = "portfolio", window: int = 63, save: bool = True):
 
 def main():
     ap = argparse.ArgumentParser()
-    add_index_args(ap, default="portfolio")
+    add_index_args(ap, default="all")
     ap.add_argument("--window", type=int, default=63)
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
-    run((','.join(resolve_index_names_from_args(args, default_index='portfolio')) or 'portfolio'), args.window, save=True)
+    run((','.join(resolve_index_names_from_args(args, default_index='all')) or 'all'), args.window, save=True)
 
 
 if __name__ == "__main__":
