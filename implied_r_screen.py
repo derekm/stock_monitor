@@ -1,32 +1,21 @@
 #!/usr/bin/env python3
 """
-implied_r_screen.py — Ohlson-Rueangsuwan (2026) implied cost-of-capital screen.
+implied_r_screen.py — Ohlson-Rueangsuwan (2026) implied cost-of-capital screen
+with dynamic ERP options.
 
-"Formal Equity Valuation: Overview and Limits" (SSRN 6280638) argues the most
-defensible use of valuation formulas is NOT estimating P (fragile r and g) but
-INFERRING r from the current price and fundamentals, then asking: "does the
-market's implied r look high (cheap) or low (expensive)?"
-
-Reduced-form RIV (g = r/2), Ohlson & Rueangsuwan eq:
-    P = -BV + 2*X(1)/r          ->   r = 2*X(1)/(P + BV)
-
-With X(1) = ROE*BV (expected next-period earnings on current book) and
-BV = P/(P/B):
-
-    r_implied = 2*ROE/(P/B + 1)
-
-That's the whole screen: one observable per ticker, no analyst forecasts, no g.
-
-Benchmarks (from the paper):
-  - forward P/E = 1/r
-  - sanity triplet: any two of {P/B < 1, r > 1/forward-P/E, r > ROE} imply the third
-  - r > ROE means the market demands more than the firm earns on book -> cheap
+Three ERP sources:
+  1. damodaran — Damodaran implied ERP (annual/semi-annual, from erp_history.parquet)
+  2. interpolated — Monthly or daily interpolation of Damodaran ERP
+  3. shiller   — Earnings-yield proxy (price-to-200dma scaled to ERP range)
 
 Usage:
-  python implied_r_screen.py            # print the screen
-  python implied_r_screen.py --save     # write implied_r_screen.csv/.parquet
-  python implied_r_screen.py --min-cap 10   # only names > $10B market cap
+  python implied_r_screen.py --save
+  python implied_r_screen.py --save --erp damodaran --erp-freq monthly
+  python implied_r_screen.py --save --erp shiller
+  python implied_r_screen.py --save --erp interpolated --erp-freq daily
+  python implied_r_screen.py --compare  # compare ERP sources
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,6 +25,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from scipy.interpolate import interp1d
 
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
@@ -43,40 +33,173 @@ FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT_PQ = DATA_DIR / "implied_r_screen.parquet"
 
-# ── Financial-distortion guard (Damodaran) ─────────────────────────────
-# For banks/insurers/REITs/utilities, book value ≈ invested assets and ROE is
-# levered by float/deposits. The RIV reduced form r = 2*ROE/(P/B+1) therefore
-# MECHANICALLY overstates cheapness (inflated ROE + depressed P/B). These
-# sectors' implied-r is unreliable as a standalone value signal.
-DISTORTED_SECTORS = {"Financials", "Utilities", "Real Estate", "Financial", "Multi-Sector"}
-
-# Fair-value thresholds (paper's worked example uses r = 9% for a risky firm;
-# 8% is the textbook midpoint). CHEAP = market demands > 12%, EXPENSIVE < 6%.
+# Fair-value thresholds (paper)
 R_CHEAP = 0.12
 R_FAIR_HI = 0.10
 R_FAIR_LO = 0.07
 R_EXPENSIVE = 0.06
 
-# Fair-value range endpoints: price implied by the full RIV reduced form
-# P = -BV + 2*EPS1/r at a 7% vs 10% required return. r=10% -> lower price
-# (conservative bound), r=7% -> higher price (generous bound). A stock inside
-# the range is fairly valued; below the low end is undervalued vs fair value;
-# above the high end is overvalued even at a cheap required return.
-FV_R_LO = 0.10   # conservative required return -> fair-value LOW bound
-FV_R_HI = 0.07   # generous required return    -> fair-value HIGH bound
-FV_R_MID = 0.085  # midpoint for the point estimate
+FV_R_LO = 0.10
+FV_R_HI = 0.07
+FV_R_MID = 0.085
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ERP SOURCES
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_damodaran_erp(freq: str = "semi_annual") -> pd.DataFrame:
+    """Load Damodaran implied ERP from erp_history.parquet.
+    
+    freq: 'annual', 'semi_annual', 'monthly', 'daily'
+      - annual: yearly average
+      - semi_annual: Jan/Jul points (native granularity)
+      - monthly: interpolated to monthly
+      - daily: forward-filled to daily
+    
+    Returns DataFrame with columns: [date, erp, source]
+    """
+    path = DATA_DIR / "erp_history.parquet"
+    if not path.exists():
+        print(f"WARNING: {path} not found — using default ERP=4.23%")
+        return pd.DataFrame({"date": [pd.Timestamp.now()], "erp": [0.0423], "source": ["default"]})
+    
+    df = pd.read_parquet(path)
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.dropna(subset=["implied_erp"])
+    df = df.sort_values("date").reset_index(drop=True)
+    
+    if freq == "semi_annual":
+        return df.rename(columns={"implied_erp": "erp"})[["date", "erp", "source"]]
+    
+    if freq == "annual":
+        df["year"] = df["date"].dt.year
+        annual = df.groupby("year")["implied_erp"].mean().reset_index()
+        annual["date"] = pd.to_datetime(annual["year"].astype(str) + "-06-30")
+        annual["source"] = "damodaran_annual_avg"
+        return annual.rename(columns={"implied_erp": "erp"})[["date", "erp", "source"]]
+    
+    # For monthly or daily interpolation
+    min_date = df["date"].min()
+    max_date = df["date"].max()
+    
+    if freq == "monthly":
+        target_dates = pd.date_range(min_date, max_date, freq="MS")
+    else:  # daily
+        target_dates = pd.date_range(min_date, max_date, freq="D")
+    
+    # Interpolate
+    known_dates = df["date"].map(pd.Timestamp.toordinal).values
+    known_erps = df["implied_erp"].values
+    target_ordinals = target_dates.map(pd.Timestamp.toordinal).values
+    
+    interp = interp1d(known_dates, known_erps, kind="linear", fill_value="extrapolate")
+    interp_erps = np.clip(interp(target_ordinals), 0.01, 0.15)
+    
+    result = pd.DataFrame({
+        "date": target_dates,
+        "erp": interp_erps,
+        "source": f"damodaran_interp_{freq}",
+    })
+    return result
+
+
+def load_shiller_erp() -> pd.DataFrame:
+    """Build Shiller-style earnings-yield ERP proxy.
+    
+    Proxy: ERP = (1 / CAPE) − rf
+    Where CAPE ≈ 200dma price / average earnings yield (we proxy with price/200dma).
+    
+    We map the price-to-200dma ratio to an ERP using historical correlation:
+    - When price >> 200dma (expensive), ERP is low
+    - When price << 200dma (cheap), ERP is high
+    
+    Baseline: at price/200dma = 1.0, ERP ≈ 4.5% (long-term average).
+    For every 10% increase in price/200dma, ERP drops ~0.3%.
+    """
+    prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
+    
+    # Get S&P 500 prices (SPY as proxy)
+    spy = prices[prices["ticker"] == "SPY"].sort_values("date").copy()
+    if spy.empty:
+        spy = prices.groupby("date")["close"].mean().reset_index().sort_values("date")
+    
+    spy["date"] = pd.to_datetime(spy["date"])
+    
+    # Compute 200-day moving average
+    spy["sma_200"] = spy["close"].rolling(200, min_periods=100).mean()
+    spy["price_to_sma200"] = spy["close"] / spy["sma_200"]
+    
+    # Map price_to_sma200 to ERP
+    # At ratio 1.0 → ERP ~ 4.5% (long-term average)
+    # At ratio 1.1 → ERP ~ 3.5% (slightly expensive)
+    # At ratio 0.8 → ERP ~ 6.5% (cheap)
+    spy["erp"] = 0.045 - (spy["price_to_sma200"] - 1.0) * 0.10
+    spy["erp"] = spy["erp"].clip(0.02, 0.10)
+    spy["source"] = "shiller_earnings_yield_proxy"
+    
+    return spy[["date", "erp", "source"]].dropna(subset=["erp"])
+
+
+def load_erp(erp_source: str = "damodaran", erp_freq: str = "semi_annual") -> pd.DataFrame:
+    """Load ERP from the specified source.
+    
+    Args:
+        erp_source: 'damodaran', 'shiller', or 'interpolated'
+        erp_freq: 'annual', 'semi_annual', 'monthly', 'daily'
+    
+    Returns DataFrame with columns: [date, erp, source]
+    """
+    if erp_source == "damodaran":
+        return load_damodaran_erp(freq=erp_freq if erp_freq != "daily" else "semi_annual")
+    elif erp_source == "interpolated":
+        return load_damodaran_erp(freq=erp_freq)
+    elif erp_source == "shiller":
+        return load_shiller_erp()
+    else:
+        raise ValueError(f"Unknown ERP source: {erp_source}")
+
+
+def get_erp_for_date(erp_table: pd.DataFrame, target_date, method: str = "nearest") -> float:
+    """Get ERP value for a specific date from the ERP table."""
+    if erp_table.empty:
+        return 0.0423
+    
+    target_date = pd.Timestamp(target_date)
+    
+    if method == "nearest":
+        idx = erp_table["date"].searchsorted(target_date)
+        if idx == 0:
+            return erp_table.iloc[0]["erp"]
+        if idx >= len(erp_table):
+            return erp_table.iloc[-1]["erp"]
+        before = erp_table.iloc[idx - 1]
+        after = erp_table.iloc[idx]
+        if abs((target_date - before["date"]).days) <= abs((target_date - after["date"]).days):
+            return before["erp"]
+        return after["erp"]
+    else:  # ffill
+        mask = erp_table["date"] <= target_date
+        if not mask.any():
+            return erp_table.iloc[0]["erp"]
+        return erp_table[mask].iloc[-1]["erp"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+DISTORTED_SECTORS = {"Financials", "Utilities", "Real Estate", "Financial", "Multi-Sector"}
 
 
 def fair_value_range(roe, bvps):
-    """Full RIV reduced-form price P = -BV + 2*EPS1/r at r in {7, 8.5, 10}%.
-
-    EPS1 = ROE * BV (next-period earnings on current book). Returns the three
-    fair values plus low/high bounds of the 7-10% band. None-safe.
-    """
+    """Full RIV reduced-form price P = -BV + 2*EPS1/r at r in {7, 8.5, 10}%."""
     eps1 = roe * bvps
-    fv_lo = -bvps + 2.0 * eps1 / FV_R_LO if eps1 else np.nan
-    fv_mid = -bvps + 2.0 * eps1 / FV_R_MID if eps1 else np.nan
-    fv_hi = -bvps + 2.0 * eps1 / FV_R_HI if eps1 else np.nan
+    if not eps1:
+        return np.nan, np.nan, np.nan
+    fv_lo = -bvps + 2.0 * eps1 / FV_R_LO
+    fv_mid = -bvps + 2.0 * eps1 / FV_R_MID
+    fv_hi = -bvps + 2.0 * eps1 / FV_R_HI
     return fv_lo, fv_mid, fv_hi
 
 
@@ -87,7 +210,6 @@ def latest_price() -> pd.Series:
 
 
 def load_wacc_per_ticker() -> pd.Series:
-    """Load WACC per ticker from Damodaran computation, or empty."""
     path = DATA_DIR / "wacc_per_ticker.parquet"
     if not path.exists():
         return pd.Series(dtype=float)
@@ -98,7 +220,6 @@ def load_wacc_per_ticker() -> pd.Series:
 
 
 def load_cost_of_equity_per_ticker() -> pd.Series:
-    """Load cost of equity per ticker from Damodaran computation, or empty."""
     path = DATA_DIR / "wacc_per_ticker.parquet"
     if not path.exists():
         return pd.Series(dtype=float)
@@ -109,14 +230,13 @@ def load_cost_of_equity_per_ticker() -> pd.Series:
 
 
 def price_series() -> pd.DataFrame:
-    """Full daily close matrix (wide) for beta / risk computation."""
     p = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
     p["date"] = pd.to_datetime(p["date"])
     return p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
 
 
 def _beta_map(wide: pd.DataFrame, tickers) -> pd.Series:
-    """1y weekly beta vs equal-weight market (close-based). NaN-safe."""
+    """1y weekly beta vs equal-weight market (close-based)."""
     if wide is None or len(wide) < 60:
         return pd.Series(dtype=float)
     r = np.log(wide / wide.shift(1)).resample("W").sum()
@@ -138,11 +258,6 @@ def _beta_map(wide: pd.DataFrame, tickers) -> pd.Series:
 
 
 def latest_market_cap_b() -> pd.Series:
-    """Latest daily market cap in $B (fresh — beats the quarterly fundamentals snapshot).
-
-    Falls back to fundamentals.market_cap_b where the daily column is missing
-    (ETFs/ADRs without fundamentals-derived shares).
-    """
     p = pd.read_parquet(PRICES, columns=["date", "ticker", "market_cap"])
     p = p[p["market_cap"].notna()].sort_values("date").groupby("ticker").tail(1)
     mc = p.set_index("ticker")["market_cap"] / 1e9
@@ -159,8 +274,6 @@ def latest_fundamentals() -> pd.DataFrame:
 
 
 def sector_map() -> pd.Series:
-    """ticker -> GICS sector. Primary: sp500_constituents (full universe).
-    Fallback: monitored_stocks. Unknown otherwise."""
     sec = {}
     sp = DATA_DIR / "sp500_constituents.parquet"
     if sp.exists():
@@ -176,7 +289,18 @@ def sector_map() -> pd.Series:
     return out
 
 
-def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
+# ─────────────────────────────────────────────────────────────────────────────
+# SCREEN
+# ─────────────────────────────────────────────────────────────────────────────
+
+def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str = "semi_annual") -> pd.DataFrame:
+    # Load ERP table
+    erp_table = load_erp(erp_source=erp_source, erp_freq=erp_freq)
+    
+    # Get current ERP
+    current_erp = get_erp_for_date(erp_table, pd.Timestamp.now(), method="ffill")
+    print(f"ERP source: {erp_source} | freq: {erp_freq} | current ERP: {current_erp:.2%}")
+    
     px = latest_price()
     f = latest_fundamentals()
     df = pd.DataFrame({"price": px})
@@ -193,75 +317,58 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
     if min_cap_b:
         df = df[df["mktcap_b"] >= min_cap_b]
 
-    # Sector + financial-distortion guard
     sec = sector_map().reindex(df.index)
     df["sector"] = sec.fillna("Unknown")
     df["is_financial"] = df["sector"].isin(DISTORTED_SECTORS)
-    # For financials, the RIV implied-r is structurally inflated. Flag it
-    # (distortion_flag=True) and keep the raw value but mark unreliable.
     df["r_distorted"] = df["is_financial"]
 
-    # ── Damodaran excess-return metric (financials' correct value driver) ──
-    # Value = BV + PV(excess returns), excess return = ROE − cost of equity.
-    # COE via CAPM = rf + levered-beta·ERP. Levered beta from the price beta
-    # (which already embeds leverage) + a leverage penalty for high D/E, since
-    # Damodaran stresses financials' equity-only risk rises with leverage and
-    # deposits/float are raw material, not capital. ERP 4.23%, rf 4.18%.
+    # ── Cost of equity with dynamic ERP ──
     RF = 0.0418
-    ERP = 0.0423
+    ERP = current_erp
+    
     wacc_series = load_wacc_per_ticker()
     coe_series = load_cost_of_equity_per_ticker()
     betas = _beta_map(wide, df.index)
     df["beta"] = betas.reindex(df.index).fillna(1.0)
-    # Leverage penalty: D/E above ~2x raises COE (beta-like). Use a gentle
-    # additive term so high-D/E financials aren't read as free value.
+    
     de = pd.to_numeric(f.get("debt_to_equity"), errors="coerce").reindex(df.index)
     df["debt_to_equity"] = de
     lev_prem = np.clip((de - 2.0) / 5.0, 0.0, 0.05).fillna(0.0)
     df["cost_of_equity"] = RF + df["beta"] * ERP + lev_prem
     df["excess_return"] = df["roe"] - df["cost_of_equity"]
     df["excess_ret_pct"] = (df["excess_return"] * 100).round(1)
-    # Operative value verdict for financials: value created iff ROE > COE.
+    
     def excess_verdict(row):
         if row["excess_return"] >= 0.03:
             return "CREATES_VALUE"
         if row["excess_return"] >= 0.0:
             return "AT_COST"
         return "DESTROYS_VALUE"
+    
     df["excess_ret_verdict"] = df.apply(excess_verdict, axis=1)
-
-    # ── Damodaran per-ticker WACC and cost of equity ──────────────────────
-    # Use Damodaran-computed WACC per ticker (from wacc_per_ticker.parquet)
-    # which uses sector betas, CRP, and synthetic ratings from interest coverage.
+    
+    # Damodaran per-ticker WACC
     df["wacc_damodaran"] = wacc_series.reindex(df.index)
     df["cost_of_equity_damodaran"] = coe_series.reindex(df.index)
-    # Implied r using Damodaran WACC as the required return benchmark
-    # r_implied_damodaran = 2*ROE/(P/B + 1) but with WACC as floor
-    df["implied_r_damodaran"] = df["implied_r"]
-    # For tickers with Damodaran WACC, use it as the fair-value benchmark
-    # instead of the static 7-10% band
+    df["implied_r_damodaran"] = df["roe"]
     has_wacc = df["wacc_damodaran"].notna()
-    df.loc[has_wacc, "implied_r_damodaran"] = df.loc[has_wacc, "implied_r"]
-    # Excess return using Damodaran COE
+    df.loc[has_wacc, "implied_r_damodaran"] = df.loc[has_wacc, "roe"]
     df["excess_return_damodaran"] = df["roe"] - df["cost_of_equity_damodaran"]
     df["excess_ret_damodaran_pct"] = (df["excess_return_damodaran"] * 100).round(1)
 
-    # RIV reduced form, g = r/2:  r = 2*ROE/(P/B + 1)
+    # RIV reduced form: r = 2*ROE/(P/B + 1)
     df["implied_r"] = 2.0 * df["roe"] / (df["pb_ratio"] + 1.0)
-    # forward P/E benchmark = 1/r
     df["fwd_pe_bench"] = 1.0 / df["implied_r"].replace(0, np.nan)
-    # book per share (for the full RIV expression, informational)
     df["bvps"] = df["price"] / df["pb_ratio"]
 
-    # Triplet sanity: any two of {P/B<1, r>1/fwdPE, r>ROE} imply the third.
-    # 1/fwdPE == implied_r by construction, so check r vs ROE and P/B vs 1.
+    # Triplet sanity
     df["r_gt_roe"] = df["implied_r"] > df["roe"]
     df["pb_lt_1"] = df["pb_ratio"] < 1.0
     df["triplet_ok"] = (df["r_gt_roe"] & df["pb_lt_1"]) | (
         (df["r_gt_roe"] != df["pb_lt_1"]) & (df["implied_r"] > df["roe"] * df["pb_ratio"] / (1 + df["pb_ratio"]))
     )
 
-    # Value verdict vs paper thresholds
+    # Value verdict
     def verdict(r):
         if r >= R_CHEAP:
             return "CHEAP"
@@ -272,39 +379,29 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
         if r > R_EXPENSIVE:
             return "Rich"
         return "EXPENSIVE"
-
+    
     df["verdict"] = df["implied_r"].apply(verdict)
     df["implied_r_pct"] = (df["implied_r"] * 100).round(1)
     df["fwd_pe_bench"] = df["fwd_pe_bench"].round(1)
     df["price"] = df["price"].round(2)
     df["bvps"] = df["bvps"].round(2)
 
-    # Fair-value range at r = 7% / 8.5% / 10% (full RIV reduced form)
+    # Fair-value range
     fv = df.apply(lambda r: pd.Series(fair_value_range(r["roe"], r["bvps"])), axis=1)
     df["fv_lo_r10"] = fv[0].round(2)
     df["fv_mid_r8p5"] = fv[1].round(2)
     df["fv_hi_r7"] = fv[2].round(2)
 
-    # ── g-sensitivity (Ohlson: g is under-identified) ────────────────────
-    # The fair-value band uses an implicit g=r/2. Report how the implied-r
-    # verdict shifts under alternative growth anchors. RIV reduced form at
-    # general g: r = (ROE·(1+g) + g·(P/B)) / (P/B + 1). Solving implied-r with
-    # g=0, g=r/2 (paper default), g=0.75r.
+    # g-sensitivity
     pb = df["pb_ratio"]
     roe = df["roe"]
-    # g=0 (no-growth): r = ROE·(1)/(PB+1) ... use r = ROE/PB is wrong; use the
-    # clean-surplus PVED growth-adjusted form: r_g0 = ROE / PB  (E/P + implied)
-    # Simplest defensible anchors: report ROE/PB (g=0 perpetual) and ROE (g=r,
-    # the ceiling). These bracket the paper's r/2.
-    df["r_g0"] = roe / pb          # implied r under no growth (E/P-style)
-    df["r_g_ceiling"] = roe        # implied r ceiling (g→r)
+    df["r_g0"] = roe / pb
+    df["r_g_ceiling"] = roe
     df["r_g0_pct"] = (df["r_g0"] * 100).round(1)
     df["r_g_ceiling_pct"] = (df["r_g_ceiling"] * 100).round(1)
-    # verdict under the two anchors (distorted financials excluded from clean)
     df["cheap_robust"] = (df["r_g0"] >= R_CHEAP) & ~df["r_distorted"]
     df["rich_robust"] = (df["r_g_ceiling"] < R_EXPENSIVE) & ~df["r_distorted"]
 
-    # Where is price vs the 7-10% fair band?
     def vs_fair(row):
         price, lo, hi = row["price"], row["fv_lo_r10"], row["fv_hi_r7"]
         if np.isnan(lo) or np.isnan(hi):
@@ -316,15 +413,17 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
         return "IN_FAIR"
 
     df["vs_fair"] = df.apply(vs_fair, axis=1)
-    # % gap between price and the mid (r=8.5%) fair value
     df["fv_gap_pct"] = ((df["price"] / df["fv_mid_r8p5"] - 1.0) * 100).round(1)
 
     df = df.reset_index().rename(columns={"index": "ticker"})
     df = df.sort_values("implied_r", ascending=False)
-    # Clean implied-r: drop the distorted financial value so the CHEAP/FAIR
-    # screen isn't polluted by book-heavy sectors' mechanically-high r.
     df["implied_r_clean"] = df["implied_r"].where(~df["r_distorted"])
     df["implied_r_clean_pct"] = (df["implied_r_clean"] * 100).round(1)
+    
+    # Add ERP metadata
+    df["erp_used"] = erp_source
+    df["erp_value"] = current_erp
+    
     cols = ["ticker", "sector", "is_financial", "r_distorted", "price", "bvps",
             "pb_ratio", "roe", "beta", "debt_to_equity", "implied_r_pct", "implied_r_clean_pct",
             "cost_of_equity", "cost_of_equity_damodaran", "wacc_damodaran",
@@ -332,8 +431,40 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
             "r_g0_pct", "r_g_ceiling_pct", "cheap_robust", "rich_robust",
             "fwd_pe_bench", "verdict", "mktcap_b", "ev_ebitda", "roic",
             "r_gt_roe", "pb_lt_1", "triplet_ok", "as_of",
-            "fv_lo_r10", "fv_mid_r8p5", "fv_hi_r7", "vs_fair", "fv_gap_pct"]
+            "fv_lo_r10", "fv_mid_r8p5", "fv_hi_r7", "vs_fair", "fv_gap_pct",
+            "erp_used", "erp_value"]
     return df[cols]
+
+
+def compare_erp_sources() -> pd.DataFrame:
+    """Compare ERP from different sources for validation."""
+    sources = {
+        "damodaran_semi": ("damodaran", "semi_annual"),
+        "damodaran_monthly": ("interpolated", "monthly"),
+        "damodaran_daily": ("interpolated", "daily"),
+        "shiller": ("shiller", "daily"),
+    }
+    
+    results = []
+    for name, (source, freq) in sources.items():
+        try:
+            erp_table = load_erp(erp_source=source, erp_freq=freq)
+            current_erp = get_erp_for_date(erp_table, pd.Timestamp.now(), method="ffill")
+            results.append({
+                "source": name,
+                "current_erp": current_erp,
+                "n_points": len(erp_table),
+                "date_range": f"{erp_table['date'].min()} to {erp_table['date'].max()}",
+            })
+        except Exception as e:
+            results.append({
+                "source": name,
+                "current_erp": np.nan,
+                "n_points": 0,
+                "date_range": str(e),
+            })
+    
+    return pd.DataFrame(results)
 
 
 def main():
@@ -341,23 +472,36 @@ def main():
     ap.add_argument("--save", action="store_true")
     ap.add_argument("--min-cap", type=float, default=0.0, help="min market cap $B")
     ap.add_argument("--top", type=int, default=25, help="rows to print per verdict")
+    ap.add_argument("--erp", default="damodaran", 
+                    choices=["damodaran", "shiller", "interpolated"],
+                    help="ERP source")
+    ap.add_argument("--erp-freq", default="semi_annual",
+                    choices=["annual", "semi_annual", "monthly", "daily"],
+                    help="ERP frequency (for damodaran/interpolated sources)")
+    ap.add_argument("--compare", action="store_true",
+                    help="Compare ERP sources and exit")
     args = ap.parse_args()
 
-    df = screen(min_cap_b=args.min_cap)
+    if args.compare:
+        print("=== ERP Source Comparison ===")
+        comp = compare_erp_sources()
+        print(comp.to_string(index=False))
+        return
+
+    df = screen(min_cap_b=args.min_cap, erp_source=args.erp, erp_freq=args.erp_freq)
     if df.empty:
         print("no tickers passed the filter")
         return
 
     print(f"=== Implied cost-of-capital screen ({len(df)} tickers) ===")
-    print("Formula: r = 2*ROE/(P/B + 1)  [RIV reduced form, g=r/2, Ohlson & Rueangsuwan 2026]")
+    print(f"ERP source: {args.erp} | freq: {args.erp_freq}")
+    print(f"Formula: r = 2*ROE/(P/B + 1)  [RIV reduced form, g=r/2, Ohlson & Rueangsuwan 2026]")
     print(f"Thresholds: CHEAP r>=12% | Fair 7-10% | EXPENSIVE r<=6%")
-    print("Fair-value band: P = -BV + 2*EPS1/r at r = 7%/8.5%/10% (full RIV reduced form)")
-    print(f"NOTE: {int(df['r_distorted'].sum())} financial/utility/REIT names flagged (r_distorted=True) — "
-          f"their implied-r is unreliable (book-heavy, see clean col).\n")
-    # Damodaran WACC summary
+    print(f"NOTE: {int(df['r_distorted'].sum())} financial/utility/REIT names flagged (r_distorted=True)\n")
+    
     n_wacc = df["wacc_damodaran"].notna().sum()
     if n_wacc > 0:
-        print(f"\nDamodaran WACC coverage: {n_wacc}/{len(df)} tickers")
+        print(f"Damodaran WACC coverage: {n_wacc}/{len(df)} tickers")
         print(f"  Median WACC: {df['wacc_damodaran'].median():.2%}")
         print(f"  Median COE (Damodaran): {df['cost_of_equity_damodaran'].median():.2%}")
         print(f"  Median Excess Return (Damodaran): {df['excess_ret_damodaran_pct'].median():.1f}%")
@@ -373,7 +517,6 @@ def main():
         print(sub[show_cols].head(args.top).to_string(index=False))
         print()
 
-    # market stats
     med = df["implied_r_clean_pct"].dropna().median()
     print(f"Median implied r (clean, ex-financials): {med:.1f}% | n={df['implied_r_clean_pct'].notna().sum()}")
     print(f"  CHEAP count (clean): {(df['implied_r_clean_pct'] >= R_CHEAP*100).sum()} | "
