@@ -86,6 +86,28 @@ def latest_price() -> pd.Series:
     return p.set_index("ticker")["close"]
 
 
+def load_wacc_per_ticker() -> pd.Series:
+    """Load WACC per ticker from Damodaran computation, or empty."""
+    path = DATA_DIR / "wacc_per_ticker.parquet"
+    if not path.exists():
+        return pd.Series(dtype=float)
+    df = pd.read_parquet(path)
+    if "ticker" in df.columns and "wacc" in df.columns:
+        return df.set_index("ticker")["wacc"]
+    return pd.Series(dtype=float)
+
+
+def load_cost_of_equity_per_ticker() -> pd.Series:
+    """Load cost of equity per ticker from Damodaran computation, or empty."""
+    path = DATA_DIR / "wacc_per_ticker.parquet"
+    if not path.exists():
+        return pd.Series(dtype=float)
+    df = pd.read_parquet(path)
+    if "ticker" in df.columns and "cost_of_equity" in df.columns:
+        return df.set_index("ticker")["cost_of_equity"]
+    return pd.Series(dtype=float)
+
+
 def price_series() -> pd.DataFrame:
     """Full daily close matrix (wide) for beta / risk computation."""
     p = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
@@ -184,9 +206,11 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
     # COE via CAPM = rf + levered-beta·ERP. Levered beta from the price beta
     # (which already embeds leverage) + a leverage penalty for high D/E, since
     # Damodaran stresses financials' equity-only risk rises with leverage and
-    # deposits/float are raw material, not capital. ERP 4.5%, rf 4.0%.
-    RF = 0.04
-    ERP = 0.045
+    # deposits/float are raw material, not capital. ERP 4.23%, rf 4.18%.
+    RF = 0.0418
+    ERP = 0.0423
+    wacc_series = load_wacc_per_ticker()
+    coe_series = load_cost_of_equity_per_ticker()
     betas = _beta_map(wide, df.index)
     df["beta"] = betas.reindex(df.index).fillna(1.0)
     # Leverage penalty: D/E above ~2x raises COE (beta-like). Use a gentle
@@ -205,6 +229,22 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
             return "AT_COST"
         return "DESTROYS_VALUE"
     df["excess_ret_verdict"] = df.apply(excess_verdict, axis=1)
+
+    # ── Damodaran per-ticker WACC and cost of equity ──────────────────────
+    # Use Damodaran-computed WACC per ticker (from wacc_per_ticker.parquet)
+    # which uses sector betas, CRP, and synthetic ratings from interest coverage.
+    df["wacc_damodaran"] = wacc_series.reindex(df.index)
+    df["cost_of_equity_damodaran"] = coe_series.reindex(df.index)
+    # Implied r using Damodaran WACC as the required return benchmark
+    # r_implied_damodaran = 2*ROE/(P/B + 1) but with WACC as floor
+    df["implied_r_damodaran"] = df["implied_r"]
+    # For tickers with Damodaran WACC, use it as the fair-value benchmark
+    # instead of the static 7-10% band
+    has_wacc = df["wacc_damodaran"].notna()
+    df.loc[has_wacc, "implied_r_damodaran"] = df.loc[has_wacc, "implied_r"]
+    # Excess return using Damodaran COE
+    df["excess_return_damodaran"] = df["roe"] - df["cost_of_equity_damodaran"]
+    df["excess_ret_damodaran_pct"] = (df["excess_return_damodaran"] * 100).round(1)
 
     # RIV reduced form, g = r/2:  r = 2*ROE/(P/B + 1)
     df["implied_r"] = 2.0 * df["roe"] / (df["pb_ratio"] + 1.0)
@@ -287,7 +327,8 @@ def screen(min_cap_b: float = 0.0) -> pd.DataFrame:
     df["implied_r_clean_pct"] = (df["implied_r_clean"] * 100).round(1)
     cols = ["ticker", "sector", "is_financial", "r_distorted", "price", "bvps",
             "pb_ratio", "roe", "beta", "debt_to_equity", "implied_r_pct", "implied_r_clean_pct",
-            "cost_of_equity", "excess_ret_pct", "excess_ret_verdict",
+            "cost_of_equity", "cost_of_equity_damodaran", "wacc_damodaran",
+            "excess_ret_pct", "excess_ret_damodaran_pct", "excess_ret_verdict",
             "r_g0_pct", "r_g_ceiling_pct", "cheap_robust", "rich_robust",
             "fwd_pe_bench", "verdict", "mktcap_b", "ev_ebitda", "roic",
             "r_gt_roe", "pb_lt_1", "triplet_ok", "as_of",
@@ -313,6 +354,14 @@ def main():
     print("Fair-value band: P = -BV + 2*EPS1/r at r = 7%/8.5%/10% (full RIV reduced form)")
     print(f"NOTE: {int(df['r_distorted'].sum())} financial/utility/REIT names flagged (r_distorted=True) — "
           f"their implied-r is unreliable (book-heavy, see clean col).\n")
+    # Damodaran WACC summary
+    n_wacc = df["wacc_damodaran"].notna().sum()
+    if n_wacc > 0:
+        print(f"\nDamodaran WACC coverage: {n_wacc}/{len(df)} tickers")
+        print(f"  Median WACC: {df['wacc_damodaran'].median():.2%}")
+        print(f"  Median COE (Damodaran): {df['cost_of_equity_damodaran'].median():.2%}")
+        print(f"  Median Excess Return (Damodaran): {df['excess_ret_damodaran_pct'].median():.1f}%")
+
     for v in ["CHEAP", "Fair-ish", "FAIR", "Rich", "EXPENSIVE"]:
         sub = df[df["verdict"] == v]
         if sub.empty:

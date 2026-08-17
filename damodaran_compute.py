@@ -82,72 +82,91 @@ def compute_revenue_growth(fund: pd.DataFrame) -> pd.DataFrame:
 def compute_life_cycle(fund: pd.DataFrame) -> pd.DataFrame:
     """Classify corporate life cycle per Damodaran 6-stage framework.
     
-    Stages (Damodaran):
-    1. Start-up: negative/low revenue, negative earnings, high reinvestment
-    2. Young Growth: high revenue growth (>25%), low/negative margins, high reinvestment
-    3. High Growth: high revenue growth (15-25%), improving margins, high reinvestment
-    4. Mature Growth: moderate revenue growth (5-15%), positive margins, moderate reinvestment
-    5. Mature Stable: low revenue growth (0-5%), stable margins, low reinvestment
-    6. Decline: negative revenue growth, declining margins, negative/low reinvestment
+    Vectorized — operates on entire DataFrame at once.
     """
-    # First compute revenue growth
-    rev_growth = compute_revenue_growth(fund)
-    # Merge with original fund data to get fcf_margin, reinvestment_rate, roic
-    fund = fund.merge(
-        rev_growth[["ticker", "as_of_date", "revenue_growth"]],
-        on=["ticker", "as_of_date"], how="left"
+    # Check if revenue_growth already exists in fund
+    if "revenue_growth" not in fund.columns:
+        # First compute revenue growth
+        rev_growth = compute_revenue_growth(fund)
+        # Merge with original fund data
+        fund = fund.merge(
+            rev_growth[["ticker", "as_of_date", "revenue_growth"]],
+            on=["ticker", "as_of_date"], how="left"
+        )
+    
+    # Vectorized classification
+    rev_g = fund["revenue_growth"]
+    fcf_margin = fund["fcf_margin"]
+    reinvest = fund["reinvestment_rate"]
+    roic = fund["roic"]
+    
+    # Default: Unclassified
+    stage = pd.Series("Unclassified", index=fund.index)
+    
+    # Decline
+    stage = np.where(rev_g.notna() & (rev_g < -0.05), "Decline", stage)
+    
+    # Young Growth: high growth, negative FCF margin
+    stage = np.where(
+        rev_g.notna() & (rev_g > 0.25) & fcf_margin.notna() & (fcf_margin < 0),
+        "Young Growth", stage
     )
     
-    results = []
-    for ticker, g in fund.groupby("ticker"):
-        g = g.sort_values("as_of_date").copy()
-        
-        for _, row in g.iterrows():
-            rev_g = row.get("revenue_growth")
-            fcf_margin = row.get("fcf_margin")
-            reinvest = row.get("reinvestment_rate")
-            roic = row.get("roic")
-            
-            stage = "Unclassified"
-            
-            if pd.notna(rev_g) and pd.notna(fcf_margin) and pd.notna(reinvest):
-                if rev_g < -0.05:
-                    stage = "Decline"
-                elif rev_g > 0.25:
-                    if fcf_margin < 0:
-                        stage = "Young Growth"
-                    else:
-                        stage = "High Growth"
-                elif rev_g > 0.15:
-                    if fcf_margin < 0.10:
-                        stage = "High Growth"
-                    else:
-                        stage = "Mature Growth"
-                elif rev_g > 0.05:
-                    stage = "Mature Growth"
-                elif rev_g > 0:
-                    if fcf_margin > 0.15 and reinvest < 0.3:
-                        stage = "Mature Stable"
-                    else:
-                        stage = "Mature Growth"
-                else:
-                    stage = "Mature Stable"
-            
-            results.append({
-                "ticker": ticker,
-                "as_of_date": row["as_of_date"],
-                "life_cycle_stage": stage,
-                "revenue_growth": rev_g,
-                "fcf_margin": fcf_margin,
-                "reinvestment_rate": reinvest,
-                "roic": roic,
-            })
+    # High Growth: high growth, positive FCF margin
+    stage = np.where(
+        rev_g.notna() & (rev_g > 0.25) & fcf_margin.notna() & (fcf_margin >= 0),
+        "High Growth", stage
+    )
     
-    return pd.DataFrame(results)
+    # High Growth: moderate-high growth, low FCF margin
+    stage = np.where(
+        rev_g.notna() & (rev_g > 0.15) & (rev_g <= 0.25) & fcf_margin.notna() & (fcf_margin < 0.10),
+        "High Growth", stage
+    )
+    
+    # Mature Growth: moderate growth, higher FCF margin
+    stage = np.where(
+        rev_g.notna() & (rev_g > 0.15) & (rev_g <= 0.25) & fcf_margin.notna() & (fcf_margin >= 0.10),
+        "Mature Growth", stage
+    )
+    
+    # Mature Growth: 5-15% growth
+    stage = np.where(
+        rev_g.notna() & (rev_g > 0.05) & (rev_g <= 0.15), "Mature Growth", stage
+    )
+    
+    # Mature Stable: 0-5% growth, high FCF margin
+    stage = np.where(
+        rev_g.notna() & (rev_g > 0) & (rev_g <= 0.05) & fcf_margin.notna() & (fcf_margin > 0.10),
+        "Mature Stable", stage
+    )
+    
+    # Mature Stable: 0-5% growth, low FCF margin
+    stage = np.where(
+        rev_g.notna() & (rev_g > 0) & (rev_g <= 0.05) & fcf_margin.notna() & (fcf_margin <= 0.10),
+        "Mature Growth", stage
+    )
+    
+    # Mature Stable: negative growth but positive FCF margin
+    stage = np.where(
+        rev_g.notna() & (rev_g <= 0) & (rev_g >= -0.05) & fcf_margin.notna() & (fcf_margin > 0.10),
+        "Mature Stable", stage
+    )
+    
+    results = fund[["ticker", "as_of_date"]].copy()
+    results["life_cycle_stage"] = stage
+    results["revenue_growth"] = rev_g.values
+    results["fcf_margin"] = fcf_margin.values
+    results["reinvestment_rate"] = reinvest.values
+    results["roic"] = roic.values
+    
+    return results
 
 
 def compute_fair_multiples(fund: pd.DataFrame, erp: float = 0.0423, rf: float = 0.04) -> pd.DataFrame:
     """Compute Damodaran fundamental-implied fair multiples per ticker/date.
+    
+    Vectorized implementation using numpy broadcasting.
     
     Fair P/E = (1 - reinvestment_rate) * (1 + g) / (cost_of_equity - g)
     Fair EV/EBITDA = (1 - tax_rate) * (1 - reinvestment_rate) * (1 + g) / (wacc - g)
@@ -156,70 +175,91 @@ def compute_fair_multiples(fund: pd.DataFrame, erp: float = 0.0423, rf: float = 
     
     Where g = revenue_growth (capped at long-term GDP growth ~2-3%)
     """
-    # First compute revenue growth
-    rev_growth = compute_revenue_growth(fund)
-    # Merge with original fund data
-    fund = fund.merge(
-        rev_growth[["ticker", "as_of_date", "revenue_growth"]],
-        on=["ticker", "as_of_date"], how="left"
-    )
+    # Check if revenue_growth already exists in fund
+    if "revenue_growth" not in fund.columns:
+        # First compute revenue growth
+        rev_growth = compute_revenue_growth(fund)
+        # Merge with original fund data
+        fund = fund.merge(
+            rev_growth[["ticker", "as_of_date", "revenue_growth"]],
+            on=["ticker", "as_of_date"], how="left"
+        )
     
-    results = []
-    for ticker, g in fund.groupby("ticker"):
-        g = g.sort_values("as_of_date").copy()
-        
-        for _, row in g.iterrows():
-            rev_g = row.get("revenue_growth")
-            fcf_margin = row.get("fcf_margin")
-            reinvest = row.get("reinvestment_rate")
-            roic = row.get("roic")
-            roe = row.get("roe")
-            ev_ebitda = row.get("ev_ebitda")
-            
-            # Need WACC - load from wacc_per_ticker if available
-            wacc = row.get("wacc", 0.09)  # default
-            cost_of_equity = row.get("cost_of_equity", 0.09)
-            tax_rate = 0.25
-            
-            # Long-term growth cap
-            g_long = min(max(rev_g, 0) if pd.notna(rev_g) else 0.02, 0.03)
-            
-            fair_pe = np.nan
-            fair_ev_ebitda = np.nan
-            fair_ev_sales = np.nan
-            fair_pb = np.nan
-            
-            if pd.notna(reinvest) and pd.notna(cost_of_equity) and cost_of_equity > g_long:
-                # Fair P/E
-                fair_pe = (1 - reinvest) * (1 + g_long) / (cost_of_equity - g_long)
-                
-                # Fair P/B
-                if pd.notna(roe) and roe > 0:
-                    fair_pb = roe * (1 - reinvest) * (1 + g_long) / (cost_of_equity - g_long)
-            
-            if pd.notna(reinvest) and pd.notna(wacc) and wacc > g_long:
-                # Fair EV/EBITDA
-                fair_ev_ebitda = (1 - tax_rate) * (1 - reinvest) * (1 + g_long) / (wacc - g_long)
-                
-                # Fair EV/Sales ≈ Fair EV/EBITDA * EBITDA margin
-                # EBITDA margin ≈ 1/ev_ebitda if we have it
-                if pd.notna(ev_ebitda) and ev_ebitda > 0:
-                    ebitda_margin = 1 / ev_ebitda
-                    fair_ev_sales = fair_ev_ebitda * ebitda_margin
-            
-            results.append({
-                "ticker": ticker,
-                "as_of_date": row["as_of_date"],
-                "fair_pe": fair_pe if not np.isnan(fair_pe) else None,
-                "fair_ev_ebitda": fair_ev_ebitda if not np.isnan(fair_ev_ebitda) else None,
-                "fair_ev_sales": fair_ev_sales if not np.isnan(fair_ev_sales) else None,
-                "fair_pb": fair_pb if not np.isnan(fair_pb) else None,
-                "implied_growth": g_long,
-                "wacc_used": wacc,
-                "cost_of_equity_used": cost_of_equity,
-            })
+    # Load WACC data if available
+    from damodaran_data import WACC_PER_TICKER
+    wacc_df = pd.read_parquet(WACC_PER_TICKER) if WACC_PER_TICKER.exists() else pd.DataFrame()
+    if len(wacc_df):
+        wacc_df = wacc_df.set_index("ticker")
+        fund = fund.merge(
+            wacc_df[["wacc", "cost_of_equity"]].rename(columns={"wacc": "_wacc", "cost_of_equity": "_coe"}),
+            on="ticker", how="left"
+        )
+    else:
+        fund["_wacc"] = 0.09
+        fund["_coe"] = 0.09
     
-    return pd.DataFrame(results)
+    # Vectorized fair multiple calculation
+    reinvest = fund["reinvestment_rate"]
+    cost_of_equity = fund["_coe"]
+    wacc = fund["_wacc"]
+    roe = fund["roe"]
+    ev_ebitda = fund["ev_ebitda"]
+    
+    # Long-term growth cap
+    g_long = fund["revenue_growth"].clip(lower=0, upper=0.03)
+    g_long = g_long.fillna(0.02)
+    
+    tax_rate = 0.25
+    
+    # Extract columns as Series
+    reinvest = fund["reinvestment_rate"]
+    roic = fund["roic"]
+    roe = fund["roe"]
+    wacc_val = fund["_wacc"]
+    cost_of_equity = fund["_coe"]
+    
+    # Use reinvestment_rate if available, otherwise compute from g/ROIC or g/ROE
+    reinvest_calc = reinvest.copy()
+    mask_no_reinvest = reinvest_calc.isna() & roic.notna() & (roic > 0)
+    reinvest_calc[mask_no_reinvest] = (g_long / roic)[mask_no_reinvest]
+    mask_still_missing = reinvest_calc.isna() & roe.notna() & (roe > 0)
+    reinvest_calc[mask_still_missing] = (g_long / roe)[mask_still_missing]
+    reinvest_calc = reinvest_calc.fillna(0.5)
+    
+    # Fair P/E: payout / (cost_of_equity - g)
+    fair_pe = pd.Series(np.nan, index=fund.index)
+    pe_mask = cost_of_equity.notna() & (cost_of_equity > g_long) & roe.notna() & (roe > 0)
+    payout = np.clip(1 - g_long / roe, 0, 1)
+    fair_pe = np.where(pe_mask, payout / (cost_of_equity - g_long), fair_pe)
+    
+    # Fair P/B: (ROE - g) / (cost_of_equity - g)
+    fair_pb = pd.Series(np.nan, index=fund.index)
+    pb_mask = pe_mask
+    fair_pb = np.where(pb_mask, (roe - g_long) / (cost_of_equity - g_long), fair_pb)
+    
+    # Fair EV/EBITDA: (1 - reinvest) * (1 - t) / (wacc - g)
+    fair_ev_ebitda = pd.Series(np.nan, index=fund.index)
+    ev_mask = wacc_val.notna() & (wacc_val > g_long)
+    fcf_conversion = (1 - reinvest_calc) * (1 - tax_rate)
+    fair_ev_ebitda = np.where(ev_mask, fcf_conversion / (wacc_val - g_long), fair_ev_ebitda)
+    
+    # Fair EV/Sales: Fair EV/EBITDA * EBITDA margin
+    fair_ev_sales = pd.Series(np.nan, index=fund.index)
+    sales_mask = ev_mask & ev_ebitda.notna() & (ev_ebitda > 0)
+    ebitda_margin = pd.Series(np.nan, index=fund.index)
+    ebitda_margin = np.where(sales_mask, 1 / ev_ebitda, ebitda_margin)
+    fair_ev_sales = np.where(sales_mask, fair_ev_ebitda * ebitda_margin, fair_ev_sales)
+    
+    results = fund[["ticker", "as_of_date"]].copy()
+    results["fair_pe"] = np.where(np.isfinite(fair_pe), fair_pe, np.nan)
+    results["fair_ev_ebitda"] = np.where(np.isfinite(fair_ev_ebitda), fair_ev_ebitda, np.nan)
+    results["fair_ev_sales"] = np.where(np.isfinite(fair_ev_sales), fair_ev_sales, np.nan)
+    results["fair_pb"] = np.where(np.isfinite(fair_pb), fair_pb, np.nan)
+    results["implied_growth"] = g_long
+    results["wacc_used"] = wacc
+    results["cost_of_equity_used"] = cost_of_equity
+    
+    return results
 
 
 def main():
