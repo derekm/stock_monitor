@@ -126,7 +126,15 @@ def rolling_max_dd_2d(cum_ret: np.ndarray, window: int) -> np.ndarray:
     return result
 
 
-def run(universe: str = "all", window: int = 63, save: bool = True):
+def run(universe: str = "all", window: int = 63, save: bool = True, checkpoint=None):
+    tickers = resolve(universe)
+    if checkpoint is not None and checkpoint.is_valid(tickers) and OUT.exists():
+        done = checkpoint.get_completed_tickers()
+        if set(tickers).issubset(done):
+            prev = pd.read_parquet(OUT)
+            if "window" in prev.columns and (prev["window"] == window).all() and set(prev["ticker"]).issuperset(tickers):
+                print(f"=== Rolling {window}d SKIP {len(tickers)} tickers already complete ===")
+                return prev
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "adj_close"])
     prices = prices.rename(columns={"adj_close": "close"})
     prices["date"] = pd.to_datetime(prices["date"])
@@ -180,6 +188,14 @@ def run(universe: str = "all", window: int = 63, save: bool = True):
     if save:
         df.to_parquet(OUT)
         print(f"Wrote {OUT}")
+        if checkpoint is not None:
+            try:
+                last_d = prices["date"].max()
+                if hasattr(last_d, "date"):
+                    last_d = last_d.date()
+                checkpoint.mark_all_complete(list(df["ticker"].astype(str)), last_d)
+            except Exception as e:
+                print(f"checkpoint mark skip: {e}")
 
     # rolling dual-screen stability from history if present
     hist = DATA_DIR / "preferred_metrics_history.parquet"
@@ -206,18 +222,26 @@ def main():
     ap = argparse.ArgumentParser()
     add_index_args(ap, default="all")
     ap.add_argument("--window", type=int, default=63)
-    ap.add_argument("--universe", default="all")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
+    uni = "all"
+    if args.universe:
+        uni = str(args.universe[-1])
+    elif args.index:
+        uni = str(args.index[-1])
+    ck = None
     try:
         from resumable_job import JobCheckpoint
         ck = JobCheckpoint("rolling_window_analysis", "daily_prices")
-        tickers = resolve(args.universe)
+        tickers = resolve(uni)
         if not ck.is_valid(tickers):
             print("rolling checkpoint invalid (prices or universe changed) — full recompute")
-    except Exception:
-        pass
-    run(args.universe, args.window, save=args.save)
+            ck._init_state(tickers)
+            ck._save()
+    except Exception as e:
+        print(f"checkpoint unused: {e}")
+        ck = None
+    run(uni, args.window, save=args.save, checkpoint=ck)
 
 
 if __name__ == "__main__":

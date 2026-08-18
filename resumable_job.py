@@ -207,6 +207,21 @@ class JobCheckpoint:
         finally:
             self._release_lock()
     
+    def mark_all_complete(self, tickers: list[str], last_date: date):
+        """Mark a batch of tickers complete (one lock)."""
+        self._acquire_lock()
+        try:
+            if self._state is None:
+                self._init_state(tickers)
+            iso = last_date.isoformat()
+            now = datetime.now().isoformat()
+            for t in tickers:
+                self._state["tickers"][t] = {"status": "complete", "completed_at": now, "last_date": iso}
+            self._state["completed_tickers"] = len(self.get_completed_tickers())
+            self._save()
+        finally:
+            self._release_lock()
+
     def mark_ticker_complete(self, ticker: str, last_date: date):
         """Mark a ticker as complete with its last processed date."""
         self._acquire_lock()

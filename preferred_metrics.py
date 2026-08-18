@@ -57,178 +57,12 @@ FAIR_MULTIPLES_FILE = DATA_DIR / "fair_multiples.parquet"
 from analytics_common import (
     ROE_MIN, ROIC_MIN, DE_MAX, EV_MAX as EV_EBITDA_MAX, PB_MAX, MCA_MAX,
 )
-# Damodaran constants
-RF_US = 0.0418        # US risk-free rate (Jan 2026)
-ERP_US = 0.0423      # Damodaran implied ERP (Jan 2026)
-MARGINAL_TAX = 0.21  # US corporate marginal tax rate
-SYNTHETIC_RATING = [
-    (8.5, "Aaa", 0.0040),
-    (6.5, "Aa", 0.0070),
-    (5.5, "A", 0.0090),
-    (4.25, "Baa", 0.0150),
-    (3.0, "Ba", 0.0250),
-    (2.0, "B", 0.0400),
-    (1.5, "Caa", 0.0600),
-    (0.0, "Ca", 0.1000),
-]
-SECTOR_BETAS = {
-    "Technology": 1.15, "Communication Services": 1.10,
-    "Consumer Discretionary": 1.20, "Consumer Staples": 0.80,
-    "Health Care": 0.85, "Financials": 1.10, "Industrials": 1.05,
-    "Materials": 1.10, "Energy": 1.15, "Utilities": 0.70,
-    "Real Estate": 0.90, "ETF": 1.00,
-}
-
-
-def synthetic_rating_from_coverage(interest_coverage):
-    """Return (rating, default_spread) from interest coverage per Damodaran table."""
-    if pd.isna(interest_coverage) or interest_coverage <= 0:
-        return "Ca", 0.1000
-    for threshold, rating, spread in SYNTHETIC_RATING:
-        if interest_coverage >= threshold:
-            return rating, spread
-    return "Ca", 0.1000
-
-
-def compute_wacc_inline(sector, interest_coverage, debt_to_equity, market_cap):
-    """Compute WACC per Damodaran framework inline from fundamentals.
-    
-    Returns dict with cost_of_equity, cost_of_debt, after_tax_cost_of_debt, wacc,
-    synthetic_rating, default_spread, weight_equity, weight_debt.
-    """
-    sector_beta = SECTOR_BETAS.get(sector, 1.0)
-    crp = 0.0  # US-centric; CRP lookup for international would go here
-    
-    cost_of_equity = RF_US + sector_beta * (ERP_US + crp)
-    
-    rating, default_spread = synthetic_rating_from_coverage(interest_coverage)
-    cost_of_debt = RF_US + default_spread
-    after_tax_cost_of_debt = cost_of_debt * (1 - MARGINAL_TAX)
-    
-    if pd.notna(debt_to_equity) and debt_to_equity > 0 and pd.notna(market_cap) and market_cap > 0:
-        E = market_cap
-        D = debt_to_equity * market_cap
-        if D > 0 and E > 0:
-            w_e = E / (D + E)
-            w_d = D / (D + E)
-        else:
-            w_e, w_d = 1.0, 0.0
-    else:
-        w_e, w_d = 1.0, 0.0
-    
-    wacc = cost_of_equity * w_e + after_tax_cost_of_debt * w_d
-    
-    return {
-        "cost_of_equity": round(cost_of_equity, 6),
-        "cost_of_debt": round(cost_of_debt, 6),
-        "after_tax_cost_of_debt": round(after_tax_cost_of_debt, 6),
-        "wacc": round(wacc, 6),
-        "synthetic_rating": rating,
-        "default_spread": default_spread,
-        "weight_equity": round(w_e, 4),
-        "weight_debt": round(w_d, 4),
-    }
-
-
-def classify_life_cycle(rev_growth, fcf_margin, roic):
-    """Classify corporate life cycle stage per Damodaran 5-stage framework.
-    
-    Stages:
-    - Young Growth: rev > 30%, fcf < 0
-    - High Growth: rev 15-30%, fcf < 5%
-    - Mature Growth: rev 5-15%, roic > 15%
-    - Mature Stable: rev > 2%, fcf > 10%
-    - Decline: rev < 0%
-    """
-    if pd.isna(rev_growth):
-        return "Unclassified"
-    if rev_growth < 0:
-        return "Decline"
-    if rev_growth > 0.30:
-        if pd.notna(fcf_margin) and fcf_margin < 0:
-            return "Young Growth"
-        return "High Growth"
-    if rev_growth > 0.15:
-        if pd.notna(fcf_margin) and fcf_margin < 0.05:
-            return "High Growth"
-        return "Mature Growth"
-    if rev_growth > 0.05:
-        if pd.notna(roic) and roic > 0.15:
-            return "Mature Growth"
-        return "Mature Growth"
-    if rev_growth > 0.02:
-        if pd.notna(fcf_margin) and fcf_margin > 0.10:
-            return "Mature Stable"
-        return "Mature Growth"
-    return "Mature Stable"
-
-
-def fair_pe(growth, roe, cost_of_equity):
-    """Implied P/E from fundamentals (Gordon growth)."""
-    if pd.isna(growth) or pd.isna(roe) or pd.isna(cost_of_equity):
-        return np.nan
-    if cost_of_equity <= growth:
-        return np.nan
-    payout = max(0, 1 - growth / roe) if roe > 0 else 0
-    return payout / (cost_of_equity - growth)
-
-
-def fair_ev_ebitda(growth, roic, wacc, tax_rate=MARGINAL_TAX):
-    """Implied EV/EBITDA from fundamentals."""
-    if pd.isna(growth) or pd.isna(roic) or pd.isna(wacc):
-        return np.nan
-    if wacc <= growth or roic <= 0:
-        return np.nan
-    reinvestment = growth / roic
-    fcf_conversion = (1 - reinvestment) * (1 - tax_rate)
-    return fcf_conversion / (wacc - growth)
-
-
-def fair_ev_sales(growth, margin, roic, wacc, tax_rate=MARGINAL_TAX):
-    """Implied EV/Sales from fundamentals."""
-    if pd.isna(growth) or pd.isna(margin) or pd.isna(roic) or pd.isna(wacc):
-        return np.nan
-    if wacc <= growth or roic <= 0:
-        return np.nan
-    reinvestment = growth / roic
-    fcf_conversion = margin * (1 - reinvestment) * (1 - tax_rate)
-    return fcf_conversion / (wacc - growth)
-
-
-def fair_pb(growth, roe, cost_of_equity):
-    """Implied P/B from fundamentals."""
-    if pd.isna(growth) or pd.isna(roe) or pd.isna(cost_of_equity):
-        return np.nan
-    if cost_of_equity <= growth:
-        return np.nan
-    return (roe - growth) / (cost_of_equity - growth)
-
-
-def compute_fair_multiples_inline(rev_growth, roe, roic, wacc, cost_of_equity, ev_ebitda=None, tax_rate=MARGINAL_TAX):
-    """Compute all fair multiples inline from fundamentals.
-    
-    Returns dict with fair_pe, fair_ev_ebitda, fair_ev_sales, fair_pb.
-    """
-    g = min(max(rev_growth, 0) if pd.notna(rev_growth) else 0.02, 0.03)
-    
-    pe = fair_pe(g, roe, cost_of_equity)
-    ev_ebitda_fair = fair_ev_ebitda(g, roic, wacc, tax_rate)
-    
-    ev_sales = np.nan
-    if pd.notna(ev_ebitda) and ev_ebitda > 0 and pd.notna(ev_ebitda_fair):
-        ebitda_margin = 1.0 / ev_ebitda
-        ev_sales = ev_ebitda_fair * ebitda_margin
-    
-    pb = fair_pb(g, roe, cost_of_equity)
-    
-    return {
-        "fair_pe": round(pe, 2) if pd.notna(pe) else np.nan,
-        "fair_ev_ebitda": round(ev_ebitda_fair, 2) if pd.notna(ev_ebitda_fair) else np.nan,
-        "fair_ev_sales": round(ev_sales, 2) if pd.notna(ev_sales) else np.nan,
-        "fair_pb": round(pb, 2) if pd.notna(pb) else np.nan,
-    }
-
-
+from damodaran_data import (
+    compute_wacc_per_ticker,
+    classify_life_cycle,
+    compute_fair_multiples,
+    latest_implied_erp,
+)
 DE_IDEAL = 0.5
 BASE_W_MAX = 0.05     # default suggested max weight floor before composite scaling
 
@@ -625,52 +459,31 @@ def build_table() -> pd.DataFrame:
         except Exception:
             fund["sector"] = "Technology"
 
-    # Inline Damodaran computation for tickers missing pre-computed data
-        # This ensures the script is self-sufficient even without damodaran_data.py runs
-        rev_growth_col = None
-        for rg_c in ("revenue_growth", "revenue_growth_yoy", "revenue_growth_3y"):
-            if rg_c in fund.columns:
-                rev_growth_col = rg_c
-                break
-        fcf_margin_col = "fcf_margin" if "fcf_margin" in fund.columns else None
+    # Fill missing Damodaran fields from the shared module (latest row per ticker).
+    latest = fund.sort_values("as_of_date").groupby("ticker", as_index=False).tail(1) if "as_of_date" in fund.columns else fund
+    if "revenue_growth" in latest.columns and "revenue_growth_3y" not in latest.columns:
+        latest = latest.copy()
+        latest["revenue_growth_3y"] = latest["revenue_growth"]
+    miss_w = latest[~latest["ticker"].isin(wacc_data)]
+    if len(miss_w):
+        wdf = compute_wacc_per_ticker(miss_w)
+        if len(wdf):
+            for t, rec in wdf.set_index("ticker").to_dict("index").items():
+                wacc_data[t] = rec
+    miss_lc = latest[~latest["ticker"].isin(life_cycle_data)]
+    if len(miss_lc):
+        life_cycle_data.update(dict(zip(miss_lc["ticker"], miss_lc.apply(classify_life_cycle, axis=1))))
+    miss_fm = latest[~latest["ticker"].isin(fair_mult_data)]
+    if len(miss_fm) and wacc_data:
+        wacc_df = pd.DataFrame.from_dict(wacc_data, orient="index")
+        wacc_df.index.name = "ticker"
+        wacc_df = wacc_df.reset_index()
+        if "ticker" in wacc_df.columns and "wacc" in wacc_df.columns:
+            fdf = compute_fair_multiples(miss_fm, wacc_df[["ticker", "wacc", "cost_of_equity", "cost_of_debt", "sector_beta"]].drop_duplicates("ticker") if "sector_beta" in wacc_df.columns else wacc_df)
+            if len(fdf):
+                fair_mult_data.update(fdf.set_index("ticker").to_dict("index"))
 
-        inline_wacc = {}
-        inline_lc = {}
-        inline_fair = {}
-        for idx in fund.index:
-            t = fund.at[idx, "ticker"]
-            if t in wacc_data and t in life_cycle_data and t in fair_mult_data:
-                continue  # already have pre-computed data
-            sector = fund.at[idx, "sector"] if "sector" in fund.columns else "Technology"
-            ic = fund.at[idx, "interest_coverage"] if "interest_coverage" in fund.columns else np.nan
-            de = fund.at[idx, "debt_to_equity"] if "debt_to_equity" in fund.columns else np.nan
-            mc = fund.at[idx, "market_cap"] if "market_cap" in fund.columns else np.nan
-
-            if t not in wacc_data:
-                inline_wacc[t] = compute_wacc_inline(sector, ic, de, mc)
-
-            if t not in life_cycle_data:
-                rg = fund.at[idx, rev_growth_col] if rev_growth_col else np.nan
-                fcf_m = fund.at[idx, fcf_margin_col] if fcf_margin_col else np.nan
-                roic_val = fund.at[idx, "roic"] if "roic" in fund.columns else np.nan
-                inline_lc[t] = classify_life_cycle(rg, fcf_m, roic_val)
-
-            if t not in fair_mult_data and t in inline_wacc:
-                rg = fund.at[idx, rev_growth_col] if rev_growth_col else np.nan
-                roe_val = fund.at[idx, "roe"] if "roe" in fund.columns else np.nan
-                roic_val = fund.at[idx, "roic"] if "roic" in fund.columns else np.nan
-                ev_ebitda_val = fund.at[idx, "ev_ebitda"] if "ev_ebitda" in fund.columns else np.nan
-                w = inline_wacc[t]["wacc"]
-                coe = inline_wacc[t]["cost_of_equity"]
-                inline_fair[t] = compute_fair_multiples_inline(rg, roe_val, roic_val, w, coe, ev_ebitda_val)
-
-        # Merge inline into pre-computed dicts
-        for t, d in inline_wacc.items():
-            wacc_data[t] = d
-        life_cycle_data.update(inline_lc)
-        fair_mult_data.update(inline_fair)
-
-        # Vectorized scoring — compute all tickers at once
+    # Vectorized scoring — compute all tickers at once
         q = score_quality_vectorized(fund)
         v = score_value_vectorized(fund)
         lev = leverage_metrics_vectorized(fund)
@@ -819,6 +632,48 @@ def build_table() -> pd.DataFrame:
         out["excess_cash_share"] = excess
         out["distrust_p_bad"] = p_bad.clip(0.0, 0.60)
         out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
+
+        # Fit P(bad) = P(63d return < -10%) on excess cash, decline, ARISTA, quality.
+        try:
+            px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
+            px["date"] = pd.to_datetime(px["date"])
+            last = px.sort_values("date").groupby("ticker").tail(1).set_index("ticker")["close"]
+            prev = px.sort_values("date").groupby("ticker").nth(-64) if False else None
+            px = px.sort_values(["ticker", "date"])
+            g = px.groupby("ticker")["close"]
+            ret63 = (g.transform("last") / g.shift(63) - 1.0)
+            r63 = px.assign(ret63=ret63).sort_values("date").groupby("ticker").tail(1).set_index("ticker")["ret63"]
+            y = (r63.reindex(out["ticker"].values) < -0.10).astype(float)
+            y.index = out.index
+            X = pd.DataFrame({
+                "const": 1.0,
+                "excess": pd.to_numeric(out["excess_cash_share"], errors="coerce").fillna(0),
+                "decline": out["life_cycle_stage"].eq("Decline").astype(float),
+                "arista": (p_bad > 0.15).astype(float),
+                "lowq": (1.0 - pd.to_numeric(out.get("quality_score", 0.5), errors="coerce").fillna(0.5)).clip(0, 1),
+            }, index=out.index)
+            mask = y.notna() & X.notna().all(axis=1)
+            if mask.sum() > 80 and y.loc[mask].nunique() > 1:
+                xm = X.loc[mask].values
+                yy = y.loc[mask].values
+                b = np.zeros(xm.shape[1])
+                for _ in range(12):
+                    z = xm @ b
+                    p = 1.0 / (1.0 + np.exp(-np.clip(z, -20, 20)))
+                    w = p * (1 - p) + 1e-6
+                    grad = xm.T @ (p - yy)
+                    hess = xm.T @ (xm * w[:, None])
+                    try:
+                        b = b - np.linalg.solve(hess, grad)
+                    except np.linalg.LinAlgError:
+                        break
+                p_hat = 1.0 / (1.0 + np.exp(-np.clip(X.values @ b, -20, 20)))
+                out["distrust_p_bad_fitted"] = np.clip(p_hat, 0.01, 0.80)
+                out["distrust_p_bad"] = (0.4 * out["distrust_p_bad"] + 0.6 * out["distrust_p_bad_fitted"]).clip(0, 0.8)
+                out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
+                out["distrust_fit_n"] = int(mask.sum())
+        except Exception:
+            pass
 
         df = out.sort_values("composite_score", ascending=False).reset_index(drop=True)
         return df

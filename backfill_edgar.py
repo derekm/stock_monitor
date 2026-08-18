@@ -154,7 +154,13 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
                 if pd.api.types.is_numeric_dtype(df[col]):
                     df[col] = df[col].astype("float64")
         merged = ex.merge(nd, on=idx, how="left", suffixes=("_old", "_new"))
-        overlap_mask = merged["source_new"].notna()
+        for col in list(ex.columns):
+            if col in idx:
+                continue
+            old_c = f"{col}_old"
+            if old_c in merged.columns:
+                merged[col] = merged[old_c]
+        overlap_mask = merged["source_new"].notna() if "source_new" in merged.columns else merged.filter(regex="_new$").notna().any(axis=1)
         if overlap_mask.any():
             protected_mask = merged.loc[overlap_mask, "source_old"].isin(PROTECTED_SOURCES)
             overwrite_mask = overlap_mask & ~protected_mask
@@ -176,9 +182,14 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
                 old_col, new_col = f"{c}_old", f"{c}_new"
                 if old_col not in merged.columns or new_col not in merged.columns:
                     continue
-                missing = merged.loc[remaining_mask, old_col].isna() & merged.loc[remaining_mask, new_col].notna()
-                if missing.any():
-                    merged.loc[missing, c] = merged.loc[missing, new_col]
+                try:
+                    old_s = merged[old_col]
+                    new_s = merged[new_col]
+                    fill = remaining_mask & old_s.isna() & new_s.notna()
+                    if fill.any():
+                        merged.loc[fill, c] = new_s.loc[fill].to_numpy()
+                except Exception:
+                    continue
             cols_to_drop = [c for c in merged.columns if c.endswith("_old") or c.endswith("_new")]
             existing = merged.drop(columns=cols_to_drop)
         brand_new = new_df[~new_df.set_index(idx).index.isin(ex.set_index(idx).index)].copy()
@@ -330,6 +341,7 @@ def main():
     all_rows: list[dict] = []
     ok = 0
     newly_bad = 0
+    processed = 0
     flushed = 0
     for t, cik in matched:
         try:
@@ -350,7 +362,8 @@ def main():
         except Exception as e:
             print(f"  !! {t}: {e}")
             time.sleep(0.12)
-        if ok and ok % FLUSH_EVERY == 0 and all_rows:
+        processed += 1
+        if processed % FLUSH_EVERY == 0 and all_rows:
             n = merge_into_fundamentals(all_rows)
             flushed += len({r.get("ticker") for r in all_rows})
             print(f"  flushed → {n} fundamentals rows")
