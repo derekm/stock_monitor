@@ -672,6 +672,56 @@ def test_resident_kernels():
     return True
 
 
+def test_single_edgar_extractor():
+    """There must be exactly ONE EDGAR extractor implementation.
+
+    edgar_lib.py used to carry a parallel copy of the extraction logic, and it
+    silently disagreed with edgar_companyfacts_v2 on the same ticker. Measured
+    against SEC 10-K figures before consolidation (ttm_revenue at FY end):
+        AAPL  edgar_lib 265.60B  vs  v2 391.04B  (10-K 391.04B)
+        MSFT  edgar_lib  66.69B  vs  v2 245.12B  (10-K 245.12B)
+        CHKP  edgar_lib   7.31B  vs  v2   2.56B  (10-K   2.56B)
+    edgar_lib failed 6 of 10 revenue/net-income checks because it lacked
+    _span_months, _pick_tag and the annual fallback. It now DELEGATES.
+
+    This test fails if the duplicate ever returns.
+    """
+    print("Testing single EDGAR extractor...")
+    import inspect
+    import edgar_lib as L
+    import edgar_companyfacts_v2 as V
+
+    for fn in ("extract_financials", "compute_quarterly_fundamentals"):
+        src = inspect.getsource(getattr(L, fn))
+        assert "edgar_companyfacts_v2" in src, (
+            f"edgar_lib.{fn} no longer delegates to edgar_companyfacts_v2 -- "
+            "a second extractor has reappeared"
+        )
+    assert not hasattr(L, "_extract_financials_legacy"), \
+        "the legacy extractor was restored in edgar_lib"
+
+    # the canonical implementation must retain the three correctness fixes
+    for helper in ("_span_months", "_pick_tag", "_annual_series"):
+        assert hasattr(V, helper), f"edgar_companyfacts_v2.{helper} is missing"
+
+    # _pick_tag must prefer a currently-filed tag over a discontinued one with
+    # more history (the SalesRevenueNet trap: more quarters, but stopped in 2018)
+    facts = {
+        "Stale": {"units": {"USD": [
+            {"start": "2017-01-01", "end": "2017-03-31", "val": 1.0},
+            {"start": "2017-04-01", "end": "2017-06-30", "val": 1.0},
+            {"start": "2017-07-01", "end": "2017-09-30", "val": 1.0},
+        ]}},
+        "Current": {"units": {"USD": [
+            {"start": "2025-01-01", "end": "2025-03-31", "val": 2.0},
+        ]}},
+    }
+    assert V._pick_tag(facts, ["Stale", "Current"]) == "Current", \
+        "_pick_tag ranked a discontinued tag above a currently-filed one"
+    print("  edgar_lib delegates; v2 keeps span/tag/annual fixes ✓")
+    return True
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -728,6 +778,7 @@ if __name__ == "__main__":
         ("Profiler batch parity", test_profiler_batch_parity),
         ("resid_mom_63 reconstruction", test_resid_mom_reconstruction),
         ("Resident tensor kernels", test_resident_kernels),
+        ("Single EDGAR extractor", test_single_edgar_extractor),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]

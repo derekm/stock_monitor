@@ -433,192 +433,57 @@ def detect_fiscal_year_end(equity: pd.Series) -> Optional[int]:
 
 
 def extract_financials(cik: str) -> Optional[dict]:
+    """Extract raw financials from EDGAR companyfacts.
+
+    DELEGATES to edgar_companyfacts_v2. There is exactly ONE extractor; this is a
+    thin compatibility shim so existing callers keep working.
+
+    This module used to carry its own parallel implementation, and it was wrong.
+    Measured against SEC 10-K figures on 2026-08 (ttm_revenue / ttm_net_income at
+    fiscal year end):
+
+        ticker  edgar_lib (old)              v2 (canonical)
+        AAPL    265.60B  -32.1%   93.74B      391.04B  0.00%   93.74B  0.00%
+        MSFT     66.69B  -72.8%   88.14B      245.12B  0.00%   88.14B  0.00%
+        NVDA    221.66B  +69.9%  123.67B      130.50B  0.00%   72.88B  0.00%
+        PANW      4.67B  -41.9%    2.58B        8.03B  0.01%    2.58B  0.02%
+        CHKP      7.31B +185.0%    2.48B        2.56B  0.00%    0.85B  3.42%
+
+    The old code failed 6 of 10 measurements because it lacked three fixes that
+    landed in v2: period-length detection from start/end (12-month facts were
+    filed as quarters), best-covered XBRL tag selection (it took the first tag
+    present, so AAPL revenue came from a series that stopped in 2018), and an
+    annual fallback for filers with no quarterly coverage.
     """
-    Extract all raw financials from EDGAR companyfacts.
-    """
-    d = fetch_companyfacts(cik)
-    facts = extract_facts(d)
-    
-    # First pass: detect fiscal year end from equity
-    equity_tags = TAG_MAP.get("equity", [])
-    equity_series = parse_balance(facts, equity_tags)
-    fy_end = detect_fiscal_year_end(equity_series) or 12
-    
-    result = {}
-    for concept, tags in TAG_MAP.items():
-        if concept in ("assets", "equity", "debt", "cash", "shares"):
-            result[concept] = parse_balance(facts, tags)
-        elif concept in ("operating_cash_flow", "capital_expenditure"):
-            result[concept] = parse_cashflow_quarterly(facts, tags, fy_end)
-        else:
-            result[concept] = parse_quarterly(facts, tags, fy_end)
-    
-    result["fiscal_year_end"] = fy_end
-    return result
+    from edgar_companyfacts_v2 import extract_raw_financials
+    return extract_raw_financials(cik)
 
 
 def compute_ttm(financials: dict, qend_date, concept: str) -> Optional[float]:
-    """Compute trailing-twelve-month sum for a quarterly series."""
+    """Trailing-twelve-month sum for a quarterly series.
+
+    Kept as a thin helper; the authoritative TTM logic (including the span check
+    and annual fallback for filers with no quarterly coverage) lives in
+    edgar_companyfacts_v2.compute_quarterly_fundamentals.
+    """
     series = financials.get(concept, pd.Series(dtype=float))
-    if series.empty:
+    if series is None or series.empty:
         return None
     s = series[series.index <= qend_date].dropna().tail(4)
     return float(s.sum()) if len(s) > 0 else None
 
 
 def compute_quarterly_fundamentals(financials: dict, ticker: str,
-                                    px: dict[str, pd.Series] = None) -> list[dict]:
+                                   px: dict[str, pd.Series] = None) -> list[dict]:
+    """DELEGATES to edgar_companyfacts_v2 -- see extract_financials() for the
+    measured accuracy comparison that made v2 canonical. The parallel
+    implementation that used to live here was deleted, not kept as a fallback:
+    two extractors meant two different answers for the same ticker.
     """
-    Compute quarterly fundamentals with full provenance tracking.
-    """
-    equity = financials.get("equity", pd.Series(dtype=float))
-    if equity.empty:
-        return []
-    
-    results = []
-    
-    for qend_date, eq_val in equity.items():
-        if eq_val is None or eq_val <= 0:
-            continue
-        
-        row = {
-            "ticker": ticker,
-            "as_of_date": qend_date.date() if hasattr(qend_date, "date") else qend_date,
-        }
-        
-        # TTM income (4 quarters)
-        for concept in ["revenue", "net_income", "operating_income",
-                        "depreciation_amortization", "interest_expense",
-                        "operating_cash_flow", "capital_expenditure"]:
-            row[f"ttm_{concept}"] = compute_ttm(financials, qend_date, concept)
-        
-        # Balance sheet values
-        for concept in ["assets", "equity", "debt", "cash", "shares"]:
-            series = financials.get(concept, pd.Series(dtype=float))
-            if not series.empty:
-                s = series[series.index <= qend_date].dropna()
-                row[concept] = float(s.iloc[-1]) if len(s) > 0 else None
-            else:
-                row[concept] = None
-        
-        # Free Cash Flow with provenance
-        ttm_ocf = row.get("ttm_operating_cash_flow")
-        ttm_capex = row.get("ttm_capital_expenditure")
-        
-        if ttm_ocf is not None:
-            if ttm_capex is not None and ttm_capex != 0:
-                row["free_cash_flow"] = ttm_ocf - abs(ttm_capex)
-                row["fcf_provenance"] = "computed"
-            else:
-                row["free_cash_flow"] = ttm_ocf
-                row["fcf_provenance"] = "proxy"
-        else:
-            row["free_cash_flow"] = None
-            row["fcf_provenance"] = "unavailable"
-        
-        # Derived ratios
-        ttm_ni = row.get("ttm_net_income")
-        ttm_oi = row.get("ttm_operating_income")
-        ttm_da = row.get("ttm_depreciation_amortization")
-        ttm_int = row.get("ttm_interest_expense")
-        total_debt = row.get("debt")
-        total_equity = row.get("equity")
-        total_assets = row.get("assets")
-        total_cash = row.get("cash")
-        total_shares = row.get("shares")
-        
-        # ROE
-        if ttm_ni is not None and total_equity and total_equity > 0:
-            row["roe"] = ttm_ni / total_equity
-            row["roe_provenance"] = "ttm_computed"
-        else:
-            row["roe_provenance"] = "unavailable"
-        
-        # ROIC
-        if ttm_oi is not None:
-            invested = (total_debt or 0) + (total_equity or 0)
-            if invested > 0:
-                nopat = ttm_oi * 0.75
-                row["roic"] = nopat / invested
-                row["roic_provenance"] = "ttm_computed"
-            else:
-                row["roic_provenance"] = "unavailable"
-        else:
-            row["roic_provenance"] = "missing_oi"
-        
-        # D/E
-        if total_debt is not None and total_equity and total_equity > 0:
-            row["debt_to_equity"] = total_debt / total_equity
-            row["debt_to_equity_provenance"] = "reported"
-        else:
-            row["debt_to_equity_provenance"] = "unavailable"
-        
-        # Interest Coverage
-        if ttm_oi is not None and ttm_int and ttm_int > 0:
-            row["interest_coverage"] = ttm_oi / ttm_int
-            row["interest_coverage_provenance"] = "ttm_computed"
-        elif ttm_oi is not None:
-            row["interest_coverage_provenance"] = "no_interest_expense"
-        else:
-            row["interest_coverage_provenance"] = "unavailable"
-        
-        # EBITDA
-        if ttm_oi is not None:
-            row["ebitda"] = ttm_oi + (ttm_da or 0)
-            row["ebitda_provenance"] = "computed" if ttm_da else "oi_only"
-        else:
-            row["ebitda_provenance"] = "unavailable"
-        
-        # FCF Margin
-        if row.get("free_cash_flow") is not None and row.get("ttm_revenue") and row["ttm_revenue"] > 0:
-            row["fcf_margin"] = row["free_cash_flow"] / row["ttm_revenue"]
-            row["fcf_margin_provenance"] = row.get("fcf_provenance", "computed")
-        else:
-            row["fcf_margin_provenance"] = "unavailable"
-        
-        # Market cap
-        if px and ticker in px and total_shares:
-            p = px[ticker]
-            avail = p[p.index <= qend_date]
-            if len(avail):
-                mcap = float(avail.iloc[-1]) * total_shares
-                row["market_cap"] = int(mcap)
-                row["market_cap_b"] = round(mcap / 1e9, 2)
-                row["market_cap_provenance"] = "price_times_shares"
-                
-                if total_equity and total_equity > 0:
-                    row["pb_ratio"] = mcap / total_equity
-                    row["pb_ratio_provenance"] = "computed"
-                if total_assets and total_assets > 0:
-                    row["mktcap_to_assets"] = mcap / total_assets
-                    row["mktcap_to_assets_provenance"] = "computed"
-                
-                ebitda = row.get("ebitda")
-                if ebitda and ebitda > 0 and total_debt is not None and total_cash is not None:
-                    ev = mcap + total_debt - total_cash
-                    row["ev_ebitda"] = ev / ebitda
-                    row["ev_ebitda_provenance"] = "computed"
-        else:
-            row["market_cap_provenance"] = "missing_price_or_shares"
-        
-        # Single quarter revenue
-        rev_series = financials.get("revenue", pd.Series(dtype=float))
-        if not rev_series.empty:
-            s = rev_series[rev_series.index <= qend_date].dropna()
-            if len(s) > 0:
-                row["total_revenue"] = float(s.iloc[-1])
-                row["total_revenue_provenance"] = "reported"
-            else:
-                row["total_revenue_provenance"] = "unavailable"
-        else:
-            row["total_revenue_provenance"] = "missing"
-        
-        row["source"] = "edgar_v2"
-        row["fiscal_year_end"] = financials.get("fiscal_year_end")
-        
-        results.append(row)
-    
-    return results
+    from edgar_companyfacts_v2 import (
+        compute_quarterly_fundamentals as _v2_compute,
+    )
+    return _v2_compute(financials, ticker, px)
 
 
 if __name__ == "__main__":
