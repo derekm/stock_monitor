@@ -780,6 +780,10 @@ if __name__ == "__main__":
     ap.add_argument("--tickers", help="Comma-separated tickers")
     ap.add_argument("--max-tickers", type=int, default=10)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--csv", action="store_true",
+                    help="also dump edgar_v2_quarterly.csv (diagnostic only)")
+    ap.add_argument("--flush-every", type=int, default=1,
+                    help="merge into fundamentals.parquet every N tickers (default 1)")
     args = ap.parse_args()
     
     # Load CIKs
@@ -790,11 +794,16 @@ if __name__ == "__main__":
     if args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",")]
     else:
-        # Use monitored stocks
-        MONITORED = DATA_DIR / "monitored_stocks.parquet"
-        if MONITORED.exists():
-            stocks = pd.read_parquet(MONITORED)
-            tickers = sorted(stocks["ticker"].astype(str).str.upper().unique().tolist())
+        # Universe is daily_prices.parquet. monitored_stocks.parquet is
+        # deprecated and must not drive a backfill: it is an optional sleeve
+        # list, not the coverage universe.
+        DAILY = DATA_DIR / "daily_prices.parquet"
+        if DAILY.exists():
+            import pyarrow.parquet as _pq
+            tickers = sorted(
+                _pq.read_table(DAILY, columns=["ticker"])["ticker"]
+                .to_pandas().astype(str).str.upper().unique().tolist()
+            )
         else:
             tickers = sorted(cik_map.keys())
     
@@ -803,39 +812,84 @@ if __name__ == "__main__":
         tickers = tickers[:args.max_tickers]
     
     print(f"Processing {len(tickers)} tickers...")
-    
+
+    # Incremental merge: flush completed tickers into fundamentals.parquet as we
+    # go, so an interrupt (or a rate-limit abort) keeps everything already
+    # fetched. The previous version accumulated every row in memory and only
+    # wrote edgar_v2_quarterly.csv at the very end -- it never touched
+    # fundamentals.parquet at all, which is why the panel showed only 39
+    # edgar_v2 rows from an unrelated path.
+    from backfill_edgar import merge_into_fundamentals
+
     results = []
+    pending = []
+    counters = {"merged": 0}          # module scope here, so no `nonlocal`
+    done = skipped = 0
+
+    def _flush():
+        if not pending:
+            return
+        try:
+            n = merge_into_fundamentals(list(pending))
+            counters["merged"] += len(pending)
+            print(f"    [flush] merged {len(pending)} rows -> panel now {n:,}")
+        except Exception as e:
+            # Never lose the batch silently; keep `pending` intact so the next
+            # flush retries it rather than dropping the fetched rows.
+            print(f"    !! flush FAILED ({type(e).__name__}: {e}) -- retrying at next flush")
+            return
+        pending.clear()
+
     for t in tickers:
         if t not in cik_map:
             print(f"  !! {t}: no CIK")
+            skipped += 1
             continue
         cik = cik_map[t]
         try:
             fin = extract_raw_financials(cik)
             if fin is None:
                 print(f"  !! {t}: no data")
+                skipped += 1
                 continue
-            
+
             # Print diagnostic
             rev_count = len(fin.get("revenue", pd.Series()))
             ocf_count = len(fin.get("operating_cash_flow", pd.Series()))
             capex_count = len(fin.get("capital_expenditure", pd.Series()))
             eq_count = len(fin.get("equity", pd.Series()))
             print(f"  {t}: rev={rev_count}, ocf={ocf_count}, capex={capex_count}, eq={eq_count}")
-            
+
             if args.dry_run:
                 continue
-            
+
             rows = compute_quarterly_fundamentals(fin, t)
             results.extend(rows)
+            pending.extend(rows)
+            done += 1
             print(f"    → {len(rows)} quarters")
-            
+
+            if args.flush_every and done % args.flush_every == 0:
+                _flush()
+
             time.sleep(0.12)
+        except KeyboardInterrupt:
+            print("\n[interrupted] flushing what we have...")
+            _flush()
+            raise
         except Exception as e:
             print(f"  !! {t}: {e}")
             time.sleep(0.12)
-    
-    if results:
+
+    _flush()   # final partial batch
+    print(f"\nTickers processed: {done}, skipped: {skipped}")
+    print(f"Rows merged into fundamentals.parquet: {counters['merged']}")
+
+    if args.csv and results:
+        # Diagnostic dump only. This file is NOT the persistence path -- it went
+        # stale once (written 00:22, script's alias block changed 15:37 the same
+        # day) and its 46 columns lacked shareholders_equity/total_assets/
+        # total_debt entirely, which is what made edgar_v2 rows look empty.
         df = pd.DataFrame(results)
         df.to_csv("edgar_v2_quarterly.csv", index=False)
-        print(f"\nSaved {len(df)} rows to edgar_v2_quarterly.csv")
+        print(f"Also wrote edgar_v2_quarterly.csv ({len(df)} rows, diagnostic)")

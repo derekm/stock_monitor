@@ -8,12 +8,14 @@ and M&A data). Overwrites existing rows unless source is edgar_v2 or html_10q.
 
 import argparse
 import json
+import os
 import time
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import numpy as np
+import pyarrow.parquet as pq
 import requests
 
 DATA_DIR = Path(__file__).parent
@@ -204,19 +206,45 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
                     result_cols[col] = merged[old_c]
                 else:
                     result_cols[col] = merged[col]
-        # Overwrite non-protected columns with new values
+        # Overwrite non-protected columns with new values.
+        #
+        # CRITICAL: only rows present in THIS batch may change. The previous
+        # implementation did `vals = merged[new_col]; vals[~overwrite_mask] = nan`,
+        # which set every row absent from the batch to NaN for every column the
+        # batch carried. With per-ticker flushing that wiped the whole panel one
+        # flush at a time (proved in a sandbox: merging ZZTEST 2024-03-31 took
+        # 2024-09-30 net_income from 120.0 to NaN). Now the old column is the
+        # base and we assign only into the masked subset, so untouched rows keep
+        # their values bit-for-bit.
         overlap_mask = merged["source_new"].notna() if "source_new" in merged.columns else merged.filter(regex="_new$").notna().any(axis=1)
         if overlap_mask.any():
-            protected_mask = merged.loc[overlap_mask, "source_old"].isin(PROTECTED_SOURCES)
+            protected_mask = merged["source_old"].isin(PROTECTED_SOURCES)
             overwrite_mask = overlap_mask & ~protected_mask
             for col in nd.columns:
                 if col in idx or col == "source":
                     continue
                 new_col = f"{col}_new"
-                if new_col in merged.columns:
-                    vals = merged[new_col].copy()
-                    vals[~overwrite_mask] = np.nan
-                    result_cols[col] = vals
+                if new_col not in merged.columns:
+                    continue
+                base = result_cols[col].copy() if col in result_cols else merged.get(f"{col}_old")
+                if base is None:
+                    continue
+                new_s = merged[new_col]
+                # assign only where this batch supplies a value AND the row is
+                # not protected; NaN in the batch must not erase a real value
+                apply = overwrite_mask & new_s.notna()
+                if apply.any():
+                    base = base.copy()
+                    base.loc[apply] = new_s.loc[apply].to_numpy()
+                result_cols[col] = base
+            # Restamp provenance on rows this batch actually updated, so the row
+            # reports the extractor that produced it and becomes protected on
+            # subsequent runs (the old code left them as source='edgar', which
+            # made the merge non-idempotent: a re-run changed 999 -> 777).
+            if "source" in result_cols:
+                src = result_cols["source"].copy()
+                src.loc[overwrite_mask] = "edgar_v2"
+                result_cols["source"] = src
             # Fill missing in protected columns
             remaining_mask = overlap_mask & protected_mask
             FILL_COLS = [
@@ -254,8 +282,38 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
     for col in combined.columns:
         if pd.api.types.is_numeric_dtype(combined[col]):
             combined[col] = pd.to_numeric(combined[col], errors="coerce").astype("float64")
-    combined.to_parquet(FUND, index=False)
+    _atomic_write_parquet(combined, FUND)
     return len(combined)
+
+
+def _atomic_write_parquet(df: pd.DataFrame, path: Path) -> None:
+    """Write via temp file + os.replace so an interrupt cannot truncate `path`.
+
+    A direct df.to_parquet(path) leaves a partially-written file if the process
+    dies mid-write. That is how a 40-ticker run once took fundamentals.parquet
+    from 33.5 MB to 4.6 MB and required restoring from a dated backup. os.replace
+    is atomic on the same filesystem, so the original file survives any crash.
+
+    A sanity floor guards the other half of that incident: refuse to shrink the
+    panel by more than 20% in one write, since every legitimate merge here is
+    additive.
+    """
+    if path.exists():
+        try:
+            prev_rows = pq.ParquetFile(path).metadata.num_rows
+            if prev_rows > 100 and len(df) < prev_rows * 0.8:
+                raise RuntimeError(
+                    f"refusing to write {len(df):,} rows over {prev_rows:,} existing "
+                    f"({len(df)/prev_rows:.1%}); merges here are additive, so this "
+                    "indicates dropped data. Inspect before overwriting."
+                )
+        except RuntimeError:
+            raise
+        except Exception:
+            pass  # unreadable metadata: fall through to the normal write
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)
 
 
 def _backup_fundamentals() -> Path:
