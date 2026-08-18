@@ -804,8 +804,21 @@ def build_table() -> pd.DataFrame:
             if "ticker" in ar.columns:
                 flagged = set(ar["ticker"].astype(str).str.upper())
                 p_bad = p_bad + out["ticker"].astype(str).str.upper().isin(flagged).astype(float) * 0.20
+        cash = None
+        for c in ("cash", "cash_and_equivalents", "cash_b"):
+            if c in out.columns:
+                cash = pd.to_numeric(out[c], errors="coerce")
+                break
+        if cash is None and "mktcap_to_assets" in out.columns:
+            excess = (1.0 - pd.to_numeric(out["mktcap_to_assets"], errors="coerce").clip(0, 2)).clip(0, 1)
+        elif cash is not None and "market_cap" in out.columns:
+            mc = pd.to_numeric(out["market_cap"], errors="coerce")
+            excess = (cash / mc.replace(0, np.nan)).clip(0, 1)
+        else:
+            excess = pd.Series(0.15, index=out.index)
+        out["excess_cash_share"] = excess
         out["distrust_p_bad"] = p_bad.clip(0.0, 0.60)
-        out["distrust_discount"] = (1.0 - out["distrust_p_bad"]).round(4)
+        out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
 
         df = out.sort_values("composite_score", ascending=False).reset_index(drop=True)
         return df

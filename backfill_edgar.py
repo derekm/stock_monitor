@@ -130,6 +130,73 @@ def fetch_and_build(ticker: str, cik: str, px: dict[str, pd.Series]) -> list[dic
     return rows
 
 
+FLUSH_EVERY = 40
+PROTECTED_SOURCES = {"edgar_v2", "html_10q"}
+
+
+def merge_into_fundamentals(new_rows: list[dict]) -> int:
+    """Additive merge + parquet write. Safe to call mid-run."""
+    if not new_rows:
+        return 0
+    new_df = pd.DataFrame(new_rows)
+    new_df["source"] = "edgar_v2"
+    existing = pd.read_parquet(FUND) if FUND.exists() else pd.DataFrame()
+    from update_fundamentals import _as_date
+    new_df["as_of_date"] = new_df["as_of_date"].map(_as_date)
+    if len(existing):
+        existing["as_of_date"] = existing["as_of_date"].map(_as_date)
+    idx = ["ticker", "as_of_date"]
+    if len(existing):
+        ex = existing.reset_index(drop=True).copy()
+        nd = new_df.reset_index(drop=True).copy()
+        for df in (ex, nd):
+            for col in df.columns:
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    df[col] = df[col].astype("float64")
+        merged = ex.merge(nd, on=idx, how="left", suffixes=("_old", "_new"))
+        overlap_mask = merged["source_new"].notna()
+        if overlap_mask.any():
+            protected_mask = merged.loc[overlap_mask, "source_old"].isin(PROTECTED_SOURCES)
+            overwrite_mask = overlap_mask & ~protected_mask
+            for col in nd.columns:
+                if col == "source":
+                    continue
+                new_col = f"{col}_new"
+                if new_col in merged.columns:
+                    merged.loc[overwrite_mask, col] = merged.loc[overwrite_mask, new_col]
+            remaining_mask = overlap_mask & protected_mask
+            FILL_COLS = [
+                "market_cap", "market_cap_b", "total_assets", "total_assets_b",
+                "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
+                "debt_to_equity", "shares_outstanding", "interest_coverage",
+                "earnings_stability", "total_revenue", "operating_income", "net_income",
+                "free_cash_flow", "operating_cash_flow", "capital_expenditure",
+            ]
+            for c in FILL_COLS:
+                old_col, new_col = f"{c}_old", f"{c}_new"
+                if old_col not in merged.columns or new_col not in merged.columns:
+                    continue
+                missing = merged.loc[remaining_mask, old_col].isna() & merged.loc[remaining_mask, new_col].notna()
+                if missing.any():
+                    merged.loc[missing, c] = merged.loc[missing, new_col]
+            cols_to_drop = [c for c in merged.columns if c.endswith("_old") or c.endswith("_new")]
+            existing = merged.drop(columns=cols_to_drop)
+        brand_new = new_df[~new_df.set_index(idx).index.isin(ex.set_index(idx).index)].copy()
+        combined = pd.concat([existing, brand_new], ignore_index=True) if len(brand_new) else existing
+    else:
+        combined = new_df
+    if "last_updated" in combined.columns:
+        combined["last_updated"] = pd.to_datetime(combined["last_updated"], errors="coerce")
+    combined = combined.sort_values(["ticker", "as_of_date"]).drop_duplicates(
+        subset=["ticker", "as_of_date"], keep="last"
+    )
+    for col in combined.columns:
+        if pd.api.types.is_numeric_dtype(combined[col]):
+            combined[col] = pd.to_numeric(combined[col], errors="coerce").astype("float64")
+    combined.to_parquet(FUND, index=False)
+    return len(combined)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tickers", default=None, help="Comma-separated subset")
@@ -263,6 +330,7 @@ def main():
     all_rows: list[dict] = []
     ok = 0
     newly_bad = 0
+    flushed = 0
     for t, cik in matched:
         try:
             rows = fetch_and_build(t, cik, px)
@@ -270,10 +338,9 @@ def main():
                 all_rows.extend(rows)
                 ok += 1
                 print(f"  {t}: {len(rows)} quarters (cik={cik})")
-            time.sleep(0.12)  # SEC: ≤10 req/s
+            time.sleep(0.12)
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
-                # CIK is bad — add to quarantine on the fly
                 bad_cik_set.add(t)
                 newly_bad += 1
                 print(f"  !! {t}: 404 (quarantined)")
@@ -283,104 +350,24 @@ def main():
         except Exception as e:
             print(f"  !! {t}: {e}")
             time.sleep(0.12)
+        if ok and ok % FLUSH_EVERY == 0 and all_rows:
+            n = merge_into_fundamentals(all_rows)
+            flushed += len({r.get("ticker") for r in all_rows})
+            print(f"  flushed → {n} fundamentals rows")
+            all_rows = []
     if newly_bad:
         quarantine = {"bad_ciks": {t: {"cik": cik_map[t], "reason": "SEC_404"} for t in bad_cik_set if t in cik_map}}
+        Path("backfill_checkpoints").mkdir(exist_ok=True)
         with open("backfill_checkpoints/bad_ciks.json", "w") as f:
             json.dump(quarantine, f, indent=2)
         print(f"Quarantined {newly_bad} new bad CIKs (total: {len(bad_cik_set)})")
-    if not all_rows:
-        print("No rows fetched.")
-        return
-
-    new_df = pd.DataFrame(all_rows)
-    new_df["source"] = "edgar_v2"
-    existing = pd.read_parquet(FUND) if FUND.exists() else pd.DataFrame()
-    
-    from update_fundamentals import _as_date
-    new_df["as_of_date"] = new_df["as_of_date"].map(_as_date)
-    if len(existing):
-        existing["as_of_date"] = existing["as_of_date"].map(_as_date)
-    
-    idx = ["ticker", "as_of_date"]
-    PROTECTED_SOURCES = {"edgar_v2", "html_10q"}
-    
-    if len(existing):
-        # Reset index to avoid MultiIndex dtype issues
-        ex = existing.reset_index() if not isinstance(existing.index, pd.RangeIndex) else existing.copy()
-        nd = new_df.reset_index() if not isinstance(new_df.index, pd.RangeIndex) else new_df.copy()
-        
-        # Cast ALL numeric columns to float64 BEFORE merge to avoid parquet overflow
-        # (int64 can't hold values > 2^63, and merge with NaN produces object dtype)
-        for df in [ex, nd]:
-            for col in df.columns:
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    df[col] = df[col].astype('float64')
-        
-        # For overlapping rows: overwrite unless existing is from edgar_v2 or html_10q
-        merged = ex.merge(nd, on=idx, how='left', suffixes=('_old', '_new'))
-        
-        # Find overlapping rows
-        overlap_mask = merged['source_new'].notna()
-        
-        if overlap_mask.any():
-            # Find rows we CAN overwrite (not protected)
-            protected_mask = merged.loc[overlap_mask, 'source_old'].isin(PROTECTED_SOURCES)
-            overwrite_mask = overlap_mask & ~protected_mask
-            
-            # For overwriting rows: replace all columns from new data
-            for col in nd.columns:
-                if col == 'source':
-                    continue
-                new_col = f"{col}_new"
-                if new_col in merged.columns:
-                    merged.loc[overwrite_mask, col] = merged.loc[overwrite_mask, new_col]
-            
-            n_overwritten = overwrite_mask.sum()
-            n_protected = protected_mask.sum()
-            print(f"  Overwritten: {n_overwritten}, Protected: {n_protected}")
-            
-            # Also fill NaN cells in remaining overlap where existing is weaker
-            remaining_mask = overlap_mask & protected_mask
-            FILL_COLS = [
-                "market_cap", "market_cap_b", "total_assets", "total_assets_b",
-                "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
-                "debt_to_equity", "shares_outstanding", "interest_coverage",
-                "earnings_stability", "total_revenue", "operating_income", "net_income",
-                "free_cash_flow", "operating_cash_flow", "capital_expenditure",
-            ]
-            n_filled = 0
-            for c in FILL_COLS:
-                old_col = f"{c}_old"
-                new_col = f"{c}_new"
-                if old_col not in merged.columns or new_col not in merged.columns:
-                    continue
-                missing = merged.loc[remaining_mask, old_col].isna() & merged.loc[remaining_mask, new_col].notna()
-                if missing.any():
-                    merged.loc[missing, c] = merged.loc[missing, new_col]
-                    n_filled += missing.sum()
-            print(f"  NaN cells filled: {n_filled}")
-            
-            # Drop _old and _new suffix columns
-            cols_to_drop = [c for c in merged.columns if c.endswith('_old') or c.endswith('_new')]
-            existing = merged.drop(columns=cols_to_drop)
-        
-        brand_new = new_df[~new_df.set_index(idx).index.isin(ex.set_index(idx).index)].copy()
-        combined = pd.concat([existing, brand_new], ignore_index=True) if len(brand_new) else existing
+    if all_rows:
+        n = merge_into_fundamentals(all_rows)
+        print(f"EDGAR v2 final: {n} rows after last flush ({ok} tickers ok)")
+    elif flushed:
+        print(f"EDGAR v2 done: {ok} tickers ok, already flushed")
     else:
-        combined = new_df
-    
-    if "last_updated" in combined.columns:
-        combined["last_updated"] = pd.to_datetime(combined["last_updated"], errors="coerce")
-    
-    # Deduplicate
-    combined = combined.sort_values(["ticker", "as_of_date"]).drop_duplicates(
-        subset=["ticker", "as_of_date"], keep="last"
-    )
-    
-    before = len(pd.read_parquet(FUND)) if FUND.exists() else 0
-    combined.to_parquet(FUND, index=False)
-    print(f"EDGAR v2: +{len(combined) - before} rows, {len(new_df)} fetched for {new_df['ticker'].nunique()} tickers → {FUND}")
-    print(f"  total fundamentals rows now: {len(combined)}")
+        print("No rows fetched.")
 
 
 if __name__ == "__main__":

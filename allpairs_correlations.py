@@ -56,17 +56,24 @@ def pairwise_long(corr: np.ndarray, cols: list[str], date, window: int, kind: st
 def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = True):
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
     prices["date"] = pd.to_datetime(prices["date"])
-    stocks = pd.read_parquet(STOCKS, columns=["ticker", "sector", "defensive_value_index", "growth_tech_index", "dual_pass_member"])
+    from analytics_common import load_membership
+    stocks = load_membership()
+    keep = [c for c in ["ticker", "sector", "defensive_value_index", "growth_tech_index", "dual_pass_member"] if c in stocks.columns]
+    stocks = stocks[keep] if keep else stocks
 
-    # prioritize dual + portfolio-ish + defensive + growth sample
-    priority = []
-    for col in ["dual_pass_member", "defensive_value_index", "growth_tech_index"]:
-        if col in stocks.columns:
-            priority += stocks.loc[stocks[col] == True, "ticker"].tolist()
-    # fill with most liquid by row count
+    # Sector-EW + within-sector (not N² on 10k). max_assets = per-sector cap.
+    if "sector" in stocks.columns:
+        sec_map = stocks.dropna(subset=["sector"]).set_index("ticker")["sector"].to_dict()
+    else:
+        sec_map = {}
     counts = prices.groupby("ticker").size().sort_values(ascending=False)
-    ordered = list(dict.fromkeys(priority + counts.index.tolist()))
-    tickers = ordered[:max_assets]
+    by_sec: dict[str, list] = {}
+    for t in counts.index:
+        by_sec.setdefault(sec_map.get(t, "_none"), []).append(t)
+    tickers = []
+    for sec, ts in by_sec.items():
+        tickers.extend(ts[: max(8, max_assets // max(len(by_sec), 1))])
+    tickers = list(dict.fromkeys(tickers))[: max(max_assets * 4, 80)]
 
     wide = (
         prices[prices.ticker.isin(tickers)]

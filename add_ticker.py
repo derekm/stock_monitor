@@ -5,7 +5,8 @@ add_ticker.py — One-command onboarding of new tickers.
 Adds ticker(s) to the universe and runs the full backfill + analytics chain:
 
   1. Look up name / sector / industry via yfinance (overridable).
-  2. Add to monitored_stocks.parquet (idempotent: skips if present).
+  2. Optional sleeve metadata in monitored_stocks (not the universe).
+     Universe membership is daily_prices after the price backfill.
   3. Backfill price history with --period max (full available history).
   4. Backfill fundamentals via backfill_preferred_fundamentals.py
      (EDGAR XBRL → yfinance quarterly → Polygon financials, additive;
@@ -71,7 +72,7 @@ def add_to_universe(ticker: str, name: str | None, sector: str | None,
     df = load_stocks()
     ticker = ticker.upper()
     if ticker in df["ticker"].astype(str).str.upper().values:
-        print(f"  [universe] {ticker} already in monitored_stocks — skipping add")
+        print(f"  [sleeve] {ticker} already in monitored_stocks — skipping sleeve add")
         return False
 
     meta = lookup_meta(ticker)

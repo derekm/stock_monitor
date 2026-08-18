@@ -285,6 +285,13 @@ def score_row(r, stress_p: float, fragility_map=None, skew_map=None, sigs: dict 
                 m_att = m_orig * (1.0 - 0.5 * stress_p)
                 score += (m_att - m_orig)  # remove the attenuated fraction
                 reasons.append(f"momentum_attenuated_{0.5*stress_p:.0%}")
+    if r.get("mos_pass"):
+        score += 0.08
+        reasons.append("mos_pass")
+    dd = r.get("distrust_discount")
+    if dd is not None and pd.notna(dd):
+        score *= float(np.clip(float(dd), 0.5, 1.0))
+        reasons.append("distrust_cash")
     return score, reasons
 
 
@@ -317,6 +324,8 @@ def build() -> pd.DataFrame:
             if "ticker" in keep:
                 df = df.merge(extra[keep], on="ticker", how="left", suffixes=("", "_x"))
     # signal aggregator composite (OOS IC-weighted blend of 5 families)
+    if "mos_pass" in df.columns:
+        pass  # consumed in score()
     if AGG.exists():
         agg = pd.read_parquet(AGG)
         keep = [c for c in ("ticker", "composite", "rank") if c in agg.columns]

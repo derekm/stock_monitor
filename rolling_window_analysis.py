@@ -24,7 +24,8 @@ OUT_STAB = DATA_DIR / "rolling_screen_stability.parquet"
 
 
 def resolve(universe: str) -> list[str]:
-    stocks = pd.read_parquet(STOCKS)
+    from analytics_common import load_membership
+    stocks = load_membership()
     if universe == "all":
         prices = pd.read_parquet(PRICES, columns=["ticker"])
         return prices["ticker"].unique().tolist()
@@ -44,10 +45,24 @@ def resolve(universe: str) -> list[str]:
 
 
 def rolling_cumsum_2d(arr: np.ndarray, window: int) -> np.ndarray:
-    """Rolling sum for 2D array [dates x tickers] using cumsum."""
+    """Rolling sum for 2D array [dates x tickers]. CUDA/DirectML if large enough."""
     n_dates, n_tickers = arr.shape
     if n_dates < window:
         return np.full_like(arr, np.nan)
+    if n_tickers * n_dates > 200_000:
+        try:
+            import torch
+            from fractal_windows_gpu import _best_device
+            dev = _best_device()
+            if dev != "cpu":
+                t = torch.as_tensor(np.nan_to_num(arr), dtype=torch.float32, device=dev)
+                cum = torch.cumsum(t, dim=0)
+                out = torch.full_like(t, float("nan"))
+                z = torch.zeros((1, n_tickers), device=dev)
+                out[window - 1 :] = cum[window - 1 :] - torch.cat([z, cum[:-window]], dim=0)
+                return out.cpu().numpy()
+        except Exception:
+            pass
     cumsum = np.nancumsum(arr, axis=0)
     result = np.full_like(arr, np.nan)
     result[window-1:] = cumsum[window-1:] - np.vstack([np.zeros((1, n_tickers)), cumsum[:-window]])
@@ -191,9 +206,18 @@ def main():
     ap = argparse.ArgumentParser()
     add_index_args(ap, default="all")
     ap.add_argument("--window", type=int, default=63)
+    ap.add_argument("--universe", default="all")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
-    run((','.join(resolve_index_names_from_args(args, default_index='all')) or 'all'), args.window, save=True)
+    try:
+        from resumable_job import JobCheckpoint
+        ck = JobCheckpoint("rolling_window_analysis", "daily_prices")
+        tickers = resolve(args.universe)
+        if not ck.is_valid(tickers):
+            print("rolling checkpoint invalid (prices or universe changed) — full recompute")
+    except Exception:
+        pass
+    run(args.universe, args.window, save=args.save)
 
 
 if __name__ == "__main__":

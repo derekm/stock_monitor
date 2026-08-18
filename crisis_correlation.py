@@ -65,7 +65,8 @@ def vectorized_corr(block: np.ndarray) -> np.ndarray:
 def run(save: bool = True):
     # Load data with Polars
     prices = pl.read_parquet(PRICES, columns=["date", "ticker", "close"])
-    stocks = pl.read_parquet(STOCKS, columns=["ticker", "sector", "defensive_value_index", "growth_tech_index", "value_sleeve", "instrument_type"])
+    from analytics_common import load_membership
+    stocks = pl.from_pandas(load_membership())
     
     # Pivot to wide format (date x ticker) using Polars
     wide = prices.pivot(index="date", on="ticker", values="close").sort("date")

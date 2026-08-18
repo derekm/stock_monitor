@@ -597,6 +597,31 @@ def run(save: bool = True) -> dict[str, pl.DataFrame]:
     print("Generating composite signals...")
     latest_fund = fund.sort("as_of_date").group_by("ticker").tail(1)
     signals = generate_signals(trends, recovery, peer_signals, beta_signals, latest_fund, stocks)
+    try:
+        pdf = signals.to_pandas()
+        wacc_p = DATA_DIR / "wacc_per_ticker.parquet"
+        if wacc_p.exists() and "ev_ebitda" in pdf.columns:
+            w = pd.read_parquet(wacc_p)
+            pdf = pdf.merge(w[["ticker", "wacc"]].drop_duplicates("ticker"), on="ticker", how="left")
+        gcol = next((c for c in pdf.columns if "revenue_growth" in c or c.endswith("roe_slope_per_period")), None)
+        y = pd.to_numeric(pdf.get("ev_ebitda"), errors="coerce")
+        X = pd.DataFrame({
+            "g": pd.to_numeric(pdf[gcol], errors="coerce") if gcol else np.nan,
+            "roic": pd.to_numeric(pdf.get("roic"), errors="coerce"),
+            "wacc": pd.to_numeric(pdf.get("wacc"), errors="coerce"),
+        })
+        mask = y.notna() & X.notna().all(axis=1)
+        if mask.sum() > 30:
+            xm = np.column_stack([np.ones(mask.sum()), X.loc[mask].values])
+            coef, *_ = np.linalg.lstsq(xm, y.loc[mask].values, rcond=None)
+            pred = xm @ coef
+            resid = pd.Series(np.nan, index=pdf.index)
+            resid.loc[mask] = y.loc[mask].values - pred
+            pdf["multiple_residual"] = resid
+            signals = pl.from_pandas(pdf)
+            print(f"  multiple_residual: {mask.sum()} names")
+    except Exception as e:
+        print(f"  residual skip: {e}")
     print(f"  Final signals: {len(signals)} tickers")
 
     if "fundamental_signal" in signals.columns:

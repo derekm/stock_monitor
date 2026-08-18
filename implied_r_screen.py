@@ -25,6 +25,8 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import io
+import requests
 from scipy.interpolate import interp1d
 
 DATA_DIR = Path(__file__).parent
@@ -136,16 +138,46 @@ def load_shiller_erp() -> pd.DataFrame:
     # At ratio 0.8 → ERP ~ 6.5% (cheap)
     spy["erp"] = 0.045 - (spy["price_to_sma200"] - 1.0) * 0.10
     spy["erp"] = spy["erp"].clip(0.02, 0.10)
-    spy["source"] = "shiller_earnings_yield_proxy"
-    
+    spy["source"] = "spy_sma_heuristic"
     return spy[["date", "erp", "source"]].dropna(subset=["erp"])
+
+
+def load_cape_erp() -> pd.DataFrame:
+    """Shiller CAPE ERP = 1/PE10 - long rate. Uses datahub s-and-p-500 series."""
+    urls = [
+        "https://raw.githubusercontent.com/datasets/s-and-p-500/master/data/data.csv",
+        "https://datahub.io/core/s-and-p-500/r/data.csv",
+    ]
+    UA = {"User-Agent": "personal-research derek.moore@example.com"}
+    raw = None
+    for url in urls:
+        try:
+            r = requests.get(url, headers=UA, timeout=30)
+            if r.status_code == 200 and "PE10" in r.text[:2000] or "PE10" in r.text:
+                raw = pd.read_csv(io.StringIO(r.text))
+                break
+        except Exception:
+            continue
+    if raw is None or raw.empty:
+        print("WARNING: CAPE series unavailable — falling back to Damodaran ERP")
+        return load_damodaran_erp("semi_annual")
+    raw.columns = [c.strip() for c in raw.columns]
+    pe = "PE10" if "PE10" in raw.columns else [c for c in raw.columns if "PE" in c.upper()][0]
+    raw["date"] = pd.to_datetime(raw["Date"] if "Date" in raw.columns else raw.iloc[:, 0], errors="coerce")
+    raw["cape"] = pd.to_numeric(raw[pe], errors="coerce")
+    rf_col = next((c for c in raw.columns if "Long" in c or "Interest" in c), None)
+    rf = pd.to_numeric(raw[rf_col], errors="coerce") / 100.0 if rf_col else 0.0418
+    out = raw.dropna(subset=["date", "cape"]).copy()
+    out["erp"] = (1.0 / out["cape"] - rf).clip(0.01, 0.15)
+    out["source"] = "shiller_cape"
+    return out[["date", "erp", "source"]]
 
 
 def load_erp(erp_source: str = "damodaran", erp_freq: str = "semi_annual") -> pd.DataFrame:
     """Load ERP from the specified source.
     
     Args:
-        erp_source: 'damodaran', 'shiller', or 'interpolated'
+        erp_source: 'damodaran', 'interpolated', 'spy_sma', 'cape' (shiller→cape)
         erp_freq: 'annual', 'semi_annual', 'monthly', 'daily'
     
     Returns DataFrame with columns: [date, erp, source]
@@ -154,7 +186,9 @@ def load_erp(erp_source: str = "damodaran", erp_freq: str = "semi_annual") -> pd
         return load_damodaran_erp(freq=erp_freq if erp_freq != "daily" else "semi_annual")
     elif erp_source == "interpolated":
         return load_damodaran_erp(freq=erp_freq)
-    elif erp_source == "shiller":
+    elif erp_source in ("cape", "shiller"):
+        return load_cape_erp()
+    elif erp_source == "spy_sma":
         return load_shiller_erp()
     else:
         raise ValueError(f"Unknown ERP source: {erp_source}")
@@ -440,7 +474,8 @@ def compare_erp_sources() -> pd.DataFrame:
         "damodaran_semi": ("damodaran", "semi_annual"),
         "damodaran_monthly": ("interpolated", "monthly"),
         "damodaran_daily": ("interpolated", "daily"),
-        "shiller": ("shiller", "daily"),
+        "spy_sma": ("spy_sma", "daily"),
+        "cape": ("cape", "monthly"),
     }
     
     results = []
@@ -471,7 +506,7 @@ def main():
     ap.add_argument("--min-cap", type=float, default=0.0, help="min market cap $B")
     ap.add_argument("--top", type=int, default=25, help="rows to print per verdict")
     ap.add_argument("--erp", default="damodaran", 
-                    choices=["damodaran", "shiller", "interpolated"],
+                    choices=["damodaran", "interpolated", "spy_sma", "cape", "shiller"],
                     help="ERP source")
     ap.add_argument("--erp-freq", default="semi_annual",
                     choices=["annual", "semi_annual", "monthly", "daily"],

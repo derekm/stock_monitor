@@ -63,7 +63,8 @@ def _compute_momentum_all(wide: pd.DataFrame) -> pd.DataFrame:
 
 
 def _sector_map() -> dict[str, str]:
-    stocks = pd.read_parquet(STOCKS) if STOCKS.exists() else pd.DataFrame()
+    from analytics_common import load_membership
+    stocks = load_membership()
     if stocks.empty or "ticker" not in stocks.columns:
         return {}
     out = {}

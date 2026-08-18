@@ -247,13 +247,28 @@ def synthetic_rating_from_coverage(interest_coverage: float | None) -> tuple[str
     return "Ca", 0.1000
 
 
+def latest_implied_erp() -> float:
+    """Most recent Damodaran implied ERP from erp_history.parquet, else 0.0423."""
+    p = DATA_DIR / "erp_history.parquet"
+    if not p.exists():
+        return 0.0423
+    df = pd.read_parquet(p)
+    col = "implied_erp" if "implied_erp" in df.columns else "erp"
+    df = df.dropna(subset=[col]).sort_values("date" if "date" in df.columns else df.columns[0])
+    if df.empty:
+        return 0.0423
+    return float(df.iloc[-1][col])
+
+
 def compute_wacc_per_ticker(
     fundamentals: pd.DataFrame,
-    erp_us: float = 0.0423,
+    erp_us: float | None = None,
     risk_free: float = 0.0418,
     marginal_tax: float = 0.21,
 ) -> pd.DataFrame:
-    """Vectorized WACC. Latest row per ticker."""
+    """Vectorized WACC. Latest row per ticker. ERP defaults to latest Damodaran series."""
+    if erp_us is None:
+        erp_us = latest_implied_erp()
     if fundamentals.empty:
         return pd.DataFrame()
     df = fundamentals.copy()
