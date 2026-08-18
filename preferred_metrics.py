@@ -668,16 +668,35 @@ def build_table() -> pd.DataFrame:
                 except np.linalg.LinAlgError:
                     break
             p_hat = 1.0 / (1.0 + np.exp(-np.clip(X.values @ b, -20, 20)))
+            # DIAGNOSTIC ONLY — do not feed this into distrust_p_bad.
+            #
+            # The fitted logit was validated out-of-sample (distrust_oos_eval.py:
+            # 6 embargoed walk-forward folds, point-in-time features, labels at 71
+            # quarterly rebalances) and FAILED: pooled AUC 0.591 on a >=$5M/day
+            # liquid universe, below the 0.65 gate and beaten by a single trailing
+            # volatility column (vol63, AUC 0.651). The previously reported
+            # in-script AUC was not out-of-sample -- it split rows by alphabetical
+            # ticker while every label came from the same final 63-day window.
+            #
+            # Because buy_candidates.py multiplies the composite score by
+            # distrust_discount (clipped to [0.5, 1.0]), blending this in at 60%
+            # changed the action label of 1,018 names and cut BUY from 1,016 to
+            # 578. distrust_p_bad therefore stays on the heuristic until a
+            # replacement clears the gate on the same harness.
             out["distrust_p_bad_fitted"] = np.clip(p_hat, 0.01, 0.80)
-            out["distrust_p_bad"] = (0.4 * out["distrust_p_bad"] + 0.6 * out["distrust_p_bad_fitted"]).clip(0, 0.8)
-            out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
             out["distrust_fit_n"] = int(mask.sum())
 
-            # Compute AUC on holdout (last 20% of tickers)
+            # In-sample-ish cross-sectional AUC, kept for continuity only.
+            #
+            # NOT out-of-sample: the split below is by ROW ORDER (alphabetical
+            # ticker) while every label comes from the SAME final 63-day window,
+            # so train and test share one identical market episode. It reads
+            # ~0.65 while the honest walk-forward number is 0.591.
+            # Use distrust_oos_eval.py for the real figure; do not gate on this.
             n = len(yy)
             split = int(n * 0.8)
             if n - split >= 10:  # need at least 10 test samples
-                # Simple train/test split by index order
+                # Cross-sectional split by index order (see caveat above)
                 xm_train, xm_test = xm[:split], xm[split:]
                 yy_train, yy_test = yy[:split], yy[split:]
                 # Re-fit on train
@@ -697,11 +716,16 @@ def build_table() -> pd.DataFrame:
                 from sklearn.metrics import roc_auc_score
                 try:
                     auc = roc_auc_score(yy_test, p_test)
-                    out["distrust_fit_auc"] = round(float(auc), 3)
+                    out["distrust_fit_auc_insample"] = round(float(auc), 3)
                 except Exception:
-                    out["distrust_fit_auc"] = np.nan
+                    out["distrust_fit_auc_insample"] = np.nan
             else:
-                out["distrust_fit_auc"] = np.nan
+                out["distrust_fit_auc_insample"] = np.nan
+            # Honest walk-forward result from distrust_oos_eval.py (liquid
+            # universe, embargoed folds). Static because it is a validation
+            # outcome, not a per-run quantity.
+            out["distrust_fit_auc_oos"] = 0.591
+            out["distrust_fit_gate_pass"] = False
     except Exception:
         pass
 
@@ -732,7 +756,8 @@ def main():
         "quality_score", "value_score", "wacc", "life_cycle_stage",
         "fair_pe", "fair_ev_ebitda", "discount_to_fair", "mos_pass",
         "w_current", "suggested_w_max", "sizing_action",
-        "distrust_p_bad", "distrust_discount", "distrust_fit_auc", "distrust_fit_n",
+        "distrust_p_bad", "distrust_discount", "distrust_fit_auc_insample",
+        "distrust_fit_auc_oos", "distrust_fit_n",
     ]
     print(df[show].to_string(index=False, max_rows=30))
 

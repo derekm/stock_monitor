@@ -64,14 +64,47 @@ def test_edgar_merge():
 
 
 def test_distrust_fit():
-    """Test that distrust_fit_auc column exists in preferred_metrics."""
-    print("Testing distrust_fit_auc...")
+    """The fitted distrust logit must stay DIAGNOSTIC, not drive distrust_discount.
+
+    It failed honest OOS validation (0.591 walk-forward on the liquid universe,
+    below the 0.65 gate, beaten by vol63 alone), and buy_candidates.py
+    multiplies its score by distrust_discount -- so a regression that re-blends
+    the fitted value into distrust_p_bad would silently move live decisions.
+    """
+    print("Testing distrust fit is diagnostic-only...")
+    import numpy as np
     from preferred_metrics import build_table
-    
+
     df = build_table()
-    assert "distrust_fit_auc" in df.columns, "distrust_fit_auc column missing"
-    assert df["distrust_fit_auc"].notna().sum() > 0, "distrust_fit_auc should have some values"
-    print(f"  distrust_fit_auc present with {df['distrust_fit_auc'].notna().sum()} non-null values ✓")
+    for c in ("distrust_p_bad", "distrust_discount", "distrust_p_bad_fitted",
+              "distrust_fit_auc_insample", "distrust_fit_auc_oos"):
+        assert c in df.columns, f"{c} column missing"
+
+    # The honest OOS number must be recorded and must fail the gate.
+    oos = float(df["distrust_fit_auc_oos"].dropna().iloc[0])
+    assert oos < 0.65, f"recorded OOS AUC {oos} unexpectedly passes the gate"
+    assert not bool(df["distrust_fit_gate_pass"].dropna().iloc[0]), "gate must be False"
+
+    # distrust_discount must equal the HEURISTIC form, not the 40/60 blend.
+    p_h = pd.to_numeric(df["distrust_p_bad"], errors="coerce")
+    p_f = pd.to_numeric(df["distrust_p_bad_fitted"], errors="coerce")
+    ex = pd.to_numeric(df["excess_cash_share"], errors="coerce").fillna(0)
+    dd = pd.to_numeric(df["distrust_discount"], errors="coerce")
+
+    expect_heur = (1.0 - p_h * ex).round(4)
+    blend = (0.4 * p_h + 0.6 * p_f).clip(0, 0.8)
+    expect_blend = (1.0 - blend * ex).round(4)
+
+    m = dd.notna() & expect_heur.notna()
+    assert np.allclose(dd[m], expect_heur[m], atol=1e-4), \
+        "distrust_discount does not match the heuristic form"
+
+    # And it must be measurably DIFFERENT from the blended form, so this test
+    # actually detects a re-blend regression rather than passing vacuously.
+    differs = (~np.isclose(expect_heur[m], expect_blend[m], atol=1e-4)).sum()
+    assert differs > 0, "heuristic and blend are indistinguishable; test is vacuous"
+    print(f"  discount is heuristic-only (differs from blend on {differs} names) ✓")
+    print(f"  recorded OOS AUC {oos} < 0.65 gate, gate_pass=False ✓")
     return True
 
 

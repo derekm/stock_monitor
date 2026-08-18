@@ -25,6 +25,12 @@ Automated **preferred metrics** for screening, sizing, and inclusion decisions.
 - Per-name weight caps (vol-target aware when `vol_targets.csv` present)
 - Actions: `prefer_add` / `hold_or_add` / `hold` / `reduce_or_avoid`
 
+### Cash-distrust discount
+- `distrust_p_bad` — heuristic P(bad outcome) from decline stage, ARISTA flag, and quality.
+- `distrust_discount` = `1 − distrust_p_bad × excess_cash_share`. `buy_candidates.py` multiplies its own score by this, clipped to [0.5, 1.0], so it moves live BUY/ACCUMULATE/WATCH labels. Note `composite_score` here is computed *before* the discount and is not scaled by it.
+- `distrust_p_bad_fitted` — logit fit, **diagnostic only**. It failed honest walk-forward validation (`distrust_oos_eval.py`): pooled OOS AUC **0.591** on a ≥$5M/day liquid universe, under the 0.65 gate and beaten by trailing volatility alone (`vol63` 0.651). It is deliberately NOT blended into `distrust_p_bad`; `test_basic.py::test_distrust_fit` fails if a re-blend is reintroduced.
+- `distrust_fit_auc_insample` — the old in-script number (~0.65). NOT out-of-sample: it splits rows by alphabetical ticker while every label comes from the same final 63-day window. Kept for continuity; do not gate on it. `distrust_fit_auc_oos` (0.591) and `distrust_fit_gate_pass` (False) record the honest result.
+
 ## Decision labels
 
 | Label | Meaning |
