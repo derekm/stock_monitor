@@ -25,11 +25,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-try:
-    from tensor_ops import rolling_slope, get_device
-    HAS_TENSOR_OPS = True
-except ImportError:
-    HAS_TENSOR_OPS = False
+from tensor_ops import rolling_slope, get_device
 
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
@@ -265,18 +261,7 @@ def analyze_fundamental_trends(fund: pl.DataFrame, min_obs: int = 4) -> pl.DataF
 
         # Rolling slope per window (use max window = number of dates)
         window = min(wide.height, 12)  # max 12 quarters = 3 years
-        if HAS_TENSOR_OPS:
-            slopes = rolling_slope(arr, window, get_device())
-        else:
-            # CPU fallback
-            slopes = np.full_like(arr, np.nan)
-            for i in range(arr.shape[0]):
-                y = arr[i]
-                mask = ~np.isnan(y)
-                if mask.sum() >= min_obs:
-                    x = np.arange(len(y), dtype=float)
-                    if len(x) > 1 and np.std(x) > 0:
-                        slopes[i] = np.cov(x, y)[0, 1] / np.var(x)
+        slopes = rolling_slope(arr, window, get_device())
 
         # Extract latest slope per ticker
         latest_slopes = slopes[:, -1] if slopes.shape[1] > 0 else np.full(arr.shape[0], np.nan)
@@ -311,7 +296,22 @@ def analyze_fundamental_trends(fund: pl.DataFrame, min_obs: int = 4) -> pl.DataF
                 "earliest_value": float(y[0]) if mask[0] else None,
             })
 
-    return pl.DataFrame(results) if results else pl.DataFrame()
+    return pl.DataFrame(results, schema_overrides={
+        "pct_change": pl.Float64,
+        "recent_vs_early_pct": pl.Float64,
+        "latest_value": pl.Float64,
+        "earliest_value": pl.Float64,
+    }) if results else pl.DataFrame(schema={
+        "ticker": pl.String,
+        "metric": pl.String,
+        "slope_per_period": pl.Float64,
+        "total_change": pl.Float64,
+        "pct_change": pl.Float64,
+        "recent_vs_early_pct": pl.Float64,
+        "n_obs": pl.Int64,
+        "latest_value": pl.Float64,
+        "earliest_value": pl.Float64,
+    })
 
 
 def detect_recovery(trends: pl.DataFrame) -> pl.DataFrame:

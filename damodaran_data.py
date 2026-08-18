@@ -227,6 +227,71 @@ def build_crp_data() -> pd.DataFrame:
     return df
 
 
+def fetch_crp_from_source() -> pd.DataFrame:
+    """Fetch CRP from Damodaran's spreadsheet, cache to parquet, return DataFrame.
+    
+    Downloads from CRP_URL, parses Excel, caches to CRP_COUNTRY with as_of date.
+    Falls back to static CRP_STATIC_2026 if download fails.
+    """
+    # Try to download fresh
+    try:
+        print(f"Fetching CRP from {CRP_URL}...")
+        resp = requests.get(CRP_URL, timeout=30)
+        resp.raise_for_status()
+        xl = pd.read_excel(io.BytesIO(resp.content), sheet_name=None)
+        
+        for sheet_name, df in xl.items():
+            if "Country" in str(df.columns) or "CRP" in str(df.columns):
+                df.columns = [str(c).strip() for c in df.columns]
+                # Try to find country and CRP columns
+                country_col = None
+                crp_col = None
+                for c in df.columns:
+                    cl = c.lower()
+                    if "country" in cl or "nation" in cl:
+                        country_col = c
+                    if "crp" in cl or "risk premium" in cl or "country risk" in cl:
+                        crp_col = c
+                
+                if country_col and crp_col:
+                    clean = df[[country_col, crp_col]].copy()
+                    clean.columns = ["country", "crp"]
+                    clean = clean.dropna()
+                    clean["crp"] = pd.to_numeric(clean["crp"], errors="coerce")
+                    clean = clean.dropna(subset=["crp"])
+                    clean["as_of"] = pd.Timestamp(date.today())
+                    clean["source"] = f"damodaran_ctryprem_{date.today().year}"
+                    
+                    # Save cache
+                    clean.to_parquet(CRP_COUNTRY, index=False)
+                    print(f"  Cached {len(clean)} countries to {CRP_COUNTRY}")
+                    return clean
+        
+        print("Warning: Could not parse CRP sheet, using static fallback")
+    except Exception as e:
+        print(f"Warning: Failed to fetch CRP data: {e}, using static fallback")
+    
+    # Fallback to static
+    return build_crp_data()
+
+
+def load_crp(force_refresh: bool = False) -> pd.DataFrame:
+    """Load CRP data, downloading if cache missing or force_refresh=True."""
+    if not force_refresh and CRP_COUNTRY.exists():
+        try:
+            df = pd.read_parquet(CRP_COUNTRY)
+            # Check if cache is recent (within 6 months)
+            if "as_of" in df.columns:
+                cache_date = pd.to_datetime(df["as_of"].iloc[0])
+                if (pd.Timestamp(date.today()) - cache_date).days < 180:
+                    print(f"Using cached CRP from {cache_date.date()} ({len(df)} countries)")
+                    return df
+        except Exception:
+            pass
+    
+    return fetch_crp_from_source()
+
+
 def build_sector_betas() -> pd.DataFrame:
     """Build sector beta data"""
     rows = []
@@ -501,7 +566,7 @@ def main():
     
     if args.all or args.fetch_crp:
         print("Building CRP data...")
-        crp = build_crp_data()
+        crp = load_crp(force_refresh=True)
         pq.write_table(pa.Table.from_pandas(crp, preserve_index=False), CRP_COUNTRY)
         print(f"Saved CRP data → {CRP_COUNTRY} ({len(crp)} rows)")
     

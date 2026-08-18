@@ -348,7 +348,7 @@ def build_table() -> pd.DataFrame:
             # Take first (highest rank, latest date) per ticker
             latest_real = real.groupby("ticker", as_index=False).first()
             latest_real = latest_real.drop(columns=["_src_rank"])
-            
+
             # Fallback for tickers that only have seed sources
             latest_any = fund.groupby("ticker", as_index=False).tail(1)
             have = set(latest_real["ticker"])
@@ -413,25 +413,25 @@ def build_table() -> pd.DataFrame:
             }
 
     # Load Damodaran data
-        # Load Damodaran data from pre-computed parquet files
-        wacc_data = {}
-        if WACC_FILE.exists():
-            wacc_df = pd.read_parquet(WACC_FILE)
-            wacc_data = wacc_df.set_index("ticker").to_dict("index")
+    # Load Damodaran data from pre-computed parquet files
+    wacc_data = {}
+    if WACC_FILE.exists():
+        wacc_df = pd.read_parquet(WACC_FILE)
+        wacc_data = wacc_df.set_index("ticker").to_dict("index")
 
-        life_cycle_data = {}
-        if LIFE_CYCLE_FILE.exists():
-            lc_df = pd.read_parquet(LIFE_CYCLE_FILE)
-            life_cycle_data = lc_df.set_index("ticker")["life_cycle_stage"].to_dict()
+    life_cycle_data = {}
+    if LIFE_CYCLE_FILE.exists():
+        lc_df = pd.read_parquet(LIFE_CYCLE_FILE)
+        life_cycle_data = lc_df.set_index("ticker")["life_cycle_stage"].to_dict()
 
-        fair_mult_data = {}
-        if FAIR_MULTIPLES_FILE.exists():
-            fm_df = pd.read_parquet(FAIR_MULTIPLES_FILE)
-            fm_df["as_of_date"] = pd.to_datetime(fm_df["as_of_date"], errors="coerce")
-            fm_df = fm_df.sort_values("as_of_date").groupby("ticker", as_index=False).tail(1)
-            fair_mult_data = fm_df.set_index("ticker").to_dict("index")
+    fair_mult_data = {}
+    if FAIR_MULTIPLES_FILE.exists():
+        fm_df = pd.read_parquet(FAIR_MULTIPLES_FILE)
+        fm_df["as_of_date"] = pd.to_datetime(fm_df["as_of_date"], errors="coerce")
+        fm_df = fm_df.sort_values("as_of_date").groupby("ticker", as_index=False).tail(1)
+        fair_mult_data = fm_df.set_index("ticker").to_dict("index")
 
-        # Compute revenue growth inline from total_revenue history
+    # Compute revenue growth inline from total_revenue history
     # This is needed for life cycle classification and fair multiples
     if "total_revenue" in fund.columns and fund["total_revenue"].notna().sum() > 0:
         rev_growth_map = {}
@@ -484,199 +484,229 @@ def build_table() -> pd.DataFrame:
                 fair_mult_data.update(fdf.set_index("ticker").to_dict("index"))
 
     # Vectorized scoring — compute all tickers at once
-        q = score_quality_vectorized(fund)
-        v = score_value_vectorized(fund)
-        lev = leverage_metrics_vectorized(fund)
+    q = score_quality_vectorized(fund)
+    v = score_value_vectorized(fund)
+    lev = leverage_metrics_vectorized(fund)
 
-        # composite: quality + value (Buffett wants both when possible)
-        composite = 0.55 * q["quality_score"] + 0.45 * v["value_score"]
-        # boost if both pass
-        both_pass = q["buffett_pass"] & v["trifecta_pass"]
-        composite = np.where(both_pass, np.minimum(1.0, composite + 0.08), composite)
+    # composite: quality + value (Buffett wants both when possible)
+    composite = 0.55 * q["quality_score"] + 0.45 * v["value_score"]
+    # boost if both pass
+    both_pass = q["buffett_pass"] & v["trifecta_pass"]
+    composite = np.where(both_pass, np.minimum(1.0, composite + 0.08), composite)
 
-        # Vectorized leverage adjustment
-        adj = pd.Series(0.0, index=fund.index)
-        adj = np.where(lev["leverage_flag"] == "cheap-assets", 0.03, adj)
-        adj = np.where(lev["leverage_flag"] == "levered-assets", -0.10, adj)
-        adj = np.where(lev["leverage_flag"] == "low-MCA", -0.02, adj)
-        composite = np.clip(composite + adj, 0.0, 1.0)
+    # Vectorized leverage adjustment
+    adj = pd.Series(0.0, index=fund.index)
+    adj = np.where(lev["leverage_flag"] == "cheap-assets", 0.03, adj)
+    adj = np.where(lev["leverage_flag"] == "levered-assets", -0.10, adj)
+    adj = np.where(lev["leverage_flag"] == "low-MCA", -0.02, adj)
+    composite = np.clip(composite + adj, 0.0, 1.0)
 
-        # dual flag
-        dual = q["buffett_pass"] & v["trifecta_pass"]
-        # Apply quality_trend_demote
-        demote_tickers = set(quality_trend_demote.keys())
-        dual = dual & ~fund["ticker"].isin(demote_tickers)
-        # earnings_stability < 0.5 guard
-        dual = dual & fund["earnings_stability"].notna() & (fund["earnings_stability"] >= 0.5)
-        # levered-assets guard
-        levered_mask = (lev["leverage_flag"] == "levered-assets") & (
-            fund["interest_coverage"].isna() | (fund["interest_coverage"] < 5.0)
-        )
-        dual = dual & ~levered_mask
+    # dual flag
+    dual = q["buffett_pass"] & v["trifecta_pass"]
+    # Apply quality_trend_demote
+    demote_tickers = set(quality_trend_demote.keys())
+    dual = dual & ~fund["ticker"].isin(demote_tickers)
+    # earnings_stability < 0.5 guard
+    dual = dual & fund["earnings_stability"].notna() & (fund["earnings_stability"] >= 0.5)
+    # levered-assets guard
+    levered_mask = (lev["leverage_flag"] == "levered-assets") & (
+        fund["interest_coverage"].isna() | (fund["interest_coverage"] < 5.0)
+    )
+    dual = dual & ~levered_mask
 
-        # Vectorized sizing
-        base_cap = pd.Series(0.03, index=fund.index)
-        base_cap = np.where(composite >= 0.75, 0.12, base_cap)
-        base_cap = np.where((composite >= 0.60) & (composite < 0.75), 0.08, base_cap)
-        base_cap = np.where((composite >= 0.45) & (composite < 0.60), 0.05, base_cap)
+    # Vectorized sizing
+    base_cap = pd.Series(0.03, index=fund.index)
+    base_cap = np.where(composite >= 0.75, 0.12, base_cap)
+    base_cap = np.where((composite >= 0.60) & (composite < 0.75), 0.08, base_cap)
+    base_cap = np.where((composite >= 0.45) & (composite < 0.60), 0.05, base_cap)
 
-        # Apply vol targets
-        vt_series = fund["ticker"].map(vt)
-        cap = pd.Series(base_cap, index=fund.index)
-        has_vt = vt_series.notna() & np.isfinite(vt_series)
-        cap = np.where(has_vt, np.minimum(base_cap, vt_series), cap)
+    # Apply vol targets
+    vt_series = fund["ticker"].map(vt)
+    cap = pd.Series(base_cap, index=fund.index)
+    has_vt = vt_series.notna() & np.isfinite(vt_series)
+    cap = np.where(has_vt, np.minimum(base_cap, vt_series), cap)
 
-        sizing_action = pd.Series("reduce_or_avoid", index=fund.index, dtype=object)
-        sizing_action = np.where(composite >= 0.75, "prefer_add", sizing_action)
-        sizing_action = np.where((composite >= 0.70) & (composite < 0.75), "hold_or_add", sizing_action)
-        sizing_action = np.where((composite >= 0.50) & (composite < 0.70), "hold", sizing_action)
+    sizing_action = pd.Series("reduce_or_avoid", index=fund.index, dtype=object)
+    sizing_action = np.where(composite >= 0.75, "prefer_add", sizing_action)
+    sizing_action = np.where((composite >= 0.70) & (composite < 0.75), "hold_or_add", sizing_action)
+    sizing_action = np.where((composite >= 0.50) & (composite < 0.70), "hold", sizing_action)
 
-        # Decision
-        decision = pd.Series("AVOID", index=fund.index, dtype=object)
-        decision = np.where(composite >= 0.35, "WATCH", decision)
-        decision = np.where(composite >= 0.50, "SATELLITE", decision)
-        decision = np.where(q["buffett_pass"] & (composite >= 0.55), "INCLUDE_QUALITY", decision)
-        decision = np.where(v["trifecta_pass"] & (composite >= 0.45), "INCLUDE_VALUE", decision)
-        decision = np.where(dual, "INCLUDE_CORE", decision)
+    # Decision
+    decision = pd.Series("AVOID", index=fund.index, dtype=object)
+    decision = np.where(composite >= 0.35, "WATCH", decision)
+    decision = np.where(composite >= 0.50, "SATELLITE", decision)
+    decision = np.where(q["buffett_pass"] & (composite >= 0.55), "INCLUDE_QUALITY", decision)
+    decision = np.where(v["trifecta_pass"] & (composite >= 0.45), "INCLUDE_VALUE", decision)
+    decision = np.where(dual, "INCLUDE_CORE", decision)
 
-        # Build flags DataFrame
-        flags_df = pd.DataFrame({
-            "sector": fund["ticker"].map({r["ticker"]: r.get("sector") for _, r in stocks.iterrows()}) if len(stocks) else None,
-            "in_portfolio": fund["ticker"].map({r["ticker"]: bool(r.get("in_portfolio", False)) for _, r in stocks.iterrows()}) if len(stocks) else False,
-            "defensive_value_index": fund["ticker"].map({r["ticker"]: bool(r.get("defensive_value_index", False)) for _, r in stocks.iterrows()}) if len(stocks) else False,
-            "growth_tech_index": fund["ticker"].map({r["ticker"]: bool(r.get("growth_tech_index", False)) for _, r in stocks.iterrows()}) if len(stocks) else False,
-            "growth_sleeve": fund["ticker"].map({r["ticker"]: r.get("growth_sleeve") for _, r in stocks.iterrows()}) if len(stocks) else None,
-        }, index=fund.index)
+    # Build flags DataFrame
+    flags_df = pd.DataFrame({
+        "sector": fund["ticker"].map({r["ticker"]: r.get("sector") for _, r in stocks.iterrows()}) if len(stocks) else None,
+        "in_portfolio": fund["ticker"].map({r["ticker"]: bool(r.get("in_portfolio", False)) for _, r in stocks.iterrows()}) if len(stocks) else False,
+        "defensive_value_index": fund["ticker"].map({r["ticker"]: bool(r.get("defensive_value_index", False)) for _, r in stocks.iterrows()}) if len(stocks) else False,
+        "growth_tech_index": fund["ticker"].map({r["ticker"]: bool(r.get("growth_tech_index", False)) for _, r in stocks.iterrows()}) if len(stocks) else False,
+        "growth_sleeve": fund["ticker"].map({r["ticker"]: r.get("growth_sleeve") for _, r in stocks.iterrows()}) if len(stocks) else None,
+    }, index=fund.index)
 
-        # Holdings weights
-        h_w_series = fund["ticker"].map(h_w).fillna(0.0)
+    # Holdings weights
+    h_w_series = fund["ticker"].map(h_w).fillna(0.0)
 
-        # Damodaran data
-        wacc_df = pd.DataFrame(wacc_data).T if wacc_data else pd.DataFrame()
-        lc_series = pd.Series(life_cycle_data)
-        fair_df = pd.DataFrame(fair_mult_data).T if fair_mult_data else pd.DataFrame()
+    # Damodaran data
+    wacc_df = pd.DataFrame(wacc_data).T if wacc_data else pd.DataFrame()
+    lc_series = pd.Series(life_cycle_data)
+    fair_df = pd.DataFrame(fair_mult_data).T if fair_mult_data else pd.DataFrame()
 
-        wacc_vals = fund["ticker"].map(wacc_df["wacc"]) if "wacc" in wacc_df.columns else None
-        coe_vals = fund["ticker"].map(wacc_df["cost_of_equity"]) if "cost_of_equity" in wacc_df.columns else None
-        cod_vals = fund["ticker"].map(wacc_df["cost_of_debt"]) if "cost_of_debt" in wacc_df.columns else None
-        synth_vals = fund["ticker"].map(wacc_df["synthetic_rating"]) if "synthetic_rating" in wacc_df.columns else None
-        lc_vals = fund["ticker"].map(lc_series)
-        fair_pe_vals = fund["ticker"].map(fair_df["fair_pe"]) if "fair_pe" in fair_df.columns else None
-        fair_ev_vals = fund["ticker"].map(fair_df["fair_ev_ebitda"]) if "fair_ev_ebitda" in fair_df.columns else None
-        fair_sales_vals = fund["ticker"].map(fair_df["fair_ev_sales"]) if "fair_ev_sales" in fair_df.columns else None
-        fair_pb_vals = fund["ticker"].map(fair_df["fair_pb"]) if "fair_pb" in fair_df.columns else None
+    wacc_vals = fund["ticker"].map(wacc_df["wacc"]) if "wacc" in wacc_df.columns else None
+    coe_vals = fund["ticker"].map(wacc_df["cost_of_equity"]) if "cost_of_equity" in wacc_df.columns else None
+    cod_vals = fund["ticker"].map(wacc_df["cost_of_debt"]) if "cost_of_debt" in wacc_df.columns else None
+    synth_vals = fund["ticker"].map(wacc_df["synthetic_rating"]) if "synthetic_rating" in wacc_df.columns else None
+    lc_vals = fund["ticker"].map(lc_series)
+    fair_pe_vals = fund["ticker"].map(fair_df["fair_pe"]) if "fair_pe" in fair_df.columns else None
+    fair_ev_vals = fund["ticker"].map(fair_df["fair_ev_ebitda"]) if "fair_ev_ebitda" in fair_df.columns else None
+    fair_sales_vals = fund["ticker"].map(fair_df["fair_ev_sales"]) if "fair_ev_sales" in fair_df.columns else None
+    fair_pb_vals = fund["ticker"].map(fair_df["fair_pb"]) if "fair_pb" in fair_df.columns else None
 
-        # Assemble output
-        out = pd.DataFrame({
-            "ticker": fund["ticker"].values,
-            "sector": flags_df["sector"].values,
-            "in_portfolio": flags_df["in_portfolio"].values,
-            "defensive_value_index": flags_df["defensive_value_index"].values,
-            "growth_tech_index": flags_df["growth_tech_index"].values,
-            "growth_sleeve": flags_df["growth_sleeve"].values,
-            "roe": fund["roe"].values,
-            "roic": fund["roic"].values,
-            "debt_to_equity": fund["debt_to_equity"].values,
-            "interest_coverage": fund["interest_coverage"].values,
-            "earnings_stability": fund["earnings_stability"].values,
-            "ev_ebitda": fund["ev_ebitda"].values,
-            "pb_ratio": fund["pb_ratio"].values,
-            "mktcap_to_assets": fund["mktcap_to_assets"].values,
-            **{col: q[col].values for col in q.columns},
-            **{col: v[col].values for col in v.columns},
-            **{col: lev[col].values for col in lev.columns},
-            "leverage_score_adj": adj.round(4),
-            "composite_score": np.round(composite, 4),
-            "w_current": h_w_series.round(4).values,
-            "suggested_w_max": np.round(cap, 4),
-            "sizing_action": sizing_action,
-            "wacc": wacc_vals,
-            "cost_of_equity": coe_vals,
-            "cost_of_debt": cod_vals,
-            "synthetic_rating": synth_vals,
-            "life_cycle_stage": lc_vals,
-            "fair_pe": fair_pe_vals,
-            "fair_ev_ebitda": fair_ev_vals,
-            "fair_ev_sales": fair_sales_vals,
-            "fair_pb": fair_pb_vals,
-            "decision": decision,
-        }, index=fund.index)
+    # Assemble output
+    out = pd.DataFrame({
+        "ticker": fund["ticker"].values,
+        "sector": flags_df["sector"].values,
+        "in_portfolio": flags_df["in_portfolio"].values,
+        "defensive_value_index": flags_df["defensive_value_index"].values,
+        "growth_tech_index": flags_df["growth_tech_index"].values,
+        "growth_sleeve": flags_df["growth_sleeve"].values,
+        "roe": fund["roe"].values,
+        "roic": fund["roic"].values,
+        "debt_to_equity": fund["debt_to_equity"].values,
+        "interest_coverage": fund["interest_coverage"].values,
+        "earnings_stability": fund["earnings_stability"].values,
+        "ev_ebitda": fund["ev_ebitda"].values,
+        "pb_ratio": fund["pb_ratio"].values,
+        "mktcap_to_assets": fund["mktcap_to_assets"].values,
+        **{col: q[col].values for col in q.columns},
+        **{col: v[col].values for col in v.columns},
+        **{col: lev[col].values for col in lev.columns},
+        "leverage_score_adj": adj.round(4),
+        "composite_score": np.round(composite, 4),
+        "w_current": h_w_series.round(4).values,
+        "suggested_w_max": np.round(cap, 4),
+        "sizing_action": sizing_action,
+        "wacc": wacc_vals,
+        "cost_of_equity": coe_vals,
+        "cost_of_debt": cod_vals,
+        "synthetic_rating": synth_vals,
+        "life_cycle_stage": lc_vals,
+        "fair_pe": fair_pe_vals,
+        "fair_ev_ebitda": fair_ev_vals,
+        "fair_ev_sales": fair_sales_vals,
+        "fair_pb": fair_pb_vals,
+        "decision": decision,
+    }, index=fund.index)
 
-        fe = pd.to_numeric(out["fair_ev_ebitda"], errors="coerce")
-        ev = pd.to_numeric(out["ev_ebitda"], errors="coerce")
-        out["discount_to_fair"] = (fe - ev) / fe.replace(0, np.nan)
-        out["mos_pass"] = out["discount_to_fair"] >= 0.15
+    fe = pd.to_numeric(out["fair_ev_ebitda"], errors="coerce")
+    ev = pd.to_numeric(out["ev_ebitda"], errors="coerce")
+    out["discount_to_fair"] = (fe - ev) / fe.replace(0, np.nan)
+    out["mos_pass"] = out["discount_to_fair"] >= 0.15
 
-        p_bad = pd.Series(0.05, index=out.index)
-        p_bad = p_bad + out["life_cycle_stage"].eq("Decline").astype(float) * 0.15
-        if "quality_score" in out.columns:
-            p_bad = p_bad + (pd.to_numeric(out["quality_score"], errors="coerce") < 0.4).astype(float) * 0.10
-        arista_p = DATA_DIR / "arista_signals.parquet"
-        if arista_p.exists():
-            ar = pd.read_parquet(arista_p)
-            if "ticker" in ar.columns:
-                flagged = set(ar["ticker"].astype(str).str.upper())
-                p_bad = p_bad + out["ticker"].astype(str).str.upper().isin(flagged).astype(float) * 0.20
-        cash = None
-        for c in ("cash", "cash_and_equivalents", "cash_b"):
-            if c in out.columns:
-                cash = pd.to_numeric(out[c], errors="coerce")
-                break
-        if cash is None and "mktcap_to_assets" in out.columns:
-            excess = (1.0 - pd.to_numeric(out["mktcap_to_assets"], errors="coerce").clip(0, 2)).clip(0, 1)
-        elif cash is not None and "market_cap" in out.columns:
-            mc = pd.to_numeric(out["market_cap"], errors="coerce")
-            excess = (cash / mc.replace(0, np.nan)).clip(0, 1)
-        else:
-            excess = pd.Series(0.15, index=out.index)
-        out["excess_cash_share"] = excess
-        out["distrust_p_bad"] = p_bad.clip(0.0, 0.60)
-        out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
+    p_bad = pd.Series(0.05, index=out.index)
+    p_bad = p_bad + out["life_cycle_stage"].eq("Decline").astype(float) * 0.15
+    if "quality_score" in out.columns:
+        p_bad = p_bad + (pd.to_numeric(out["quality_score"], errors="coerce") < 0.4).astype(float) * 0.10
+    arista_p = DATA_DIR / "arista_signals.parquet"
+    if arista_p.exists():
+        ar = pd.read_parquet(arista_p)
+        if "ticker" in ar.columns:
+            flagged = set(ar["ticker"].astype(str).str.upper())
+            p_bad = p_bad + out["ticker"].astype(str).str.upper().isin(flagged).astype(float) * 0.20
+    cash = None
+    for c in ("cash", "cash_and_equivalents", "cash_b"):
+        if c in out.columns:
+            cash = pd.to_numeric(out[c], errors="coerce")
+            break
+    if cash is None and "mktcap_to_assets" in out.columns:
+        excess = (1.0 - pd.to_numeric(out["mktcap_to_assets"], errors="coerce").clip(0, 2)).clip(0, 1)
+    elif cash is not None and "market_cap" in out.columns:
+        mc = pd.to_numeric(out["market_cap"], errors="coerce")
+        excess = (cash / mc.replace(0, np.nan)).clip(0, 1)
+    else:
+        excess = pd.Series(0.15, index=out.index)
+    out["excess_cash_share"] = excess
+    out["distrust_p_bad"] = p_bad.clip(0.0, 0.60)
+    out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
 
-        # Fit P(bad) = P(63d return < -10%) on excess cash, decline, ARISTA, quality.
-        try:
-            px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
-            px["date"] = pd.to_datetime(px["date"])
-            last = px.sort_values("date").groupby("ticker").tail(1).set_index("ticker")["close"]
-            prev = px.sort_values("date").groupby("ticker").nth(-64) if False else None
-            px = px.sort_values(["ticker", "date"])
-            g = px.groupby("ticker")["close"]
-            ret63 = (g.transform("last") / g.shift(63) - 1.0)
-            r63 = px.assign(ret63=ret63).sort_values("date").groupby("ticker").tail(1).set_index("ticker")["ret63"]
-            y = (r63.reindex(out["ticker"].values) < -0.10).astype(float)
-            y.index = out.index
-            X = pd.DataFrame({
-                "const": 1.0,
-                "excess": pd.to_numeric(out["excess_cash_share"], errors="coerce").fillna(0),
-                "decline": out["life_cycle_stage"].eq("Decline").astype(float),
-                "arista": (p_bad > 0.15).astype(float),
-                "lowq": (1.0 - pd.to_numeric(out.get("quality_score", 0.5), errors="coerce").fillna(0.5)).clip(0, 1),
-            }, index=out.index)
-            mask = y.notna() & X.notna().all(axis=1)
-            if mask.sum() > 80 and y.loc[mask].nunique() > 1:
-                xm = X.loc[mask].values
-                yy = y.loc[mask].values
-                b = np.zeros(xm.shape[1])
+    # Fit P(bad) = P(63d return < -10%) on excess cash, decline, ARISTA, quality.
+    try:
+        px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
+        px["date"] = pd.to_datetime(px["date"])
+        last = px.sort_values("date").groupby("ticker").tail(1).set_index("ticker")["close"]
+        prev = px.sort_values("date").groupby("ticker").nth(-64) if False else None
+        px = px.sort_values(["ticker", "date"])
+        g = px.groupby("ticker")["close"]
+        ret63 = (g.transform("last") / g.shift(63) - 1.0)
+        r63 = px.assign(ret63=ret63).sort_values("date").groupby("ticker").tail(1).set_index("ticker")["ret63"]
+        y = (r63.reindex(out["ticker"].values) < -0.10).astype(float)
+        y.index = out.index
+        X = pd.DataFrame({
+            "const": 1.0,
+            "excess": pd.to_numeric(out["excess_cash_share"], errors="coerce").fillna(0),
+            "decline": out["life_cycle_stage"].eq("Decline").astype(float),
+            "arista": (p_bad > 0.15).astype(float),
+            "lowq": (1.0 - pd.to_numeric(out.get("quality_score", 0.5), errors="coerce").fillna(0.5)).clip(0, 1),
+        }, index=out.index)
+        mask = y.notna() & X.notna().all(axis=1)
+        if mask.sum() > 80 and y.loc[mask].nunique() > 1:
+            xm = X.loc[mask].values
+            yy = y.loc[mask].values
+            b = np.zeros(xm.shape[1])
+            for _ in range(12):
+                z = xm @ b
+                p = 1.0 / (1.0 + np.exp(-np.clip(z, -20, 20)))
+                w = p * (1 - p) + 1e-6
+                grad = xm.T @ (p - yy)
+                hess = xm.T @ (xm * w[:, None])
+                try:
+                    b = b - np.linalg.solve(hess, grad)
+                except np.linalg.LinAlgError:
+                    break
+            p_hat = 1.0 / (1.0 + np.exp(-np.clip(X.values @ b, -20, 20)))
+            out["distrust_p_bad_fitted"] = np.clip(p_hat, 0.01, 0.80)
+            out["distrust_p_bad"] = (0.4 * out["distrust_p_bad"] + 0.6 * out["distrust_p_bad_fitted"]).clip(0, 0.8)
+            out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
+            out["distrust_fit_n"] = int(mask.sum())
+
+            # Compute AUC on holdout (last 20% of tickers)
+            n = len(yy)
+            split = int(n * 0.8)
+            if n - split >= 10:  # need at least 10 test samples
+                # Simple train/test split by index order
+                xm_train, xm_test = xm[:split], xm[split:]
+                yy_train, yy_test = yy[:split], yy[split:]
+                # Re-fit on train
+                b_train = np.zeros(xm_train.shape[1])
                 for _ in range(12):
-                    z = xm @ b
+                    z = xm_train @ b_train
                     p = 1.0 / (1.0 + np.exp(-np.clip(z, -20, 20)))
                     w = p * (1 - p) + 1e-6
-                    grad = xm.T @ (p - yy)
-                    hess = xm.T @ (xm * w[:, None])
+                    grad = xm_train.T @ (p - yy_train)
+                    hess = xm_train.T @ (xm_train * w[:, None])
                     try:
-                        b = b - np.linalg.solve(hess, grad)
+                        b_train = b_train - np.linalg.solve(hess, grad)
                     except np.linalg.LinAlgError:
                         break
-                p_hat = 1.0 / (1.0 + np.exp(-np.clip(X.values @ b, -20, 20)))
-                out["distrust_p_bad_fitted"] = np.clip(p_hat, 0.01, 0.80)
-                out["distrust_p_bad"] = (0.4 * out["distrust_p_bad"] + 0.6 * out["distrust_p_bad_fitted"]).clip(0, 0.8)
-                out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
-                out["distrust_fit_n"] = int(mask.sum())
-        except Exception:
-            pass
+                p_test = 1.0 / (1.0 + np.exp(-np.clip(xm_test @ b_train, -20, 20)))
+                # AUC
+                from sklearn.metrics import roc_auc_score
+                try:
+                    auc = roc_auc_score(yy_test, p_test)
+                    out["distrust_fit_auc"] = round(float(auc), 3)
+                except Exception:
+                    out["distrust_fit_auc"] = np.nan
+            else:
+                out["distrust_fit_auc"] = np.nan
+    except Exception:
+        pass
 
-        df = out.sort_values("composite_score", ascending=False).reset_index(drop=True)
-        return df
+    df = out.sort_values("composite_score", ascending=False).reset_index(drop=True)
+    return df
 
 
 def main():
@@ -697,37 +727,21 @@ def main():
         df = df[df["decision"] == args.decision.upper()]
 
     show = [
-        "ticker", "decision", "composite_score", "quality_score", "value_score",
-        "buffett_pass", "trifecta_pass", "roe", "roic", "debt_to_equity",
-        "ev_ebitda", "pb_ratio", "mktcap_to_assets",
+        "ticker", "decision", "composite_score", "roe", "roic", "debt_to_equity",
+        "ev_ebitda", "pb_ratio", "mktcap_to_assets", "earnings_stability",
+        "quality_score", "value_score", "wacc", "life_cycle_stage",
+        "fair_pe", "fair_ev_ebitda", "discount_to_fair", "mos_pass",
         "w_current", "suggested_w_max", "sizing_action",
+        "distrust_p_bad", "distrust_discount", "distrust_fit_auc", "distrust_fit_n",
     ]
-    show = [c for c in show if c in df.columns]
-    print("\n=== Preferred metrics (top 25 by composite) ===")
-    print(df[show].head(25).to_string(index=False))
+    print(df[show].to_string(index=False, max_rows=30))
 
-    print("\n=== Decision counts ===")
-    print(df["decision"].value_counts().to_string())
-
-    print("\n=== Buffett pass (ROE≥15%, ROIC≥15%, D/E≤1) ===")
-    bp = df[df["buffett_pass"] == True][show]
-    print(bp.head(20).to_string(index=False) if len(bp) else "  (none)")
-
-    print("\n=== Trifecta pass ===")
-    tp = df[df["trifecta_pass"] == True][show]
-    print(tp.head(20).to_string(index=False) if len(tp) else "  (none)")
-
-    print("\n=== Both Buffett + Trifecta (INCLUDE_CORE) ===")
-    both = df[df["decision"] == "INCLUDE_CORE"][show]
-    print(both.to_string(index=False) if len(both) else "  (none)")
-
-    if args.save or True:
-        df.to_parquet(OUT)
-        pq.write_table(pa.Table.from_pandas(df, preserve_index=False), OUT_PQ)
-        hits = df[df["decision"].isin(["INCLUDE_CORE", "INCLUDE_VALUE", "INCLUDE_QUALITY"])]
-        hits.to_parquet(OUT_SCREEN)
-        print(f"\nWrote {OUT} ({len(df)} rows)")
-        print(f"Wrote {OUT_SCREEN} ({len(hits)} inclusion candidates)")
+    if args.save:
+        df.to_parquet(OUT, index=False)
+        print(f"\nSaved {len(df)} rows → {OUT}")
+        hits = df[df["decision"].isin(["INCLUDE_CORE", "INCLUDE_QUALITY", "INCLUDE_VALUE", "SATELLITE"])]
+        hits[["ticker", "decision", "composite_score", "suggested_w_max", "sizing_action"]].to_parquet(OUT_SCREEN, index=False)
+        print(f"Screen hits saved → {OUT_SCREEN} ({len(hits)} names)")
 
 
 if __name__ == "__main__":

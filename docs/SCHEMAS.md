@@ -313,6 +313,7 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `fundamentals.parquet` | `tail_risk_hedging.py` | Base parquet table |
 | `fundamentals.parquet` | `threshold_logic.py` | Base parquet table |
 | `fundamentals.parquet` | `update_fundamentals.py` | Base parquet table |
+| `fundamentals.parquet` | `backfill_edgar.py` | Base parquet table |
 | `fundamentals_history.parquet` | `data_integrity.py` | Base parquet table |
 | `fundamentals_pit.parquet` | `data_integrity.py` | Base parquet table |
 | `fundamentals_yfinance.parquet` | `backfill_constituents.py` | Base parquet table |
@@ -497,9 +498,15 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 || `subindustry_regime_lead.csv` | `subindustry_regime.py` | Taleb / fat tails ||
 || `barbell_check.csv` | `barbell_check.py` | Taleb / fat tails ||
 ||| `hidden_optionality.csv` | `hidden_optionality_audit.py` | Taleb / fat tails ||
-| `corporate_actions.parquet` | `acquisition_backfill.py` | Corporate actions |
-| `fiscal_year_end_map.parquet` | `acquisition_backfill.py` | Fiscal year map |
-| `daily_prices_expired.parquet` | `data_validation.py` | Expired price history |
-| `quarterly_lookthrough_fundamentals.parquet` | `lookthrough_engine.py` | Lookthrough / pro forma |
-| `quarterly_lookthrough_fundamentals_extended.parquet` | `lookthrough_engine.py` | Lookthrough / pro forma |
-| `backfill_checkpoints/*.json` | `full_universe_backfill.py` | Checkpoints (resumable) |
+|| `corporate_actions.parquet` | `acquisition_backfill.py` | Corporate actions |
+|| `fiscal_year_end_map.parquet` | `acquisition_backfill.py` | Fiscal year map |
+|| `daily_prices_expired.parquet` | `data_validation.py` | Expired price history |
+|| `quarterly_lookthrough_fundamentals.parquet` | `lookthrough_engine.py` | Lookthrough / pro forma |
+|| `quarterly_lookthrough_fundamentals_extended.parquet` | `lookthrough_engine.py` | Lookthrough / pro forma |
+|| `lookthrough_materialized.parquet` | `lookthrough_materialized.py` | Lookthrough / pro forma |
+|| `backfill_checkpoints/*.json` | `resumable_job.py` | Checkpoints (resumable) |
+|| `daily_prices_partitioned/` | `partition_daily_prices.py` | Partitioned daily prices |
+|| `rolling_window_metrics.parquet` | `rolling_window_analysis.py` | Summary / metrics |
+|| `preferred_metrics.parquet` | `preferred_metrics.py` | Summary / metrics |
+|| `erp_history.parquet` | `erp_service.py` | Base parquet table |
+|| `crp_by_country.parquet` | `damodaran_data.py` | Base parquet table |

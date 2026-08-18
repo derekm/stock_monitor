@@ -133,9 +133,23 @@ def fetch_and_build(ticker: str, cik: str, px: dict[str, pd.Series]) -> list[dic
 FLUSH_EVERY = 40
 PROTECTED_SOURCES = {"edgar_v2", "html_10q"}
 
+# Columns where we store prior estimates for future quarters
+ESTIMATE_COLS = [
+    "total_revenue", "operating_income", "net_income",
+    "free_cash_flow", "total_assets", "total_debt",
+    "shareholders_equity", "cash_and_equivalents",
+    "total_liabilities", "capital_expenditure",
+    "ebitda", "gross_profit", "interest_expense",
+    "operating_cash_flow", "shares_outstanding",
+]
+
 
 def merge_into_fundamentals(new_rows: list[dict]) -> int:
-    """Additive merge + parquet write. Safe to call mid-run."""
+    """Additive merge + parquet write. Safe to call mid-run.
+
+    Future-quarter EDGAR estimates are preserved in prior_estimate_* columns
+    for the most recent actual quarter.
+    """
     if not new_rows:
         return 0
     new_df = pd.DataFrame(new_rows)
@@ -143,33 +157,67 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
     existing = pd.read_parquet(FUND) if FUND.exists() else pd.DataFrame()
     from update_fundamentals import _as_date
     new_df["as_of_date"] = new_df["as_of_date"].map(_as_date)
-    # Drop future as_of_date rows (EDGAR sometimes returns estimated future quarters)
-    new_df = new_df[new_df["as_of_date"] <= date.today()]
+
+    # Split into actual (≤ today) and future (> today) rows
+    today = date.today()
+    actual_rows = new_df[new_df["as_of_date"] <= today].copy()
+    future_rows = new_df[new_df["as_of_date"] > today].copy()
+
+    # Store future estimates as prior_estimate_* on the latest actual quarter per ticker
+    if len(future_rows) > 0 and len(actual_rows) > 0:
+        for ticker in future_rows["ticker"].unique():
+            ticker_future = future_rows[future_rows["ticker"] == ticker]
+            ticker_actual = actual_rows[actual_rows["ticker"] == ticker]
+            if len(ticker_actual) == 0:
+                continue
+            # Latest actual quarter for this ticker
+            latest_actual = ticker_actual.loc[ticker_actual["as_of_date"].idxmax()]
+            latest_idx = latest_actual.name
+            # Write future estimates as prior_estimate_* columns
+            for col in ESTIMATE_COLS:
+                if col in ticker_future.columns:
+                    # Take the nearest future quarter estimate
+                    est_val = ticker_future[col].iloc[0]
+                    if pd.notna(est_val):
+                        actual_rows.at[latest_idx, f"prior_estimate_{col}"] = est_val
+
+    # Merge actual rows into fundamentals
+    new_df = actual_rows  # Only merge actual rows
     idx = ["ticker", "as_of_date"]
     if len(existing):
-        ex = existing.reset_index(drop=True).copy()
-        nd = new_df.reset_index(drop=True).copy()
+        ex = existing.copy()
+        nd = new_df.copy()
         for df in (ex, nd):
             for col in df.columns:
                 if pd.api.types.is_numeric_dtype(df[col]):
                     df[col] = df[col].astype("float64")
+        # Merge with suffixes
         merged = ex.merge(nd, on=idx, how="left", suffixes=("_old", "_new"))
-        for col in list(ex.columns):
+        # Start with old columns (protected sources keep their values)
+        result_cols = {}
+        for col in ex.columns:
             if col in idx:
-                continue
-            old_c = f"{col}_old"
-            if old_c in merged.columns:
-                merged[col] = merged[old_c]
+                result_cols[col] = merged[col]
+            else:
+                old_c = f"{col}_old"
+                if old_c in merged.columns:
+                    result_cols[col] = merged[old_c]
+                else:
+                    result_cols[col] = merged[col]
+        # Overwrite non-protected columns with new values
         overlap_mask = merged["source_new"].notna() if "source_new" in merged.columns else merged.filter(regex="_new$").notna().any(axis=1)
         if overlap_mask.any():
             protected_mask = merged.loc[overlap_mask, "source_old"].isin(PROTECTED_SOURCES)
             overwrite_mask = overlap_mask & ~protected_mask
             for col in nd.columns:
-                if col == "source":
+                if col in idx or col == "source":
                     continue
                 new_col = f"{col}_new"
                 if new_col in merged.columns:
-                    merged.loc[overwrite_mask, col] = merged.loc[overwrite_mask, new_col]
+                    vals = merged[new_col].copy()
+                    vals[~overwrite_mask] = np.nan
+                    result_cols[col] = vals
+            # Fill missing in protected columns
             remaining_mask = overlap_mask & protected_mask
             FILL_COLS = [
                 "market_cap", "market_cap_b", "total_assets", "total_assets_b",
@@ -187,13 +235,15 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
                     new_s = merged[new_col]
                     fill = remaining_mask & old_s.isna() & new_s.notna()
                     if fill.any():
-                        merged.loc[fill, c] = new_s.loc[fill].to_numpy()
+                        result_cols[c] = result_cols[c].copy()
+                        result_cols[c].loc[fill] = new_s.loc[fill].to_numpy()
                 except Exception:
                     continue
-            cols_to_drop = [c for c in merged.columns if c.endswith("_old") or c.endswith("_new")]
-            existing = merged.drop(columns=cols_to_drop)
+        # Build combined: existing (updated) + brand new rows
         brand_new = new_df[~new_df.set_index(idx).index.isin(ex.set_index(idx).index)].copy()
-        combined = pd.concat([existing, brand_new], ignore_index=True) if len(brand_new) else existing
+        combined = pd.DataFrame(result_cols)
+        if len(brand_new):
+            combined = pd.concat([combined, brand_new], ignore_index=True)
     else:
         combined = new_df
     if "last_updated" in combined.columns:
@@ -208,6 +258,80 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
     return len(combined)
 
 
+def _backup_fundamentals() -> Path:
+    """Timestamped backup before any destructive rewrite."""
+    from datetime import datetime
+    bdir = DATA_DIR / "backfill_backups"
+    bdir.mkdir(exist_ok=True)
+    dest = bdir / f"fundamentals_backup_{datetime.now():%Y%m%d_%H%M%S}.parquet"
+    import shutil
+    shutil.copy2(FUND, dest)
+    print(f"  backup -> {dest.name}")
+    return dest
+
+
+def purge_test_tickers() -> int:
+    """Drop smoke-test ticker rows (TEST*) left behind by merge tests."""
+    f = pd.read_parquet(FUND)
+    mask = f["ticker"].astype(str).str.fullmatch(r"TEST[A-Z0-9]*")
+    n = int(mask.sum())
+    print(f"purge-test-tickers: {n} rows across {f.loc[mask, 'ticker'].nunique()} tickers")
+    if n == 0:
+        return 0
+    _backup_fundamentals()
+    out = f[~mask].copy()
+    out.to_parquet(FUND, index=False)
+    print(f"  {len(f)} -> {len(out)} rows")
+    return n
+
+
+def migrate_future_estimates() -> int:
+    """Fold pre-existing future-dated rows into prior_estimate_* columns.
+
+    Historical rows with as_of_date > today were written before the estimate
+    split existed. For each ticker, the nearest future quarter's values are
+    copied onto that ticker's latest actual quarter as prior_estimate_<col>,
+    then the future rows are removed from the time series.
+    """
+    f = pd.read_parquet(FUND)
+    d = pd.to_datetime(f["as_of_date"], errors="coerce").dt.date
+    today = date.today()
+    fut_mask = d > today
+    n_fut = int(fut_mask.sum())
+    print(f"migrate-future-estimates: {n_fut} future rows, {f.loc[fut_mask, 'ticker'].nunique()} tickers")
+    if n_fut == 0:
+        return 0
+
+    _backup_fundamentals()
+    f["_d"] = d
+    future = f[fut_mask]
+    actual = f[~fut_mask].copy()
+
+    moved = 0
+    for ticker, grp in future.groupby("ticker"):
+        act = actual[actual["ticker"] == ticker]
+        if act.empty:
+            # No actual history to attach the estimate to — nothing to preserve.
+            continue
+        latest_idx = act["_d"].idxmax()
+        nearest = grp.sort_values("_d").iloc[0]
+        for col in ESTIMATE_COLS:
+            if col not in grp.columns:
+                continue
+            val = nearest[col]
+            if pd.notna(val):
+                actual.at[latest_idx, f"prior_estimate_{col}"] = val
+                moved += 1
+
+    actual = actual.drop(columns=["_d"])
+    for col in actual.columns:
+        if pd.api.types.is_numeric_dtype(actual[col]):
+            actual[col] = pd.to_numeric(actual[col], errors="coerce").astype("float64")
+    actual.to_parquet(FUND, index=False)
+    print(f"  {len(f)} -> {len(actual)} rows; {moved} estimate values preserved")
+    return moved
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tickers", default=None, help="Comma-separated subset")
@@ -216,7 +340,19 @@ def main():
     ap.add_argument("--quarantine", action="store_true", help="Use bad CIK quarantine to skip invalid CIKs")
     ap.add_argument("--validate-ciks", action="store_true", help="Validate CIKs via SEC submissions and quarantine bad ones")
     ap.add_argument("--clear-quarantine", action="store_true", help="Clear bad CIK quarantine")
+    ap.add_argument("--purge-test-tickers", action="store_true",
+                    help="Remove smoke-test ticker rows (TEST*) from fundamentals.parquet")
+    ap.add_argument("--migrate-future-estimates", action="store_true",
+                    help="Fold pre-existing future-dated rows into prior_estimate_* on the latest actual quarter")
     args = ap.parse_args()
+
+    if args.purge_test_tickers:
+        purge_test_tickers()
+        return
+
+    if args.migrate_future_estimates:
+        migrate_future_estimates()
+        return
 
     # Handle clear-quarantine
     if args.clear_quarantine:

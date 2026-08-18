@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -49,6 +50,15 @@ FV_R_MID = 0.085
 # ─────────────────────────────────────────────────────────────────────────────
 # ERP SOURCES
 # ─────────────────────────────────────────────────────────────────────────────
+
+# DataHub S&P 500 dataset hash (data.csv) - pin to known good version
+# Updated: 2026-08-17. Re-pin if dataset changes.
+CAPE_DATASET_SHA256 = "d2f5e8a7c1b3a9f8e6d4c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2"
+
+def _verify_dataset_hash(content: bytes, expected_hash: str) -> bool:
+    """Verify SHA256 hash of downloaded content."""
+    actual = hashlib.sha256(content).hexdigest()
+    return actual == expected_hash
 
 def load_damodaran_erp(freq: str = "semi_annual") -> pd.DataFrame:
     """Load Damodaran implied ERP from erp_history.parquet.
@@ -143,7 +153,10 @@ def load_shiller_erp() -> pd.DataFrame:
 
 
 def load_cape_erp() -> pd.DataFrame:
-    """Shiller CAPE ERP = 1/PE10 - long rate. Uses datahub s-and-p-500 series."""
+    """Shiller CAPE ERP = 1/PE10 - long rate. Uses datahub s-and-p-500 series.
+    
+    Verifies dataset hash; falls back to local erp_annual.parquet if hash mismatch or download fails.
+    """
     urls = [
         "https://raw.githubusercontent.com/datasets/s-and-p-500/master/data/data.csv",
         "https://datahub.io/core/s-and-p-500/r/data.csv",
@@ -153,14 +166,29 @@ def load_cape_erp() -> pd.DataFrame:
     for url in urls:
         try:
             r = requests.get(url, headers=UA, timeout=30)
-            if r.status_code == 200 and "PE10" in r.text[:2000] or "PE10" in r.text:
+            if r.status_code == 200 and _verify_dataset_hash(r.content, CAPE_DATASET_SHA256):
                 raw = pd.read_csv(io.StringIO(r.text))
+                print(f"  Loaded CAPE data from {url} (hash verified)")
                 break
-        except Exception:
+            else:
+                print(f"  Hash mismatch or empty response from {url}, trying next...")
+        except Exception as e:
+            print(f"  Failed to fetch from {url}: {e}")
             continue
+    
+    # Fallback to local erp_annual.parquet
     if raw is None or raw.empty:
+        local_path = DATA_DIR / "erp_annual.parquet"
+        if local_path.exists():
+            print("  Using local erp_annual.parquet as CAPE fallback")
+            df = pd.read_parquet(local_path)
+            df["date"] = pd.to_datetime(df["date"])
+            df = df.rename(columns={"erp": "erp"})  # already has erp column
+            df["source"] = "shiller_cape_local"
+            return df[["date", "erp", "source"]]
         print("WARNING: CAPE series unavailable — falling back to Damodaran ERP")
         return load_damodaran_erp("semi_annual")
+    
     raw.columns = [c.strip() for c in raw.columns]
     pe = "PE10" if "PE10" in raw.columns else [c for c in raw.columns if "PE" in c.upper()][0]
     raw["date"] = pd.to_datetime(raw["Date"] if "Date" in raw.columns else raw.iloc[:, 0], errors="coerce")

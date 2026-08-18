@@ -49,7 +49,7 @@ def _to_numpy(t):
 def rolling_sum(arr: np.ndarray, window: int, device: str | None = None) -> np.ndarray:
     """Rolling sum over last axis (time). arr: [T, D] or [D]."""
     dev = device or _best_device()
-    if dev != "cpu" and _HAS_TORCH:
+    if _HAS_TORCH and isinstance(dev, torch.device) and dev.type != "cpu":
         t = _to_tensor(arr, dev)
         cum = torch.cumsum(t, dim=-1)
         out = torch.full_like(t, float("nan"))
@@ -78,7 +78,7 @@ def rolling_mean(arr: np.ndarray, window: int, device: str | None = None) -> np.
 def rolling_std(arr: np.ndarray, window: int, device: str | None = None) -> np.ndarray:
     """Rolling std using Welford / cumsum of squares."""
     dev = device or _best_device()
-    if dev != "cpu" and _HAS_TORCH:
+    if _HAS_TORCH and isinstance(dev, torch.device) and dev.type != "cpu":
         t = _to_tensor(arr, dev)
         t2 = t * t
         cum1 = torch.cumsum(t, dim=-1)
@@ -134,12 +134,12 @@ def rolling_slope(arr: np.ndarray, window: int, device: str | None = None) -> np
     if denom == 0:
         return np.full_like(arr, np.nan)
 
-    if dev != "cpu" and _HAS_TORCH:
+    if _HAS_TORCH and isinstance(dev, torch.device) and dev.type != "cpu":
         t = _to_tensor(arr, dev)
         # y = rolling window values
         # sum(y) = rolling_sum(arr, n)
         # sum(xy) = rolling_sum(arr * x, n) where x = [0,1,...,n-1]
-        idx = torch.arange(t.shape[-1], dtype=t.dtype, device=dev)
+        idx = torch.arange(t.shape[-1], dtype=torch.float32, device=dev)
         xy = t * idx
         cum_y = torch.cumsum(t, dim=-1)
         cum_xy = torch.cumsum(xy, dim=-1)
@@ -179,7 +179,7 @@ def rolling_beta(arr: np.ndarray, bench: np.ndarray, window: int, device: str | 
     dev = device or _best_device()
     n = window
     # Precompute benchmark stats
-    if dev != "cpu" and _HAS_TORCH:
+    if _HAS_TORCH and isinstance(dev, torch.device) and dev.type != "cpu":
         b = _to_tensor(bench, dev)
         a = _to_tensor(arr, dev)
         cum_b = torch.cumsum(b, dim=-1)
