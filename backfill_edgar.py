@@ -146,11 +146,16 @@ ESTIMATE_COLS = [
 ]
 
 
-def merge_into_fundamentals(new_rows: list[dict]) -> int:
+def merge_into_fundamentals(new_rows: list[dict], force: bool = False) -> int:
     """Additive merge + parquet write. Safe to call mid-run.
 
     Future-quarter EDGAR estimates are preserved in prior_estimate_* columns
     for the most recent actual quarter.
+
+    force=True lets this batch overwrite PROTECTED_SOURCES rows. Needed only to
+    push a CORRECTION through: once a row is stamped edgar_v2 it is protected, so
+    a bug fix in the extractor cannot otherwise replace values it already wrote.
+    Off by default -- protection is the norm.
     """
     if not new_rows:
         return 0
@@ -219,6 +224,8 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
         overlap_mask = merged["source_new"].notna() if "source_new" in merged.columns else merged.filter(regex="_new$").notna().any(axis=1)
         if overlap_mask.any():
             protected_mask = merged["source_old"].isin(PROTECTED_SOURCES)
+            if force:
+                protected_mask = protected_mask & False   # honour every new value
             overwrite_mask = overlap_mask & ~protected_mask
             for col in nd.columns:
                 if col in idx or col == "source":

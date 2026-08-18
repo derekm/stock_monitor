@@ -117,6 +117,28 @@ def _parse_frame(frame: str) -> dict:
     return {"type": "unknown", "year": None, "quarter": None, "months": None}
 
 
+def _span_months(entry: dict):
+    """Actual period length of an EDGAR fact, from start/end.
+
+    The `frame` string alone is not sufficient. EDGAR emits a duplicate of most
+    figures with frame "N/A", and _parse_frame("N/A") returns months=None; the
+    N/A branches in the parsers below then appended those rows with months=3
+    unconditionally. That filed 12-month values as single quarters -- AAPL's
+    FY2024 net income (start 2023-10-01, end 2024-09-28, 93.736B) was stored on
+    2024-09-28 as a "quarter", so tail(4).sum() gave a TTM of 172.7B
+    (= 93.736 annual + 79.001 for Q1-Q3) against a true FY figure of 93.736B.
+
+    Returns the rounded month span, or None when start/end are unusable.
+    """
+    start, end = entry.get("start"), entry.get("end")
+    if not (start and end):
+        return None
+    try:
+        return int(round((pd.Timestamp(end) - pd.Timestamp(start)).days / 30.44))
+    except Exception:
+        return None
+
+
 def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
     """
     Parse quarterly income statement items.
@@ -152,6 +174,8 @@ def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
             "year": parsed["year"],
             "quarter": parsed["quarter"],
             "months": parsed["months"],
+            "span_months": _span_months(e),
+            "start": e.get("start"),
         })
     
     if not rows:
@@ -178,13 +202,21 @@ def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
             "source": "cy_frame",
         })
     
-    # Use N/A frames that aren't already covered by CY frames
-    # Group N/A frames by date and take the last value per date
+    # Use N/A frames that aren't already covered by CY frames.
+    #
+    # ONLY genuine ~3-month spans. An N/A frame carries no period information, so
+    # this branch used to assume months=3 for every one of them -- filing 6/9/12
+    # month figures as single quarters and inflating every downstream TTM sum.
+    # span_months comes from the fact's own start/end, so a 12-month duplicate is
+    # now rejected instead of masquerading as Q4.
     if len(na_frames) > 0:
         na_frames = na_frames.sort_values("filed").drop_duplicates(subset=["end"], keep="last")
-        
+
         for _, row in na_frames.iterrows():
             end_date = row["end"]
+            sm = row.get("span_months")
+            if sm is None or not (2 <= sm <= 4):
+                continue
             # Check if this date already has a CY quarterly entry
             already_covered = any(
                 r["date"] == end_date for r in result_rows
@@ -198,40 +230,50 @@ def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
                     "source": "na_frame",
                 })
     
-    # 2. Compute Q4 from annual - cumulative Q3 if Q4 standalone missing
-    annual = df[df["type"] == "annual"].copy()
-    cumulative = df[df["type"] == "cumulative"].copy()
-    
-    for _, row_ann in annual.iterrows():
-        year = row_ann["year"]
-        fy_val = row_ann["val"]
+    # 2. Compute Q4 as (12-month) - (9-month) sharing the same fiscal start.
+    #
+    # Matched on the facts' own start/end spans, NOT on frame strings. Frames are
+    # unreliable for off-calendar fiscal years: MSFT's FY2024 ends 2024-06-30 but
+    # its annual frame is "CY2024", and its 9-month cumulative carries frame
+    # "N/A" (so _parse_frame typed it "unknown", never "cumulative"). The old
+    # year/quarter lookup therefore found nothing and Q4 was silently dropped --
+    # leaving a 6-month hole in the series for every June/January/October
+    # fiscal-year-end company, which then made tail(4) span five quarters.
+    #
+    # Pairing on (start, 12mo) vs (start, 9mo) is fiscal-calendar agnostic:
+    # MSFT FY24 = 88.136 (2023-07-01..2024-06-30) minus 66.100
+    # (2023-07-01..2024-03-31) = 22.036B for Q4.
+    df_spans = df.copy()
+    if "span_months" not in df_spans.columns:
+        df_spans["span_months"] = None
+    df_spans["_start"] = pd.to_datetime(df_spans.get("start"), errors="coerce") \
+        if "start" in df_spans.columns else pd.NaT
+
+    ann12 = df_spans[df_spans["span_months"].between(11, 13, inclusive="both")] \
+        if df_spans["span_months"].notna().any() else df_spans.iloc[0:0]
+    cum9 = df_spans[df_spans["span_months"].between(8, 10, inclusive="both")] \
+        if df_spans["span_months"].notna().any() else df_spans.iloc[0:0]
+
+    existing_dates = {r["date"] for r in result_rows}
+    for _, row_ann in ann12.sort_values("filed").iterrows():
         fy_date = row_ann["end"]
-        
-        # Check if Q4 standalone exists
-        q4_exists = any(
-            (r.get("quarter") == f"CY{year}Q4") for r in result_rows
-        )
-        
-        if not q4_exists:
-            # Find Q3 cumulative (9-month) for this year
-            q3_cum = cumulative[
-                (cumulative["year"] == year) & (cumulative["quarter"] == 3)
-            ]
-            if len(q3_cum) == 0:
-                q3_cum = cumulative[
-                    (cumulative["year"] == year) & (cumulative["months"] == 9)
-                ]
-            
-            if len(q3_cum) > 0:
-                q3_val = q3_cum.iloc[-1]["val"]
-                q4_val = fy_val - q3_val
-                result_rows.append({
-                    "date": fy_date,
-                    "quarter": f"CY{year}Q4",
-                    "val": q4_val,
-                    "months": 3,
-                    "source": "computed_q4_diff",
-                })
+        if fy_date in existing_dates:
+            continue                      # a real standalone Q4 already exists
+        fy_start = row_ann.get("_start")
+        if pd.isna(fy_start):
+            continue
+        match = cum9[cum9["_start"] == fy_start]
+        if match.empty:
+            continue
+        q4_val = row_ann["val"] - match.sort_values("filed").iloc[-1]["val"]
+        result_rows.append({
+            "date": fy_date,
+            "quarter": None,
+            "val": q4_val,
+            "months": 3,
+            "source": "computed_q4_diff",
+        })
+        existing_dates.add(fy_date)
     
     if not result_rows:
         return pd.Series(dtype=float)
@@ -281,6 +323,8 @@ def parse_cashflow_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
             "year": parsed["year"],
             "quarter": parsed["quarter"],
             "months": parsed["months"],
+            "span_months": _span_months(e),
+            "start": e.get("start"),
         })
     
     if not rows:
@@ -310,6 +354,12 @@ def parse_cashflow_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
         
         for _, row in na_frames.iterrows():
             end_date = row["end"]
+            # ONLY genuine ~3-month spans -- see the note in
+            # parse_income_quarterly: an N/A frame carries no period info, and
+            # assuming months=3 filed 6/9/12-month figures as single quarters.
+            sm = row.get("span_months")
+            if sm is None or not (2 <= sm <= 4):
+                continue
             already_covered = any(
                 r["date"] == end_date for r in result_rows
             )
@@ -322,38 +372,41 @@ def parse_cashflow_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
                     "source": "na_frame",
                 })
     
-    # 3. Compute Q4 from annual - Q3 cumulative for each year
-    annual = df[df["type"] == "annual"].copy()
-    cumulative = df[df["type"] == "cumulative"].copy()
-    
-    for _, row_ann in annual.iterrows():
-        year = row_ann["year"]
-        fy_val = row_ann["val"]
+    # 3. Compute Q4 as (12-month) - (9-month) sharing the same fiscal start.
+    #    Span-matched, not frame-matched -- see parse_income_quarterly for why
+    #    (off-calendar fiscal years carry misleading CY frames and N/A
+    #    cumulatives, which silently dropped Q4 and left 6-month gaps).
+    df_spans = df.copy()
+    if "span_months" not in df_spans.columns:
+        df_spans["span_months"] = None
+    df_spans["_start"] = pd.to_datetime(df_spans.get("start"), errors="coerce") \
+        if "start" in df_spans.columns else pd.NaT
+    has_spans = df_spans["span_months"].notna().any()
+    ann12 = df_spans[df_spans["span_months"].between(11, 13, inclusive="both")] \
+        if has_spans else df_spans.iloc[0:0]
+    cum9 = df_spans[df_spans["span_months"].between(8, 10, inclusive="both")] \
+        if has_spans else df_spans.iloc[0:0]
+
+    existing_dates = {r["date"] for r in result_rows}
+    for _, row_ann in ann12.sort_values("filed").iterrows():
         fy_date = row_ann["end"]
-        
-        q4_exists = any(
-            (r.get("quarter") == f"CY{year}Q4") for r in result_rows
-        )
-        
-        if not q4_exists:
-            q3_cum = cumulative[
-                (cumulative["year"] == year) & (cumulative["quarter"] == 3)
-            ]
-            if len(q3_cum) == 0:
-                q3_cum = cumulative[
-                    (cumulative["year"] == year) & (cumulative["months"] == 9)
-                ]
-            
-            if len(q3_cum) > 0:
-                q3_val = q3_cum.iloc[-1]["val"]
-                q4_val = fy_val - q3_val
-                result_rows.append({
-                    "date": fy_date,
-                    "quarter": f"CY{year}Q4",
-                    "val": q4_val,
-                    "months": 3,
-                    "source": "computed_q4_diff",
-                })
+        if fy_date in existing_dates:
+            continue
+        fy_start = row_ann.get("_start")
+        if pd.isna(fy_start):
+            continue
+        match = cum9[cum9["_start"] == fy_start]
+        if match.empty:
+            continue
+        q4_val = row_ann["val"] - match.sort_values("filed").iloc[-1]["val"]
+        result_rows.append({
+            "date": fy_date,
+            "quarter": None,
+            "val": q4_val,
+            "months": 3,
+            "source": "computed_q4_diff",
+        })
+        existing_dates.add(fy_date)
     
     if not result_rows:
         return pd.Series(dtype=float)
@@ -784,6 +837,9 @@ if __name__ == "__main__":
                     help="also dump edgar_v2_quarterly.csv (diagnostic only)")
     ap.add_argument("--flush-every", type=int, default=1,
                     help="merge into fundamentals.parquet every N tickers (default 1)")
+    ap.add_argument("--force", action="store_true",
+                    help="overwrite rows already stamped edgar_v2 (needed to push "
+                         "an extractor CORRECTION through source protection)")
     args = ap.parse_args()
     
     # Load CIKs
@@ -830,7 +886,7 @@ if __name__ == "__main__":
         if not pending:
             return
         try:
-            n = merge_into_fundamentals(list(pending))
+            n = merge_into_fundamentals(list(pending), force=args.force)
             counters["merged"] += len(pending)
             print(f"    [flush] merged {len(pending)} rows -> panel now {n:,}")
         except Exception as e:
