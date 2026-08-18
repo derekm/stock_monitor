@@ -143,8 +143,8 @@ def merge_into_fundamentals(new_rows: list[dict]) -> int:
     existing = pd.read_parquet(FUND) if FUND.exists() else pd.DataFrame()
     from update_fundamentals import _as_date
     new_df["as_of_date"] = new_df["as_of_date"].map(_as_date)
-    if len(existing):
-        existing["as_of_date"] = existing["as_of_date"].map(_as_date)
+    # Drop future as_of_date rows (EDGAR sometimes returns estimated future quarters)
+    new_df = new_df[new_df["as_of_date"] <= date.today()]
     idx = ["ticker", "as_of_date"]
     if len(existing):
         ex = existing.reset_index(drop=True).copy()

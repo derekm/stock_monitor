@@ -74,8 +74,8 @@ def fractal_batch(wide_logp: np.ndarray, a: int = 30, b: int = 3,
     spans = spans_generator(a, b)
     lengths = sorted({t - f for f, t in spans})
 
-    logp = torch.as_tensor(wide_logp, dtype=torch.float64, device=dev)
-    idx = torch.arange(D, dtype=torch.float64, device=dev)
+    logp = torch.as_tensor(wide_logp, dtype=torch.float32, device=dev)
+    idx = torch.arange(D, dtype=torch.float32, device=dev)
     k_y = idx * logp  # [T, D]  k * logp
     dr = torch.diff(logp, dim=1, prepend=logp[:, :1] * float("nan"))  # daily ret
 

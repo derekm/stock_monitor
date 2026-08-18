@@ -394,49 +394,81 @@ def compute_fair_multiples(
     fundamentals: pd.DataFrame,
     wacc_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Compute fair multiples per ticker per Damodaran's fundamental drivers"""
-    
+    """Compute fair multiples per ticker per Damodaran's fundamental drivers (vectorized)."""
+
     # Merge WACC into fundamentals
     wacc_cols = ["ticker", "wacc", "cost_of_equity", "cost_of_debt", "sector_beta"]
     merged = fundamentals.merge(wacc_df[wacc_cols], on="ticker", how="left")
-    
-    results = []
-    for _, row in merged.iterrows():
-        ticker = row.get("ticker")
-        growth = row.get("revenue_growth_3y")
-        roe = row.get("roe")
-        roic = row.get("roic")
-        margin = row.get("fcf_margin")
-        if pd.isna(margin) and pd.notna(row.get("ev_ebitda")) and pd.notna(row.get("revenue")):
-            # approximate margin from ev_ebitda
-            pass
-        
-        cost_of_equity = row.get("cost_of_equity")
-        wacc = row.get("wacc")
-        
-        if pd.isna(cost_of_equity) or pd.isna(wacc):
-            results.append({"ticker": ticker, "fair_pe": np.nan, "fair_ev_ebitda": np.nan, 
-                          "fair_ev_sales": np.nan, "fair_pb": np.nan})
-            continue
-        
-        pe = fair_pe(growth, roe, cost_of_equity)
-        ev_ebitda = fair_ev_ebitda(growth, roic, wacc)
-        ev_sales = fair_ev_sales(growth, margin, roic, wacc) if pd.notna(margin) else np.nan
-        pb = fair_pb(growth, roe, cost_of_equity)
-        
-        results.append({
-            "ticker": ticker,
-            "fair_pe": round(pe, 2) if pd.notna(pe) else np.nan,
-            "fair_ev_ebitda": round(ev_ebitda, 2) if pd.notna(ev_ebitda) else np.nan,
-            "fair_ev_sales": round(ev_sales, 2) if pd.notna(ev_sales) else np.nan,
-            "fair_pb": round(pb, 2) if pd.notna(pb) else np.nan,
-            "growth_assumption": growth,
-            "roe_assumption": roe,
-            "roic_assumption": roic,
-            "margin_assumption": margin,
-        })
-    
-    return pd.DataFrame(results)
+
+    # Vectorized computation
+    ticker = merged["ticker"].values
+    growth = merged.get("revenue_growth_3y")
+    growth = growth.values if hasattr(growth, "values") else np.full(len(merged), np.nan)
+    roe = merged.get("roe")
+    roe = roe.values if hasattr(roe, "values") else np.full(len(merged), np.nan)
+    roic = merged.get("roic")
+    roic = roic.values if hasattr(roic, "values") else np.full(len(merged), np.nan)
+    margin = merged.get("fcf_margin")
+    margin = margin.values if hasattr(margin, "values") else np.full(len(merged), np.nan)
+    cost_of_equity = merged.get("cost_of_equity")
+    cost_of_equity = cost_of_equity.values if hasattr(cost_of_equity, "values") else np.full(len(merged), np.nan)
+    wacc = merged.get("wacc")
+    wacc = wacc.values if hasattr(wacc, "values") else np.full(len(merged), np.nan)
+
+    # Valid mask
+    valid = ~np.isnan(cost_of_equity) & ~np.isnan(wacc)
+
+    # Pre-allocate results
+    fair_pe = np.full(len(merged), np.nan)
+    fair_ev_ebitda = np.full(len(merged), np.nan)
+    fair_ev_sales = np.full(len(merged), np.nan)
+    fair_pb = np.full(len(merged), np.nan)
+
+    if valid.any():
+        g = growth[valid]
+        r_e = roe[valid]
+        r_ic = roic[valid]
+        m = margin[valid]
+        coe = cost_of_equity[valid]
+        w = wacc[valid]
+
+        # Fair P/E = (1 - g/ROE) / (r - g)
+        pe_num = 1.0 - np.divide(g, r_e, out=np.full_like(g, np.nan), where=(r_e != 0))
+        pe_den = coe - g
+        fair_pe_v = np.divide(pe_num, pe_den, out=np.full_like(g, np.nan), where=(pe_den != 0))
+
+        # Fair EV/EBITDA = (1 - g/ROIC) * (1 - t) / (WACC - g)
+        ev_num = (1.0 - np.divide(g, r_ic, out=np.full_like(g, np.nan), where=(r_ic != 0))) * (1 - 0.21)
+        ev_den = w - g
+        fair_ev_v = np.divide(ev_num, ev_den, out=np.full_like(g, np.nan), where=(ev_den != 0))
+
+        # Fair EV/Sales = (1 - g/ROIC) * margin * (1 - t) / (WACC - g)
+        fair_sales_v = np.full_like(g, np.nan)
+        has_margin = ~np.isnan(m)
+        if has_margin.any():
+            fair_sales_v[has_margin] = ev_num[has_margin] * m[has_margin] / np.divide(ev_den[has_margin], 1, out=np.full_like(ev_den[has_margin], np.nan), where=(ev_den[has_margin] != 0))
+
+        # Fair P/B = (ROE - g) / (r - g)
+        pb_num = r_e - g
+        pb_den = coe - g
+        fair_pb_v = np.divide(pb_num, pb_den, out=np.full_like(g, np.nan), where=(pb_den != 0))
+
+        fair_pe[valid] = np.round(fair_pe_v, 2)
+        fair_ev_ebitda[valid] = np.round(fair_ev_v, 2)
+        fair_ev_sales[valid] = np.round(fair_sales_v, 2)
+        fair_pb[valid] = np.round(fair_pb_v, 2)
+
+    return pd.DataFrame({
+        "ticker": ticker,
+        "fair_pe": fair_pe,
+        "fair_ev_ebitda": fair_ev_ebitda,
+        "fair_ev_sales": fair_ev_sales,
+        "fair_pb": fair_pb,
+        "growth_assumption": growth,
+        "roe_assumption": roe,
+        "roic_assumption": roic,
+        "margin_assumption": margin,
+    })
 
 
 def margin_of_safety_check(row: pd.DataFrame, fair_value: float, price: float, mos_pct: float = 0.20) -> dict:

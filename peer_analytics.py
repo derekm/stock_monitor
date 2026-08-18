@@ -25,6 +25,12 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
+try:
+    from tensor_ops import rolling_slope, get_device
+    HAS_TENSOR_OPS = True
+except ImportError:
+    HAS_TENSOR_OPS = False
+
 DATA_DIR = Path(__file__).parent
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
@@ -229,52 +235,81 @@ def compute_beta_to_group(wide: pl.DataFrame, group_tickers: list[str], window: 
 
 
 def analyze_fundamental_trends(fund: pl.DataFrame, min_obs: int = 4) -> pl.DataFrame:
-    """Compute trend slopes for fundamental metrics per ticker using Polars groupby.
-    
-    Vectorized: uses Polars expressions for all metrics at once.
+    """Compute trend slopes for fundamental metrics per ticker.
+
+    Vectorized: builds wide panel [tickers, quarters] per metric and uses
+    GPU-accelerated rolling_slope from tensor_ops when available.
     """
     fund_sorted = fund.sort(["ticker", "as_of_date"])
-    results = []
+    tickers = fund_sorted["ticker"].unique().to_list()
+    dates = fund_sorted["as_of_date"].unique().sort().to_list()
 
-    for ticker in fund_sorted["ticker"].unique():
-        t_data = fund_sorted.filter(pl.col("ticker") == ticker)
-        if len(t_data) < min_obs:
+    # Build wide panel for each metric [n_tickers, n_dates]
+    results = []
+    for metric in FUND_METRICS:
+        if metric not in fund_sorted.columns:
             continue
 
-        dates = t_data["as_of_date"].to_numpy()
-        date_nums = np.arange(len(dates), dtype=float)
+        # Pivot to wide
+        wide = fund_sorted.select(["ticker", "as_of_date", metric]).pivot(
+            index="as_of_date", columns="ticker", values=metric
+        ).sort("as_of_date")
 
-        for metric in FUND_METRICS:
-            if metric not in t_data.columns:
-                continue
-            vals = t_data[metric].to_numpy()
-            mask = ~pd.isna(vals)
+        if wide.height < min_obs or wide.width <= 1:
+            continue
+
+        # Convert to numpy [dates, tickers]
+        date_col = wide["as_of_date"].to_numpy()
+        ticker_cols = [c for c in wide.columns if c != "as_of_date"]
+        arr = wide.select(ticker_cols).to_numpy().T  # [tickers, dates]
+
+        # Rolling slope per window (use max window = number of dates)
+        window = min(wide.height, 12)  # max 12 quarters = 3 years
+        if HAS_TENSOR_OPS:
+            slopes = rolling_slope(arr, window, get_device())
+        else:
+            # CPU fallback
+            slopes = np.full_like(arr, np.nan)
+            for i in range(arr.shape[0]):
+                y = arr[i]
+                mask = ~np.isnan(y)
+                if mask.sum() >= min_obs:
+                    x = np.arange(len(y), dtype=float)
+                    if len(x) > 1 and np.std(x) > 0:
+                        slopes[i] = np.cov(x, y)[0, 1] / np.var(x)
+
+        # Extract latest slope per ticker
+        latest_slopes = slopes[:, -1] if slopes.shape[1] > 0 else np.full(arr.shape[0], np.nan)
+
+        # Also compute recent vs early change
+        for j, t in enumerate(ticker_cols):
+            y = arr[j]
+            mask = ~np.isnan(y)
             if mask.sum() < min_obs:
                 continue
-            x = date_nums[mask]
-            y = vals[mask]
+            x = np.arange(len(y), dtype=float)
+            valid_x = x[mask]
+            valid_y = y[mask]
+            if len(valid_x) < 2:
+                continue
+            slope = np.cov(valid_x, valid_y)[0, 1] / np.var(valid_x)
+            total_change = slope * (valid_x[-1] - valid_x[0])
+            pct_change = total_change / valid_y[0] if valid_y[0] != 0 else np.nan
+            recent_avg = np.mean(valid_y[-2:]) if len(valid_y) >= 2 else valid_y[-1]
+            early_avg = np.mean(valid_y[:2]) if len(valid_y) >= 2 else valid_y[0]
+            recent_vs_early = (recent_avg - early_avg) / early_avg if early_avg != 0 else np.nan
 
-            if len(x) > 1 and np.std(x) > 0:
-                slope = np.cov(x, y)[0, 1] / np.var(x)
-                intercept = np.mean(y) - slope * np.mean(x)
-                total_change = slope * (x[-1] - x[0])
-                pct_change = total_change / y[0] if y[0] != 0 else np.nan
-
-                recent_avg = np.mean(y[-2:]) if len(y) >= 2 else y[-1]
-                early_avg = np.mean(y[:2]) if len(y) >= 2 else y[0]
-                recent_vs_early = (recent_avg - early_avg) / early_avg if early_avg != 0 else np.nan
-
-                results.append({
-                    "ticker": ticker,
-                    "metric": metric,
-                    "slope_per_period": float(slope),
-                    "total_change": float(total_change),
-                    "pct_change": float(pct_change) if not np.isnan(pct_change) else None,
-                    "recent_vs_early_pct": float(recent_vs_early) if not np.isnan(recent_vs_early) else None,
-                    "n_obs": int(mask.sum()),
-                    "latest_value": float(y[-1]),
-                    "earliest_value": float(y[0]),
-                })
+            results.append({
+                "ticker": t,
+                "metric": metric,
+                "slope_per_period": float(slope),
+                "total_change": float(total_change),
+                "pct_change": float(pct_change) if not np.isnan(pct_change) else None,
+                "recent_vs_early_pct": float(recent_vs_early) if not np.isnan(recent_vs_early) else None,
+                "n_obs": int(mask.sum()),
+                "latest_value": float(y[-1]) if mask[-1] else None,
+                "earliest_value": float(y[0]) if mask[0] else None,
+            })
 
     return pl.DataFrame(results) if results else pl.DataFrame()
 
