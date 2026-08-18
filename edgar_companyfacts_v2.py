@@ -117,6 +117,89 @@ def _parse_frame(frame: str) -> dict:
     return {"type": "unknown", "year": None, "quarter": None, "months": None}
 
 
+def _pick_tag(facts: dict, tag_list: list[str]):
+    """Choose the BEST-COVERED tag from `tag_list`, not merely the first present.
+
+    All three parsers used to take the first tag that existed. That is wrong for
+    revenue: "Revenues" leads REV_TAGS but is a legacy stub for most filers,
+    while the modern ASC-606 tag carries the real history. Measured coverage:
+
+      AAPL  Revenues                       11 facts, last 2018-09-29
+            RevenueFromContract...Excluding 117 facts, last 2026-06-27
+      MSFT  Revenues                       31 facts, last 2010-12-31
+            RevenueFromContract...Excluding 134 facts, last 2026-06-30
+      PANW  Revenues                       18 facts, ZERO quarterly, last 2018-07-31
+            RevenueFromContract...Excluding 117 facts, 64 quarterly, last 2026-04-30
+
+    So AAPL's ttm_revenue came from a series that stopped in 2018 -- hence 265.6B
+    against an actual FY24 revenue of 391.0B, and PANW/CHKP reporting rev=0/2
+    usable points.
+
+    Ranking: RECENCY FIRST, then quarterly coverage. Ordering by raw quarterly
+    count is wrong -- SalesRevenueNet has MORE historical quarters than the modern
+    tag (AAPL 136 vs 64) but was discontinued in 2018, and picking it gave
+    ttm_revenue 255.3B against an actual 391.0B (-34.7%). What matters is which
+    tag is still being filed, so tags are compared on (last quarterly period end,
+    quarterly count). NVDA is the case that keeps this general rather than a
+    hardcoded reordering: there "Revenues" is genuinely correct (quarterly facts
+    through 2026-04-26), and it still wins under this rule.
+    """
+    best = None
+    for tag in tag_list:
+        if tag not in facts:
+            continue
+        units = facts[tag].get("units", {}).get("USD", [])
+        if not units:
+            continue
+        n_q = 0
+        last_q_end = ""          # most recent QUARTERLY period end, not any end
+        for e in units:
+            if not e.get("start"):
+                continue
+            sm = _span_months(e)
+            if sm is not None and 2 <= sm <= 4:
+                n_q += 1
+                if e.get("end", "") > last_q_end:
+                    last_q_end = e.get("end", "")
+        if n_q == 0:
+            # No quarterly facts at all: keep as a last resort, ranked below any
+            # tag that has them (CHKP files annual-only revenue).
+            last_any = max((e.get("end", "") for e in units), default="")
+            score = ("", 0, last_any, len(units))
+        else:
+            score = (last_q_end, n_q, "", len(units))
+        if best is None or score > best[1]:
+            best = (tag, score)
+    return best[0] if best else None
+
+
+def _annual_series(facts: dict, tag_list: list[str]) -> pd.Series:
+    """12-month (annual) facts as a Series keyed by period end.
+
+    Uses the same best-covered tag selection as the quarterly parsers, but keeps
+    only ~12-month spans. This is the honest source of a trailing-twelve-month
+    figure for filers that publish no quarterly data at all.
+    """
+    tag = _pick_tag(facts, tag_list)
+    if not tag:
+        return pd.Series(dtype=float)
+    rows = {}
+    for e in facts[tag].get("units", {}).get("USD", []):
+        if not e.get("start"):
+            continue
+        sm = _span_months(e)
+        if sm is None or not (11 <= sm <= 13):
+            continue
+        end = e.get("end")
+        val = e.get("val")
+        if end is None or val is None:
+            continue
+        rows[pd.Timestamp(end)] = float(val)     # later filings overwrite
+    if not rows:
+        return pd.Series(dtype=float)
+    return pd.Series(rows).sort_index()
+
+
 def _span_months(entry: dict):
     """Actual period length of an EDGAR fact, from start/end.
 
@@ -148,11 +231,9 @@ def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
     2. Also use entries with N/A frames (standalone quarterly values)
     3. For annual frames, compute Q4 by differencing if Q4 standalone missing
     """
-    tag_data = None
-    for tag in tag_list:
-        if tag in facts:
-            tag_data = facts[tag]
-            break
+    # best-covered tag, not first-present -- see _pick_tag
+    _tag = _pick_tag(facts, tag_list)
+    tag_data = facts.get(_tag) if _tag else None
     if tag_data is None:
         return pd.Series(dtype=float)
     
@@ -297,11 +378,9 @@ def parse_cashflow_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
     3. Compute Q4 = FY - Q3 cumulative when Q4 standalone missing
     4. For Q1-Q3, use cumulative differences if available
     """
-    tag_data = None
-    for tag in tag_list:
-        if tag in facts:
-            tag_data = facts[tag]
-            break
+    # best-covered tag, not first-present -- see _pick_tag
+    _tag = _pick_tag(facts, tag_list)
+    tag_data = facts.get(_tag) if _tag else None
     if tag_data is None:
         return pd.Series(dtype=float)
     
@@ -422,11 +501,9 @@ def parse_cashflow_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
 
 def parse_balance(facts: dict, tag_list: list[str]) -> pd.Series:
     """Parse balance sheet items (point-in-time)."""
-    tag_data = None
-    for tag in tag_list:
-        if tag in facts:
-            tag_data = facts[tag]
-            break
+    # best-covered tag, not first-present -- see _pick_tag
+    _tag = _pick_tag(facts, tag_list)
+    tag_data = facts.get(_tag) if _tag else None
     if tag_data is None:
         return pd.Series(dtype=float)
     
@@ -555,6 +632,18 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
         "cash": cash,
         "shares": shares,
         "fiscal_year_end": fy_end,
+        # Annual (12-month) series, keyed by period end. Needed for filers with
+        # NO quarterly coverage at all: Check Point (CHKP) is a foreign private
+        # issuer reporting semi-annually, so its revenue facts are 48x 12-month
+        # and 0x 3-month. tail(4) over its parsed series summed four different
+        # YEARS' Q4-by-difference values and produced 0.70B against an actual
+        # FY24 revenue of 2.565B. compute_quarterly_fundamentals falls back to
+        # this when the quarterly series cannot form a real TTM.
+        "annual_revenue": _annual_series(facts, REV_TAGS),
+        "annual_net_income": _annual_series(facts, NI_TAGS),
+        "annual_operating_income": _annual_series(facts, OI_TAGS),
+        "annual_operating_cash_flow": _annual_series(facts, OCF_TAGS),
+        "annual_capital_expenditure": _annual_series(facts, CAPEX_TAGS),
     }
 
 
@@ -597,9 +686,31 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             if series is None or series.empty:
                 row[f"ttm_{name}"] = None
                 continue
-            s = series[series.index <= qend_date].dropna()
-            s = s.tail(4)
-            row[f"ttm_{name}"] = float(s.sum()) if len(s) > 0 else None
+            s = series[series.index <= qend_date].dropna().tail(4)
+            # A real TTM needs four quarters that actually SPAN ~12 months. Some
+            # filers publish no quarterly facts at all (CHKP is a foreign private
+            # issuer filing semi-annually: 48 x 12-month revenue facts, 0 x
+            # 3-month), so the parsed series holds one Q4-by-difference value per
+            # year and tail(4) summed FOUR DIFFERENT YEARS -- 0.70B against an
+            # actual FY24 revenue of 2.565B. Detect that and use the reported
+            # 12-month figure instead of a fabricated sum.
+            ttm_val = None
+            if len(s) > 0:
+                span_ok = False
+                if len(s) >= 4:
+                    span = (s.index[-1] - s.index[0]).days
+                    span_ok = 240 <= span <= 400
+                if span_ok:
+                    ttm_val = float(s.sum())
+                else:
+                    ann = financials.get(f"annual_{name}")
+                    if ann is not None and not ann.empty:
+                        aa = ann[ann.index <= qend_date].dropna()
+                        if len(aa) > 0:
+                            ttm_val = float(aa.iloc[-1])
+                    if ttm_val is None and len(s) >= 4:
+                        ttm_val = float(s.sum())
+            row[f"ttm_{name}"] = ttm_val
         
         # Balance sheet values at quarter end
         for name, series in [
