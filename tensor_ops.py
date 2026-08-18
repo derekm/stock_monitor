@@ -10,6 +10,8 @@ Falls back to CPU numpy if torch unavailable or device=cpu.
 """
 
 from __future__ import annotations
+import warnings
+
 import numpy as np
 
 try:
@@ -92,10 +94,17 @@ def to_device(arr, device=None, dtype=None):
 
 
 def _to_tensor(arr: np.ndarray, device, dtype=torch.float32):
+    # A strided/read-only view (e.g. sliding_window_view output) makes torch
+    # warn about non-writable buffers; copy only in that case.
+    def _safe(a):
+        a = np.asarray(a)
+        if not a.flags.writeable:
+            a = np.array(a, copy=True)
+        return a
     if _HAS_TORCH and isinstance(device, torch.device) and device.type != "cpu":
-        return torch.as_tensor(arr, dtype=dtype, device=device)
+        return torch.as_tensor(_safe(arr), dtype=dtype, device=device)
     if _HAS_TORCH and isinstance(device, str) and device != "cpu":
-        return torch.as_tensor(arr, dtype=dtype, device=device)
+        return torch.as_tensor(_safe(arr), dtype=dtype, device=device)
     return arr  # numpy array
 
 
@@ -424,6 +433,90 @@ def rolling_skew(arr, window, device=None, min_periods=None):
 def rolling_kurt(arr, window, device=None, min_periods=None):
     """Rolling kurtosis (standardized 4th moment, NOT excess)."""
     return rolling_moment(arr, window, 4, device=device, min_periods=min_periods)
+
+
+def rolling_median(arr: np.ndarray, window: int, device: str | None = None,
+                   min_periods: int | None = None) -> np.ndarray:
+    """Rolling median over the last axis, NaN-aware, batched across rows.
+
+    Uses a strided window + nanmedian/nanquantile so the whole ticker axis is
+    done in one call instead of a per-ticker pandas loop.
+    """
+    dev = device or _best_device()
+    a = np.asarray(arr, dtype=float)
+    mp = window if min_periods is None else min_periods
+    cnt = _valid_count(a, window, device=dev)
+
+    a2 = a if a.ndim == 2 else a[None, :]
+    T, D = a2.shape
+    res = np.full((T, D), np.nan, dtype=float)
+    if D >= window:
+        if is_gpu(dev):
+            t = _to_tensor(np.ascontiguousarray(a2), dev, dtype=torch.float64)
+            wv = t.unfold(1, window, 1)
+            # nanquantile(0.5), NOT nanmedian: torch.nanmedian returns the LOWER
+            # of the two middle values for an even window while numpy/pandas
+            # average them, so with L=60 every single window disagreed.
+            # nanquantile interpolates and matches numpy.
+            res[:, window - 1:] = _to_numpy(
+                torch.nanquantile(wv.contiguous(), 0.5, dim=-1))
+        else:
+            from numpy.lib.stride_tricks import sliding_window_view
+            wv = sliding_window_view(a2, window, axis=1)
+            with warnings.catch_warnings():
+                # all-NaN windows are expected on a sparse panel; the min_periods
+                # mask below turns them into NaN anyway.
+                warnings.simplefilter("ignore", RuntimeWarning)
+                with np.errstate(invalid="ignore"):
+                    res[:, window - 1:] = np.nanmedian(wv, axis=-1)
+    out = res if a.ndim == 2 else res[0]
+    return np.where(cnt >= mp, out, np.nan)
+
+
+def rolling_quad_fit(arr: np.ndarray, window: int, device: str | None = None,
+                     min_periods: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Rolling 2nd-order polynomial fit; returns (slope, curvature).
+
+    Fits y = c0 + c1*k + c2*k^2 over each trailing window with k = 0..window-1
+    (window-local index, so the design matrix is CONSTANT and its 3x3 normal
+    equations are inverted ONCE instead of solved per row). The reference
+    implementation looped `np.linalg.solve` per day with a global-index design
+    matrix, which is algebraically equivalent for slope/curvature at the window
+    origin but O(D) solves and numerically far worse at large indices (the
+    global form builds sums of k^4 up to D^4).
+    """
+    dev = device or _best_device()
+    a = np.asarray(arr, dtype=float)
+    mp = window if min_periods is None else min_periods
+    cnt = _valid_count(a, window, device=dev)
+
+    a2 = a if a.ndim == 2 else a[None, :]
+    T, D = a2.shape
+    slope = np.full((T, D), np.nan, dtype=float)
+    curv = np.full((T, D), np.nan, dtype=float)
+    if D >= window:
+        k = np.arange(window, dtype=float)
+        X = np.stack([np.ones(window), k, k * k], axis=1)      # [window, 3]
+        XtX_inv = np.linalg.inv(X.T @ X)                        # constant
+        P = XtX_inv @ X.T                                       # [3, window]
+        if is_gpu(dev):
+            t = _to_tensor(np.ascontiguousarray(a2), dev, dtype=torch.float64)
+            wv = t.unfold(1, window, 1)                         # [T, W, window]
+            Pt = _to_tensor(P, dev, dtype=torch.float64)
+            coef = torch.einsum("cw,tdw->tdc", Pt, wv)           # [T, W, 3]
+            slope[:, window - 1:] = _to_numpy(coef[..., 1])
+            curv[:, window - 1:] = _to_numpy(coef[..., 2])
+        else:
+            from numpy.lib.stride_tricks import sliding_window_view
+            wv = sliding_window_view(a2, window, axis=1)
+            coef = np.einsum("cw,tdw->tdc", P, wv)
+            slope[:, window - 1:] = coef[..., 1]
+            curv[:, window - 1:] = coef[..., 2]
+    if a.ndim == 1:
+        slope, curv = slope[0], curv[0]
+        cnt = cnt if cnt.ndim == 1 else cnt[0]
+    ok = cnt >= mp
+    return np.where(ok, slope, np.nan), np.where(ok, curv, np.nan)
 
 
 def rolling_slope(arr: np.ndarray, window: int, device: str | None = None) -> np.ndarray:

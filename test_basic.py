@@ -465,6 +465,69 @@ def test_rolling_moments():
     return True
 
 
+def test_profiler_batch_parity():
+    """window_profile_stats_batch must equal the per-ticker reference.
+
+    Guards the bugs found while adding the batched path:
+      * price_slope/price_curvature were built from an INCONSISTENT normal-
+        equation matrix (A[0,1] used a window-local index sum while the rest
+        used global sums), so neither was a valid quadratic fit. Both paths now
+        use tensor_ops.rolling_quad_fit, verified against np.polyfit.
+      * those two columns also returned 0.0 (not NaN) before the window formed,
+        i.e. a fake "flat trend" signal.
+      * torch.nanmedian takes the LOWER middle value on an even window while
+        numpy averages, so rolling_median had to use nanquantile(0.5).
+    """
+    print("Testing statistical_profiler batch parity...")
+    import numpy as np
+    import torch
+    from statistical_profiler import (
+        window_profile_stats, window_profile_stats_batch, STAT_COLS,
+    )
+
+    rng = np.random.default_rng(21)
+    n, L = 400, 60
+    idx = pd.date_range("2024-01-01", periods=n, freq="B")
+    c = 100 * np.cumprod(1 + rng.standard_normal(n) * 0.012)
+    o = c * (1 + rng.standard_normal(n) * 0.003)
+    h = np.maximum(c, o) * (1 + np.abs(rng.standard_normal(n)) * 0.004)
+    lo = np.minimum(c, o) * (1 - np.abs(rng.standard_normal(n)) * 0.004)
+    v = rng.uniform(1e6, 5e6, n)
+    S = lambda a: pd.Series(a, index=idx)
+
+    ref = window_profile_stats(S(c), S(v), L, S(o), S(h), S(lo))
+    for dev in [torch.device("cpu"), None]:
+        got = window_profile_stats_batch(c[None, :], v[None, :], L,
+                                         o[None, :], h[None, :], lo[None, :],
+                                         device=dev)
+        for col in STAT_COLS:
+            if col == "price_mode":      # histogram mode: CPU-only by design
+                continue
+            a = ref[col].to_numpy(dtype=float)
+            b = np.asarray(got[col][0], dtype=float)
+            assert (np.isnan(a) == np.isnan(b)).all(), \
+                f"{col}: NaN pattern differs on {got['_device']}"
+            m = np.isfinite(a) & np.isfinite(b)
+            if m.any():
+                scale = max(float(np.nanmax(np.abs(a))), 1e-9)
+                rel = float(np.abs(a[m] - b[m]).max()) / scale
+                assert rel < 1e-9, f"{col}: rel diff {rel:.2e} on {got['_device']}"
+        print(f"  {got['_device']}: all 30 stats match reference ✓")
+
+    # slope/curvature must be a REAL quadratic fit and NaN before the window
+    from tensor_ops import rolling_quad_fit
+    sl, cu = rolling_quad_fit(c, L, device=torch.device("cpu"))
+    w = c[L - 1 - (L - 1):L]          # first full window
+    p = np.polyfit(np.arange(L, dtype=float), c[:L], 2)
+    assert abs(p[0] - cu[L - 1]) < 1e-9, "curvature disagrees with np.polyfit"
+    assert abs(p[1] - sl[L - 1]) < 1e-9, "slope disagrees with np.polyfit"
+    assert np.isnan(cu[: L - 1]).all(), "curvature must be NaN before the window forms"
+    assert np.isnan(ref["price_curvature"].to_numpy()[: L - 1]).all(), \
+        "reference still emits 0.0 curvature before the window forms"
+    print("  slope/curvature match np.polyfit and are NaN pre-window ✓")
+    return True
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -518,6 +581,7 @@ if __name__ == "__main__":
         ("Rolling NaN semantics", test_rolling_nan_semantics),
         ("Snapshot PIT history", test_snapshot_history),
         ("Rolling skew/kurt", test_rolling_moments),
+        ("Profiler batch parity", test_profiler_batch_parity),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]
