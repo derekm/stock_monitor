@@ -578,6 +578,74 @@ def test_resid_mom_reconstruction():
     return True
 
 
+def test_resident_kernels():
+    """The *_t kernels must match the numpy-facing primitives, and stay resident.
+
+    Motivation (measured, MX550, 300x1500 float64 = 3.6 MB):
+      25 rolling ops, numpy in/out each : 687 ms  <- .cpu() alone = 78% of runtime
+      25 rolling ops, kept resident     :  23 ms  (~30x)
+    The numpy API forces a device->host sync per call, so a multi-op pipeline is
+    dominated by transfers rather than compute. This is why a GPU rolling library
+    needs a tensor-in/tensor-out core.
+
+    Also pins the DirectML limitation: torch-directml implements sqrt/pow/clamp/
+    sort/isnan/nanquantile for float32 ONLY, so resident_device() must route it
+    to CPU rather than raise (float32 is not an option: rolling std on ~7.1e6
+    prices is off by 0.20 absolute).
+    """
+    print("Testing resident tensor kernels...")
+    import numpy as np
+    import torch
+    import tensor_ops as T
+
+    if not getattr(T, "_HAS_TORCH", False):
+        print("  torch unavailable - skipped")
+        return True
+
+    rng = np.random.default_rng(5)
+    a = rng.standard_normal((24, 400)).cumsum(axis=1) + 100.0
+    a[:, :30] = np.nan          # leading NaN, the case that broke the old _gpu
+    a[3, 100:200] = np.nan      # interior gap
+    L = 60
+
+    for dev in [torch.device("cpu"), T.resident_device()]:
+        if not T.is_gpu(dev) and dev.type != "cpu":
+            continue
+        g = torch.as_tensor(a, dtype=torch.float64, device=dev)
+        checks = [
+            ("mean", T.rolling_mean(a, L, device=dev), T.rolling_mean_t(g, L)),
+            ("sum", T.rolling_sum(a, L, device=dev), T.rolling_sum_t(g, L)),
+            ("std1", T.rolling_std(a, L, device=dev, ddof=1), T.rolling_std_t(g, L, ddof=1)),
+            ("max", T.rolling_reduce(a, L, "max", device=dev), T.rolling_reduce_t(g, L, "max")),
+            ("min", T.rolling_reduce(a, L, "min", device=dev), T.rolling_reduce_t(g, L, "min")),
+            ("median", T.rolling_median(a, L, device=dev), T.rolling_median_t(g, L)),
+            ("rank", T.rolling_rank_pct(a, L, device=dev), T.rolling_rank_pct_t(g, L)),
+        ]
+        for name, npv, tv in checks:
+            assert isinstance(tv, torch.Tensor), f"{name}_t returned numpy (lost residency)"
+            assert tv.device.type == dev.type, f"{name}_t left device {dev}"
+            got = tv.cpu().numpy()
+            assert (np.isnan(npv) == np.isnan(got)).all(), f"{name}: NaN pattern differs"
+            m = np.isfinite(npv) & np.isfinite(got)
+            if m.any():
+                d = float(np.abs(npv[m] - got[m]).max())
+                assert d < 1e-8, f"{name} on {dev}: maxdiff {d:.2e}"
+        print(f"  {T.device_name(dev)}: 7 resident kernels match numpy API ✓")
+
+    # DirectML must be routed away from the f64 resident path, not allowed to fail
+    try:
+        import torch_directml as dml
+        d = dml.device()
+        assert T.supports_f64_rolling(d) is False, \
+            "DirectML reported f64 rolling support; verify sqrt/sort/nanquantile"
+        assert T.resident_device(d).type == "cpu", \
+            "resident_device must send DirectML to CPU for f64 work"
+        print("  DirectML correctly routed to CPU for float64 ✓")
+    except ImportError:
+        print("  torch-directml not installed - skipped")
+    return True
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -633,6 +701,7 @@ if __name__ == "__main__":
         ("Rolling skew/kurt", test_rolling_moments),
         ("Profiler batch parity", test_profiler_batch_parity),
         ("resid_mom_63 reconstruction", test_resid_mom_reconstruction),
+        ("Resident tensor kernels", test_resident_kernels),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]

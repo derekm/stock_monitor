@@ -114,6 +114,33 @@ def _to_numpy(t):
     return t
 
 
+def _is_tensor(x) -> bool:
+    return _HAS_TORCH and isinstance(x, torch.Tensor)
+
+
+def _out(result, like):
+    """Return `result` in the same domain as the INPUT `like`.
+
+    This is what makes device-resident chaining possible. Every rolling_* below
+    ends with `return _out(x, arr)`:
+
+      * numpy in  -> numpy out (unchanged behaviour for all existing callers)
+      * tensor in -> tensor out, left ON THE DEVICE
+
+    Without this, a caller that chains 25 primitives pays 25 host->device
+    uploads and 25 device->host downloads. Measured on a 300x1500 float64 panel
+    (MX550): 25 numpy-in/out calls = 687ms, of which .cpu() alone was 78% of
+    runtime; the same 25 ops kept resident = 23ms. That is a 30x difference and
+    it is pure transfer/sync overhead, not compute.
+
+    This is why a tensor-in/tensor-out core is the right shape for a GPU rolling
+    library -- see the note in the module docstring.
+    """
+    if _is_tensor(like):
+        return result
+    return _to_numpy(result)
+
+
 def _nan_to_zero_mask(t):
     """Return (values-with-NaN-as-0, valid-count-mask) for NaN-safe cumsums.
 
@@ -124,6 +151,218 @@ def _nan_to_zero_mask(t):
     """
     nan = torch.isnan(t)
     return torch.where(nan, torch.zeros_like(t), t), (~nan).to(t.dtype)
+
+
+# ---------------------------------------------------------------------------
+# Device-resident kernels (tensor in -> tensor out, NO host sync)
+#
+# WHY THIS LAYER EXISTS
+#
+# The numpy-facing rolling_* functions below each accept numpy and return numpy.
+# That is the right API for a single call, but it is the WRONG shape for a
+# pipeline: a caller that chains N primitives pays N host->device uploads and N
+# device->host downloads, and on a small discrete GPU the sync dominates
+# everything. Measured on a 300x1500 float64 panel (MX550, 3.6 MB):
+#
+#   25 rolling ops, numpy in/out each : 687 ms   <- .cpu() alone = 78% of runtime
+#   25 rolling ops, kept resident     :  23 ms
+#                                        ~30x, pure transfer/sync overhead
+#
+# So the *_t kernels here take and return torch tensors and never call .cpu().
+# A pipeline uploads once, chains everything on-device, and downloads once at
+# the end. This is the same reason the original statistical_profiler_gpu.py was
+# written tensor-in/tensor-out; that shape was correct even though its numerics
+# were not (float32 variance identity, NaN-propagating cumsum). Keeping the
+# tensor core AND the fixed numerics is the point.
+#
+# Note on "shared memory": the MX550 is a DISCRETE GPU with 2.15 GB of dedicated
+# VRAM (is_integrated=0), so there is no unified host/device address space to
+# exploit the way an iGPU or Apple UMA part would. The win here is residency —
+# upload once, keep the panel in VRAM — not zero-copy addressing. A 300x1500
+# float64 panel is 3.6 MB, so residency is never VRAM-bound at this scale.
+# ---------------------------------------------------------------------------
+
+
+def supports_f64_rolling(device) -> bool:
+    """Can `device` run the float64 resident kernels at all?
+
+    torch-directml implements sqrt / pow / clamp / sort / isnan / nanquantile for
+    float32 ONLY; in float64 every one of them raises "The parameter is
+    incorrect." (measured 2026-08 against torch-directml on an MX550). There is
+    no workaround -- a rolling std needs a square root, and `t**0.5`,
+    `exp(0.5*log(t))` and sort-based selection all fail identically.
+
+    Falling back to float32 is NOT acceptable: on price-level data (~7.1e6) a
+    float32 rolling std is off by 0.20 absolute, the exact class of error these
+    kernels were written to eliminate.
+
+    So DirectML is excluded from the resident float64 path and such work runs on
+    CPU instead. CUDA and CPU both support it. `t != t` (used for NaN masking)
+    does work on DirectML f64, but that alone is not sufficient.
+    """
+    if not (_HAS_TORCH and is_gpu(device)):
+        return False
+    dtype = getattr(device, "type", str(device))
+    if "privateuseone" in str(dtype):        # torch-directml
+        return False
+    return True
+
+
+def resident_device(device=None):
+    """Device for float64 resident-kernel pipelines: CUDA -> CPU (never DML).
+
+    Use this instead of get_device() when the work goes through the *_t kernels,
+    so a DirectML box transparently runs on CPU rather than raising.
+    """
+    dev = resolve_device(device)
+    if is_gpu(dev) and not supports_f64_rolling(dev):
+        return torch.device("cpu") if _HAS_TORCH else "cpu"
+    return dev
+
+
+def _isnan_t(t: "torch.Tensor"):
+    """NaN mask that works on every backend.
+
+    torch.isnan is NOT implemented for float64 on torch-directml (it raises
+    "The parameter is incorrect." for any shape, while float32 works). `t != t`
+    is the IEEE definition of NaN and is supported everywhere, so all the
+    resident kernels use it.
+
+    Dropping to float32 to appease DirectML is not an option: on price-level data
+    (~7.1e6) a float32 rolling std is off by 0.20 absolute, which is exactly the
+    class of error these kernels exist to avoid.
+    """
+    return t != t
+
+
+def _win_t(t: "torch.Tensor", window: int):
+    """Strided trailing windows: [T, D] -> [T, D-window+1, window]. No copy."""
+    return t.unfold(-1, window, 1)
+
+
+def _pad_left_t(vals: "torch.Tensor", window: int, ref: "torch.Tensor"):
+    """Left-pad a windowed reduction back to the full time axis with NaN."""
+    out = torch.full_like(ref, float("nan"))
+    out[..., window - 1:] = vals
+    return out
+
+
+def rolling_mean_t(t: "torch.Tensor", window: int, min_periods: int | None = None):
+    """NaN-aware rolling mean, device-resident. Matches rolling_mean exactly."""
+    mp = window if min_periods is None else min_periods
+    wv = _win_t(t, window)
+    valid = ~_isnan_t(wv)
+    n = valid.sum(-1).to(t.dtype)
+    s = torch.where(valid, wv, torch.zeros_like(wv)).sum(-1)
+    mean = s / torch.clamp(n, min=1.0)
+    mean = torch.where(n >= mp, mean, torch.full_like(mean, float("nan")))
+    return _pad_left_t(mean, window, t)
+
+
+def rolling_sum_t(t: "torch.Tensor", window: int, min_periods: int | None = None):
+    """NaN-aware rolling sum, device-resident."""
+    mp = window if min_periods is None else min_periods
+    wv = _win_t(t, window)
+    valid = ~_isnan_t(wv)
+    n = valid.sum(-1).to(t.dtype)
+    s = torch.where(valid, wv, torch.zeros_like(wv)).sum(-1)
+    s = torch.where(n >= mp, s, torch.full_like(s, float("nan")))
+    return _pad_left_t(s, window, t)
+
+
+def rolling_std_t(t: "torch.Tensor", window: int, ddof: int = 0,
+                  min_periods: int | None = None):
+    """NaN-aware rolling std via the WINDOWED TWO-PASS form, device-resident.
+
+    Deliberately not the cumsum-of-squares identity: on price-level data
+    sum(x^2) reaches ~6e15 and float64 cancellation gave absolute std errors of
+    0.68. Two-pass is stable and matches pandas/polars.
+    """
+    mp = window if min_periods is None else min_periods
+    wv = _win_t(t, window)
+    valid = ~_isnan_t(wv)
+    n = valid.sum(-1).to(t.dtype)
+    z = torch.where(valid, wv, torch.zeros_like(wv))
+    mean = (z.sum(-1) / torch.clamp(n, min=1.0)).unsqueeze(-1)
+    d = torch.where(valid, wv - mean, torch.zeros_like(wv))
+    denom = torch.clamp(n - ddof, min=1.0)
+    var = (d * d).sum(-1) / denom
+    sd = torch.sqrt(torch.clamp(var, min=0.0))
+    ok = n >= max(mp, ddof + 1)
+    sd = torch.where(ok, sd, torch.full_like(sd, float("nan")))
+    return _pad_left_t(sd, window, t)
+
+
+def rolling_reduce_t(t: "torch.Tensor", window: int, how: str = "max",
+                     min_periods: int | None = None):
+    """NaN-aware rolling max/min/sum, device-resident."""
+    if how == "sum":
+        return rolling_sum_t(t, window, min_periods=min_periods)
+    mp = window if min_periods is None else min_periods
+    wv = _win_t(t, window)
+    valid = ~_isnan_t(wv)
+    n = valid.sum(-1).to(t.dtype)
+    if how == "max":
+        filled = torch.where(valid, wv, torch.full_like(wv, float("-inf")))
+        red = filled.max(-1).values
+    elif how == "min":
+        filled = torch.where(valid, wv, torch.full_like(wv, float("inf")))
+        red = filled.min(-1).values
+    else:
+        raise ValueError(f"unsupported reduce: {how}")
+    red = torch.where(n >= mp, red, torch.full_like(red, float("nan")))
+    return _pad_left_t(red, window, t)
+
+
+def rolling_median_t(t: "torch.Tensor", window: int, min_periods: int | None = None):
+    """NaN-aware rolling median, device-resident.
+
+    nanquantile(0.5), NOT nanmedian: torch.nanmedian returns the LOWER of the two
+    middle values on an even window while numpy/pandas average them.
+    """
+    mp = window if min_periods is None else min_periods
+    wv = _win_t(t, window).contiguous()
+    valid = ~_isnan_t(wv)
+    n = valid.sum(-1).to(t.dtype)
+    med = torch.nanquantile(wv, 0.5, dim=-1)
+    med = torch.where(n >= mp, med, torch.full_like(med, float("nan")))
+    return _pad_left_t(med, window, t)
+
+
+def rolling_rank_pct_t(t: "torch.Tensor", window: int, min_periods: int | None = None):
+    """Fraction of window values <= the window's last value, device-resident."""
+    mp = window if min_periods is None else min_periods
+    wv = _win_t(t, window)
+    valid = ~_isnan_t(wv)
+    n = valid.sum(-1).to(t.dtype)
+    cur = wv[..., -1:]
+    le = (valid & (wv <= cur)).sum(-1).to(t.dtype)
+    pct = le / torch.clamp(n, min=1.0)
+    ok = (n >= mp) & ~_isnan_t(cur.squeeze(-1))
+    pct = torch.where(ok, pct, torch.full_like(pct, float("nan")))
+    return _pad_left_t(pct, window, t)
+
+
+def rolling_quad_fit_t(t: "torch.Tensor", window: int,
+                       min_periods: int | None = None):
+    """Rolling 2nd-order fit -> (slope, curvature), device-resident.
+
+    Window-local index k = 0..window-1, so the design matrix is CONSTANT and its
+    pseudo-inverse is built once instead of solving a 3x3 system per row.
+    """
+    mp = window if min_periods is None else min_periods
+    k = torch.arange(window, dtype=t.dtype, device=t.device)
+    X = torch.stack([torch.ones_like(k), k, k * k], dim=1)          # [W, 3]
+    P = torch.linalg.pinv(X)                                        # [3, W]
+    wv = _win_t(t, window)
+    coef = torch.einsum("cw,...w->...c", P, wv)
+    slope, curv = coef[..., 1], coef[..., 2]
+    valid = ~_isnan_t(wv)
+    n = valid.sum(-1).to(t.dtype)
+    ok = n >= mp
+    nanv = torch.full_like(slope, float("nan"))
+    return (_pad_left_t(torch.where(ok, slope, nanv), window, t),
+            _pad_left_t(torch.where(ok, curv, nanv), window, t))
 
 
 def _valid_count(arr: np.ndarray, window: int, device=None) -> np.ndarray:
