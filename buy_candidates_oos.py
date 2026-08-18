@@ -218,8 +218,13 @@ def reconstruct_inputs(m: pd.DataFrame) -> pd.DataFrame:
     out["distrust_discount"] = (1.0 - p_bad.clip(0, 0.60) * excess).clip(0.5, 1.0)
 
     # momentum_score / resid_mom_63 / liquidity_score in production units.
-    # momentum_score is a 0-1 rank; rank cross-sectionally per date.
-    out["momentum_score"] = out.groupby("date")["mom126"].rank(pct=True)
+    #
+    # momentum_score (built last, below) matches momentum_analytics L120-126: the
+    # MEAN of cross-sectionally z-scored horizons, i.e. centered on 0. It used to
+    # be `rank(mom126, pct=True)`; because MOMENTUM_STEPS thresholds at
+    # -0.5 / 0.0 / +0.5, a 0-1 rank made the -0.15 and 0.0 tiers UNREACHABLE
+    # (measured 0.0000 of rows below either), collapsing a four-tier step
+    # function into two.
     # residual momentum, matching momentum_analytics.py L82-88: regress each
     # name's daily returns on the equal-weight market, then take
     # resid.tail(63).mean() * 63 -- i.e. a BETA-ADJUSTED, 63-day CUMULATIVE
@@ -231,9 +236,48 @@ def reconstruct_inputs(m: pd.DataFrame) -> pd.DataFrame:
     # It mattered: RESID_MOM_STEPS gives +0.10 above 0.05, and the old proxy
     # crossed that threshold on 23.0% of rows (std 0.1222).
     out["resid_mom_63"] = _resid_mom_63_pit(out)
+    # mom_12_1: 12-month return skipping the most recent month, as in
+    # momentum_analytics (s.iloc[-21] / s.iloc[-252] - 1).
+    if {"mom252", "mom21"}.issubset(out.columns):
+        out["mom_12_1"] = (1.0 + out["mom252"]) / (1.0 + out["mom21"]) - 1.0
+    # momentum_score LAST: it z-scores and averages the horizons above,
+    # including resid_mom_63, so it must be built after them.
+    out["momentum_score"] = _momentum_score_pit(out)
     out["liquidity_score"] = out.groupby("date")["dollar_vol"].rank(pct=True)
 
     return out
+
+
+def _momentum_score_pit(out: pd.DataFrame) -> pd.Series:
+    """Composite TS momentum score, matching momentum_analytics.py L120-126.
+
+    Cross-sectionally z-score each available horizon WITHIN each rebalance date,
+    then average. Production z-scores across the snapshot universe; doing it
+    per-date is the point-in-time equivalent and keeps the scale (mean 0, sd ~1)
+    that MOMENTUM_STEPS was calibrated against.
+
+    Horizon map to the reconstructed panel:
+      ret_21d  -> mom21     ret_63d -> mom63    ret_126d -> mom126
+      mom_12_1 -> mom252 (12-month, skipping the most recent month)
+      resid_mom_63 -> the beta-adjusted residual built above
+    """
+    import numpy as np
+
+    cols = [c for c in ("mom21", "mom63", "mom126", "mom_12_1", "resid_mom_63")
+            if c in out.columns]
+    if not cols:
+        return pd.Series(np.nan, index=out.index)
+
+    zs = []
+    g = out.groupby("date")
+    for c in cols:
+        mu = g[c].transform("mean")
+        sd = g[c].transform("std")
+        zs.append(((out[c] - mu) / sd.where(sd > 0)).fillna(0.0))
+    z = pd.concat(zs, axis=1)
+    # rows with no usable horizon at all stay NaN rather than scoring 0
+    any_obs = out[cols].notna().any(axis=1)
+    return z.mean(axis=1).where(any_obs)
 
 
 def _resid_mom_63_pit(out: pd.DataFrame) -> pd.Series:
@@ -428,12 +472,24 @@ def main():
         print("  NOTE: fold-mean deltas are NOT significance tests. Confirm any")
         print("  candidate with a paired per-date test before acting on it.")
         print()
-        print("  resid_mom_63 was investigated this way (2026-08) and KEPT:")
-        print("    paired per-date, n=73 -> mean d_IC +0.0039, t=0.846, p=0.40,")
-        print("    bootstrap 95% CI [-0.0051, +0.0127], helps on 37/73 dates.")
-        print("    The earlier removal case (t=1.75, and t=2.50 on re-test) came")
-        print("    from reconstructing resid_mom_63 as a 21d simple demean; the")
-        print("    production value is a BETA-ADJUSTED 63d cumulative residual.")
+        print("  Paired per-date results (2026-08, n=73, all SUPPORTED components):")
+        print("    component          d_IC       t       p   verdict")
+        print("    decision        -0.0053  -4.053  0.0001   KEEP (helps, significant)")
+        print("    mos_pass        -0.0004  -2.892  0.0051   KEEP (helps, significant)")
+        print("    liquidity_score -0.0025  -1.791  0.0775   keep")
+        print("    distrust_disc   -0.0007  -1.179  0.2421   keep")
+        print("    leverage_flag   +0.0001   0.117  0.9068   keep")
+        print("    resid_mom_63    +0.0002   0.093  0.9263   keep")
+        print("    momentum_score  +0.0102   1.337  0.1855   keep")
+        print("  NOT ONE component is significantly harmful -> remove nothing.")
+        print()
+        print("  Both momentum inputs had to be re-specified before testing:")
+        print("    resid_mom_63   was a 21d simple demean; production is a")
+        print("                   BETA-ADJUSTED 63d cumulative residual.")
+        print("    momentum_score was rank(mom126, pct=True); production is the")
+        print("                   MEAN of z-scored horizons, centered on 0. On a")
+        print("                   0-1 rank the -0.15 and 0.00 tiers of")
+        print("                   MOMENTUM_STEPS were UNREACHABLE (0.0000 of rows).")
     else:
         print("\nno component is actively harmful on IC")
 

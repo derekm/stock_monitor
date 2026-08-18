@@ -559,6 +559,16 @@ def test_resid_mom_reconstruction():
     hsrc = inspect.getsource(B._resid_mom_63_pit)
     assert "mom63" in hsrc, "resid_mom_63 helper does not use the 63d horizon"
 
+    # momentum_score must be the z-score composite, NOT a 0-1 rank: MOMENTUM_STEPS
+    # thresholds at -0.5/0.0/+0.5, so a rank makes two of four tiers unreachable.
+    assert 'out["momentum_score"] = _momentum_score_pit' in code, \
+        "momentum_score is not the PIT z-score composite"
+    assert 'rank(pct=True)' not in code.split('momentum_score')[0][-200:], \
+        "momentum_score looks like a rank again"
+    msrc = inspect.getsource(B._momentum_score_pit)
+    for h in ("mom21", "mom63", "mom126", "resid_mom_63"):
+        assert h in msrc, f"momentum_score composite is missing horizon {h}"
+
     n = 240
     df = pd.DataFrame({
         "ticker": ["A"] * n + ["B"] * n,
@@ -574,7 +584,23 @@ def test_resid_mom_reconstruction():
     bad = df.drop(columns=["mom63"]).assign(mom21=0.05)
     assert B._resid_mom_63_pit(bad).isna().all(), \
         "helper silently substituted a proxy when mom63 was absent"
+
+    # momentum_score must land on a z-score scale that reaches all four
+    # MOMENTUM_STEPS tiers, not a 0-1 rank that can never go negative.
+    rng2 = np.random.default_rng(7)
+    panel = pd.DataFrame({
+        "ticker": np.repeat([f"T{i}" for i in range(60)], 4),
+        "date": np.tile(pd.date_range("2020-03-31", periods=4, freq="QE"), 60),
+    })
+    for c in ("mom21", "mom63", "mom126", "resid_mom_63"):
+        panel[c] = rng2.standard_normal(len(panel)) * 0.2
+    ms = B._momentum_score_pit(panel)
+    assert ms.notna().any(), "momentum_score composite returned all-NaN"
+    assert float(ms.min()) < 0.0, \
+        "momentum_score never goes negative -- looks like a 0-1 rank, so the " \
+        "-0.15 and 0.00 tiers of MOMENTUM_STEPS would be unreachable"
     print("  beta-adjusted 63d horizon, no silent 21d fallback ✓")
+    print("  momentum_score is a signed z-score composite, not a rank ✓")
     return True
 
 
