@@ -902,17 +902,35 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
                 row["operating_income"] = float(s.iloc[-1])
                 row["operating_income_quarterly_provenance"] = "reported"
 
-        # Compatibility columns for fundamentals.parquet schema
-        row["revenue"] = row.get("total_revenue")
-        row["net_income"] = row.get("net_income_quarterly")
-        row["operating_cash_flow"] = row.get("ttm_operating_cash_flow")
-        row["capital_expenditure"] = row.get("ttm_capital_expenditure")
+        # Canonical fundamentals.parquet schema (post-2026-08 migration).
+        #
+        # Names carry the period basis explicitly: *_quarterly is one fiscal
+        # quarter, *_ttm is a trailing-twelve-month sum. The internal working
+        # names above are short (equity/assets/debt/cash) and the ttm_* keys hold
+        # twelve-month sums; both are mapped here at the output boundary.
+        row["revenue_quarterly"] = row.get("total_revenue")
+        row["net_income_quarterly"] = row.get("net_income_quarterly")
+        row["operating_income_quarterly"] = row.get("operating_income")
+        row["revenue_ttm"] = row.get("ttm_revenue")
+        row["net_income_ttm"] = row.get("ttm_net_income")
+        row["operating_income_ttm"] = row.get("ttm_operating_income")
+        # These two previously wrote TTM values into the QUARTERLY names
+        # (operating_cash_flow = ttm_operating_cash_flow), which mislabelled a
+        # twelve-month sum as a single quarter. Now mapped to the _ttm names.
+        row["operating_cash_flow_ttm"] = row.get("ttm_operating_cash_flow")
+        row["capital_expenditure_ttm"] = row.get("ttm_capital_expenditure")
         row["total_assets"] = row.get("assets")
-        row["stockholders_equity"] = row.get("equity")
+        row["shareholders_equity"] = row.get("equity")
         row["total_debt"] = row.get("debt")
         row["cash_and_equivalents"] = row.get("cash")
-        row["shareholders_equity"] = row.get("equity")
-        row["total_liabilities"] = row.get("debt")
+        # shares_outstanding: reject the corrupt values that made the old `shares`
+        # column unusable (FITB 2010-09-30 held 7.96e14 -- 796 trillion shares;
+        # 45 of 73 unique rows were 0.0). No US listed company exceeds ~1e11.
+        _sh = row.get("shares")
+        row["shares_outstanding"] = _sh if (_sh and 0 < _sh < 1e11) else None
+        # NOTE: total_liabilities is NOT set from `debt`. Measured on the panel,
+        # total_liabilities / total_debt has a median ratio of 2.515 -- debt is a
+        # SUBSET of liabilities, so copying one into the other was wrong.
         
         # Calendar fields
         if row.get("as_of_date"):
