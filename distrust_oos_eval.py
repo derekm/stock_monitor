@@ -44,10 +44,14 @@ def _price_col(cols) -> str:
 
 
 def load_price_panel() -> pd.DataFrame:
-    """Long-form prices with forward label and trailing momentum/vol features."""
+    """Long-form prices with forward label, trailing features, and liquidity."""
     head = pd.read_parquet(PRICES).head(0)
     pcol = _price_col(head.columns)
-    px = pd.read_parquet(PRICES, columns=["date", "ticker", pcol])
+    cols = ["date", "ticker", pcol]
+    for extra in ("close", "volume"):
+        if extra in head.columns and extra not in cols:
+            cols.append(extra)
+    px = pd.read_parquet(PRICES, columns=cols)
     px["date"] = pd.to_datetime(px["date"])
     px = px.rename(columns={pcol: "px"})
     px = px.dropna(subset=["px"])
@@ -60,13 +64,36 @@ def load_price_panel() -> pd.DataFrame:
     # Trailing features (past only).
     px["mom126"] = px["px"] / g.shift(126) - 1.0
     px["mom21"] = px["px"] / g.shift(21) - 1.0
+    px["mom252"] = px["px"] / g.shift(252) - 1.0
     ret1 = px["px"] / g.shift(1) - 1.0
-    px["vol21"] = (
-        ret1.groupby(px["ticker"], sort=False)
-        .rolling(21, min_periods=15).std().reset_index(level=0, drop=True)
+    grp = ret1.groupby(px["ticker"], sort=False)
+    px["vol21"] = grp.rolling(21, min_periods=15).std().reset_index(level=0, drop=True)
+    px["vol63"] = grp.rolling(63, min_periods=40).std().reset_index(level=0, drop=True)
+    # Downside semi-deviation: only negative days (crash-relevant asymmetry).
+    neg = ret1.where(ret1 < 0, 0.0)
+    px["dvol63"] = (
+        neg.groupby(px["ticker"], sort=False)
+        .rolling(63, min_periods=40).std().reset_index(level=0, drop=True)
     )
-    print(f"  price panel: {len(px):,} rows, price col={pcol}")
+    # Drawdown from trailing 252d peak (past only).
+    roll_max = g.rolling(252, min_periods=60).max().reset_index(level=0, drop=True)
+    px["dd252"] = (px["px"] / roll_max - 1.0).clip(-1, 0)
+
+    # Liquidity: median 63d dollar volume (raw close x shares traded).
+    if "volume" in px.columns:
+        base_px = px["close"] if "close" in px.columns else px["px"]
+        dollar = pd.to_numeric(base_px, errors="coerce") * pd.to_numeric(px["volume"], errors="coerce")
+        px["dollar_vol"] = (
+            dollar.groupby(px["ticker"], sort=False)
+            .rolling(63, min_periods=30).median().reset_index(level=0, drop=True)
+        )
+    else:
+        px["dollar_vol"] = np.nan
+
+    print(f"  price panel: {len(px):,} rows, price col={pcol}, "
+          f"dollar_vol non-null {int(px['dollar_vol'].notna().sum()):,}")
     return px
+
 
 
 def rebalance_dates(px: pd.DataFrame, start: str, freq: str) -> pd.DatetimeIndex:
@@ -120,8 +147,14 @@ def load_arista_flags() -> set[str]:
     return set(ar["ticker"].astype(str).str.upper())
 
 
-def build_panel(start: str, freq: str, min_names: int) -> pd.DataFrame:
-    """Assemble (date, ticker, features, label) with strict PIT joins."""
+def build_panel(start: str, freq: str, min_names: int,
+                min_dollar_vol: float = 0.0, max_fwd: float = 5.0) -> pd.DataFrame:
+    """Assemble (date, ticker, features, label) with strict PIT joins.
+
+    min_dollar_vol filters microcaps by median 63d dollar volume (applied at
+    each rebalance date, using only trailing data). max_fwd drops absurd
+    forward returns from bad split/adjustment data.
+    """
     px = load_price_panel()
     dates = rebalance_dates(px, start, freq)
     print(f"  rebalance dates: {len(dates)} ({dates[0].date()} .. {dates[-1].date()})")
@@ -129,6 +162,17 @@ def build_panel(start: str, freq: str, min_names: int) -> pd.DataFrame:
     snap = px[px["date"].isin(dates)].copy()
     snap = snap.dropna(subset=["fwd"])
     snap["ticker"] = snap["ticker"].astype(str).str.upper()
+
+    n_pre = len(snap)
+    if min_dollar_vol > 0:
+        snap = snap[pd.to_numeric(snap["dollar_vol"], errors="coerce") >= min_dollar_vol]
+        print(f"  liquidity filter >=${min_dollar_vol/1e6:.1f}M/day: "
+              f"{n_pre:,} -> {len(snap):,} rows")
+    if max_fwd is not None:
+        n_b = len(snap)
+        snap = snap[snap["fwd"].abs() <= max_fwd]
+        if n_b != len(snap):
+            print(f"  outlier guard |fwd|<={max_fwd}: {n_b:,} -> {len(snap):,} rows")
 
     fund = load_fundamentals_pit()
     snap = snap.sort_values("date", kind="mergesort")
@@ -153,7 +197,10 @@ def build_panel(start: str, freq: str, min_names: int) -> pd.DataFrame:
 
     merged["y"] = (merged["fwd"] < DRAWDOWN).astype(float)
 
-    keep = ["date", "ticker", "y", "excess", "decline", "arista", "lowq", "mom126", "vol21", "fwd"]
+    keep = ["date", "ticker", "y", "excess", "decline", "arista", "lowq",
+            "mom21", "mom126", "mom252", "vol21", "vol63", "dvol63", "dd252",
+            "dollar_vol", "fwd"]
+    keep = [c for c in keep if c in merged.columns]
     panel = merged[keep].dropna(subset=["excess", "lowq"]).copy()
 
     # Drop thin dates that can't support a cross-section.
@@ -165,7 +212,35 @@ def build_panel(start: str, freq: str, min_names: int) -> pd.DataFrame:
     return panel.sort_values(["date", "ticker"], kind="mergesort").reset_index(drop=True)
 
 
-FEATURES = ["excess", "decline", "arista", "lowq"]
+
+FEATURE_SETS = {
+    # Production fit as-is.
+    "production": ["excess", "decline", "arista", "lowq"],
+    # Pure price/risk features (no fundamentals join at all).
+    "price": ["vol63", "dvol63", "mom126", "dd252"],
+    # Price/risk + the fundamentals overlay: does the overlay add anything?
+    "hybrid": ["vol63", "dvol63", "mom126", "dd252", "excess", "lowq"],
+    # Single-feature reference.
+    "vol_only": ["vol63"],
+}
+FEATURES = FEATURE_SETS["production"]
+
+# Features ranked cross-sectionally within each date before fitting. Puts every
+# feature on a comparable 0-1 scale per date and neutralizes market-wide level
+# shifts (a vol spike that lifts every name carries no cross-sectional signal).
+RANK_WITHIN_DATE = True
+
+
+def design(df: pd.DataFrame, features: list[str] | None = None) -> np.ndarray:
+    feats = features if features is not None else FEATURES
+    cols = [np.ones(len(df))]
+    for f in feats:
+        v = pd.to_numeric(df[f], errors="coerce")
+        if RANK_WITHIN_DATE and "date" in df.columns and df["date"].nunique() > 1:
+            v = v.groupby(df["date"]).rank(pct=True)
+        cols.append(v.fillna(0.5 if RANK_WITHIN_DATE else 0.0).values)
+    return np.column_stack(cols)
+
 
 
 def fit_logit(X: np.ndarray, y: np.ndarray, iters: int = 12, ridge: float = 1e-6) -> np.ndarray:
@@ -191,11 +266,6 @@ def predict(X: np.ndarray, b: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-np.clip(X @ b, -20, 20)))
 
 
-def design(df: pd.DataFrame) -> np.ndarray:
-    cols = [np.ones(len(df))] + [pd.to_numeric(df[f], errors="coerce").fillna(0).values for f in FEATURES]
-    return np.column_stack(cols)
-
-
 def auc_score(y: np.ndarray, s: np.ndarray) -> float:
     """Rank-based AUC (ties averaged). NaN when only one class present."""
     y = np.asarray(y, float); s = np.asarray(s, float)
@@ -208,7 +278,8 @@ def auc_score(y: np.ndarray, s: np.ndarray) -> float:
     return float((r[y == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * n0))
 
 
-def walk_forward(panel: pd.DataFrame, n_folds: int, min_train_dates: int) -> pd.DataFrame:
+def walk_forward(panel: pd.DataFrame, n_folds: int, min_train_dates: int,
+                 features: list[str] | None = None) -> pd.DataFrame:
     """Expanding-origin folds over REBALANCE DATES with a label embargo.
 
     A training date is usable only if its label window closed before the test
@@ -233,8 +304,8 @@ def walk_forward(panel: pd.DataFrame, n_folds: int, min_train_dates: int) -> pd.
         if len(tr) < 200 or len(te) < 50 or tr["y"].nunique() < 2 or te["y"].nunique() < 2:
             continue
 
-        b = fit_logit(design(tr), tr["y"].values)
-        p = predict(design(te), b)
+        b = fit_logit(design(tr, features), tr["y"].values)
+        p = predict(design(te, features), b)
 
         rows.append(pd.DataFrame({
             "fold": k,
@@ -361,22 +432,61 @@ def main():
     ap.add_argument("--min-train-dates", type=int, default=12)
     ap.add_argument("--min-names", type=int, default=50)
     ap.add_argument("--bins", type=int, default=10)
+    ap.add_argument("--min-dollar-vol", type=float, default=0.0,
+                    help="min median 63d dollar volume, e.g. 5e6")
+    ap.add_argument("--max-fwd", type=float, default=5.0,
+                    help="drop |forward return| above this (bad adjustment data)")
+    ap.add_argument("--feature-set", default="production",
+                    choices=sorted(FEATURE_SETS), help="feature set for the headline run")
+    ap.add_argument("--compare-all", action="store_true",
+                    help="evaluate every feature set on identical folds")
+    ap.add_argument("--tag", default="", help="suffix for output filenames")
     args = ap.parse_args()
 
     print("Building point-in-time panel...")
-    panel = build_panel(args.start, args.freq, args.min_names)
+    panel = build_panel(args.start, args.freq, args.min_names,
+                        min_dollar_vol=args.min_dollar_vol, max_fwd=args.max_fwd)
 
-    print("Walk-forward folds (embargoed):")
-    oos = walk_forward(panel, args.folds, args.min_train_dates)
+    sets = sorted(FEATURE_SETS) if args.compare_all else [args.feature_set]
+    results = {}
+    for name in sets:
+        print(f"\nWalk-forward folds (embargoed) — feature set '{name}': "
+              f"{FEATURE_SETS[name]}")
+        oos = walk_forward(panel, args.folds, args.min_train_dates, FEATURE_SETS[name])
+        results[name] = (oos, metrics(oos))
 
-    met = metrics(oos)
+    if args.compare_all:
+        comp = []
+        for name, (_, met) in results.items():
+            pooled = met[met["scope"] == "pooled"].iloc[0]
+            folds = met[met["scope"] != "pooled"]["auc_model"].dropna()
+            comp.append({
+                "feature_set": name,
+                "n_features": len(FEATURE_SETS[name]),
+                "auc_pooled": pooled["auc_model"],
+                "auc_min_fold": round(float(folds.min()), 4),
+                "auc_max_fold": round(float(folds.max()), 4),
+                "brier": pooled["brier_model"],
+                "brier_base": pooled["brier_base"],
+                "auc_vol21_ref": pooled["auc_vol21"],
+            })
+        comp = pd.DataFrame(comp).sort_values("auc_pooled", ascending=False)
+        comp.to_csv(DATA_DIR / f"distrust_oos_feature_sets{args.tag}.csv", index=False)
+        print("\n=== Feature-set comparison (identical folds) ===")
+        print(comp.to_string(index=False))
+        best = comp.iloc[0]["feature_set"]
+        print(f"\nbest feature set: {best}")
+    else:
+        best = args.feature_set
+
+    oos, met = results[best]
     tab = calibration_table(oos, args.bins)
 
-    met.to_csv(DATA_DIR / "distrust_oos_metrics.csv", index=False)
-    tab.to_csv(DATA_DIR / "distrust_oos_calibration.csv", index=False)
-    plot_calibration(tab, met, DATA_DIR / "distrust_oos_calibration.png")
+    met.to_csv(DATA_DIR / f"distrust_oos_metrics{args.tag}.csv", index=False)
+    tab.to_csv(DATA_DIR / f"distrust_oos_calibration{args.tag}.csv", index=False)
+    plot_calibration(tab, met, DATA_DIR / f"distrust_oos_calibration{args.tag}.png")
 
-    print("\n=== OOS metrics ===")
+    print(f"\n=== OOS metrics ({best}) ===")
     print(met.to_string(index=False))
     print("\n=== Calibration deciles ===")
     print(tab.round(4).to_string(index=False))
@@ -384,6 +494,7 @@ def main():
     pooled = met[met["scope"] == "pooled"].iloc[0]
     folds = met[met["scope"] != "pooled"]["auc_model"].dropna()
     print("\n=== Verdict ===")
+    print(f"feature set         : {best} {FEATURE_SETS[best]}")
     print(f"pooled OOS AUC      : {pooled['auc_model']:.3f}")
     print(f"fold AUC range      : {folds.min():.3f} .. {folds.max():.3f}")
     print(f"best single feature : {max(pooled['auc_excess_only'], pooled['auc_lowq_only']):.3f}")
