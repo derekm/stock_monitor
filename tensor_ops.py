@@ -19,21 +19,23 @@ except ImportError:
     _HAS_TORCH = False
 
 
-def _best_device() -> str:
+def _best_device():
     if not _HAS_TORCH:
         return "cpu"
     if torch.cuda.is_available():
-        return "cuda"
+        return torch.device("cuda")
     try:
         import torch_directml  # type: ignore
-        return str(torch_directml.device())
+        return torch_directml.device()
     except ImportError:
         pass
-    return "cpu"
+    return torch.device("cpu")
 
 
-def _to_tensor(arr: np.ndarray, device: str, dtype=torch.float32):
-    if _HAS_TORCH and device != "cpu":
+def _to_tensor(arr: np.ndarray, device, dtype=torch.float32):
+    if _HAS_TORCH and isinstance(device, torch.device) and device.type != "cpu":
+        return torch.as_tensor(arr, dtype=dtype, device=device)
+    if _HAS_TORCH and isinstance(device, str) and device != "cpu":
         return torch.as_tensor(arr, dtype=dtype, device=device)
     return arr  # numpy array
 

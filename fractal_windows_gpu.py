@@ -34,19 +34,18 @@ except Exception:  # noqa: BLE001
 from fractal_windows import spans_generator
 
 
-def _best_device() -> str:
-    """CUDA, then DirectML, then CPU."""
+def _best_device():
+    """CUDA, then DirectML, then CPU. Returns torch.device."""
     if not _HAS_TORCH:
-        return "cpu"
+        return torch.device("cpu")
     if torch.cuda.is_available():
-        return "cuda"
+        return torch.device("cuda")
     try:
         import torch_directml  # type: ignore
-        dml = torch_directml.device()
-        return str(dml)
+        return torch_directml.device()
     except Exception:
         pass
-    return "cpu"
+    return torch.device("cpu")
 
 
 def _batched_rolling_sums(logp_t: "torch.Tensor", L: int) -> "torch.Tensor":

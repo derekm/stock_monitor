@@ -44,8 +44,14 @@ def resolve(universe: str) -> list[str]:
     return stocks["ticker"].tolist()
 
 
-def rolling_cumsum_2d(arr: np.ndarray, window: int) -> np.ndarray:
-    """Rolling sum for 2D array [dates x tickers]. CUDA/DirectML if large enough."""
+def rolling_cumsum_2d(arr: np.ndarray, window: int, device=None) -> np.ndarray:
+    """Rolling sum for 2D array [dates, tickers] using GPU when beneficial.
+
+    Args:
+        arr: [dates, tickers] array
+        window: rolling window size
+        device: torch.device (cuda, directml, cpu) or None for auto
+    """
     n_dates, n_tickers = arr.shape
     if n_dates < window:
         return np.full_like(arr, np.nan)
@@ -53,8 +59,8 @@ def rolling_cumsum_2d(arr: np.ndarray, window: int) -> np.ndarray:
         try:
             import torch
             from fractal_windows_gpu import _best_device
-            dev = _best_device()
-            if dev != "cpu":
+            dev = device if device is not None else _best_device()
+            if dev.type != "cpu":
                 t = torch.as_tensor(np.nan_to_num(arr), dtype=torch.float32, device=dev)
                 cum = torch.cumsum(t, dim=0)
                 out = torch.full_like(t, float("nan"))
