@@ -94,12 +94,12 @@ def combine_quarterly_rows(
     
     # Income statement items (additive)
     additive_cols = [
-        'total_revenue', 'operating_income', 'net_income',
+        'revenue_quarterly', 'operating_income_quarterly', 'net_income_quarterly',
         'free_cash_flow', 'total_assets', 'total_debt',
         'shareholders_equity', 'cash_and_equivalents',
-        'total_liabilities', 'capital_expenditure',
-        'ttm_revenue', 'ttm_net_income', 'ttm_operating_income',
-        'ttm_operating_cash_flow', 'ttm_capital_expenditure',
+        'total_liabilities', 'capital_expenditure_ttm',
+        'revenue_ttm', 'net_income_ttm', 'operating_income_ttm',
+        'operating_cash_flow_ttm', 'capital_expenditure_ttm',
     ]
     
     for col in additive_cols:
@@ -118,7 +118,7 @@ def combine_quarterly_rows(
         combined[col] = total
     
     # Recompute ratios from combined values
-    rev = combined.get('total_revenue', np.nan)
+    rev = combined.get('revenue_quarterly', np.nan)
     fcf = combined.get('free_cash_flow', np.nan)
     if pd.notna(rev) and rev > 0 and pd.notna(fcf):
         combined['fcf_margin'] = fcf / rev
@@ -292,7 +292,7 @@ def add_acquisition(
     completion_date: str,
     announcement_date: str = None,
     purchase_price: float = None,
-    consideration_type: str = 'cash',
+    consideration_type: str = 'cash_and_equivalents',
     notes: str = None,
 ):
     """

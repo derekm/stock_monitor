@@ -433,13 +433,13 @@ def build_table() -> pd.DataFrame:
 
     # Compute revenue growth inline from total_revenue history
     # This is needed for life cycle classification and fair multiples
-    if "total_revenue" in fund.columns and fund["total_revenue"].notna().sum() > 0:
+    if "revenue_quarterly" in fund.columns and fund["revenue_quarterly"].notna().sum() > 0:
         rev_growth_map = {}
         for tk, g in fund.groupby("ticker"):
             g = g.sort_values("as_of_date")
-            real = g[g["total_revenue"].notna()]
+            real = g[g["revenue_quarterly"].notna()]
             if len(real) >= 5:
-                rev_ttm = real["total_revenue"].rolling(4, min_periods=4).sum()
+                rev_ttm = real["revenue_quarterly"].rolling(4, min_periods=4).sum()
                 yoy = rev_ttm.pct_change(4)
                 latest_yoy = yoy.dropna().iloc[-1] if len(yoy.dropna()) > 0 else np.nan
                 rev_growth_map[tk] = latest_yoy
@@ -618,7 +618,7 @@ def build_table() -> pd.DataFrame:
             flagged = set(ar["ticker"].astype(str).str.upper())
             p_bad = p_bad + out["ticker"].astype(str).str.upper().isin(flagged).astype(float) * 0.20
     cash = None
-    for c in ("cash", "cash_and_equivalents", "cash_b"):
+    for c in ("cash_and_equivalents", "cash_and_equivalents", "cash_b"):
         if c in out.columns:
             cash = pd.to_numeric(out[c], errors="coerce")
             break

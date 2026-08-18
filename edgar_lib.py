@@ -36,24 +36,24 @@ NO_COMPANYFACTS = {"BAYRY"}
 
 # Tag lists for financial concepts
 TAG_MAP = {
-    "revenue": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "revenue_quarterly": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
                 "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet"],
-    "net_income": ["NetIncomeLoss", "NetIncomeCommonStockholders"],
-    "operating_income": ["OperatingIncomeLoss", "OperatingIncome"],
+    "net_income_quarterly": ["NetIncomeLoss", "NetIncomeCommonStockholders"],
+    "operating_income_quarterly": ["OperatingIncomeLoss", "OperatingIncome"],
     "depreciation_amortization": ["DepreciationDepletionAndAmortization",
                                   "DepreciationAmortizationAndAccretionNet"],
     "interest_expense": ["InterestExpenseNonOperating", "InterestExpense",
                          "InterestAndDebtExpense"],
-    "operating_cash_flow": ["NetCashProvidedByUsedInOperatingActivities",
+    "operating_cash_flow_ttm": ["NetCashProvidedByUsedInOperatingActivities",
                            "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
-    "capital_expenditure": ["PaymentsToAcquirePropertyPlantAndEquipment",
+    "capital_expenditure_ttm": ["PaymentsToAcquirePropertyPlantAndEquipment",
                            "PaymentsToAcquirePropertyPlantAndEquipmentNet",
                            "CapitalExpenditure"],
-    "assets": ["Assets"],
-    "equity": ["StockholdersEquity", "CommonStockholdersEquity"],
+    "total_assets": ["Assets"],
+    "shareholders_equity": ["StockholdersEquity", "CommonStockholdersEquity"],
     "debt": ["LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "Debt",
              "TotalDebt", "LongTermDebtNoncurrent"],
-    "cash": ["CashAndCashEquivalents", "CashCashEquivalentsAndShortTermInvestments"],
+    "cash_and_equivalents": ["CashAndCashEquivalents", "CashCashEquivalentsAndShortTermInvestments"],
     "shares": ["CommonStockSharesOutstanding", "OrdinarySharesNumber",
                "EntityCommonStockSharesOutstanding"],
     "tax_expense": ["IncomeTaxExpenseBenefit"],
@@ -496,7 +496,7 @@ if __name__ == "__main__":
             rows = compute_quarterly_fundamentals(fin, "PANW")
             df = pd.DataFrame(rows)
             print(f"Extracted {len(df)} quarters for PANW")
-            print(df[["as_of_date", "ttm_operating_cash_flow", "ttm_capital_expenditure",
+            print(df[["as_of_date", "operating_cash_flow_ttm", "capital_expenditure_ttm",
                       "free_cash_flow", "fcf_provenance"]].tail(8).to_string())
 
 

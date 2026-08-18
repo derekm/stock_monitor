@@ -98,18 +98,18 @@ def fetch_ticker(ticker: str, key: str, max_pages: int) -> list[dict]:
             bal = fin.get("balance_sheet") or {}
             qend = rec.get("end_date") or rec.get("filing_date")
             ni = _val(inc, "net_income_loss", "net_income_loss_attributable_to_parent")
-            oi = _val(inc, "operating_income_loss", "operating_income")
+            oi = _val(inc, "operating_income_loss", "operating_income_quarterly")
             ebitda = _val(inc, "ebitda")
             shares = _val(inc, "basic_average_shares", "diluted_average_shares")
             equity = _val(
                 bal,
                 "equity_attributable_to_parent",
-                "equity",
-                "stockholders_equity",
+                "shareholders_equity",
+                "shareholders_equity",
             )
-            assets = _val(bal, "assets", "liabilities_and_equity")
+            assets = _val(bal, "total_assets", "liabilities_and_equity")
             debt = _val(bal, "long_term_debt", "noncurrent_liabilities")
-            cash = _val(bal, "cash", "cash_and_equivalents")
+            cash = _val(bal, "cash_and_equivalents", "cash_and_equivalents")
             if shares is None:
                 shares = _val(bal, "outstanding_shares")
             # TTM-ish: we only have this quarter here; ratios use this quarter's
@@ -121,10 +121,10 @@ def fetch_ticker(ticker: str, key: str, max_pages: int) -> list[dict]:
                 "ni_q": ni,
                 "oi_q": oi,
                 "ebitda_q": ebitda,
-                "equity": equity,
+                "shareholders_equity": equity,
                 "total_assets": assets,
                 "debt": debt,
-                "cash": cash,
+                "cash_and_equivalents": cash,
                 "shares": shares,
                 "source": "polygon_financials",
                 "notes": "polygon vX quarterly financials",
@@ -161,8 +161,8 @@ def finalize(rows: list[dict], prices: dict) -> pd.DataFrame:
         eb = _ttm(grp, "ebitda_q")
         for r, ttm_ni, ttm_oi, ttm_eb in zip(grp, ni, oi, eb):
             equity, assets, debt, cash, shares = (
-                r.get("equity"), r.get("total_assets"), r.get("debt"),
-                r.get("cash"), r.get("shares"),
+                r.get("shareholders_equity"), r.get("total_assets"), r.get("debt"),
+                r.get("cash_and_equivalents"), r.get("shares"),
             )
             mcap = None
             qend = r.get("as_of_date")
@@ -192,7 +192,10 @@ def finalize(rows: list[dict], prices: dict) -> pd.DataFrame:
                 "roe": round(roe, 4) if roe else None,
                 "roic": round(roic, 4) if roic else None,
                 "debt_to_equity": round(de, 3) if de else None,
-                "shares_outstanding": shares,
+                # guard the same corruption class that made the old `shares`
+                # column unusable (values up to 7.96e14); no US listed company
+                # has >=1e11 shares outstanding.
+                "shares_outstanding": shares if (shares and 0 < shares < 1e11) else None,
                 "source": "polygon_financials",
                 "notes": r.get("notes"),
                 "last_updated": r.get("last_updated"),

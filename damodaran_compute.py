@@ -50,10 +50,10 @@ def compute_revenue_growth(fund: pd.DataFrame) -> pd.DataFrame:
         g = g.sort_values("as_of_date").copy()
         
         # Filter to rows with actual revenue data
-        real = g[g["total_revenue"].notna()].copy()
+        real = g[g["revenue_quarterly"].notna()].copy()
         if len(real) < 4:
             # Not enough data for TTM
-            out = g[["ticker", "as_of_date", "total_revenue"]].copy()
+            out = g[["ticker", "as_of_date", "revenue_quarterly"]].copy()
             out["rev_ttm"] = np.nan
             out["revenue_growth_yoy"] = np.nan
             out["revenue_growth_qoq"] = np.nan
@@ -63,13 +63,13 @@ def compute_revenue_growth(fund: pd.DataFrame) -> pd.DataFrame:
         
         # Compute TTM and growth on real quarterly data
         real = real.sort_values("as_of_date")
-        real["rev_ttm"] = real["total_revenue"].rolling(4, min_periods=4).sum()
+        real["rev_ttm"] = real["revenue_quarterly"].rolling(4, min_periods=4).sum()
         real["revenue_growth_yoy"] = real["rev_ttm"].pct_change(4)
-        real["revenue_growth_qoq"] = real["total_revenue"].pct_change(1)
+        real["revenue_growth_qoq"] = real["revenue_quarterly"].pct_change(1)
         real["revenue_growth"] = real["revenue_growth_yoy"]
         
         # Merge back to full frame
-        out = g[["ticker", "as_of_date", "total_revenue"]].copy()
+        out = g[["ticker", "as_of_date", "revenue_quarterly"]].copy()
         out = out.merge(
             real[["ticker", "as_of_date", "rev_ttm", "revenue_growth_yoy", "revenue_growth_qoq", "revenue_growth"]],
             on=["ticker", "as_of_date"], how="left"

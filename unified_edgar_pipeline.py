@@ -105,7 +105,7 @@ def unified_extract(cik: str, ticker: str, use_html: bool = True,
                 if html_row.get("free_cash_flow") is not None:
                     merged_row["free_cash_flow"] = html_row["free_cash_flow"]
                     merged_row["fcf_provenance"] = html_row.get("fcf_provenance", "html_merged")
-                    merged_row["capital_expenditure"] = html_row.get("capital_expenditure")
+                    merged_row["capital_expenditure_ttm"] = html_row.get("capital_expenditure_ttm")
             merged.append(merged_row)
         elif xbrl_row:
             merged.append(xbrl_row)
@@ -114,16 +114,16 @@ def unified_extract(cik: str, ticker: str, use_html: bool = True,
             merged.append({
                 "ticker": ticker,
                 "as_of_date": html_row.get("report_date"),
-                "total_revenue": html_row.get("revenue"),
-                "net_income": html_row.get("net_income"),
-                "ebit": html_row.get("operating_income"),
+                "revenue_quarterly": html_row.get("revenue_quarterly"),
+                "net_income_quarterly": html_row.get("net_income_quarterly"),
+                "ebit": html_row.get("operating_income_quarterly"),
                 "free_cash_flow": html_row.get("free_cash_flow"),
                 "fcf_provenance": html_row.get("fcf_provenance"),
-                "capital_expenditure": html_row.get("capital_expenditure"),
-                "total_assets": html_row.get("assets"),
-                "shareholders_equity": html_row.get("equity"),
-                "total_debt": html_row.get("debt"),
-                "cash_and_equivalents": html_row.get("cash"),
+                "capital_expenditure_ttm": html_row.get("capital_expenditure_ttm"),
+                "total_assets": html_row.get("total_assets"),
+                "shareholders_equity": html_row.get("shareholders_equity"),
+                "total_debt": html_row.get("total_debt"),
+                "cash_and_equivalents": html_row.get("cash_and_equivalents"),
                 "source": "html_10q",
             })
     
@@ -139,10 +139,10 @@ def unified_extract(cik: str, ticker: str, use_html: bool = True,
     # Quality score
     if merged:
         total = len(merged)
-        has_revenue = sum(1 for r in merged if r.get("total_revenue") is not None)
+        has_revenue = sum(1 for r in merged if r.get("revenue_quarterly") is not None)
         has_fcf = sum(1 for r in merged if r.get("free_cash_flow") is not None)
-        has_capex = sum(1 for r in merged if r.get("capital_expenditure") is not None)
-        has_ocf = sum(1 for r in merged if r.get("ttm_operating_cash_flow") is not None)
+        has_capex = sum(1 for r in merged if r.get("capital_expenditure_ttm") is not None)
+        has_ocf = sum(1 for r in merged if r.get("operating_cash_flow_ttm") is not None)
         
         result["quality_score"] = int((
             has_revenue / total * 25 +
@@ -207,4 +207,4 @@ if __name__ == "__main__":
     if all_results:
         df = pd.DataFrame(all_results)
         print(f"\nTotal rows: {len(df)}")
-        print(df[["ticker", "as_of_date", "total_revenue", "free_cash_flow", "fcf_provenance", "source"]].head(20).to_string())
+        print(df[["ticker", "as_of_date", "revenue_quarterly", "free_cash_flow", "fcf_provenance", "source"]].head(20).to_string())

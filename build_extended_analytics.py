@@ -31,8 +31,8 @@ prices['date'] = pd.to_datetime(prices['date']).dt.date
 FUNDAMENTAL_METRICS = [
     'ev_ebitda', 'roic', 'fcf_margin', 'debt_to_equity', 'interest_coverage',
     'roe', 'reinvestment_rate', 'pb_ratio', 'mktcap_to_assets',
-    'earnings_stability', 'free_cash_flow', 'capital_expenditure',
-    'total_debt', 'shareholders_equity', 'total_assets', 'total_revenue',
+    'earnings_stability', 'free_cash_flow', 'capital_expenditure_ttm',
+    'total_debt', 'shareholders_equity', 'total_assets', 'revenue_quarterly',
     'market_cap', 'market_cap_b'
 ]
 

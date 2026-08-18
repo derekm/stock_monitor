@@ -102,10 +102,10 @@ def build_materialized_view() -> pd.DataFrame:
                     
                     # Additive combination for income statement / balance sheet items
                     additive_cols = [
-                        "total_revenue", "operating_income", "net_income",
+                        "revenue_quarterly", "operating_income_quarterly", "net_income_quarterly",
                         "free_cash_flow", "total_assets", "total_debt",
                         "shareholders_equity", "cash_and_equivalents",
-                        "total_liabilities", "capital_expenditure",
+                        "total_liabilities", "capital_expenditure_ttm",
                         "ebitda", "gross_profit", "interest_expense",
                     ]
                     

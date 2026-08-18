@@ -376,9 +376,9 @@ def cmd_fetch_history(args):
                     "roic": round(roic, 4) if roic else None,
                     "debt_to_equity": round(de, 3) if de else None,
                     "shares_outstanding": int(shares) if shares else None,
-                    "total_revenue": int(revenue) if revenue else None,
+                    "revenue_quarterly": int(revenue) if revenue else None,
                     "free_cash_flow": int(fcf) if fcf else None,
-                    "capital_expenditure": int(capex) if capex else None,
+                    "capital_expenditure_ttm": int(capex) if capex else None,
                     "fcf_margin": round(fcf_margin, 4) if fcf_margin else None,
                     "reinvestment_rate": round(reinvestment_rate, 4) if reinvestment_rate else None,
                     "source": "yfinance_history",
@@ -406,7 +406,7 @@ def cmd_fetch_history(args):
         "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
         "debt_to_equity", "shares_outstanding", "interest_coverage",
         "earnings_stability",
-        "total_revenue", "free_cash_flow", "capital_expenditure",
+        "revenue_quarterly", "free_cash_flow", "capital_expenditure_ttm",
         "fcf_margin", "reinvestment_rate",
     ]
     idx = ["ticker", "as_of_date"]

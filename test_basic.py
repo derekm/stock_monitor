@@ -30,9 +30,9 @@ def test_edgar_merge():
         
         # Create test data: 1 actual row, 2 future estimate rows
         new_rows = [
-            {'ticker': test_ticker, 'as_of_date': today - timedelta(days=30), 'source': 'edgar_v2', 'total_revenue': 1000, 'net_income': 100},
-            {'ticker': test_ticker, 'as_of_date': today + timedelta(days=90), 'source': 'edgar_v2', 'total_revenue': 1200, 'net_income': 150},  # future Q+1
-            {'ticker': test_ticker, 'as_of_date': today + timedelta(days=180), 'source': 'edgar_v2', 'total_revenue': 1300, 'net_income': 180},  # future Q+2
+            {'ticker': test_ticker, 'as_of_date': today - timedelta(days=30), 'source': 'edgar_v2', 'revenue_quarterly': 1000, 'net_income_quarterly': 100},
+            {'ticker': test_ticker, 'as_of_date': today + timedelta(days=90), 'source': 'edgar_v2', 'revenue_quarterly': 1200, 'net_income_quarterly': 150},  # future Q+1
+            {'ticker': test_ticker, 'as_of_date': today + timedelta(days=180), 'source': 'edgar_v2', 'revenue_quarterly': 1300, 'net_income_quarterly': 180},  # future Q+2
         ]
         
         n = merge_into_fundamentals(new_rows)
@@ -51,10 +51,10 @@ def test_edgar_merge():
             raise AssertionError("Future-dated row should not be in fundamentals")
         
         # Verify prior estimates captured
-        if row.get('prior_estimate_total_revenue') != 1200:
-            raise AssertionError(f"Expected prior_estimate_total_revenue=1200, got {row.get('prior_estimate_total_revenue')}")
-        if row.get('prior_estimate_net_income') != 150:
-            raise AssertionError(f"Expected prior_estimate_net_income=150, got {row.get('prior_estimate_net_income')}")
+        if row.get('prior_estimate_revenue_quarterly') != 1200:
+            raise AssertionError(f"Expected prior_estimate_revenue_quarterly=1200, got {row.get('prior_estimate_revenue_quarterly')}")
+        if row.get('prior_estimate_net_income_quarterly') != 150:
+            raise AssertionError(f"Expected prior_estimate_net_income_quarterly=150, got {row.get('prior_estimate_net_income_quarterly')}")
         
         print("  EDGAR merge with prior_estimate columns ✓")
         return True
@@ -722,6 +722,87 @@ def test_single_edgar_extractor():
     return True
 
 
+def test_fundamentals_canonical_schema():
+    """fundamentals.parquet must use canonical names with an explicit period basis.
+
+    Guards the 2026-08 migration (92 -> 83 cols). Two classes of bug it locks out:
+
+    1. DUPLICATE NAMES for one concept. `equity`/`stockholders_equity` alongside
+       `shareholders_equity`, `assets` vs `total_assets`, etc. The sparse aliases
+       were the ambiguous ones (`debt` doesn't say *total*, `shares` doesn't say
+       *outstanding*), so the verbose name is canonical.
+
+    2. MISLABELLED PERIOD BASIS. The bare-vs-ttm_ prefix did NOT reliably encode
+       the period. Measured median ratio ttm_X / X where both were set:
+           net_income 3.992 | revenue 4.222   -> bare really was a QUARTER
+           capital_expenditure 1.000          -> bare was ALREADY TTM
+           operating_cash_flow 1.000          -> bare was ALREADY TTM
+       So *_quarterly must be ~1/4 of *_ttm. If a twelve-month sum ever lands in
+       a *_quarterly column again, the ratio check below catches it.
+    """
+    print("Testing fundamentals canonical schema...")
+    import polars as pl
+    path = Path(__file__).parent / "fundamentals.parquet"
+    if not path.exists():
+        print("  fundamentals.parquet absent, skipping")
+        return True
+    f = pl.read_parquet(path)
+
+    banned = [
+        "equity", "stockholders_equity", "assets", "cash", "shares",
+        "total_revenue", "revenue", "net_income",
+        "ttm_revenue", "ttm_net_income", "operating_income",
+        "ttm_operating_income", "operating_cash_flow",
+        "ttm_operating_cash_flow", "capital_expenditure",
+        "ttm_capital_expenditure",
+        # these two would mean the cash-flow mislabelling came back
+        "operating_cash_flow_quarterly", "capital_expenditure_quarterly",
+    ]
+    present = [c for c in banned if c in f.columns]
+    assert not present, f"pre-migration column names present: {present}"
+
+    required = [
+        "shareholders_equity", "total_assets", "cash_and_equivalents",
+        "shares_outstanding", "total_debt", "total_liabilities",
+        "revenue_quarterly", "revenue_ttm",
+        "net_income_quarterly", "net_income_ttm",
+        "operating_income_quarterly", "operating_income_ttm",
+        "operating_cash_flow_ttm", "capital_expenditure_ttm",
+    ]
+    missing = [c for c in required if c not in f.columns]
+    assert not missing, f"canonical columns missing: {missing}"
+
+    # a *_ttm column must be ~4x its *_quarterly partner, never ~1x
+    for q, t in (("revenue_quarterly", "revenue_ttm"),
+                 ("net_income_quarterly", "net_income_ttm"),
+                 ("operating_income_quarterly", "operating_income_ttm")):
+        both = f.filter(pl.col(q).is_not_null() & pl.col(t).is_not_null()
+                        & (pl.col(q) != 0))
+        if both.height < 20:
+            continue
+        ratio = float(both.with_columns(
+            (pl.col(t) / pl.col(q)).alias("r"))["r"].median())
+        assert 2.0 < ratio < 6.0, (
+            f"{t}/{q} median ratio {ratio:.2f} -- a TTM value is probably "
+            f"mislabelled as quarterly (or vice versa)"
+        )
+
+    # total_debt and total_liabilities are DIFFERENT metrics (median ratio 2.515);
+    # a previous writer bug copied debt into liabilities.
+    both = f.filter(pl.col("total_debt").is_not_null()
+                    & pl.col("total_liabilities").is_not_null()
+                    & (pl.col("total_debt") != 0))
+    if both.height > 100:
+        r = float(both.with_columns(
+            (pl.col("total_liabilities") / pl.col("total_debt")).alias("r"))["r"].median())
+        assert r > 1.2, (
+            f"total_liabilities/total_debt median {r:.3f} -- liabilities looks "
+            "copied from debt again"
+        )
+    print(f"  {f.width} cols, no legacy names, period basis verified ✓")
+    return True
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -779,6 +860,7 @@ if __name__ == "__main__":
         ("resid_mom_63 reconstruction", test_resid_mom_reconstruction),
         ("Resident tensor kernels", test_resident_kernels),
         ("Single EDGAR extractor", test_single_edgar_extractor),
+        ("Fundamentals canonical schema", test_fundamentals_canonical_schema),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]

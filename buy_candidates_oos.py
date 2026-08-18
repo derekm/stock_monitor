@@ -150,9 +150,9 @@ def build_panel(start: str, min_dollar_vol: float, min_names: int) -> pd.DataFra
         "ev_ebitda": num("ev_ebitda"),
         "pb": num("pb_ratio"),
         "mca": num("mktcap_to_assets"),
-        "cash": num("cash_and_equivalents"),
+        "cash_and_equivalents": num("cash_and_equivalents"),
         "mcap": num("market_cap"),
-        "assets": num("total_assets"),
+        "total_assets": num("total_assets"),
         "debt": num("total_debt"),
     }).sort_values("as_of_date", kind="mergesort")
 
@@ -210,7 +210,7 @@ def reconstruct_inputs(m: pd.DataFrame) -> pd.DataFrame:
                        & pb.notna() & (pb <= PB_MAX * 0.7))
 
     # distrust heuristic (same form as preferred_metrics, pre-blend)
-    excess = (out["cash"] / out["mcap"].replace(0, np.nan)).clip(0, 1)
+    excess = (out["cash_and_equivalents"] / out["mcap"].replace(0, np.nan)).clip(0, 1)
     excess = excess.fillna((1.0 - mca.clip(0, 2)).clip(0, 1)).fillna(0)
     p_bad = pd.Series(0.10, index=out.index)
     p_bad = p_bad + (roe < 0).astype(float) * 0.20

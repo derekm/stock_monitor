@@ -97,18 +97,18 @@ def compute_growth_quality(fund: pd.DataFrame) -> pd.DataFrame:
     fund = fund.copy()
     # For CAGR, we need first and last revenue in 12-quarter window
     # Use shift-based approach instead of rolling apply on datetime
-    fund["rev_shifted_12"] = fund.groupby("ticker")["total_revenue"].shift(12)
+    fund["rev_shifted_12"] = fund.groupby("ticker")["revenue_ttm"].shift(12)
     fund["date_shifted_12"] = fund.groupby("ticker")["as_of_date"].shift(12)
     
     fund["years"] = (fund["as_of_date"] - fund["date_shifted_12"]).dt.days / 365.25
     fund["rev_cagr_3y"] = np.where(
-        (fund["years"] > 0) & (fund["rev_shifted_12"] > 0) & fund["total_revenue"].notna(),
-        (fund["total_revenue"] / fund["rev_shifted_12"]) ** (1 / fund["years"]) - 1,
+        (fund["years"] > 0) & (fund["rev_shifted_12"] > 0) & fund["revenue_ttm"].notna(),
+        (fund["revenue_ttm"] / fund["rev_shifted_12"]) ** (1 / fund["years"]) - 1,
         np.nan
     )
     
     # Growth volatility (QoQ revenue growth std over 12 quarters)
-    fund["rev_growth_qoq"] = fund.groupby("ticker")["total_revenue"].pct_change()
+    fund["rev_growth_qoq"] = fund.groupby("ticker")["revenue_ttm"].pct_change()
     fund["growth_volatility"] = fund.groupby("ticker")["rev_growth_qoq"].transform(
         lambda x: x.rolling(12, min_periods=8).std()
     )

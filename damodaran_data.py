@@ -592,8 +592,8 @@ def main():
             fund_hist = fund_hist.sort_values("as_of_date")
             growth_map = {}
             for t, g in fund_hist.groupby("ticker"):
-                if "total_revenue" in g.columns and len(g) >= 2:
-                    rev = g["total_revenue"].dropna()
+                if "revenue_quarterly" in g.columns and len(g) >= 2:
+                    rev = g["revenue_quarterly"].dropna()
                     if len(rev) >= 2:
                         # Approx 3y growth from first to last
                         first_rev = rev.iloc[0]
@@ -606,10 +606,10 @@ def main():
         
         # Compute FCF margin
         if "fcf_margin" not in fund.columns:
-            if "free_cash_flow" in fund.columns and "total_revenue" in fund.columns:
-                fund["fcf_margin"] = fund["free_cash_flow"] / fund["total_revenue"]
-            elif "fcf" in fund.columns and "total_revenue" in fund.columns:
-                fund["fcf_margin"] = fund["fcf"] / fund["total_revenue"]
+            if "free_cash_flow" in fund.columns and "revenue_quarterly" in fund.columns:
+                fund["fcf_margin"] = fund["free_cash_flow"] / fund["revenue_quarterly"]
+            elif "fcf" in fund.columns and "revenue_quarterly" in fund.columns:
+                fund["fcf_margin"] = fund["fcf"] / fund["revenue_quarterly"]
             else:
                 fund["fcf_margin"] = np.nan
         

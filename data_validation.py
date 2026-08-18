@@ -33,7 +33,7 @@ def validate_fundamentals(df: pd.DataFrame) -> pd.DataFrame:
     df = df[pd.to_datetime(df['as_of_date']).dt.date <= today]
     
     # Set infinite values to NaN
-    for col in ['net_income', 'total_revenue', 'free_cash_flow', 'operating_income']:
+    for col in ['net_income_quarterly', 'revenue_quarterly', 'free_cash_flow', 'operating_income_quarterly']:
         if col in df.columns:
             inf_mask = np.isinf(df[col])
             if inf_mask.any():

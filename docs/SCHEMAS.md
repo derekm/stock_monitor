@@ -21,6 +21,44 @@ auxiliary tables feeding several stages.
   (`update_prices`, `update_fundamentals`, `manage_stocks`, `manage_alerts`,
   `parse_sp500*`, `backfill_*`). They are the single source of truth.
 
+### `fundamentals.parquet` column naming (canonical since 2026-08)
+
+Column names state the **period basis** explicitly; the old bare-vs-`ttm_` prefix
+did not reliably encode it.
+
+| Basis | Suffix | Columns |
+| --- | --- | --- |
+| One fiscal quarter | `_quarterly` | `revenue_quarterly`, `net_income_quarterly`, `operating_income_quarterly` |
+| Trailing twelve months | `_ttm` | `revenue_ttm`, `net_income_ttm`, `operating_income_ttm`, `operating_cash_flow_ttm`, `capital_expenditure_ttm` |
+| Point-in-time balance | *(none)* | `total_assets`, `total_debt`, `total_liabilities`, `shareholders_equity`, `cash_and_equivalents`, `shares_outstanding` |
+
+A `_ttm` column is ~4x its `_quarterly` partner (measured median 3.67–3.68).
+`test_basic.test_fundamentals_canonical_schema` fails if that ratio degenerates
+toward 1.0, which is how a twelve-month sum previously ended up under a quarterly
+name.
+
+Renamed away — **do not reintroduce**: `equity`, `stockholders_equity` →
+`shareholders_equity`; `assets` → `total_assets`; `cash` →
+`cash_and_equivalents`; `total_revenue`, `revenue` → `revenue_quarterly`;
+`net_income` → `net_income_quarterly`; `ttm_*` → `*_ttm`. The bare
+`operating_cash_flow` and `capital_expenditure` already held TTM values (ratio
+1.000 against their `ttm_` partners) and map to `*_ttm`, **not** `*_quarterly`.
+
+`shares` was **dropped**, not renamed: it disagreed with `shares_outstanding` on
+3,547 of 4,866 shared rows (FITB 2010-09-30 held 7.96e14 — 796 trillion shares),
+and 45 of its 73 unique rows were 0.0.
+
+`total_debt` and `total_liabilities` are **distinct** (median ratio 2.515 — debt
+is a subset). A writer bug used to copy one into the other.
+
+Known pre-existing defect: 211 rows have `shares_outstanding > 1e11` (PCG
+preferred series at 5.14e14, all `source=edgar`). The current writer rejects
+values ≥1e11, but the legacy rows remain.
+
+Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
+--dry-run` then `--apply`.
+
+
 ### Screen / decision  (`screen_decision`)
 
 - Decision tables keyed by `ticker`: boolean/label columns for each gate leg

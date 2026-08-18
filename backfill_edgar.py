@@ -137,12 +137,12 @@ PROTECTED_SOURCES = {"edgar_v2", "html_10q"}
 
 # Columns where we store prior estimates for future quarters
 ESTIMATE_COLS = [
-    "total_revenue", "operating_income", "net_income",
+    "revenue_quarterly", "operating_income_quarterly", "net_income_quarterly",
     "free_cash_flow", "total_assets", "total_debt",
     "shareholders_equity", "cash_and_equivalents",
-    "total_liabilities", "capital_expenditure",
+    "total_liabilities", "capital_expenditure_ttm",
     "ebitda", "gross_profit", "interest_expense",
-    "operating_cash_flow", "shares_outstanding",
+    "operating_cash_flow_ttm", "shares_outstanding",
 ]
 
 
@@ -258,8 +258,8 @@ def merge_into_fundamentals(new_rows: list[dict], force: bool = False) -> int:
                 "market_cap", "market_cap_b", "total_assets", "total_assets_b",
                 "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",
                 "debt_to_equity", "shares_outstanding", "interest_coverage",
-                "earnings_stability", "total_revenue", "operating_income", "net_income",
-                "free_cash_flow", "operating_cash_flow", "capital_expenditure",
+                "earnings_stability", "revenue_quarterly", "operating_income_quarterly", "net_income_quarterly",
+                "free_cash_flow", "operating_cash_flow_ttm", "capital_expenditure_ttm",
             ]
             for c in FILL_COLS:
                 old_col, new_col = f"{c}_old", f"{c}_new"
