@@ -322,8 +322,8 @@ def main():
             ]
             n_filled = 0
             for c in FILL_COLS:
-                old_col = f"{col}_old"
-                new_col = f"{col}_new"
+                old_col = f"{c}_old"
+                new_col = f"{c}_new"
                 if old_col not in merged.columns or new_col not in merged.columns:
                     continue
                 missing = merged.loc[remaining_mask, old_col].isna() & merged.loc[remaining_mask, new_col].notna()

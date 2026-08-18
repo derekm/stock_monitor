@@ -42,7 +42,7 @@ JOBS = {
     "crisis": (["crisis_correlation.py", "--save"], None),
     "factor_rot": (["factor_rotation_defense.py", "run", "--save"], None),
     "risk_enrich": (["risk_enrich.py"], None),
-    "rolling": (["rolling_window_vectorized.py", "--universe", "all", "--save"], None),
+    "rolling": (["rolling_window_analysis.py", "--universe", "all", "--save"], None),
     "rolling_corr": (["rolling_correlation_windows.py", "--save"], None),
     "tail_hedge": (["tail_risk_hedging.py", "--save"], None),
     "allpairs": (["allpairs_correlations.py", "--window", "63", "--step", "21", "--max-assets", "50"], None),
