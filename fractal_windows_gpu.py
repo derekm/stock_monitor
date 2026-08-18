@@ -32,20 +32,9 @@ except Exception:  # noqa: BLE001
     _HAS_TORCH = False
 
 from fractal_windows import spans_generator
-
-
-def _best_device():
-    """CUDA, then DirectML, then CPU. Returns torch.device."""
-    if not _HAS_TORCH:
-        return torch.device("cpu")
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    try:
-        import torch_directml  # type: ignore
-        return torch_directml.device()
-    except Exception:
-        pass
-    return torch.device("cpu")
+# Device selection is centralized in tensor_ops — do not reimplement it here.
+from tensor_ops import _best_device, is_gpu
+from tensor_ops import gpu_available as _to_gpu_available
 
 
 def _batched_rolling_sums(logp_t: "torch.Tensor", L: int) -> "torch.Tensor":
@@ -117,7 +106,13 @@ def fractal_batch(wide_logp: np.ndarray, a: int = 30, b: int = 3,
 
 
 def gpu_available() -> bool:
-    return _HAS_TORCH and torch.cuda.is_available()
+    """True when any accelerator is usable (CUDA or DirectML).
+
+    Delegates to tensor_ops. The old implementation checked
+    `torch.cuda.is_available()` only, so a DirectML-only host (Intel Xe)
+    reported False even though the GPU path worked.
+    """
+    return _to_gpu_available()
 
 
 def fractal_consensus_batch(res: dict, T: int, D: int, device: str | None = None

@@ -22,10 +22,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from fractal_windows_gpu import (
-    fractal_batch, fractal_consensus_batch, gpu_available, _best_device,
-)
+from fractal_windows_gpu import fractal_batch, fractal_consensus_batch
 from fractal_windows import spans_generator
+# Device handling comes from tensor_ops, not a local reimplementation.
+from tensor_ops import (
+    _best_device, is_gpu, device_name, resolve_device,
+)
+_resolve_device = resolve_device
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "fractal_windows_backtest.parquet"
@@ -59,7 +62,7 @@ def build_matrix(tickers_cap: int | None = None, device: str | None = None) -> p
         raise SystemExit("not enough history")
 
     logp = np.log(wide.values.T)  # [T, D]
-    print(f"  universe: {len(tickers)} tickers x {D} days (device={device or _best_device()})")
+    print(f"  universe: {len(tickers)} tickers x {D} days (device={device_name(resolve_device(device))})")
 
     res = fractal_batch(logp, 30, 3, device=device)
     cons = fractal_consensus_batch(res, len(tickers), D, device=device)
@@ -151,9 +154,13 @@ def main():
     ap.add_argument("--device", default="auto")
     args = ap.parse_args()
     dev = None if args.device == "auto" else args.device
-    eng = "GPU" if (dev != "cpu" and gpu_available()) else "CPU-batched"
-    print(f"Building matrix (engine: {eng}, device={_best_device()})...")
-    df = build_matrix(args.tickers, dev)
+    # Resolve the device ONCE and label from what will actually be used.
+    # Previously this printed _best_device() regardless of --device, so
+    # `--device cpu` reported "device=cuda" while running on the CPU.
+    resolved = _resolve_device(dev)
+    eng = "GPU" if is_gpu(resolved) else "CPU-batched"
+    print(f"Building matrix (engine: {eng}, device={device_name(resolved)})...")
+    df = build_matrix(args.tickers, resolved)
     print(f"  rows: {len(df)} | tickers: {df['ticker'].nunique()}")
     r = report(df)
     pd.set_option("display.width", 220)

@@ -55,20 +55,13 @@ def rolling_cumsum_2d(arr: np.ndarray, window: int, device=None) -> np.ndarray:
     n_dates, n_tickers = arr.shape
     if n_dates < window:
         return np.full_like(arr, np.nan)
+    # tensor_ops owns device selection AND the CPU path, so there is no local
+    # fallback to maintain here. It sums over the LAST axis, so transpose the
+    # [dates, tickers] panel into [tickers, dates] and back.
     if n_tickers * n_dates > 200_000:
-        try:
-            import torch
-            from fractal_windows_gpu import _best_device
-            dev = device if device is not None else _best_device()
-            if dev.type != "cpu":
-                t = torch.as_tensor(np.nan_to_num(arr), dtype=torch.float32, device=dev)
-                cum = torch.cumsum(t, dim=0)
-                out = torch.full_like(t, float("nan"))
-                z = torch.zeros((1, n_tickers), device=dev)
-                out[window - 1 :] = cum[window - 1 :] - torch.cat([z, cum[:-window]], dim=0)
-                return out.cpu().numpy()
-        except Exception:
-            pass
+        from tensor_ops import rolling_sum
+        out = rolling_sum(np.nan_to_num(arr).T, window, device=device)
+        return np.asarray(out).T
     cumsum = np.nancumsum(arr, axis=0)
     result = np.full_like(arr, np.nan)
     result[window-1:] = cumsum[window-1:] - np.vstack([np.zeros((1, n_tickers)), cumsum[:-window]])

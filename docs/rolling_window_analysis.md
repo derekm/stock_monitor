@@ -23,6 +23,9 @@ Reads `daily_prices.parquet`, `monitored_stocks.parquet`, `portfolio_holdings.pa
 
 ## Key Features (2026-08)
 
+- **Centralized device handling**: `tensor_ops` is the single source of truth for GPU/CPU selection (`get_device`/`best_device`, `resolve_device`, `is_gpu`, `gpu_available`, `device_name`, `to_device`). `fractal_windows_gpu`, `statistical_profiler_gpu`, `fractal_windows_backtest_gpu` and `backtest_coiled_spring` import from it rather than reimplementing the CUDA→DirectML→CPU ladder. `_best_device()` returns a `torch.device` **object**, never a string — `torch.device("cpu") != "cpu"` is truthy, and string guards silently routed CPU work down the GPU branch.
+- **No local CPU fallbacks**: every rolling op in `tensor_ops` already has an internal numpy path, so callers must not wrap it in their own try/except GPU→CPU ladder.
+
 - **GPU acceleration**: Uses `tensor_ops.rolling_cumsum_2d` for vectorized cumsum on CUDA or DirectML (Intel Xe). Falls back to CPU NumPy automatically.
 - **Resumable checkpoints**: Uses `resumable_job.JobCheckpoint` — skips tickers already computed (prints `=== Rolling 63d SKIP N tickers already complete ===`).
 - **Universe from daily_prices**: No longer uses `monitored_stocks.parquet` as universe source.

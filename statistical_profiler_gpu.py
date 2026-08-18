@@ -21,12 +21,11 @@ import pandas as pd
 import torch
 
 from fractal_windows import spans_generator
-
-
-def _best_device() -> str:
-    if torch.cuda.is_available():
-        return "cuda"
-    return "cpu"
+# Device selection is centralized in tensor_ops — do not reimplement it here.
+# The previous local version returned a STRING and checked CUDA only, so the
+# DirectML (Intel Xe) path was never selected.
+from tensor_ops import _best_device, is_gpu
+from tensor_ops import gpu_available as _to_gpu_available
 
 
 def _batched_rolling_sums(x: torch.Tensor, L: int) -> torch.Tensor:
@@ -304,7 +303,8 @@ def fractal_stats_batch(
 
 
 def gpu_available() -> bool:
-    return torch.cuda.is_available()
+    """True when any accelerator is usable (CUDA or DirectML) — see tensor_ops."""
+    return _to_gpu_available()
 
 
 if __name__ == "__main__":

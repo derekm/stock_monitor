@@ -20,6 +20,14 @@ except ImportError:
 
 
 def _best_device():
+    """CUDA, then DirectML, then CPU. Always returns a torch.device.
+
+    Canonical device selection for the whole repo — do NOT reimplement this in
+    individual scripts. Import `get_device` (or `best_device`) from here.
+    Returning a device OBJECT (not a string) matters: `torch.device("cpu")`
+    compares unequal to the string "cpu", so string-based guards silently send
+    CPU work down the GPU branch.
+    """
     if not _HAS_TORCH:
         return "cpu"
     if torch.cuda.is_available():
@@ -27,9 +35,60 @@ def _best_device():
     try:
         import torch_directml  # type: ignore
         return torch_directml.device()
-    except ImportError:
+    except Exception:  # noqa: BLE001 - any DirectML import/init failure -> CPU
         pass
     return torch.device("cpu")
+
+
+def is_gpu(device=None) -> bool:
+    """True when `device` (or the auto-selected one) is a real accelerator."""
+    dev = device if device is not None else _best_device()
+    if not _HAS_TORCH or not isinstance(dev, torch.device):
+        return False
+    return dev.type != "cpu"
+
+
+def gpu_available() -> bool:
+    """True when any accelerator (CUDA or DirectML) is usable."""
+    return is_gpu()
+
+
+def device_name(device=None) -> str:
+    """Human-readable device label for logs."""
+    dev = device if device is not None else _best_device()
+    if not _HAS_TORCH or not isinstance(dev, torch.device):
+        return "cpu"
+    if dev.type == "cuda":
+        try:
+            return f"cuda:{torch.cuda.get_device_name(0)}"
+        except Exception:  # noqa: BLE001
+            return "cuda"
+    return str(dev)
+
+
+def resolve_device(device=None):
+    """Normalize None / "auto" / "cpu" / "cuda" / device -> a torch.device.
+
+    Use this in CLI entry points so the device is resolved ONCE and logs
+    report what will actually be used.
+    """
+    if device is None or (isinstance(device, str) and device == "auto"):
+        return _best_device()
+    if _HAS_TORCH and isinstance(device, str):
+        return torch.device(device)
+    return device
+
+
+def to_device(arr, device=None, dtype=None):
+    """Move a numpy array onto `device` as a tensor, or return it unchanged on CPU.
+
+    Central conversion helper so scripts stop hand-rolling
+    `torch.as_tensor(..., device=...)` behind their own try/except.
+    """
+    dev = resolve_device(device)
+    if not is_gpu(dev):
+        return arr
+    return torch.as_tensor(arr, dtype=dtype or torch.float32, device=dev)
 
 
 def _to_tensor(arr: np.ndarray, device, dtype=torch.float32):
@@ -49,7 +108,7 @@ def _to_numpy(t):
 def rolling_sum(arr: np.ndarray, window: int, device: str | None = None) -> np.ndarray:
     """Rolling sum over last axis (time). arr: [T, D] or [D]."""
     dev = device or _best_device()
-    if _HAS_TORCH and isinstance(dev, torch.device) and dev.type != "cpu":
+    if is_gpu(dev):
         t = _to_tensor(arr, dev)
         cum = torch.cumsum(t, dim=-1)
         out = torch.full_like(t, float("nan"))
@@ -78,7 +137,7 @@ def rolling_mean(arr: np.ndarray, window: int, device: str | None = None) -> np.
 def rolling_std(arr: np.ndarray, window: int, device: str | None = None) -> np.ndarray:
     """Rolling std using Welford / cumsum of squares."""
     dev = device or _best_device()
-    if _HAS_TORCH and isinstance(dev, torch.device) and dev.type != "cpu":
+    if is_gpu(dev):
         t = _to_tensor(arr, dev)
         t2 = t * t
         cum1 = torch.cumsum(t, dim=-1)
@@ -134,7 +193,7 @@ def rolling_slope(arr: np.ndarray, window: int, device: str | None = None) -> np
     if denom == 0:
         return np.full_like(arr, np.nan)
 
-    if _HAS_TORCH and isinstance(dev, torch.device) and dev.type != "cpu":
+    if is_gpu(dev):
         t = _to_tensor(arr, dev)
         # y = rolling window values
         # sum(y) = rolling_sum(arr, n)
@@ -179,7 +238,7 @@ def rolling_beta(arr: np.ndarray, bench: np.ndarray, window: int, device: str | 
     dev = device or _best_device()
     n = window
     # Precompute benchmark stats
-    if _HAS_TORCH and isinstance(dev, torch.device) and dev.type != "cpu":
+    if is_gpu(dev):
         b = _to_tensor(bench, dev)
         a = _to_tensor(arr, dev)
         cum_b = torch.cumsum(b, dim=-1)
@@ -223,3 +282,7 @@ def rolling_beta(arr: np.ndarray, bench: np.ndarray, window: int, device: str | 
 # Convenience: auto-detect device
 def get_device() -> str:
     return _best_device()
+
+
+# Public alias — prefer this name in new code.
+best_device = get_device

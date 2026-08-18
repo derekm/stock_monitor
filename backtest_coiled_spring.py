@@ -36,6 +36,9 @@ import pandas as pd
 import polars as pl
 import torch
 
+# Device selection is centralized in tensor_ops.
+from tensor_ops import _best_device, gpu_available as _gpu_available, device_name
+
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "daily_prices.parquet"
 FUND = ROOT / "fundamentals.parquet"
@@ -172,8 +175,12 @@ def compute_states_pl(df_pl: pl.DataFrame, use_gpu: bool = False) -> pl.DataFram
     low = df_pl["low"].to_numpy()
     vol = df_pl["volume"].to_numpy()
 
-    if use_gpu and torch.cuda.is_available():
-        device = torch.device("cuda")
+    # NOTE: the GPU branch below is NOT numerically equivalent to the Polars
+    # branch (bb_pos is a documented "rough proxy"), so this is a real
+    # behavioural switch, not a pure device fallback. Only the device SELECTION
+    # is centralized in tensor_ops; the divergent math is left as-is.
+    if use_gpu and _gpu_available():
+        device = _best_device()
         c_t = torch.tensor(close, device=device, dtype=torch.float32)
         h_t = torch.tensor(high, device=device, dtype=torch.float32)
         l_t = torch.tensor(low, device=device, dtype=torch.float32)
@@ -305,7 +312,7 @@ def main():
 
     print("=== Coiled Spring Backtest (GPU-assisted) ===")
     print("Date:", datetime.now().date())
-    print("GPU:", torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU only")
+    print("GPU:", _gpu_available(), device_name())
 
     # Load with polars for speed
     df = pl.read_parquet(DATA)

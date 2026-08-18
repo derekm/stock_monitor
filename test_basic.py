@@ -188,12 +188,66 @@ def test_tensor_ops_correctness():
 
 
 def test_fractal_gpu():
-    """Test fractal_windows_gpu device selection."""
-    print("Testing fractal GPU device...")
-    from fractal_windows_gpu import _best_device
-    dev = _best_device()
-    print(f"  fractal device: {dev}")
+    """fractal_windows_gpu must use tensor_ops device selection, and its GPU
+    and CPU paths must agree numerically (test moved here from ad-hoc probes)."""
+    print("Testing fractal GPU/CPU parity via tensor_ops...")
+    import torch
+    from tensor_ops import _best_device as canonical, is_gpu, device_name
+    import fractal_windows_gpu as F
+
+    # Device selection must be the SAME object identity-wise as tensor_ops.
+    assert F._best_device is canonical, "fractal_windows_gpu must reuse tensor_ops._best_device"
+    dev = F._best_device()
+    print(f"  fractal device: {device_name(dev)}")
     assert dev.type in ("cuda", "privateuseone", "cpu")
+
+    # gpu_available must agree with tensor_ops (was CUDA-only before).
+    from tensor_ops import gpu_available as tops_gpu
+    assert F.gpu_available() == tops_gpu(), "gpu_available diverges from tensor_ops"
+
+    # CPU vs GPU parity on the real fractal kernel.
+    np.random.seed(7)
+    logp = np.cumsum(np.random.randn(12, 400) * 0.01, axis=1) + 4.0
+    res_cpu = F.fractal_batch(logp, a=30, b=3, device=torch.device("cpu"))
+    assert res_cpu, "fractal_batch returned nothing on CPU"
+
+    if is_gpu(dev):
+        res_gpu = F.fractal_batch(logp, a=30, b=3, device=dev)
+        assert set(res_cpu) == set(res_gpu), "span keys differ between devices"
+        worst = 0.0
+        for span in res_cpu:
+            for stat in ("ret", "slope", "momentum"):
+                a = res_cpu[span][stat].cpu().numpy()
+                b = res_gpu[span][stat].cpu().numpy()
+                m = np.isfinite(a) & np.isfinite(b)
+                if m.any():
+                    worst = max(worst, float(np.abs(a[m] - b[m]).max()))
+        print(f"  max |GPU-CPU| across spans/stats: {worst:.2e}")
+        assert worst < 1e-2, f"fractal GPU/CPU divergence too large: {worst}"
+        print("  fractal GPU vs CPU parity ✓")
+    else:
+        print("  no accelerator present — CPU path only ✓")
+    return True
+
+
+def test_no_duplicate_device_logic():
+    """No module may reimplement device selection; all must defer to tensor_ops."""
+    print("Testing centralized device handling...")
+    import tensor_ops
+    mods = ["fractal_windows_gpu", "statistical_profiler_gpu", "fractal_windows_backtest_gpu"]
+    import importlib
+    for name in mods:
+        m = importlib.import_module(name)
+        if hasattr(m, "_best_device"):
+            assert m._best_device is tensor_ops._best_device, \
+                f"{name} has its own _best_device (must reuse tensor_ops)"
+        if hasattr(m, "gpu_available"):
+            assert m.gpu_available() == tensor_ops.gpu_available(), \
+                f"{name}.gpu_available disagrees with tensor_ops"
+    # Device objects, never strings — the bug that sent CPU work to the GPU path.
+    d = tensor_ops._best_device()
+    assert not isinstance(d, str), "_best_device must return a torch.device, not a str"
+    print(f"  {len(mods)} modules defer to tensor_ops ✓")
     return True
 
 
@@ -224,7 +278,8 @@ if __name__ == "__main__":
         ("GPU fallback", test_gpu_fallback),
         ("CAPE ERP", test_cape_erp),
         ("Tensor ops correctness", test_tensor_ops_correctness),
-        ("Fractal GPU", test_fractal_gpu),
+        ("Fractal GPU/CPU parity", test_fractal_gpu),
+        ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]
     
