@@ -121,7 +121,86 @@ def main():
     ap.add_argument("--tickers", default=None, help="Comma-separated subset")
     ap.add_argument("--max-tickers", type=int, default=None)
     ap.add_argument("--dry-run", action="store_true", help="Fetch CIKs and report coverage, write nothing")
+    ap.add_argument("--quarantine", action="store_true", help="Use bad CIK quarantine to skip invalid CIKs")
+    ap.add_argument("--validate-ciks", action="store_true", help="Validate CIKs via SEC submissions and quarantine bad ones")
+    ap.add_argument("--clear-quarantine", action="store_true", help="Clear bad CIK quarantine")
     args = ap.parse_args()
+
+    # Handle clear-quarantine
+    if args.clear_quarantine:
+        quarantine_path = Path("backfill_checkpoints/bad_ciks.json")
+        if quarantine_path.exists():
+            quarantine_path.unlink()
+            print("Cleared bad CIK quarantine")
+        else:
+            print("No quarantine file found")
+        return
+
+    # Load bad CIK quarantine if requested
+    bad_cik_set = set()
+    if args.quarantine:
+        quarantine_path = Path("backfill_checkpoints/bad_ciks.json")
+        if quarantine_path.exists():
+            with open(quarantine_path) as f:
+                quarantine = json.load(f)
+            bad_cik_set = set(quarantine.get("bad_ciks", {}).keys())
+            print(f"Quarantine: skipping {len(bad_cik_set)} tickers with bad CIKs")
+
+    # Handle validate-ciks
+    if args.validate_ciks:
+        print("Validating CIKs via SEC submissions API...")
+        from update_fundamentals import universe_tickers
+        tickers = universe_tickers()
+        if not tickers:
+            print("No universe found")
+            return
+        
+        cik_map = load_cik_map()
+        cik_map.update(CIK_OVERRIDES)
+        
+        bad_count = 0
+        good_count = 0
+        bad_ciks = {}
+        
+        for i, ticker in enumerate(tickers):
+            cik = cik_map.get(ticker)
+            if not cik:
+                bad_ciks[ticker] = {"cik": "NONE", "reason": "NO_CIK_IN_MAP"}
+                bad_count += 1
+                continue
+            
+            url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+            try:
+                r = requests.get(url, headers=UA, timeout=10)
+                if r.status_code == 404:
+                    bad_ciks[ticker] = {"cik": cik, "reason": "SEC_404"}
+                    bad_count += 1
+                else:
+                    good_count += 1
+                time.sleep(0.05)
+                
+                if i % 100 == 0:
+                    print(f"  {i}/{len(tickers)}...")
+            except Exception as e:
+                bad_ciks[ticker] = {"cik": cik, "reason": str(e)}
+                bad_count += 1
+        
+        quarantine = {
+            "bad_ciks": bad_ciks,
+            "metadata": {
+                "total_checked": len(tickers),
+                "bad_count": bad_count,
+                "good_count": good_count
+            }
+        }
+        with open("backfill_checkpoints/bad_ciks.json", "w") as f:
+            json.dump(quarantine, f, indent=2)
+        
+        print(f"\nValidation complete:")
+        print(f"  Good: {good_count}")
+        print(f"  Bad: {bad_count}")
+        print(f"Saved to backfill_checkpoints/bad_ciks.json")
+        return
 
     from update_fundamentals import universe_tickers
     tickers = universe_tickers()
@@ -139,7 +218,7 @@ def main():
     print("Loading SEC ticker→CIK map...")
     cik_map = load_cik_map()
     cik_map.update(CIK_OVERRIDES)
-    matched = [(t, cik_map[t]) for t in tickers if t in cik_map]
+    matched = [(t, cik_map[t]) for t in tickers if t in cik_map and t not in bad_cik_set]
     unmatched = [t for t in tickers if t not in cik_map]
     print(f"  {len(matched)}/{len(tickers)} tickers have a CIK")
     if unmatched:
@@ -155,6 +234,7 @@ def main():
 
     all_rows: list[dict] = []
     ok = 0
+    newly_bad = 0
     for t, cik in matched:
         try:
             rows = fetch_and_build(t, cik, px)
@@ -163,9 +243,23 @@ def main():
                 ok += 1
                 print(f"  {t}: {len(rows)} quarters (cik={cik})")
             time.sleep(0.12)  # SEC: ≤10 req/s
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                # CIK is bad — add to quarantine on the fly
+                bad_cik_set.add(t)
+                newly_bad += 1
+                print(f"  !! {t}: 404 (quarantined)")
+            else:
+                print(f"  !! {t}: {e}")
+            time.sleep(0.12)
         except Exception as e:
             print(f"  !! {t}: {e}")
             time.sleep(0.12)
+    if newly_bad:
+        quarantine = {"bad_ciks": {t: {"cik": cik_map[t], "reason": "SEC_404"} for t in bad_cik_set if t in cik_map}}
+        with open("backfill_checkpoints/bad_ciks.json", "w") as f:
+            json.dump(quarantine, f, indent=2)
+        print(f"Quarantined {newly_bad} new bad CIKs (total: {len(bad_cik_set)})")
     if not all_rows:
         print("No rows fetched.")
         return
