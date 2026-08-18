@@ -528,6 +528,56 @@ def test_profiler_batch_parity():
     return True
 
 
+def test_resid_mom_reconstruction():
+    """The OOS resid_mom_63 must match production's DEFINITION, not a proxy.
+
+    momentum_analytics.py computes a BETA-ADJUSTED 63-day cumulative residual
+    (resid.tail(63).mean() * 63). buy_candidates_oos originally reconstructed it
+    as `mom21 - mean(mom21)` -- a 21-day simple demean with no beta adjustment.
+    That is a different variable on a different scale, and it inverted the
+    conclusion of the removal test: the proxy said drop it (t=2.50, p=0.015),
+    the real definition says keep it (t=0.85, p=0.40).
+
+    This test pins the reconstruction to the 63d horizon so the ablation cannot
+    silently drift back to measuring something production never computes.
+    """
+    print("Testing resid_mom_63 reconstruction...")
+    import inspect
+    import numpy as np
+    import buy_candidates_oos as B
+
+    src = inspect.getsource(B.reconstruct_inputs)
+    # look at CODE only; the comment block deliberately mentions the old proxy
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.strip().startswith("#"))
+    assert 'out["resid_mom_63"] = _resid_mom_63_pit' in code, \
+        "resid_mom_63 no longer uses the PIT helper"
+    assert 'mom21"] - ' not in code, \
+        "reconstruct_inputs is back to the 21d-demean proxy for resid_mom_63"
+
+    # the helper must use the 63d horizon and be explicit (NaN) without it
+    hsrc = inspect.getsource(B._resid_mom_63_pit)
+    assert "mom63" in hsrc, "resid_mom_63 helper does not use the 63d horizon"
+
+    n = 240
+    df = pd.DataFrame({
+        "ticker": ["A"] * n + ["B"] * n,
+        "date": list(pd.date_range("2020-01-01", periods=n, freq="B")) * 2,
+        "mom63": np.concatenate([
+            np.linspace(0.02, 0.40, n), np.linspace(-0.10, 0.10, n)]),
+    })
+    out = B._resid_mom_63_pit(df)
+    assert len(out) == len(df), "helper changed row count"
+    assert out.notna().any(), "helper returned all-NaN on valid input"
+
+    # missing mom63 -> explicit NaN, never a silent fallback to the 21d proxy
+    bad = df.drop(columns=["mom63"]).assign(mom21=0.05)
+    assert B._resid_mom_63_pit(bad).isna().all(), \
+        "helper silently substituted a proxy when mom63 was absent"
+    print("  beta-adjusted 63d horizon, no silent 21d fallback ✓")
+    return True
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -582,6 +632,7 @@ if __name__ == "__main__":
         ("Snapshot PIT history", test_snapshot_history),
         ("Rolling skew/kurt", test_rolling_moments),
         ("Profiler batch parity", test_profiler_batch_parity),
+        ("resid_mom_63 reconstruction", test_resid_mom_reconstruction),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]

@@ -64,6 +64,10 @@ def load_price_panel() -> pd.DataFrame:
     # Trailing features (past only).
     px["mom126"] = px["px"] / g.shift(126) - 1.0
     px["mom21"] = px["px"] / g.shift(21) - 1.0
+    # 63d trailing return: needed to rebuild buy_candidates' resid_mom_63 on the
+    # same horizon production uses (momentum_analytics takes a 63-day
+    # beta-adjusted residual, not a 21-day demean).
+    px["mom63"] = px["px"] / g.shift(63) - 1.0
     px["mom252"] = px["px"] / g.shift(252) - 1.0
     ret1 = px["px"] / g.shift(1) - 1.0
     grp = ret1.groupby(px["ticker"], sort=False)

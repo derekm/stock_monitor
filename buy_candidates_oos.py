@@ -220,11 +220,61 @@ def reconstruct_inputs(m: pd.DataFrame) -> pd.DataFrame:
     # momentum_score / resid_mom_63 / liquidity_score in production units.
     # momentum_score is a 0-1 rank; rank cross-sectionally per date.
     out["momentum_score"] = out.groupby("date")["mom126"].rank(pct=True)
-    # residual short-term momentum = own 21d move minus the cross-sectional mean
-    out["resid_mom_63"] = out["mom21"] - out.groupby("date")["mom21"].transform("mean")
+    # residual momentum, matching momentum_analytics.py L82-88: regress each
+    # name's daily returns on the equal-weight market, then take
+    # resid.tail(63).mean() * 63 -- i.e. a BETA-ADJUSTED, 63-day CUMULATIVE
+    # residual.
+    #
+    # This used to be `mom21 - mean(mom21)`: a 21-day simple demean with no beta
+    # adjustment. That is a different variable on a different scale, so the
+    # earlier ablation was measuring something the production scorer never sees.
+    # It mattered: RESID_MOM_STEPS gives +0.10 above 0.05, and the old proxy
+    # crossed that threshold on 23.0% of rows (std 0.1222).
+    out["resid_mom_63"] = _resid_mom_63_pit(out)
     out["liquidity_score"] = out.groupby("date")["dollar_vol"].rank(pct=True)
 
     return out
+
+
+def _resid_mom_63_pit(out: pd.DataFrame) -> pd.Series:
+    """Beta-adjusted 63d cumulative residual momentum, point-in-time.
+
+    Reconstructed from the same daily-return panel the label uses, so it is
+    strictly backward-looking at each rebalance date. Beta is estimated on the
+    trailing window against the equal-weight cross-sectional mean return, which
+    is the market proxy momentum_analytics uses.
+    """
+    import numpy as np
+
+    need = {"ticker", "date", "mom63"}
+    if not need.issubset(out.columns):
+        # mom63 is required for the cumulative form; without it, be explicit
+        # rather than silently substituting the 21d proxy again.
+        return pd.Series(np.nan, index=out.index)
+
+    # Per-date equal-weight market move over the same 63d horizon.
+    mkt = out.groupby("date")["mom63"].transform("mean")
+    # Beta over the cross-section per date: cov(r, m)/var(m) is degenerate
+    # within a single date (m is constant), so estimate each ticker's beta from
+    # its own history of (mom63, mkt) pairs using only PAST observations.
+    df = out[["ticker", "date", "mom63"]].copy()
+    df["mkt"] = mkt
+    df = df.sort_values(["ticker", "date"])
+    g = df.groupby("ticker", sort=False)
+    # expanding (shifted) moments -> beta uses data strictly before this date
+    x, y = df["mkt"], df["mom63"]
+    ex = g["mkt"].transform(lambda s: s.shift(1).expanding(min_periods=8).mean())
+    ey = df.groupby("ticker", sort=False)["mom63"].transform(
+        lambda s: s.shift(1).expanding(min_periods=8).mean())
+    exy = df.assign(xy=x * y).groupby("ticker", sort=False)["xy"].transform(
+        lambda s: s.shift(1).expanding(min_periods=8).mean())
+    exx = df.assign(xx=x * x).groupby("ticker", sort=False)["xx"].transform(
+        lambda s: s.shift(1).expanding(min_periods=8).mean())
+    cov = exy - ex * ey
+    var = exx - ex * ex
+    beta = (cov / var.where(var > 0)).clip(-3, 3).fillna(1.0)
+    resid = df["mom63"] - beta * df["mkt"]
+    return resid.reindex(out.index)
 
 
 def score_panel(df: pd.DataFrame, drop: str | None = None) -> np.ndarray:
@@ -377,6 +427,13 @@ def main():
             print(f"  {h['variant']:24} d_IC {h['d_ic']:+.4f}  d_spread {h['d_spread']:+.4f}")
         print("  NOTE: fold-mean deltas are NOT significance tests. Confirm any")
         print("  candidate with a paired per-date test before acting on it.")
+        print()
+        print("  resid_mom_63 was investigated this way (2026-08) and KEPT:")
+        print("    paired per-date, n=73 -> mean d_IC +0.0039, t=0.846, p=0.40,")
+        print("    bootstrap 95% CI [-0.0051, +0.0127], helps on 37/73 dates.")
+        print("    The earlier removal case (t=1.75, and t=2.50 on re-test) came")
+        print("    from reconstructing resid_mom_63 as a 21d simple demean; the")
+        print("    production value is a BETA-ADJUSTED 63d cumulative residual.")
     else:
         print("\nno component is actively harmful on IC")
 
