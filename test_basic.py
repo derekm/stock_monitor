@@ -263,6 +263,103 @@ def test_fractal_gpu():
     return True
 
 
+def test_coiled_spring_gpu_parity():
+    """backtest_coiled_spring batched path: GPU == CPU == polars reference.
+
+    Guards the three bugs found while building it:
+      1. torch.cumsum propagates NaN where np.nancumsum does not, so a
+         72%-NaN price panel gave 22,500 NaN on GPU vs 100 on CPU.
+      2. rolling_mean/std divided by the window width instead of the observed
+         count, disagreeing with pandas/polars in any NaN window.
+      3. the cumsum-of-squares variance identity is unstable on real prices
+         (sum(x^2) ~6e15 exhausts float64) -- measured 0.68 absolute error.
+    """
+    print("Testing coiled-spring GPU/CPU parity...")
+    import numpy as np
+    import polars as pl
+    import torch
+    from backtest_coiled_spring import compute_states_pl, compute_states_batch
+
+    rng = np.random.default_rng(17)
+    T, D = 12, 700
+    close = 100 * np.cumprod(1 + rng.standard_normal((T, D)) * 0.012, axis=1)
+    high = close * (1 + np.abs(rng.standard_normal((T, D))) * 0.004)
+    low = close * (1 - np.abs(rng.standard_normal((T, D))) * 0.004)
+    vol = rng.uniform(1e6, 6e6, (T, D))
+    # inject real-world gaps: a late-listing ticker and interior holes
+    close[0, :200] = np.nan
+    high[0, :200] = np.nan
+    low[0, :200] = np.nan
+    vol[0, :200] = np.nan
+    wide = {"close": close, "high": high, "low": low, "volume": vol}
+    names = [f"T{i}" for i in range(T)]
+
+    cpu = compute_states_batch(wide, names, device=torch.device("cpu"))
+    auto = compute_states_batch(wide, names, device=None)
+    print(f"  devices: cpu vs {auto['_device']}")
+
+    bool_cols = ["squeeze_active", "width_compressed", "is_test", "is_held", "is_sprung"]
+    for c in bool_cols:
+        n = int((cpu[c] != auto[c]).sum())
+        assert n == 0, f"{c}: {n} GPU/CPU mismatches"
+    for c in ["bb_width", "vol_z", "bb_width_p252"]:
+        a, b = cpu[c], auto[c]
+        assert (np.isnan(a) == np.isnan(b)).all(), f"{c}: NaN pattern differs (cumsum NaN bug)"
+        m = np.isfinite(a) & np.isfinite(b)
+        d = float(np.abs(a[m] - b[m]).max()) if m.any() else 0.0
+        assert d < 1e-6, f"{c}: GPU/CPU maxdiff {d}"
+    print("  batched GPU == CPU on all 8 outputs ✓")
+
+    # And the batched path must match the per-ticker polars reference.
+    worst_bool, worst_num = 0, 0.0
+    for i in range(1, T):  # row 0 has the injected gap; polars ref needs >=300 rows
+        ref = compute_states_pl(pl.DataFrame({
+            "close": close[i], "high": high[i], "low": low[i], "volume": vol[i]}))
+        for c in bool_cols:
+            r = np.nan_to_num(ref[c].to_numpy()).astype(bool)
+            worst_bool = max(worst_bool, int((r != auto[c][i]).sum()))
+        for c in ["bb_width", "vol_z"]:
+            r = ref[c].to_numpy()
+            m = np.isfinite(r) & np.isfinite(auto[c][i])
+            if m.any():
+                worst_num = max(worst_num, float(np.abs(r[m] - auto[c][i][m]).max()))
+    assert worst_bool == 0, f"batched vs polars: {worst_bool} boolean mismatches"
+    assert worst_num < 1e-6, f"batched vs polars: {worst_num} numeric drift"
+    print(f"  batched == polars reference (numeric drift {worst_num:.1e}) ✓")
+    return True
+
+
+def test_rolling_nan_semantics():
+    """rolling_mean/std/sum must match pandas NaN semantics on BOTH devices."""
+    print("Testing rolling NaN semantics vs pandas...")
+    import numpy as np
+    import torch
+    from tensor_ops import rolling_mean, rolling_std, rolling_sum, get_device
+
+    rng = np.random.default_rng(3)
+    T, D = 6, 300
+    a = rng.standard_normal((T, D)).cumsum(1) + 100.0
+    a[:, :25] = np.nan                      # late listing
+    for i in range(T):                      # interior holes
+        a[i, rng.choice(np.arange(30, D), 15, replace=False)] = np.nan
+
+    for dev in [torch.device("cpu"), get_device()]:
+        for fn, kw, ref in [
+            (rolling_mean, {}, lambda s: s.rolling(20).mean()),
+            (rolling_std, {"ddof": 1}, lambda s: s.rolling(20).std()),
+            (rolling_sum, {}, lambda s: s.rolling(20).sum()),
+        ]:
+            got = fn(a, 20, device=dev, **kw)
+            exp = np.vstack([ref(pd.Series(a[i])).to_numpy() for i in range(T)])
+            assert (np.isnan(got) == np.isnan(exp)).all(), \
+                f"{fn.__name__} NaN pattern differs from pandas on {dev}"
+            m = np.isfinite(got) & np.isfinite(exp)
+            d = float(np.abs(got[m] - exp[m]).max())
+            assert d < 1e-8, f"{fn.__name__} on {dev}: maxdiff {d}"
+    print("  mean/std/sum match pandas incl. NaN windows, both devices ✓")
+    return True
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -312,6 +409,8 @@ if __name__ == "__main__":
         ("CAPE ERP", test_cape_erp),
         ("Tensor ops correctness", test_tensor_ops_correctness),
         ("Fractal GPU/CPU parity", test_fractal_gpu),
+        ("Coiled spring GPU parity", test_coiled_spring_gpu_parity),
+        ("Rolling NaN semantics", test_rolling_nan_semantics),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]
