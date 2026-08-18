@@ -1,4 +1,4 @@
-# fractal_windows.py / fractal_windows_gpu.py — fractal sliding-window momentum
+# fractal_windows.py — fractal sliding-window momentum
 
 Implements the fractal-of-sliding-windows momentum scheme from patent
 **US20120253946A1** (FIGS 26A/28/29) — the application I'm an inventor on.
@@ -75,7 +75,7 @@ $$
 
 ## Two engines, guaranteed identical
 
-| | fractal_windows.py | fractal_windows_gpu.py |
+| | fractal_windows: per-ticker | fractal_windows: batched |
 |---|---|---|
 | Within-ticker | vectorized pandas rolling (O(n), closed-form slope) | batched torch cumsum |
 | Across-tickers | serial loop (parallelize with Pool) | one `[T x days]` tensor op |
@@ -103,8 +103,7 @@ conclusion:** fractal multi-granularity agreement is a real signal (hit rate
 
 ## Files
 
-- `fractal_windows.py` — spans_generator, fractal_signal_vec, fractal_consensus, breakout_score, best_span_wins, fractal_multi_view, fractal_posture
-- `fractal_windows_gpu.py` — fractal_batch (batched tensor), fractal_consensus_batch (on-device)
+- `fractal_windows.py` — spans_generator, fractal_signal_vec, fractal_consensus, breakout_score, best_span_wins, fractal_multi_view, fractal_posture, plus the batched engine (`fractal_batch`, `fractal_consensus_batch`, `gpu_available`) folded in from the deleted `fractal_windows_gpu.py`. Device selection comes from `tensor_ops`; pass `device="cpu"` to force CPU.
 - `fractal_windows_backtest.py` — CPU parallel backtest (single-window vs fractal)
 - `fractal_windows_backtest_gpu.py` — GPU scatter-gather backtest
 - `test_fractal_cpu_gpu.py` — CPU/GPU concurrency test

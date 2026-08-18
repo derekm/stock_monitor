@@ -367,6 +367,65 @@ def rolling_rank_pct(arr: np.ndarray, window: int, device: str | None = None,
     return res if arr.ndim == 2 else res[0]
 
 
+def rolling_moment(arr: np.ndarray, window: int, order: int,
+                   device: str | None = None,
+                   min_periods: int | None = None) -> np.ndarray:
+    """Standardized rolling 3rd (skew) or 4th (kurtosis) moment.
+
+    order=3 -> E[(x-mu)^3]/sigma^3, order=4 -> E[(x-mu)^4]/sigma^4 (raw, NOT
+    excess kurtosis). Uses the same windowed two-pass form as rolling_std, so it
+    is stable on price-level input where the cumsum-of-powers identity is not.
+    """
+    if order not in (3, 4):
+        raise ValueError("order must be 3 or 4")
+    dev = device or _best_device()
+    a = np.asarray(arr, dtype=float)
+    mp = window if min_periods is None else min_periods
+    cnt = _valid_count(a, window, device=dev)
+
+    a2 = a if a.ndim == 2 else a[None, :]
+    T, D = a2.shape
+    res = np.full((T, D), np.nan, dtype=float)
+    if D >= window:
+        if is_gpu(dev):
+            t = _to_tensor(np.ascontiguousarray(a2), dev, dtype=torch.float64)
+            wv = t.unfold(1, window, 1)
+            valid = ~torch.isnan(wv)
+            n = valid.sum(-1).to(t.dtype).clamp(min=1.0)
+            zero = torch.zeros_like(wv)
+            mean = torch.where(valid, wv, zero).sum(-1) / n
+            d = torch.where(valid, wv - mean.unsqueeze(-1), zero)
+            m2 = (d ** 2).sum(-1) / n
+            mk = (d ** order).sum(-1) / n
+            sig = torch.sqrt(torch.clamp(m2, min=0.0))
+            val = mk / torch.clamp(sig ** order, min=1e-300)
+            res[:, window - 1:] = _to_numpy(val)
+        else:
+            from numpy.lib.stride_tricks import sliding_window_view
+            wv = sliding_window_view(a2, window, axis=1)
+            valid = ~np.isnan(wv)
+            n = np.maximum(valid.sum(-1).astype(float), 1.0)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                mean = np.where(valid, wv, 0.0).sum(-1) / n
+                d = np.where(valid, wv - mean[..., None], 0.0)
+                m2 = (d ** 2).sum(-1) / n
+                mk = (d ** order).sum(-1) / n
+                sig = np.sqrt(np.maximum(m2, 0.0))
+                res[:, window - 1:] = mk / np.maximum(sig ** order, 1e-300)
+    out = res if a.ndim == 2 else res[0]
+    return np.where(cnt >= mp, out, np.nan)
+
+
+def rolling_skew(arr, window, device=None, min_periods=None):
+    """Rolling skewness (standardized 3rd moment)."""
+    return rolling_moment(arr, window, 3, device=device, min_periods=min_periods)
+
+
+def rolling_kurt(arr, window, device=None, min_periods=None):
+    """Rolling kurtosis (standardized 4th moment, NOT excess)."""
+    return rolling_moment(arr, window, 4, device=device, min_periods=min_periods)
+
+
 def rolling_slope(arr: np.ndarray, window: int, device: str | None = None) -> np.ndarray:
     """
     Rolling OLS slope of arr against time index [0, 1, ..., D-1].

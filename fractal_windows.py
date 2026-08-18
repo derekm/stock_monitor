@@ -473,3 +473,123 @@ def fractal_signal_vec(close: pd.Series, a: int, b: int) -> pd.DataFrame:
             }))
     out = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
     return out
+
+
+# ---------------------------------------------------------------------------
+# Batched (multi-ticker) fractal engine
+#
+# Folded in from the former `fractal_windows_gpu.py` (deleted 2026-08). There is
+# no separate `_gpu` module any more: device selection lives in `tensor_ops`, so
+# a parallel "gpu" file only duplicated the CPU/GPU ladder and drifted from it.
+# `fractal_batch` works on any device -- pass device="cpu" to force CPU.
+#
+# Two numeric bugs from the old file are fixed here:
+#   1. It ran in float32. The rolling-variance identity (sum(x^2) - sum(x)^2/L)
+#      subtracts two large nearly-equal numbers, so float32 produced errors of
+#      O(100) on price-level input. Now float64.
+#   2. It used raw torch.cumsum, which PROPAGATES NaN -- one NaN poisoned every
+#      later value in the row. tensor_ops.rolling_sum treats NaN as 0 and masks
+#      by observed count, matching pandas/polars.
+# ---------------------------------------------------------------------------
+
+
+def fractal_batch(wide_logp: np.ndarray, a: int = 30, b: int = 3,
+                  device=None) -> dict:
+    """wide_logp: [T tickers, D days] log-prices. Returns
+    {(from, to): {ret, slope, momentum, uptrend, vol} as [T, D] tensors}.
+
+    One batched pass over every ticker; the span tuples are integer loop
+    indices, so no host<->device round-trips happen inside the loop.
+    """
+    import torch
+    from tensor_ops import resolve_device, rolling_sum, rolling_std
+
+    dev = resolve_device(device)
+    T, D = wide_logp.shape
+    spans = spans_generator(a, b)
+    lengths = sorted({t - f for f, t in spans})
+
+    # float64: see note above -- float32 breaks the variance identity.
+    logp_np = np.asarray(wide_logp, dtype=float)
+    logp = torch.as_tensor(logp_np, dtype=torch.float64, device=dev)
+    idx_np = np.arange(D, dtype=float)
+    idx = torch.as_tensor(idx_np, dtype=torch.float64, device=dev)
+
+    # daily log returns, NaN on the first column (no prior observation)
+    dr_np = np.full_like(logp_np, np.nan)
+    dr_np[:, 1:] = np.diff(logp_np, axis=1)
+
+    result = {}
+    for L in lengths:
+        # OLS slope of logp against the within-window index, via rolling sums.
+        sy = rolling_sum(logp_np, L, device=dev)
+        sky = rolling_sum(idx_np * logp_np, L, device=dev)
+        start = idx_np - (L - 1)
+        sxy = sky - start * sy
+        sx = L * (L - 1) / 2.0
+        sxx = L * (L - 1) * (2 * L - 1) / 6.0
+        denom = L * sxx - sx * sx
+        slope_np = (L * sxy - sx * sy) / denom
+
+        # trailing L-day log return = logp[t] - logp[t-L]
+        ret_np = np.full_like(logp_np, np.nan)
+        ret_np[:, L:] = logp_np[:, L:] - logp_np[:, :-L]
+
+        # rolling vol of daily returns (ddof=1, matching the original intent)
+        vol_np = rolling_std(dr_np, L, device=dev, ddof=1)
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mom_np = ret_np / np.clip(vol_np, 1e-9, None)
+        up_np = (ret_np > 0) & (slope_np > 0)
+
+        ret_t = torch.as_tensor(ret_np, device=dev)
+        slope_t = torch.as_tensor(slope_np, device=dev)
+        mom_t = torch.as_tensor(mom_np, device=dev)
+        vol_t = torch.as_tensor(vol_np, device=dev)
+        up_t = torch.as_tensor(up_np, device=dev)
+
+        for (f, t) in spans:
+            if t - f != L:
+                continue
+            result[(f, t)] = {
+                "ret": ret_t, "slope": slope_t, "momentum": mom_t,
+                "uptrend": up_t, "vol": vol_t,
+            }
+    return result
+
+
+def fractal_consensus_batch(res: dict, T: int, D: int, device=None) -> dict:
+    """Consensus across all fractal spans: NaN-safe mean of each stat.
+
+    The span dimension is a fixed known axis, so this is a stack + masked mean
+    over dim 0 rather than a groupby. Returns [T, D] tensors.
+    """
+    import torch
+    from tensor_ops import resolve_device
+
+    dev = resolve_device(device)
+    spans = list(res.keys())
+    if not spans:
+        return {}
+
+    def nanmean(key, cast_float=False):
+        x = torch.stack([res[s][key].to(torch.float64) for s in spans], 0)
+        mask = torch.isfinite(x)
+        s = torch.where(mask, x, torch.zeros_like(x)).sum(0)
+        n = mask.sum(0).clamp(min=1)
+        return s / n
+
+    return {
+        "frac_uptrend": nanmean("uptrend"),
+        "mean_momentum": nanmean("momentum"),
+        "mean_ret": nanmean("ret"),
+        "mean_slope": nanmean("slope"),
+        "n_spans": torch.full((T, D), float(len(spans)), device=dev,
+                              dtype=torch.float64),
+    }
+
+
+def gpu_available() -> bool:
+    """True when any accelerator is usable (CUDA or DirectML) -- see tensor_ops."""
+    from tensor_ops import gpu_available as _ga
+    return _ga()

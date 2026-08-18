@@ -4,7 +4,7 @@
 Tests whether judging momentum via the multi-granularity fractal consensus
 (patent US20120253946A1) is a better signal than any single momentum window.
 
-Fast path: GPU-batched fractal computation (fractal_windows_gpu) with CPU
+Fast path: GPU-batched fractal computation (fractal_windows.fractal_batch) with CPU
 fallback (fractal_windows.fractal_signal_vec) — both verified to concur by
 test_fractal_cpu_gpu.py. Single-window momentum is computed vectorized.
 
@@ -34,7 +34,7 @@ DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "fractal_windows_backtest.parquet"
 
 try:
-    from fractal_windows_gpu import fractal_batch, gpu_available
+    from fractal_windows import fractal_batch, gpu_available
     _GPU = gpu_available()
 except Exception:  # noqa: BLE001
     fractal_batch = None

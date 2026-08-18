@@ -6,7 +6,7 @@ the fractal momentum + on-device consensus as batched torch ops, then gathers th
 forward-return signal rows (vectorized, no per-date Python loop).
 
 Engine selection:
-  - GPU batched (fractal_windows_gpu) when torch.cuda available
+  - GPU batched (fractal_windows.fractal_batch) when an accelerator is available
   - else CPU batched (same code path, device="cpu")
 
 This is the true scatter-gather: the per-ticker serial loop and pandas/polars
@@ -22,8 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from fractal_windows_gpu import fractal_batch, fractal_consensus_batch
-from fractal_windows import spans_generator
+from fractal_windows import spans_generator, fractal_batch, fractal_consensus_batch
 # Device handling comes from tensor_ops, not a local reimplementation.
 from tensor_ops import (
     _best_device, is_gpu, device_name, resolve_device,

@@ -130,7 +130,18 @@ def _rolling_mode(close: np.ndarray, L: int, n_bins: int = 9) -> np.ndarray:
 
 
 def _rolling_skew_kurt(x: np.ndarray, L: int) -> tuple[np.ndarray, np.ndarray]:
-    """Rolling skewness and kurtosis via moment rolling sums (vectorized)."""
+    """Rolling skewness and EXCESS kurtosis (vectorized).
+
+    NOTE: this is deliberately NOT tensor_ops.rolling_skew/rolling_kurt, and the
+    two disagree by design -- do not "unify" them without a decision:
+      * here: deviations are taken from a ROLLING mean and then rolled AGAIN,
+        so the effective lookback is ~2L, and kurtosis is EXCESS (-3.0).
+      * tensor_ops: single-window textbook moments, RAW kurtosis.
+    Measured difference on 500 points, L=60: skew 3.04, kurt 9.59. Swapping the
+    implementation would silently change every STAT_COLS output and any model
+    trained on them, so the estimator stays as-is and the shared library is used
+    only by new code.
+    """
     s = pd.Series(x)
     n = s.rolling(L).count().to_numpy()
     m1 = s.rolling(L).mean().to_numpy()

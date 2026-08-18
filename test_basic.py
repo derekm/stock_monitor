@@ -221,16 +221,16 @@ def test_tensor_ops_correctness():
 
 
 def test_fractal_gpu():
-    """fractal_windows_gpu must use tensor_ops device selection, and its GPU
+    """fractal_windows batch path must use tensor_ops device selection, and its GPU
     and CPU paths must agree numerically (test moved here from ad-hoc probes)."""
     print("Testing fractal GPU/CPU parity via tensor_ops...")
     import torch
     from tensor_ops import _best_device as canonical, is_gpu, device_name
-    import fractal_windows_gpu as F
+    import fractal_windows as F
 
     # Device selection must be the SAME object identity-wise as tensor_ops.
-    assert F._best_device is canonical, "fractal_windows_gpu must reuse tensor_ops._best_device"
-    dev = F._best_device()
+    # fractal_windows no longer has its own _best_device; it resolves via tensor_ops.
+    dev = canonical()
     print(f"  fractal device: {device_name(dev)}")
     assert dev.type in ("cuda", "privateuseone", "cpu")
 
@@ -421,11 +421,55 @@ def test_snapshot_history():
     return True
 
 
+def test_rolling_moments():
+    """rolling_skew/rolling_kurt match textbook moments on both devices.
+
+    Also pins the DELIBERATE difference from
+    statistical_profiler._rolling_skew_kurt, which uses a double-rolling
+    (~2L effective) window and EXCESS kurtosis. They must NOT be silently
+    unified: on 500 points at L=60 they differ by 3.04 (skew) / 9.59 (kurt),
+    which would change every STAT_COLS output.
+    """
+    print("Testing rolling skew/kurt...")
+    import numpy as np
+    import torch
+    from tensor_ops import rolling_skew, rolling_kurt, get_device
+
+    rng = np.random.default_rng(4)
+    x = rng.standard_normal(500).cumsum() + 100.0
+    L = 60
+    s = pd.Series(x)
+    sk_ref = s.rolling(L).apply(
+        lambda w: ((w - w.mean()) ** 3).mean() / ((w - w.mean()) ** 2).mean() ** 1.5,
+        raw=True).to_numpy()
+    ku_ref = s.rolling(L).apply(
+        lambda w: ((w - w.mean()) ** 4).mean() / ((w - w.mean()) ** 2).mean() ** 2,
+        raw=True).to_numpy()
+
+    for dev in [torch.device("cpu"), get_device()]:
+        for name, got, exp in [("skew", rolling_skew(x, L, device=dev), sk_ref),
+                               ("kurt", rolling_kurt(x, L, device=dev), ku_ref)]:
+            assert (np.isnan(got) == np.isnan(exp)).all(), f"{name} NaN pattern on {dev}"
+            m = np.isfinite(got) & np.isfinite(exp)
+            d = float(np.abs(got[m] - exp[m]).max())
+            assert d < 1e-9, f"{name} on {dev}: maxdiff {d}"
+    print("  match textbook moments on CPU and GPU ✓")
+
+    # the profiler's estimator is intentionally different -- assert it stays so
+    from statistical_profiler import _rolling_skew_kurt
+    p_sk, _ = _rolling_skew_kurt(x, L)
+    m = np.isfinite(p_sk) & np.isfinite(sk_ref)
+    assert float(np.abs(p_sk[m] - sk_ref[m]).max()) > 0.1, \
+        "profiler skew now matches textbook -- estimators were unified; update docs"
+    print("  profiler estimator still distinct (double-rolling, excess) ✓")
+    return True
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
     import tensor_ops
-    mods = ["fractal_windows_gpu", "statistical_profiler_gpu", "fractal_windows_backtest_gpu"]
+    mods = ["fractal_windows", "fractal_windows_backtest_gpu", "backtest_coiled_spring"]
     import importlib
     for name in mods:
         m = importlib.import_module(name)
@@ -473,6 +517,7 @@ if __name__ == "__main__":
         ("Coiled spring GPU parity", test_coiled_spring_gpu_parity),
         ("Rolling NaN semantics", test_rolling_nan_semantics),
         ("Snapshot PIT history", test_snapshot_history),
+        ("Rolling skew/kurt", test_rolling_moments),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]

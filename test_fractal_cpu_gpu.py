@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from fractal_windows import fractal_signal_vec, spans_generator
-from fractal_windows_gpu import fractal_batch, gpu_available
+from fractal_windows import fractal_batch, gpu_available
 
 
 def _build_gpu_result(close: pd.Series, a: int, b: int):
