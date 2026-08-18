@@ -360,6 +360,67 @@ def test_rolling_nan_semantics():
     return True
 
 
+def test_snapshot_history():
+    """append_history must be idempotent, DATE-native, and PIT-joinable.
+
+    These snapshot tables are overwritten every run, which is why 6 of ~13
+    buy_candidates components were untestable. Options chains especially cannot
+    be reconstructed after the fact, so a silent regression here permanently
+    loses data rather than just delaying a backtest.
+    """
+    print("Testing snapshot history append...")
+    import datetime as dt
+    import numpy as np
+    import pyarrow.parquet as pq
+    from snapshot_history import append_history, load_history, history_path, asof_join
+
+    name = "_pytest_snapshot_hist"
+    path = history_path(name)
+    if path.exists():
+        path.unlink()
+    try:
+        d1 = pd.DataFrame({"ticker": ["A", "B"], "composite": [1.0, 2.0]})
+        d2 = pd.DataFrame({"ticker": ["A", "B", "C"], "composite": [1.5, 2.5, 3.5]})
+        append_history(d1, name, as_of=dt.date(2026, 8, 1), quiet=True)
+        append_history(d2, name, as_of=dt.date(2026, 8, 2), quiet=True)
+        h = load_history(name)
+        assert len(h) == 5, f"expected 5 rows, got {len(h)}"
+        assert h["as_of_date"].nunique() == 2
+
+        # idempotency: re-running the same as_of replaces, never duplicates
+        append_history(d2, name, as_of=dt.date(2026, 8, 2), quiet=True)
+        h = load_history(name)
+        assert len(h) == 5, f"re-run duplicated rows: {len(h)}"
+
+        # DATE-native (date32[day]), never a midnight timestamp
+        assert str(pq.read_schema(path).field("as_of_date").type) == "date32[day]"
+        assert isinstance(h["as_of_date"].iloc[0], dt.date)
+        assert not isinstance(h["as_of_date"].iloc[0], pd.Timestamp)
+
+        # point-in-time join must not leak the future
+        panel = pd.DataFrame({
+            "date": pd.to_datetime(["2026-08-01", "2026-08-02", "2026-07-31"]),
+            "ticker": ["A", "A", "A"],
+        })
+        j = asof_join(panel, name, ["composite"]).sort_values("date")
+        vals = dict(zip(j["date"].dt.strftime("%Y-%m-%d"), j["composite"]))
+        assert np.isnan(vals["2026-07-31"]), "leaked history from the future"
+        assert vals["2026-08-01"] == 1.0, f"wrong PIT value: {vals}"
+        assert vals["2026-08-02"] == 1.5, f"stale PIT value: {vals}"
+        print("  append idempotent, date32[day], PIT join has no lookahead ✓")
+
+        # the real writers must be wired up
+        import fragility_screen, signal_aggregator, options_skew
+        for mod in (fragility_screen, signal_aggregator, options_skew):
+            src = Path(mod.__file__).read_text()
+            assert "append_history" in src, f"{mod.__name__} does not append history"
+        print("  fragility_screen / signal_aggregator / options_skew all append ✓")
+    finally:
+        if path.exists():
+            path.unlink()
+    return True
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -411,6 +472,7 @@ if __name__ == "__main__":
         ("Fractal GPU/CPU parity", test_fractal_gpu),
         ("Coiled spring GPU parity", test_coiled_spring_gpu_parity),
         ("Rolling NaN semantics", test_rolling_nan_semantics),
+        ("Snapshot PIT history", test_snapshot_history),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]

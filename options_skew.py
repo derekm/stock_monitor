@@ -131,6 +131,18 @@ def main():
     if args.save and len(df):
         df.to_parquet(OUT)
         print(f"\nWrote {OUT}")
+        # Point-in-time history. Options quotes are inherently un-recoverable
+        # after the fact (yfinance serves only the live chain), so without this
+        # append the `skew` component can NEVER be backtested -- unlike the
+        # price/fundamental inputs, no amount of later work can reconstruct it.
+        # Stamped with the quote date when present, else the latest price date.
+        from snapshot_history import append_history
+        stamp = None
+        if "date" in df.columns:
+            stamp = pd.to_datetime(df["date"], errors="coerce").max()
+            if pd.isna(stamp):
+                stamp = None
+        append_history(df, "options_skew", as_of=stamp)
 
 
 if __name__ == "__main__":

@@ -446,6 +446,7 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `cross_section_returns.csv` | `cross_section.py` | Cross-section |
 | `cross_section_stats.csv` | `cross_section.py` | Cross-section |
 | `signal_aggregator_scores.csv` | `signal_aggregator.py` | Aggregate |
+| `signal_aggregator_scores_history.parquet` | `signal_aggregator.py` | Aggregate (append-only PIT) |
 | `signal_aggregator_ic.csv` | `signal_aggregator.py` | Aggregate |
 | `regime_forecast_stats.csv` | `regime_forecast.py` | Forecast / anomaly |
 | `regime_model_oos.csv` | `pass6.py` | Forecast / anomaly |
@@ -474,6 +475,8 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 || `ergodicity_ruin.csv` | `ergodicity_ruin.py` | Taleb / fat tails ||
 || `portfolio_ergodic.csv` | `ergodicity_ruin.py` | Taleb / fat tails ||
 || `fragility_screen.csv` | `fragility_screen.py` | Taleb / fat tails ||
+|| `fragility_screen_history.parquet` | `fragility_screen.py` | Taleb / fat tails (append-only PIT) ||
+|| `options_skew_history.parquet` | `options_skew.py` | Options (append-only PIT; not back-fillable) ||
 || `macro_fragility.csv` | `macro_fragility.py` | Taleb / fat tails ||
 || `macro_shock.csv` | `macro_shock.py` | Taleb / fat tails ||
 || `macro_sector_shock.csv` | `macro_sector_shock.py` | Taleb / fat tails (DYNAMIC baskets) ||

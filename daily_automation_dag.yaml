@@ -192,6 +192,11 @@ jobs:
     cmd: ["fragility_screen.py"]
     timeout: null
     desc: "Taleb fragility screen"
+
+  options_skew:
+    cmd: ["options_skew.py", "--save"]
+    timeout: 900
+    desc: "Options skew snapshot + PIT history (NOT back-fillable: yfinance serves only the live chain, so a missed day is lost forever)"
   
   taleb_minsky:
     cmd: ["macro_fragility.py", "--save"]

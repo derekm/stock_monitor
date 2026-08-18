@@ -50,6 +50,20 @@ def pctile(s):
     return result
 
 
+def _price_asof():
+    """Latest observed price date — the honest as-of stamp for this snapshot.
+
+    Uses the DATA date, not wall-clock: a run on stale data must not claim to
+    represent today, or the point-in-time join in buy_candidates_oos would see
+    values dated before they actually existed.
+    """
+    try:
+        d = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date"])
+        return pd.to_datetime(d["date"]).max().date()
+    except Exception:
+        return None
+
+
 def main():
     # 1) leverage / coverage from fundamentals (latest per ticker)
     frag = pd.DataFrame()
@@ -152,6 +166,11 @@ def main():
             out[c] = frag[c]
     out = out.sort_values("fragility_score", ascending=False)
     out.to_parquet(DATA_DIR / "fragility_screen.parquet", index=False)
+    # Point-in-time history: the snapshot above is overwritten each run, which
+    # is why `fragile_veto` (a -0.30 score penalty in buy_candidates) could not
+    # be backtested. Additive; existing readers are unaffected.
+    from snapshot_history import append_history
+    append_history(out, "fragility_screen", as_of=_price_asof())
 
     n_fragile = int(out["fragile_flag"].sum())
     print(f"fragility_screen.csv: {len(out)} tickers | {n_fragile} flagged FRAGILE (top 10%)")

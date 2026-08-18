@@ -764,6 +764,14 @@ def main():
     if args.save:
         df.to_parquet(OUT, index=False)
         print(f"\nSaved {len(df)} rows → {OUT}")
+        # NOTE: deliberately NOT calling snapshot_history.append_history here.
+        # `preferred_metrics_history.parquet` ALREADY EXISTS and is owned by
+        # backfill_preferred_fundamentals.py, which writes a per-quarter panel
+        # (311,777 rows, one row per ticker-quarter, as_of_date per row).
+        # Appending a daily snapshot into it would corrupt that schema and is
+        # unnecessary: `decision`/`mos_pass` are already reconstructible
+        # point-in-time from dated fundamentals, which is why
+        # buy_candidates_oos lists them as SUPPORTED rather than EXCLUDED.
         hits = df[df["decision"].isin(["INCLUDE_CORE", "INCLUDE_QUALITY", "INCLUDE_VALUE", "SATELLITE"])]
         hits[["ticker", "decision", "composite_score", "suggested_w_max", "sizing_action"]].to_parquet(OUT_SCREEN, index=False)
         print(f"Screen hits saved → {OUT_SCREEN} ({len(hits)} names)")

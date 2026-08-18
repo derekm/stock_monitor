@@ -55,14 +55,60 @@ EMBARGO = 21
 SUPPORTED = ["decision", "mos_pass", "leverage_flag", "momentum_score",
              "resid_mom_63", "liquidity_score", "distrust_discount"]
 # Components excluded for lack of dated history (reported, never faked).
+#
+# STATUS 2026-08: the writers now append `*_history.parquet` via
+# snapshot_history.append_history, so these become testable as history
+# accumulates. `history_status()` reports how many dates each one has; a
+# component is promoted out of this dict once it covers enough rebalances.
+# Nothing here is back-fillable: options chains in particular are gone once the
+# quote date passes, which is why the append had to be added before more
+# backtesting, not after.
 EXCLUDED = {
-    "composite": "signal_aggregator_scores.parquet has no date column",
+    "composite": "signal_aggregator_scores: history appending since 2026-08",
     "factor_composite": "quarterly only, sparse coverage pre-2014",
-    "fragile_veto": "fragility_screen.parquet has no date column",
-    "skew": "options snapshot only",
+    "fragile_veto": "fragility_screen: history appending since 2026-08",
+    "skew": "options_skew: history appending since 2026-08 (not back-fillable)",
     "sp500_member": "current membership only -> survivorship bias",
     "stress_p": "hmm_regime_states covers <1 year",
 }
+
+# Snapshot tables now accumulating point-in-time history, and the scorer
+# component each one unlocks.
+#
+# preferred_metrics is deliberately NOT here: preferred_metrics_history.parquet
+# already exists with different semantics (a per-ticker-quarter panel written by
+# backfill_preferred_fundamentals.py, 311k rows / 3600 dates), and decision and
+# mos_pass are already reconstructible PIT from dated fundamentals -- they are
+# in SUPPORTED, not EXCLUDED.
+HISTORY_TABLES = {
+    "signal_aggregator_scores": "composite",
+    "fragility_screen": "fragile_veto",
+    "options_skew": "skew",
+}
+
+
+def history_status() -> pd.DataFrame:
+    """How much point-in-time history exists per snapshot table.
+
+    Print this before trusting an EXCLUDED label: once a table covers enough
+    rebalance dates, its component can move into the tested set.
+    """
+    from snapshot_history import load_history
+
+    rows = []
+    for name, comp in HISTORY_TABLES.items():
+        h = load_history(name)
+        if h.empty or "as_of_date" not in h.columns:
+            rows.append({"table": name, "unlocks": comp, "dates": 0,
+                         "first": None, "last": None, "rows": 0})
+            continue
+        rows.append({
+            "table": name, "unlocks": comp,
+            "dates": int(h["as_of_date"].nunique()),
+            "first": h["as_of_date"].min(), "last": h["as_of_date"].max(),
+            "rows": len(h),
+        })
+    return pd.DataFrame(rows)
 
 
 def build_panel(start: str, min_dollar_vol: float, min_names: int) -> pd.DataFrame:
@@ -281,6 +327,9 @@ def main():
     print(f"  testable components : {SUPPORTED}")
     for k, v in EXCLUDED.items():
         print(f"  EXCLUDED {k:17}: {v}")
+    print()
+    print("Point-in-time history accumulating (unlocks the EXCLUDED set):")
+    print(history_status().to_string(index=False))
     print()
 
     print("Building PIT panel...")

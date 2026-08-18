@@ -264,6 +264,9 @@ def build(cutoff: pd.Timestamp | None = None, lindy: bool = False) -> tuple[pd.D
     if cutoff is None:
         cutoff = prices["date"].max()
     cutoff = pd.Timestamp(cutoff)
+    # Record the resolved cutoff so callers can stamp history with the DATA
+    # date rather than the wall-clock date (they differ on a stale run).
+    build.last_cutoff = cutoff
     regime_s = load_regime_map()
     fwd_series = forward_return_series(cutoff)
     if not fwd_series.empty and not regime_s.empty:
@@ -332,6 +335,13 @@ def main():
         scores.to_parquet(OUT_SCORES)
         ic_df.to_parquet(OUT_IC)
         print(f"\nWrote {OUT_SCORES}\nWrote {OUT_IC}")
+        # Append point-in-time history. The snapshot above is overwritten every
+        # run, which is why buy_candidates_oos could not backtest `composite`
+        # (no date column -> no way to know what the score saw historically).
+        # History is additive; nothing downstream changes.
+        from snapshot_history import append_history
+        append_history(scores, "signal_aggregator_scores",
+                       as_of=getattr(build, "last_cutoff", None) or args.cutoff)
 
 
 if __name__ == "__main__":
