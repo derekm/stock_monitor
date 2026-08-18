@@ -15,8 +15,8 @@ from datetime import datetime, date
 from pathlib import Path
 import json
 import hashlib
-import fcntl
 import os
+import sys
 
 CHECKPOINT_DIR = Path(__file__).parent / "backfill_checkpoints"
 CHECKPOINT_DIR.mkdir(exist_ok=True)
@@ -84,14 +84,32 @@ class JobCheckpoint:
         return combined_hash.hexdigest()[:16]
     
     def _acquire_lock(self):
-        """Acquire file lock for atomic checkpoint updates."""
-        self._lock_fd = open(self.lock_file, 'w')
-        fcntl.flock(self._lock_fd.fileno(), fcntl.LOCK_EX)
-    
+        """Acquire file lock. msvcrt on Windows, fcntl elsewhere."""
+        self._lock_fd = open(self.lock_file, "a+")
+        if sys.platform == "win32":
+            import msvcrt
+            self._lock_fd.seek(0)
+            try:
+                msvcrt.locking(self._lock_fd.fileno(), msvcrt.LK_LOCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
+            fcntl.flock(self._lock_fd.fileno(), fcntl.LOCK_EX)
+
     def _release_lock(self):
         """Release file lock."""
         if self._lock_fd:
-            fcntl.flock(self._lock_fd.fileno(), fcntl.LOCK_UN)
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+                    self._lock_fd.seek(0)
+                    msvcrt.locking(self._lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self._lock_fd.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
             self._lock_fd.close()
             self._lock_fd = None
     

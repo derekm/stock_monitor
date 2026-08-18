@@ -6,7 +6,7 @@ with dynamic ERP options.
 Three ERP sources:
   1. damodaran — Damodaran implied ERP (annual/semi-annual, from erp_history.parquet)
   2. interpolated — Monthly or daily interpolation of Damodaran ERP
-  3. shiller   — Earnings-yield proxy (price-to-200dma scaled to ERP range)
+  3. spy_sma — price-to-200dma heuristic (NOT Shiller CAPE; labeled honestly)
 
 Usage:
   python implied_r_screen.py --save
@@ -350,9 +350,7 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
     # Damodaran per-ticker WACC
     df["wacc_damodaran"] = wacc_series.reindex(df.index)
     df["cost_of_equity_damodaran"] = coe_series.reindex(df.index)
-    df["implied_r_damodaran"] = df["roe"]
-    has_wacc = df["wacc_damodaran"].notna()
-    df.loc[has_wacc, "implied_r_damodaran"] = df.loc[has_wacc, "roe"]
+    df["implied_r_damodaran"] = 2.0 * df["roe"] / (df["pb_ratio"] + 1.0)
     df["excess_return_damodaran"] = df["roe"] - df["cost_of_equity_damodaran"]
     df["excess_ret_damodaran_pct"] = (df["excess_return_damodaran"] * 100).round(1)
 

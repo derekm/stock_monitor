@@ -435,43 +435,22 @@ def get_pro_forma_fundamentals(
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Add example acquisitions
-    print("Adding example acquisitions...")
-    
-    # PANW acquires CYBR
-    add_acquisition(
-        acquirer_ticker='PANW',
-        target_ticker='CYBR',
-        completion_date='2026-07-31',
-        announcement_date='2026-03-15',
-        purchase_price=1_500_000_000,
-        notes='PANW acquires CyberArk for endpoint security'
-    )
-    
-    # Example: PANW also acquires another company (hypothetical)
-    add_acquisition(
-        acquirer_ticker='PANW',
-        target_ticker='ZS',
-        completion_date='2026-10-15',
-        announcement_date='2026-06-01',
-        purchase_price=800_000_000,
-        notes='PANW acquires Zscaler for cloud security (example)'
-    )
-    
-    # Get pro forma series
-    print("\nGetting PANW pro forma series...")
-    series = get_pro_forma_series('PANW', quarters=12)
-    
-    if not series.empty:
-        print(f"Pro forma series: {len(series)} quarters")
-        print("\nRecent quarters with provenance:")
-        for _, row in series.tail(8).iterrows():
-            date = row['as_of_date']
-            rev = row.get('total_revenue', np.nan)
-            prov = row.get('data_provenance', 'unknown')
-            source = row.get('lookthrough_source', 'N/A')
-            
-            rev_str = f"${rev/1e6:.0f}M" if pd.notna(rev) else "N/A"
-            print(f"  {date}: Rev={rev_str}, Provenance={prov}, Source={source}")
+    acqs = load_acquisitions()
+    print(f"corporate_actions acquisitions: {len(acqs)}")
+    if acqs.empty:
+        print("No acquisition rows. Register via acquisition_backfill.process_acquisition.")
     else:
-        print("No pro forma series available")
+        fund = pd.read_parquet(FUND) if FUND.exists() else pd.DataFrame()
+        have = set(fund["ticker"].astype(str).str.upper()) if not fund.empty else set()
+        for _, row in acqs.iterrows():
+            acq = str(row.get("acquirer_ticker", "")).upper()
+            tgt = str(row.get("target_ticker", "")).upper()
+            close = row.get("completion_date")
+            tgt_ok = tgt in have
+            acq_ok = acq in have
+            note = "ok" if tgt_ok and acq_ok else "NO PRO FORMA — missing acquiree/acquirer quarters"
+            print(f"  {acq}+{tgt} close={close} acquiree_in_fund={tgt_ok} [{note}]")
+            if acq_ok:
+                series = get_pro_forma_series(acq, quarters=8)
+                n_lt = int((series.get("data_provenance") == "lookthrough_proforma").sum()) if not series.empty and "data_provenance" in series.columns else 0
+                print(f"    lookthrough_proforma quarters: {n_lt}")

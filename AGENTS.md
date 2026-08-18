@@ -4,7 +4,7 @@ This repo is a **personal portfolio intelligence stack** (Python + DuckDB + a st
 
 ## Mental model
 
-- **Inputs are few, outputs are many.** Nearly everything reads `daily_prices.parquet`, `fundamentals.parquet`, `monitored_stocks.parquet`, `portfolio_holdings.parquet`, `trades.parquet`, `sector_prices.parquet`, `sp500_constituents.parquet`, `alerts_config.parquet`, `earnings_calendar.parquet`. Everything else is a derived CSV/parquet.
+- **Inputs are few, outputs are many.** Nearly everything reads `daily_prices.parquet` (the universe), `fundamentals.parquet`, `portfolio_holdings.parquet`, `trades.parquet`, `sector_prices.parquet`, `sp500_constituents.parquet`, `alerts_config.parquet`, `earnings_calendar.parquet`. `monitored_stocks.parquet` is sleeve metadata only, not the universe. Everything else is a derived parquet.
 - **One orchestrator to rule them:** prefer `run_daily_automation.py` (or the dashboard's `analytics_service` → `/run/all-daily`) over calling individual scripts. Individual scripts exist for targeted re-runs and research.
 - **Dashboard = 4 services + static site**, all launched by `./start_dashboard.sh` (granite_service :5055, pipeline_service :5056, analytics_service :8767, static :8765). Ctrl+C stops all.
 - **Forecasts are stateful:** they need pretrained checkpoints under `checkpoints/` (Git-ignored, large). `granite_backfill.py`/`ttm_backfill.py` pretrain; `granite_daily.py` runs daily; `forecast_granite.py` emits `forecasts_granite.csv/.parquet`. **Regime-selected serving** (`regime_serving.py` + `checkpoints/regime/`) ensembles the current HMM regime's model when available.

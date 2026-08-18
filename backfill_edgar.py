@@ -48,12 +48,26 @@ MA_TAGS = [
 
 
 def load_cik_map() -> dict:
-    r = requests.get(TICKERS_URL, headers=UA, timeout=30)
-    r.raise_for_status()
+    """Local cik_ticker_map.json wins; live SEC map fills gaps; overrides last."""
     out = {}
-    for row in r.json().values():
-        cik = str(row["cik_str"]).zfill(10)
-        out[str(row["ticker"]).upper()] = cik
+    local = DATA_DIR / "cik_ticker_map.json"
+    if local.exists():
+        with open(local) as f:
+            raw = json.load(f)
+        for t, c in raw.items():
+            cs = str(c).zfill(10)
+            if cs.isdigit() and len(cs) == 10:
+                out[str(t).upper()] = cs
+    try:
+        r = requests.get(TICKERS_URL, headers=UA, timeout=30)
+        r.raise_for_status()
+        for row in r.json().values():
+            t = str(row["ticker"]).upper()
+            cik = str(row["cik_str"]).zfill(10)
+            if t not in out:
+                out[t] = cik
+    except Exception as e:
+        print(f"  live SEC ticker map failed ({e}); using local map only ({len(out)})")
     return out
 
 
@@ -175,6 +189,20 @@ def main():
                 if r.status_code == 404:
                     bad_ciks[ticker] = {"cik": cik, "reason": "SEC_404"}
                     bad_count += 1
+                elif r.status_code == 200:
+                    name = (r.json().get("name") or "").upper()
+                    tk = ticker.upper().split("-")[0]
+                    if len(tk) >= 2 and tk not in name and not any(
+                        tok.startswith(tk[:3]) for tok in name.replace(",", " ").split() if len(tok) >= 3
+                    ):
+                        bad_ciks[ticker] = {
+                            "cik": cik,
+                            "reason": "ENTITY_MISMATCH",
+                            "suggestion": r.json().get("name", ""),
+                        }
+                        bad_count += 1
+                    else:
+                        good_count += 1
                 else:
                     good_count += 1
                 time.sleep(0.05)

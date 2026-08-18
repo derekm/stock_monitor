@@ -83,28 +83,9 @@ print("Saved quarterly_holdings_panel.parquet")
 # QUARTERLY NETWORK EDGES
 # ============================================================
 print("\nBuilding quarterly network edges...")
-
-quarters = sorted(quarterly_panel['as_of_date'].unique())
-all_edges = []
-
-for q in tqdm(quarters, desc="Quarters"):
-    q_data = quarterly_panel[quarterly_panel['as_of_date'] == q]
-    
-    # Build edges for this quarter
-    for _, row in q_data.iterrows():
-        all_edges.append({
-            'as_of_date': q,
-            'filer_ticker': row['filer_ticker'],
-            'held_ticker': row['held_ticker'],
-            'market_value': row['market_value'],
-            'ownership_pct': 0  # Will compute below
-        })
-
-edges_df = pd.DataFrame(all_edges)
-
-# Compute ownership_pct per filer per quarter
-filer_quarter_totals = edges_df.groupby(['filer_ticker', 'as_of_date'])['market_value'].transform('sum')
-edges_df['ownership_pct'] = edges_df['market_value'] / filer_quarter_totals
+edges_df = quarterly_panel[["as_of_date", "filer_ticker", "held_ticker", "market_value"]].copy()
+filer_quarter_totals = edges_df.groupby(["filer_ticker", "as_of_date"])["market_value"].transform("sum")
+edges_df["ownership_pct"] = edges_df["market_value"] / filer_quarter_totals.replace(0, np.nan)
 
 print(f"Total quarterly edges: {len(edges_df)}")
 edges_df.to_parquet('quarterly_network_edges.parquet', index=False)

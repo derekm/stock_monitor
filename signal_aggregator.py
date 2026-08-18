@@ -296,6 +296,18 @@ def build(cutoff: pd.Timestamp | None = None, lindy: bool = False) -> tuple[pd.D
 
     out = normed.copy()
     out["composite"] = comp.round(4)
+    try:
+        pref = pd.read_parquet(PREF, columns=["ticker", "life_cycle_stage"])
+        pref["ticker"] = pref["ticker"].astype(str).str.upper()
+        lc = pref.drop_duplicates("ticker").set_index("ticker")["life_cycle_stage"]
+        stage = out.index.map(lc)
+        tilt = pd.Series(1.0, index=out.index)
+        tilt = tilt.mask(pd.Series(stage, index=out.index).isin(["Young Growth", "High Growth"]), 1.05)
+        tilt = tilt.mask(pd.Series(stage, index=out.index).eq("Decline"), 0.90)
+        out["composite"] = (out["composite"] * tilt).clip(0, 1).round(4)
+        out["life_cycle_stage"] = stage
+    except Exception:
+        pass
     out["rank"] = out["composite"].rank(ascending=False, method="min").astype("Int64")
     out = out.sort_values("rank").reset_index()
     return out, ic_df

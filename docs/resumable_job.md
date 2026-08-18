@@ -34,6 +34,8 @@ python resumable_job.py --job rolling_window_analysis --full-reload  # force res
 - `backfill_checkpoints/<job_name>_checkpoint.json` — per-ticker progress, universe hash, data hash, timestamps
 - `backfill_checkpoints/<job_name>_checkpoint.lock` — file lock for atomic updates
 
+Locks: `msvcrt` on Windows, `fcntl` elsewhere. Not wired into `run_daily_automation.py` yet — jobs still run full-pass unless they call this module themselves.
+
 ## Related programs
 
 - `run_daily_automation.py` — orchestrator that runs daily jobs (candidate for resumable integration)

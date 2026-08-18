@@ -35,8 +35,17 @@ from fractal_windows import spans_generator
 
 
 def _best_device() -> str:
-    if _HAS_TORCH and torch.cuda.is_available():
+    """CUDA, then DirectML, then CPU."""
+    if not _HAS_TORCH:
+        return "cpu"
+    if torch.cuda.is_available():
         return "cuda"
+    try:
+        import torch_directml  # type: ignore
+        dml = torch_directml.device()
+        return str(dml)
+    except Exception:
+        pass
     return "cpu"
 
 

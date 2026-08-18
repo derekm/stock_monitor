@@ -177,9 +177,23 @@ def clip_returns(rets: pd.DataFrame, clip: float = 0.35) -> pd.DataFrame:
 
 
 def load_membership() -> pd.DataFrame:
-    p = DATA_DIR / "monitored_stocks.parquet"
-    if p.exists():
-        return pd.read_parquet(p)
+    """Universe membership. Prefer daily_prices tickers; sleeve flags optional."""
+    prices = DATA_DIR / "daily_prices.parquet"
+    stocks = DATA_DIR / "monitored_stocks.parquet"
+    if prices.exists():
+        px = pd.read_parquet(prices, columns=["ticker"])
+        out = pd.DataFrame({"ticker": sorted(px["ticker"].astype(str).str.upper().unique())})
+        if stocks.exists():
+            meta = pd.read_parquet(stocks)
+            if "ticker" in meta.columns:
+                meta = meta.copy()
+                meta["ticker"] = meta["ticker"].astype(str).str.upper()
+                extra = [c for c in meta.columns if c != "ticker"]
+                if extra:
+                    out = out.merge(meta.drop_duplicates("ticker"), on="ticker", how="left")
+        return out
+    if stocks.exists():
+        return pd.read_parquet(stocks)
     return pd.DataFrame()
 
 

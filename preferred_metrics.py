@@ -786,10 +786,26 @@ def build_table() -> pd.DataFrame:
             "fair_ev_ebitda": fair_ev_vals,
             "fair_ev_sales": fair_sales_vals,
             "fair_pb": fair_pb_vals,
-            "mos_pass": False,
-            "discount_to_fair": np.nan,
             "decision": decision,
         }, index=fund.index)
+
+        fe = pd.to_numeric(out["fair_ev_ebitda"], errors="coerce")
+        ev = pd.to_numeric(out["ev_ebitda"], errors="coerce")
+        out["discount_to_fair"] = (fe - ev) / fe.replace(0, np.nan)
+        out["mos_pass"] = out["discount_to_fair"] >= 0.15
+
+        p_bad = pd.Series(0.05, index=out.index)
+        p_bad = p_bad + out["life_cycle_stage"].eq("Decline").astype(float) * 0.15
+        if "quality_score" in out.columns:
+            p_bad = p_bad + (pd.to_numeric(out["quality_score"], errors="coerce") < 0.4).astype(float) * 0.10
+        arista_p = DATA_DIR / "arista_signals.parquet"
+        if arista_p.exists():
+            ar = pd.read_parquet(arista_p)
+            if "ticker" in ar.columns:
+                flagged = set(ar["ticker"].astype(str).str.upper())
+                p_bad = p_bad + out["ticker"].astype(str).str.upper().isin(flagged).astype(float) * 0.20
+        out["distrust_p_bad"] = p_bad.clip(0.0, 0.60)
+        out["distrust_discount"] = (1.0 - out["distrust_p_bad"]).round(4)
 
         df = out.sort_values("composite_score", ascending=False).reset_index(drop=True)
         return df

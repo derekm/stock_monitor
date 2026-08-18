@@ -2,9 +2,9 @@
 """
 run_daily_automation.py — Master daily job for stock_monitor analytics stack.
 
-Runs 21 jobs as a dependency DAG with multiprocessing (independent jobs run
+Runs 40+ jobs as a dependency DAG with multiprocessing (independent jobs run
 in parallel; only real dependencies serialize). Falls back to sequential
-execution if multiprocessing is unavailable.
+execution if multiprocessing is unavailable. Universe is daily_prices.
 
 Dependency order (edges = must-finish-before):
   hmm → rebalance
@@ -45,11 +45,11 @@ JOBS = {
     "rolling": (["rolling_window_analysis.py", "--universe", "all", "--save"], None),
     "rolling_corr": (["rolling_correlation_windows.py", "--save"], None),
     "tail_hedge": (["tail_risk_hedging.py", "--save"], None),
-    "allpairs": (["allpairs_correlations.py", "--window", "63", "--step", "21", "--max-assets", "50"], None),
+    "allpairs": (["allpairs_correlations.py", "--window", "63", "--step", "21", "--max-assets", "80"], None),
     "fund_snap": (["fundamentals_history.py", "snapshot"], None),
     "screen_bt": (["fundamentals_history.py", "backtest-screens"], None),
-    "edgar_backfill": (["full_universe_backfill.py", "--max-tickers", "200", "--resume"], None),
-    "backfill_new_tickers": (["acquisition_backfill.py", "backfill_new_tickers_job"], None),
+    "edgar_backfill": (["backfill_edgar.py", "--quarantine"], 7200),
+    "backfill_new_tickers": (["acquisition_backfill.py"], 1800),
     "dupont": (["dupont_analysis.py", "--save"], None),
     "growth": (["growth_tech_analytics.py"], None),
     "peer": (["peer_analytics.py", "--save"], None),
@@ -133,9 +133,10 @@ DEPS = {
     "taleb_ride_now": set(),
     "polygon_prices": set(),
     "polygon_flatfiles": set(),
+    "acq_backfill": set(),
     "export": {"aggregate", "technical", "econ_cal", "est_rev", "shadow",
                "taleb_tail", "taleb_gap", "taleb_iv_skew", "taleb_ergodic", "taleb_fragility", "taleb_minsky", "taleb_shock", "taleb_sector_shock", "taleb_shock_ride", "taleb_arista", "taleb_subindustry_regime", "taleb_barbell",
-               "taleb_optionality"},
+               "taleb_optionality", "lookthrough", "damodaran"},
 }
 
 # jobs with no deps start at wave 0

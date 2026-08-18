@@ -253,70 +253,49 @@ def compute_wacc_per_ticker(
     risk_free: float = 0.0418,
     marginal_tax: float = 0.21,
 ) -> pd.DataFrame:
-    """Compute WACC per Damodaran framework for each ticker"""
-    
-    results = []
-    for _, row in fundamentals.iterrows():
-        ticker = row.get("ticker")
-        sector = row.get("sector", "Technology")  # default
-        
-        # Get sector beta
-        sector_beta = SECTOR_BETAS_STATIC.get(sector, 1.0)
-        
-        # Get CRP (default 0 for US)
-        country = row.get("country", "USA")
-        crp = CRP_STATIC_2026.get(country, 0.0)
-        
-        # Cost of Equity
-        cost_of_equity = risk_free + sector_beta * (erp_us + crp)
-        
-        # Cost of Debt from interest coverage
-        ic = row.get("interest_coverage")
-        rating, default_spread = synthetic_rating_from_coverage(ic)
-        cost_of_debt = risk_free + default_spread
-        after_tax_cost_of_debt = cost_of_debt * (1 - marginal_tax)
-        
-        # Capital structure weights
-        de = row.get("debt_to_equity")
-        market_cap = row.get("market_cap")
-        total_debt = row.get("total_debt")  # may not exist
-        
-        if pd.notna(de) and de > 0 and pd.notna(market_cap) and market_cap > 0:
-            # Use market value of equity and book debt (Damodaran: market equity, book debt)
-            E = market_cap
-            D = de * market_cap if pd.notna(de) else 0
-            if D > 0 and E > 0:
-                w_e = E / (D + E)
-                w_d = D / (D + E)
-            else:
-                w_e, w_d = 1.0, 0.0
-        else:
-            # No debt or missing data
-            w_e, w_d = 1.0, 0.0
-        
-        wacc = cost_of_equity * w_e + after_tax_cost_of_debt * w_d
-        
-        results.append({
-            "ticker": ticker,
-            "sector": sector,
-            "country": country,
-            "cost_of_equity": round(cost_of_equity, 6),
-            "cost_of_debt": round(cost_of_debt, 6),
-            "after_tax_cost_of_debt": round(after_tax_cost_of_debt, 6),
-            "wacc": round(wacc, 6),
-            "sector_beta": sector_beta,
-            "erp_us": erp_us,
-            "crp": crp,
-            "risk_free": risk_free,
-            "synthetic_rating": rating,
-            "default_spread": default_spread,
-            "weight_equity": round(w_e, 4),
-            "weight_debt": round(w_d, 4),
-            "marginal_tax": marginal_tax,
-            "as_of_date": row.get("as_of_date"),
-        })
-    
-    return pd.DataFrame(results)
+    """Vectorized WACC. Latest row per ticker."""
+    if fundamentals.empty:
+        return pd.DataFrame()
+    df = fundamentals.copy()
+    if "as_of_date" in df.columns:
+        df = df.sort_values("as_of_date").groupby("ticker", as_index=False).tail(1)
+    sector = df["sector"] if "sector" in df.columns else pd.Series("Technology", index=df.index)
+    country = df["country"] if "country" in df.columns else pd.Series("USA", index=df.index)
+    sector_beta = sector.map(lambda s: SECTOR_BETAS_STATIC.get(s, 1.0) if pd.notna(s) else 1.0)
+    crp = country.map(lambda c: CRP_STATIC_2026.get(c, 0.0) if pd.notna(c) else 0.0)
+    cost_of_equity = risk_free + sector_beta * (erp_us + crp)
+    ic = df["interest_coverage"] if "interest_coverage" in df.columns else pd.Series(np.nan, index=df.index)
+    rating_spread = ic.map(synthetic_rating_from_coverage)
+    rating = rating_spread.map(lambda x: x[0])
+    default_spread = rating_spread.map(lambda x: x[1])
+    cost_of_debt = risk_free + default_spread
+    after_tax = cost_of_debt * (1 - marginal_tax)
+    de = df["debt_to_equity"] if "debt_to_equity" in df.columns else pd.Series(np.nan, index=df.index)
+    mc = df["market_cap"] if "market_cap" in df.columns else pd.Series(np.nan, index=df.index)
+    use_w = de.notna() & (de > 0) & mc.notna() & (mc > 0)
+    w_e = pd.Series(1.0, index=df.index).mask(use_w, 1.0 / (1.0 + de))
+    w_d = pd.Series(0.0, index=df.index).mask(use_w, de / (1.0 + de))
+    wacc = cost_of_equity * w_e + after_tax * w_d
+    return pd.DataFrame({
+        "ticker": df["ticker"].values,
+        "sector": sector.values,
+        "country": country.values,
+        "cost_of_equity": cost_of_equity.round(6).values,
+        "cost_of_debt": cost_of_debt.round(6).values,
+        "after_tax_cost_of_debt": after_tax.round(6).values,
+        "wacc": wacc.round(6).values,
+        "sector_beta": sector_beta.values,
+        "erp_us": erp_us,
+        "crp": crp.values,
+        "risk_free": risk_free,
+        "synthetic_rating": rating.values,
+        "default_spread": default_spread.values,
+        "weight_equity": w_e.round(4).values,
+        "weight_debt": w_d.round(4).values,
+        "marginal_tax": marginal_tax,
+        "as_of_date": df["as_of_date"].values if "as_of_date" in df.columns else None,
+        "wacc_source": "computed",
+    })
 
 
 def classify_life_cycle(row: pd.Series) -> str:
