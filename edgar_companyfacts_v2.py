@@ -124,13 +124,13 @@ def _pick_tag(facts: dict, tag_list: list[str], prefer_order: bool = False):
     with any usable facts. Use it when the tags are NOT interchangeable measures
     of the same quantity. SHARES_TAGS is that case: CommonStockSharesOutstanding
     is a POINT-IN-TIME count, which is what a balance-sheet field needs, while
-    WeightedAverageNumberOfSharesOutstandingBasic is a period AVERAGE used for
-    EPS. Coverage ranking picked the weighted-average for AAPL purely because it
-    has more facts (234 vs 144), silently substituting a different metric. The
-    two are close for AAPL (14.61B vs 14.66B) but they are not the same quantity.
+    WeightedAverageNumberOfSharesOutstandingBasic is a period AVERAGE used for EPS.
+    Coverage ranking would prefer the weighted-average for AAPL on fact count alone
+    (234 vs 144) and substitute a different quantity; the two happen to sit close
+    for AAPL (14.61B vs 14.66B) but they do not measure the same thing.
 
-    All three parsers used to take the first tag that existed. That is wrong for
-    revenue: "Revenues" leads REV_TAGS but is a legacy stub for most filers,
+    Coverage ranking matters for revenue, where taking the first tag present is
+    wrong: "Revenues" leads REV_TAGS but is a legacy stub for most filers,
     while the modern ASC-606 tag carries the real history. Measured coverage:
 
       AAPL  Revenues                       11 facts, last 2018-09-29
@@ -140,18 +140,17 @@ def _pick_tag(facts: dict, tag_list: list[str], prefer_order: bool = False):
       PANW  Revenues                       18 facts, ZERO quarterly, last 2018-07-31
             RevenueFromContract...Excluding 117 facts, 64 quarterly, last 2026-04-30
 
-    So AAPL's revenue_ttm came from a series that stopped in 2018 -- hence 265.6B
-    against an actual FY24 revenue of 391.0B, and PANW/CHKP reporting rev=0/2
-    usable points.
+    Picking a discontinued tag yields a series that stops at its last filing --
+    "Revenues" for AAPL ends in 2018 and produces a revenue_ttm of 265.6B against an
+    actual FY24 391.0B, and leaves PANW/CHKP with 0-2 usable points.
 
-    Ranking: RECENCY FIRST, then quarterly coverage. Ordering by raw quarterly
-    count is wrong -- SalesRevenueNet has MORE historical quarters than the modern
-    tag (AAPL 136 vs 64) but was discontinued in 2018, and picking it gave
-    revenue_ttm 255.3B against an actual 391.0B (-34.7%). What matters is which
-    tag is still being filed, so tags are compared on (last quarterly period end,
-    quarterly count). NVDA is the case that keeps this general rather than a
-    hardcoded reordering: there "Revenues" is genuinely correct (quarterly facts
-    through 2026-04-26), and it still wins under this rule.
+    Ranking: RECENCY FIRST, then quarterly coverage. Raw quarterly count is the
+    wrong key -- SalesRevenueNet holds MORE historical quarters than the modern tag
+    (AAPL 136 vs 64) but was discontinued in 2018, and choosing it gives revenue_ttm
+    255.3B against 391.0B (-34.7%). What matters is which tag is still being filed,
+    so tags are compared on (last quarterly period end, quarterly count). NVDA keeps
+    this general rather than a hardcoded reordering: there "Revenues" is genuinely
+    correct (quarterly facts through 2026-04-26) and wins under the same rule.
     """
     if prefer_order:
         for tag in tag_list:
@@ -168,10 +167,7 @@ def _pick_tag(facts: dict, tag_list: list[str], prefer_order: bool = False):
             continue
         units_all = facts[tag].get("units", {})
         # Share counts are filed under units["shares"], monetary items under
-        # units["USD"]. Looking only at USD made this return None for every
-        # SHARES_TAGS entry, so parse_balance got tag_data=None and the shares
-        # series came back EMPTY for every ticker -- AAPL lost all 72 share
-        # counts even though CommonStockSharesOutstanding has 144 facts.
+        # units["USD"]; both must be considered or share tags yield nothing.
         units = []
         for unit_key in ("USD", "shares"):
             units.extend(units_all.get(unit_key, []))
@@ -316,10 +312,9 @@ def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
     # Use N/A frames that aren't already covered by CY frames.
     #
     # ONLY genuine ~3-month spans. An N/A frame carries no period information, so
-    # this branch used to assume months=3 for every one of them -- filing 6/9/12
-    # month figures as single quarters and inflating every downstream TTM sum.
-    # span_months comes from the fact's own start/end, so a 12-month duplicate is
-    # now rejected instead of masquerading as Q4.
+    # span_months is taken from the fact's own start/end; that rejects the 6/9/12
+    # month duplicates EDGAR also files, which would otherwise enter as quarters
+    # and inflate every downstream TTM sum.
     if len(na_frames) > 0:
         na_frames = na_frames.sort_values("filed").drop_duplicates(subset=["end"], keep="last")
 
@@ -345,11 +340,10 @@ def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
     #
     # Matched on the facts' own start/end spans, NOT on frame strings. Frames are
     # unreliable for off-calendar fiscal years: MSFT's FY2024 ends 2024-06-30 but
-    # its annual frame is "CY2024", and its 9-month cumulative carries frame
-    # "N/A" (so _parse_frame typed it "unknown", never "cumulative"). The old
-    # year/quarter lookup therefore found nothing and Q4 was silently dropped --
-    # leaving a 6-month hole in the series for every June/January/October
-    # fiscal-year-end company, which then made tail(4) span five quarters.
+    # its annual frame is "CY2024", and its 9-month cumulative carries frame "N/A"
+    # (_parse_frame types that "unknown", never "cumulative"). A year/quarter lookup
+    # finds no pair there, dropping Q4 and leaving a 6-month hole for every
+    # June/January/October fiscal-year-end company.
     #
     # Pairing on (start, 12mo) vs (start, 9mo) is fiscal-calendar agnostic:
     # MSFT FY24 = 88.136 (2023-07-01..2024-06-30) minus 66.100
@@ -482,9 +476,8 @@ def parse_cashflow_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
                 })
     
     # 3. Compute Q4 as (12-month) - (9-month) sharing the same fiscal start.
-    #    Span-matched, not frame-matched -- see parse_income_quarterly for why
-    #    (off-calendar fiscal years carry misleading CY frames and N/A
-    #    cumulatives, which silently dropped Q4 and left 6-month gaps).
+    #    Span-matched, not frame-matched -- see parse_income_quarterly: off-calendar
+    #    fiscal years carry misleading CY frames and N/A cumulatives.
     df_spans = df.copy()
     if "span_months" not in df_spans.columns:
         df_spans["span_months"] = None
@@ -544,8 +537,8 @@ def parse_balance(facts: dict, tag_list: list[str],
         return pd.Series(dtype=float)
     
     rows = []
-    # Both unit families in ONE loop -- the two were byte-identical apart from the
-    # unit key, and `start` was captured in neither, which is the bug below.
+    # Both unit families share one loop; `start` is captured so span_months below
+    # can tell an instant balance value from a duration fact.
     units_all = tag_data.get("units", {})
     for unit_key in ("USD", "shares"):
         for e in units_all.get(unit_key, []):
@@ -561,11 +554,9 @@ def parse_balance(facts: dict, tag_list: list[str],
                 "quarter": parsed["quarter"],
                 # span_months distinguishes a genuinely instantaneous balance
                 # value (no start -> None) from a DURATION fact. The weighted-
-                # average share tags are durations, and SpaceX (SPCX) files two
-                # facts at end=2026-06-30: a 6-month average of 4.879B and a
-                # 3-month average of 5.864B. Deduplicating on `end` alone kept
-                # whichever sorted first and silently returned the 6-month
-                # figure -- a 20% understatement of the latest quarter.
+                # average share tags are durations. SpaceX (SPCX) files two facts
+                # at end=2026-06-30 -- a 6-month average of 4.879B and a 3-month
+                # average of 5.864B -- so `end` alone cannot identify the value.
                 "span_months": _span_months(e),
             })
     if not rows:
@@ -727,14 +718,11 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
 
         # TTM income (4 quarters ending at qend_date).
         #
-        # `out_name` is the CANONICAL panel column. Earlier this loop wrote
-        # ttm_<name> for every entry and a later block copied those into the
-        # canonical names WITHOUT removing the originals -- merge_into_fundamentals
-        # writes every key it is handed, so a real run silently re-created 11
-        # pre-migration columns (panel went 83 -> 94 cols). The canonical name is
-        # now the only key written. ttm_depreciation_amortization and
-        # ttm_interest_expense keep their names because those ARE the panel
-        # columns; there is no *_ttm variant of them.
+        # `out_name` is the CANONICAL panel column and the only key written:
+        # merge_into_fundamentals persists every key it is handed, so emitting a
+        # working alias alongside it would create a duplicate column.
+        # ttm_depreciation_amortization and ttm_interest_expense ARE the panel
+        # column names; there is no *_ttm variant of those two.
         for src_key, out_name in [
             ("revenue", "revenue_ttm"),
             ("net_income", "net_income_ttm"),
@@ -791,10 +779,9 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             s = series[series.index <= qend_date].dropna()
             row[out_name] = float(s.iloc[-1]) if len(s) > 0 else None
 
-        # shares_outstanding: reject values that cannot be a share count. This is
-        # the corruption that made the old `shares` column unusable (FITB
-        # 2010-09-30 held 7.96e14; BRK-B carried 1.65e12 against a true 1.4e9).
-        # Cleaned in clean_corrupt_shares.py; rejected at the source here.
+        # Reject values that cannot be a share count: filings carry scale errors
+        # (7.96e14 shares, or 1.65e12 for a company with 1.4e9). No US listed
+        # company exceeds ~1e11. clean_corrupt_shares.py repairs stored rows.
         _sh = row.get("shares_outstanding")
         row["shares_outstanding"] = _sh if (_sh and 0 < _sh < 1e11) else None
 
@@ -818,11 +805,9 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             row["fcf_source"] = None
             row["fcf_provenance"] = "unavailable"
 
-        # Single-quarter values. These are read back for provenance below, so they
-        # are assigned BEFORE the provenance blocks -- previously the provenance
-        # checks ran first and tested keys that did not exist yet, so
-        # revenue_provenance was "unavailable" on every row that in fact had
-        # revenue, and roe_provenance compared against a missing key.
+        # Single-quarter values. Assigned BEFORE the provenance blocks below, which
+        # read them back -- a provenance check running first would test keys that do
+        # not exist yet and report "unavailable" for populated fields.
         rev_series = financials.get("revenue")
         if rev_series is not None and not rev_series.empty:
             s = rev_series[rev_series.index <= qend_date].dropna()
@@ -997,9 +982,8 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
         # NOTE: total_liabilities is deliberately NOT set from total_debt.
         # Measured on the panel, total_liabilities / total_debt has a median ratio
         # of 2.515 -- debt is a SUBSET of liabilities, so copying one into the
-        # other was wrong. shares_outstanding is assigned once, above, with the
-        # plausibility guard; re-assigning it here from an unguarded value is what
-        # let 7.96e14 share counts into the panel.
+        # other would be wrong. shares_outstanding is assigned once, above, behind
+        # the plausibility guard; it must not be re-assigned from a raw value here.
 
         row["source"] = "edgar_v2"
         row["fiscal_year_end"] = financials.get("fiscal_year_end")
@@ -1013,15 +997,19 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="Extract quarterly fundamentals from EDGAR")
     ap.add_argument("--tickers", help="Comma-separated tickers")
-    ap.add_argument("--max-tickers", type=int, default=10)
+    # No default cap: omitting --max-tickers means the whole universe. A default
+    # would silently truncate a full run and still exit 0 reporting success.
+    ap.add_argument("--max-tickers", type=int, default=None,
+                    help="cap the number of tickers processed (default: no cap)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--csv", action="store_true",
                     help="also dump edgar_v2_quarterly.csv (diagnostic only)")
     ap.add_argument("--flush-every", type=int, default=1,
                     help="merge into fundamentals.parquet every N tickers (default 1)")
     ap.add_argument("--force", action="store_true",
-                    help="overwrite rows already stamped edgar_v2 (needed to push "
-                         "an extractor CORRECTION through source protection)")
+                    help="allow a DOWNGRADE: let this batch overwrite rows from a "
+                         "higher-ranked source. Same-source corrections do not "
+                         "need it (see SOURCE_RANK in update_fundamentals)")
     args = ap.parse_args()
     
     # Load CIKs
@@ -1046,9 +1034,8 @@ if __name__ == "__main__":
             tickers = sorted(cik_map.keys())
     
     tickers = [t for t in tickers if t not in NO_COMPANYFACTS]
-    # --max-tickers is a guard for UNIVERSE runs only. It must not silently
-    # truncate an explicit --tickers list: the default of 10 quietly dropped 40
-    # of a 50-ticker sample and the run still reported success.
+    # --max-tickers caps UNIVERSE runs only; an explicit --tickers list is always
+    # processed in full so a cap cannot silently drop requested tickers.
     if args.max_tickers and not args.tickers:
         tickers = tickers[:args.max_tickers]
     elif args.tickers and args.max_tickers and len(tickers) > args.max_tickers:

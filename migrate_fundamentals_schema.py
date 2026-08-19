@@ -98,12 +98,10 @@ COALESCE = {
 #     operating_income    ~4     -> bare really was a QUARTER
 #     capital_expenditure 1.000  -> bare was ALREADY TTM
 #     operating_cash_flow 1.000  -> bare was ALREADY TTM
-# The cash-flow pair was mislabelled because the v2 writer did
-# `row["capital_expenditure"] = row.get("ttm_capital_expenditure")`. Mapping those
-# two to *_quarterly would have put twelve-month sums under a quarterly name --
-# exactly the false authority this migration exists to remove. They are coalesced
-# into their *_ttm partners instead (they agree at ratio 1.0 where both are set:
-# 436 rows for capex, 287 for OCF).
+# The cash-flow pair carries twelve-month sums, so mapping it to *_quarterly would
+# put a TTM figure under a quarterly name -- exactly the false authority this
+# migration removes. Both coalesce into their *_ttm partners, which they agree with
+# at ratio 1.0 where both are set (436 rows for capex, 287 for OCF).
 RENAME = {
     "revenue": "revenue_quarterly",
     "ttm_revenue": "revenue_ttm",

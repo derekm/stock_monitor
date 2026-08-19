@@ -315,7 +315,10 @@ def extract_quarterly_from_html(cik: str, ticker: str,
             filing["report_date"], filing["form"]
         )
         
-        if data and (data.get("revenue") is not None or data.get("net_income") is not None):
+        # revenue_quarterly / net_income_quarterly are the canonical names; a
+        # filing with neither carries no usable income data.
+        if data and (data.get("revenue_quarterly") is not None
+                     or data.get("net_income_quarterly") is not None):
             data["ticker"] = ticker
             results.append(data)
         

@@ -108,11 +108,9 @@ fund.loc[roic_mask & (invested_capital > 0), 'roic'] = (
 )
 print(f"Computed ROIC for {(roic_mask & (invested_capital > 0)).sum()} rows")
 
-# FCF margin = free_cash_flow / revenue_ttm.
-# Both must be the SAME period basis. free_cash_flow is a TTM figure
-# (operating_cash_flow_ttm - |capital_expenditure_ttm|), so dividing it by ONE
-# QUARTER of revenue inflated the margin ~4x and produced 268 rows with an
-# impossible margin >100% (median 0.365 vs a correct 0.102).
+# FCF margin = free_cash_flow / revenue_ttm. Both sides must share a period basis:
+# free_cash_flow is TTM (operating_cash_flow_ttm - |capital_expenditure_ttm|), so a
+# quarterly denominator would overstate the margin ~4x.
 fcfm_mask = fund['free_cash_flow'].notna() & fund['revenue_ttm'].notna() & (fund['revenue_ttm'] > 0) & fund['fcf_margin'].isna()
 fund.loc[fcfm_mask, 'fcf_margin'] = fund.loc[fcfm_mask, 'free_cash_flow'] / fund.loc[fcfm_mask, 'revenue_ttm']
 print(f"Computed FCF margin for {fcfm_mask.sum()} rows")

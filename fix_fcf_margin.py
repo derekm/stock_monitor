@@ -2,30 +2,25 @@
 """
 fix_fcf_margin.py — repair fcf_margin values that cannot be true.
 
-WHAT IS WRONG
+fcf_margin = free_cash_flow / revenue. Both sides must share a period basis:
+free_cash_flow is TTM (operating_cash_flow_ttm - |capital_expenditure_ttm|), so the
+denominator is revenue_ttm.
 
-fcf_margin = free_cash_flow / revenue. Both sides must be the SAME period basis.
-free_cash_flow is a TTM figure (operating_cash_flow_ttm - |capital_expenditure_ttm|),
-so the denominator must be revenue_ttm. Measured on this panel, 4,638 rows carry
-fcf_margin > 150%, which no operating business sustains, and the column ranges from
--192,013 to +9,427.
+Two causes produce an impossible margin, and only one is recomputable:
 
-Two separate causes, and only one of them is recomputable:
-
-  102 rows   have free_cash_flow AND revenue_ttm -> RECOMPUTE from the TTM pair.
-  4,536 rows have NO revenue at all (revenue_ttm and revenue_quarterly both NULL)
-             yet still carry a numeric fcf_margin. There is nothing to divide by,
-             so the stored number cannot be reconstructed or trusted -> NULL.
-
-The 4,536 are overwhelmingly source='edgar' (4,585 of 4,638 by source), i.e. they
-predate the v2 extractor and the schema migration. They are NOT collateral damage
-from the rename: the rename could only affect rows that HAVE revenue.
-
-WHY NULL RATHER THAN LEAVE THEM
+  * the row has free_cash_flow AND revenue_ttm -> RECOMPUTE from the TTM pair
+  * the row has NO revenue at all (revenue_ttm and revenue_quarterly both NULL) yet
+    still carries a numeric fcf_margin. Nothing can be divided, so the stored number
+    cannot be reconstructed or trusted -> NULL
 
 A wrong number is worse than a gap: fcf_margin feeds Damodaran quality screens and
-preferred_metrics scoring, where +9,427 silently dominates any ranking. An explicit
+preferred_metrics scoring, where an extreme value dominates any ranking. An explicit
 NULL is honest and every consumer already handles it.
+
+CAUTION: an impossible margin can be a SYMPTOM of a wrong denominator rather than a
+wrong margin. Where revenue_ttm is understated the margin is arithmetically correct
+for its inputs, and nulling it hides the real defect. Check the denominator before
+running this.
 
 Usage:
     python fix_fcf_margin.py --dry-run

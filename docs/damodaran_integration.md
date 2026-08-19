@@ -107,8 +107,9 @@ def compute_wacc_per_ticker(fund: pd.DataFrame) -> pd.DataFrame:
 ```python
 def classify_life_cycle(fundamentals_latest):
     rev_growth_3y = fundamentals['revenue_growth_3y']
-    fcf_margin = fundamentals['fcf'] / fundamentals['revenue']
-    reinvestment_rate = 1 - (fcf / ebit)
+    # free_cash_flow is TTM, so the denominator is TTM revenue.
+    fcf_margin = fundamentals['free_cash_flow'] / fundamentals['revenue_ttm']
+    reinvestment_rate = 1 - (fundamentals['free_cash_flow'] / fundamentals['ebit'])
     roic = fundamentals['roic']
     
     if rev_growth_3y > 0.30 and fcf_margin < 0:        return "Young Growth"

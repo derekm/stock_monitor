@@ -91,8 +91,8 @@ nopat = fund['ebit'] * (1 - tax_rate)
 fund.loc[roic_mask & (invested_capital > 0), 'roic'] = nopat[roic_mask & (invested_capital > 0)] / invested_capital[roic_mask & (invested_capital > 0)]
 print(f"Computed ROIC for {(roic_mask & (invested_capital > 0)).sum()} rows")
 
-# FCF margin = free_cash_flow / revenue_ttm (same period basis: FCF is TTM, so a
-# quarterly denominator inflates the margin ~4x and produces >100% margins).
+# FCF margin = free_cash_flow / revenue_ttm -- FCF is TTM, so the denominator is
+# TTM revenue.
 fcfm_mask = fund['free_cash_flow'].notna() & fund['revenue_ttm'].notna() & (fund['revenue_ttm'] > 0) & fund['fcf_margin'].isna()
 fund.loc[fcfm_mask, 'fcf_margin'] = fund.loc[fcfm_mask, 'free_cash_flow'] / fund.loc[fcfm_mask, 'revenue_ttm']
 print(f"Computed FCF margin for {fcfm_mask.sum()} rows")

@@ -675,9 +675,9 @@ def test_resident_kernels():
 def test_single_edgar_extractor():
     """There must be exactly ONE EDGAR extractor implementation.
 
-    edgar_lib.py used to carry a parallel copy of the extraction logic, and it
-    silently disagreed with edgar_companyfacts_v2 on the same ticker. Measured
-    against SEC 10-K figures before consolidation (ttm_revenue at FY end):
+    Two implementations disagree on the same ticker. edgar_companyfacts_v2 is
+    canonical on measured accuracy against SEC 10-K figures (revenue_ttm at FY end);
+    a second copy in edgar_lib.py produced:
         AAPL  edgar_lib 265.60B  vs  v2 391.04B  (10-K 391.04B)
         MSFT  edgar_lib  66.69B  vs  v2 245.12B  (10-K 245.12B)
         CHKP  edgar_lib   7.31B  vs  v2   2.56B  (10-K   2.56B)
@@ -725,7 +725,7 @@ def test_single_edgar_extractor():
 def test_fundamentals_canonical_schema():
     """fundamentals.parquet must use canonical names with an explicit period basis.
 
-    Guards the 2026-08 migration (92 -> 83 cols). Two classes of bug it locks out:
+    Two classes of defect this locks out:
 
     1. DUPLICATE NAMES for one concept. `equity`/`stockholders_equity` alongside
        `shareholders_equity`, `assets` vs `total_assets`, etc. The sparse aliases
@@ -806,14 +806,13 @@ def test_fundamentals_canonical_schema():
 def test_period_basis_consistency():
     """Ratios must not mix a TTM numerator with a quarterly denominator.
 
-    The schema rename mapped total_revenue -> revenue_quarterly mechanically, which
-    silently turned `free_cash_flow / total_revenue` into a TTM-over-quarterly
-    division across 8 files. free_cash_flow is TTM (operating_cash_flow_ttm minus
-    |capital_expenditure_ttm|), so the margin inflated ~4x and 268 panel rows held
-    an impossible fcf_margin > 100% (median 0.365 vs a correct 0.102).
+    free_cash_flow is TTM (operating_cash_flow_ttm minus
+    |capital_expenditure_ttm|), so a quarterly denominator overstates any margin
+    built from it ~4x and yields impossible values above 100%.
 
-    A stale COMMENT was what made it invisible: `# FCF margin = free_cash_flow /
-    total_revenue` still sat above the changed code, so it read as correct.
+    A mechanical column rename can introduce this without touching the arithmetic,
+    and a comment naming the old column keeps it looking correct, so the ratio pairs
+    are checked directly.
     """
     import re
     from pathlib import Path

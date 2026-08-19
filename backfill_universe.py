@@ -197,14 +197,13 @@ def compute_derived_fundamentals(df):
         df['roic'] = np.where(invested_capital > 0, df['ebit'] / invested_capital, np.nan)
     
     # ROE = Net Income / Shareholders Equity
-    # ROE = TTM net income / shareholders_equity. Must use the TTM basis: a
-    # single quarter's earnings over full-year equity understates ROE ~4x.
+    # ROE = TTM net income / shareholders_equity; a quarterly numerator over
+    # full-year equity would understate ROE ~4x.
     if 'net_income_ttm' in df.columns and 'shareholders_equity' in df.columns:
         df['roe'] = np.where(df['shareholders_equity'] > 0, df['net_income_ttm'] / df['shareholders_equity'], np.nan)
 
-    # FCF Margin = free_cash_flow / revenue_ttm. free_cash_flow is already a TTM
-    # figure, so the denominator must be TTM revenue too -- dividing by one
-    # quarter inflates the margin ~4x and yields impossible >100% margins.
+    # FCF Margin = free_cash_flow / revenue_ttm -- free_cash_flow is TTM, so the
+    # denominator is TTM revenue.
     if 'free_cash_flow' in df.columns and 'revenue_ttm' in df.columns:
         df['fcf_margin'] = np.where(df['revenue_ttm'] > 0, df['free_cash_flow'] / df['revenue_ttm'], np.nan)
     

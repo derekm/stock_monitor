@@ -438,9 +438,8 @@ def extract_financials(cik: str) -> Optional[dict]:
     DELEGATES to edgar_companyfacts_v2. There is exactly ONE extractor; this is a
     thin compatibility shim so existing callers keep working.
 
-    This module used to carry its own parallel implementation, and it was wrong.
-    Measured against SEC 10-K figures on 2026-08 (ttm_revenue / ttm_net_income at
-    fiscal year end):
+    v2 is canonical on measured accuracy against SEC 10-K figures
+    (revenue_ttm / net_income_ttm at fiscal year end):
 
         ticker  edgar_lib (old)              v2 (canonical)
         AAPL    265.60B  -32.1%   93.74B      391.04B  0.00%   93.74B  0.00%
@@ -476,9 +475,8 @@ def compute_ttm(financials: dict, qend_date, concept: str) -> Optional[float]:
 def compute_quarterly_fundamentals(financials: dict, ticker: str,
                                    px: dict[str, pd.Series] = None) -> list[dict]:
     """DELEGATES to edgar_companyfacts_v2 -- see extract_financials() for the
-    measured accuracy comparison that made v2 canonical. The parallel
-    implementation that used to live here was deleted, not kept as a fallback:
-    two extractors meant two different answers for the same ticker.
+    measured accuracy comparison behind that choice. There is no local fallback
+    implementation: two extractors would give two answers for one ticker.
     """
     from edgar_companyfacts_v2 import (
         compute_quarterly_fundamentals as _v2_compute,

@@ -133,7 +133,16 @@ def fetch_and_build(ticker: str, cik: str, px: dict[str, pd.Series]) -> list[dic
 
 
 FLUSH_EVERY = 40
-PROTECTED_SOURCES = {"edgar_v2", "html_10q"}
+
+# Overwrite protection is by SOURCE RANK: an incoming row replaces a stored one
+# when its source ranks >= the stored source. Rank lets a source correct its own
+# earlier output (edgar_v2 -> edgar_v2, 110 >= 110) while a weaker source cannot
+# touch it (yfinance 40 < edgar 100). No version parsing, no sorting, no flag.
+from update_fundamentals import (  # canonical ranking
+    SOURCE_RANK,
+    DEFAULT_SOURCE_RANK,
+    source_rank,
+)
 
 # Columns where we store prior estimates for future quarters
 ESTIMATE_COLS = [
@@ -152,10 +161,13 @@ def merge_into_fundamentals(new_rows: list[dict], force: bool = False) -> int:
     Future-quarter EDGAR estimates are preserved in prior_estimate_* columns
     for the most recent actual quarter.
 
-    force=True lets this batch overwrite PROTECTED_SOURCES rows. Needed only to
-    push a CORRECTION through: once a row is stamped edgar_v2 it is protected, so
-    a bug fix in the extractor cannot otherwise replace values it already wrote.
-    Off by default -- protection is the norm.
+    Overwrite protection is by SOURCE RANK (see SOURCE_RANK in
+    update_fundamentals): an incoming row replaces a stored one when its source
+    ranks >= the stored source. A source may therefore correct its own output
+    (edgar_v2 -> edgar_v2) while a downgrade is refused (yfinance -> edgar).
+
+    force=True additionally allows a DOWNGRADE -- a lower-ranked source overwriting
+    a higher-ranked one. Same-source corrections do not need it. Off by default.
     """
     if not new_rows:
         return 0
@@ -223,10 +235,20 @@ def merge_into_fundamentals(new_rows: list[dict], force: bool = False) -> int:
         # their values bit-for-bit.
         overlap_mask = merged["source_new"].notna() if "source_new" in merged.columns else merged.filter(regex="_new$").notna().any(axis=1)
         if overlap_mask.any():
-            protected_mask = merged["source_old"].isin(PROTECTED_SOURCES)
+            # An incoming row wins when its source ranks >= the stored source, so a
+            # source may correct its own output (edgar_v2 -> edgar_v2, 110 >= 110)
+            # while a weaker source cannot (yfinance 40 < edgar 100).
+            old_rank = merged["source_old"].map(source_rank)
+            if "source_new" in merged.columns:
+                new_rank = merged["source_new"].map(source_rank)
+            else:
+                new_rank = pd.Series(DEFAULT_SOURCE_RANK, index=merged.index)
+            allowed = new_rank >= old_rank
             if force:
-                protected_mask = protected_mask & False   # honour every new value
-            overwrite_mask = overlap_mask & ~protected_mask
+                # Escape hatch for a deliberate DOWNGRADE; same-source corrections
+                # are already permitted by the rank comparison above.
+                allowed = pd.Series(True, index=merged.index)
+            overwrite_mask = overlap_mask & allowed
             for col in nd.columns:
                 if col in idx or col == "source":
                     continue

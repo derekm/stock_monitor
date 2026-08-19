@@ -2,46 +2,42 @@
 """
 clean_corrupt_shares.py — repair implausible shares_outstanding in fundamentals.parquet.
 
-WHY A SIMPLE THRESHOLD DOES NOT WORK
+A FLAT THRESHOLD IS WRONG
 
-The obvious rule ("NULL anything above 1e11") destroys real data. Measured on this
-panel:
+"NULL anything above 1e11" destroys real data:
 
   HCMC   shares_outstanding 5.27e11, market_cap 5.27e6 -> implied price $0.00001
-         That is CORRECT: HCMC is a sub-penny stock that really has ~380B shares
-         outstanding, and its series grows monotonically through repeated dilution.
-         A 1e11 cutoff would delete 20 legitimate rows.
+         Correct: HCMC is a sub-penny stock with ~380B shares outstanding and a
+         monotonically growing series. A 1e11 cutoff deletes 20 legitimate rows.
 
-Nor does "ratio to the ticker's own median": the 20x-100x band is full of genuine
+"Ratio to the ticker's own median" is also wrong: the 20x-100x band holds genuine
 corporate actions --
 
   SCLX 2022-12-31  7.03e6 -> 1.41e8   (real issuance,   20.1x median)
   AERA 2024-02-29  1.16e8 -> 2.33e9   (real issuance,   20.2x median)
   VYST 2021-09-30  6.39e7 -> 1.29e9   (real issuance,   20.3x median)
 
-WHAT ACTUALLY IDENTIFIES CORRUPTION
+WHAT IDENTIFIES CORRUPTION
 
-A share count is a slow-moving stock quantity. Real changes persist: after a split
-or an issuance the new level STAYS. Corruption is a value that is wildly out of
-line with the ticker's own neighbours and then reverts -- a unit/scale error in one
-filing, not a corporate action:
+A share count is a slow-moving stock quantity: real changes PERSIST, because after a
+split or issuance the new level stays. Corruption is a value wildly out of line with
+the ticker's own neighbours that then reverts -- a unit/scale error in one filing:
 
   AAQL 2017-09-30   9.99e6 -> 9.99e10 -> 9.99e6      (exactly 1e4 too big)
   AATC 2016-06-30   5.04e6 -> 5.05e9  -> 5.07e6      (exactly 1e3 too big)
   ADAM 2011-12-31   1.12e7 -> 1.39e10 -> 1.42e7
   CNA  2012-12-31   2.71e8 -> 2.69e14 (sustained run, then back to 2.7e8)
 
-So the rule is: flag a row when it exceeds a robust per-ticker baseline (the median
-of the OTHER rows for that ticker) by a large factor AND the series returns to that
-baseline afterwards. Sustained runs are caught by comparing against the median
-rather than only the immediate neighbours.
+So a row is flagged when it exceeds a robust per-ticker baseline (the median of that
+ticker's OTHER rows) by a large factor AND the series returns to that baseline.
+Comparing against the median rather than only the immediate neighbours catches
+sustained runs.
 
 REPAIR, NOT DELETION
 
-Where the corrupt value is a clean power-of-ten multiple of the baseline (1e3, 1e4,
-1e6 ...), it is a unit error and is rescaled. Otherwise the value is set to NULL --
-an honest gap beats a wrong number. Nothing is dropped; only shares_outstanding is
-touched.
+Where the value is a clean power-of-ten multiple of the baseline it is a unit error
+and is rescaled. Otherwise it becomes NULL -- an honest gap beats a wrong number.
+No rows are dropped and only shares_outstanding is touched.
 
 Usage:
     python clean_corrupt_shares.py --dry-run
@@ -72,11 +68,10 @@ PLACEHOLDER_MAX = 1000.0  # 1.0 / 4.0 / 20.0 etc are filing placeholders, not co
 def _px_plausible(px: float) -> bool:
     """Is an implied share price (market_cap / shares) believable?
 
-    Deliberately WIDE: this is only used to break a tie about which of two
-    power-of-ten candidates is right, never on its own to condemn a row. It must
-    not be used as primary evidence, because market_cap itself is unreliable --
-    HCMC's early rows imply a $20,000,000 share price, which means those market
-    caps are wrong, not the share counts.
+    Deliberately WIDE. This only breaks a tie between two power-of-ten candidates
+    and is never primary evidence, because market_cap is itself unreliable: HCMC's
+    early rows imply a $20,000,000 share price, so those market caps are wrong
+    rather than the share counts.
     """
     return np.isfinite(px) and 1e-6 <= px <= 1e7
 
@@ -116,15 +111,14 @@ def find_corrupt(df: pd.DataFrame) -> pd.DataFrame:
 
             mc = mcaps[i]
 
-            # PRIMARY evidence is the ticker's own series only. market_cap is NOT
-            # used to condemn a row -- it is unreliable in exactly the same rows
-            # (HCMC's early market caps imply a $2e7 share price).
+            # PRIMARY evidence is the ticker's own series. market_cap cannot
+            # condemn a row: it is unreliable in the same rows (HCMC's early market
+            # caps imply a $2e7 share price).
             too_big = v / base >= SPIKE_FACTOR
-            # A handful of filings carry a placeholder instead of a share count
-            # (1.0, 4.0, 20.0 ...). Those are not scale errors and cannot be
-            # rescaled -- 275 rows sit at <=100 shares. Only treat a small value
-            # as corrupt when it is an absurd absolute count, not merely small
-            # relative to a polluted median.
+            # Some filings carry a placeholder instead of a share count (1.0, 4.0,
+            # 20.0 ...). Those are not scale errors and cannot be rescaled, so a
+            # small value counts as corrupt only when the absolute count is absurd,
+            # not merely small against a polluted median.
             placeholder = v <= PLACEHOLDER_MAX and base >= SPIKE_FACTOR * v
 
             if not (too_big or placeholder):
@@ -146,8 +140,7 @@ def find_corrupt(df: pd.DataFrame) -> pd.DataFrame:
             exp = round(np.log10(ratio))
             repair = np.nan
             kind = "null"
-            # Placeholders (1.0, 20.0) are not scale errors -- there is no true
-            # value hiding behind them, so they become NULL.
+            # Placeholders (1.0, 20.0) hide no true value, so they become NULL.
             if too_big and exp >= 2 and abs(ratio / (10.0 ** exp) - 1.0) < 0.15:
                 cand = v / (10.0 ** exp)
                 ok = True

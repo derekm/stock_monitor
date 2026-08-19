@@ -26,8 +26,26 @@ FUND = DATA_DIR / "fundamentals.parquet"
 MONITORED = DATA_DIR / "monitored_stocks.parquet"
 PRICES = DATA_DIR / "daily_prices.parquet"
 
-# Source priority (higher = better) — used by preferred_metrics.py
+# Source priority (higher = better). THE canonical ranking -- import it, never
+# redefine it. preferred_metrics.py and backfill_edgar.py both consume this.
+#
+# Protection is by RANK, not by a set of protected names: an incoming row may
+# overwrite a stored one when its source ranks >= the stored source. Rank permits a
+# source to correct its own earlier output (edgar_v2 -> edgar_v2) while still
+# refusing a downgrade (yfinance -> edgar).
+#
+# edgar_v2 and html_10q are PEERS at 110: both are the company's own filings for
+# the same period. companyfacts (XBRL) is the primary path; html_10q scrapes the
+# 10-Q HTML and covers line items companyfacts states no explicit fact for, so
+# neither is categorically better -- they are two readings of one filing.
+#
+# CONSEQUENCE of equal rank: either may overwrite the other, so the last batch to
+# run wins. That is acceptable because a disagreement between them is a
+# data-quality signal to surface, not to resolve by ranking -- see
+# reconcile_companyfacts_html.py. Keep them equal.
 SOURCE_RANK = {
+    "edgar_v2": 110,
+    "html_10q": 110,
     "edgar": 100,
     "manual": 80,
     "yfinance_history": 60,
@@ -35,6 +53,17 @@ SOURCE_RANK = {
     "yfinance": 40,
     "fundamentals_history_backfill": 10,
 }
+
+# Unrecognised sources rank below every real source but above the seed/stub
+# backfills. Keep every real source listed explicitly so none falls here.
+DEFAULT_SOURCE_RANK = 30
+
+
+def source_rank(src) -> int:
+    """Rank for a source string; unknown/missing sources get DEFAULT_SOURCE_RANK."""
+    if src is None or (isinstance(src, float) and pd.isna(src)):
+        return DEFAULT_SOURCE_RANK
+    return SOURCE_RANK.get(str(src), DEFAULT_SOURCE_RANK)
 
 
 def _as_date(x):

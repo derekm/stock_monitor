@@ -324,15 +324,12 @@ def build_table() -> pd.DataFrame:
     fund = pd.read_parquet(FUND)
     if "as_of_date" in fund.columns:
         fund = fund.sort_values("as_of_date")
-        # Source priority: higher rank = better source
-        SOURCE_RANK = {
-            "edgar": 100,
-            "manual": 80,
-            "yfinance_history": 60,
-            "polygon_financials": 55,
-            "yfinance": 40,
-            "fundamentals_history_backfill": 10,
-        }
+        # Source priority comes from update_fundamentals.SOURCE_RANK -- the single
+        # canonical ranking. It used to be duplicated here, and the copy omitted
+        # edgar_v2 and html_10q, so both fell to the default rank of 30 and sorted
+        # BELOW yfinance (40) -- ranking our most accurate source beneath a
+        # third-party API.
+        from update_fundamentals import source_rank
         seed_src = {
             "seed_approx_buffett", "seed_aero_dual", "seed_starlink_launch",
             "seed_neardual_spcx", "seed_defensive_etf", "approx_seed_2026-07",
@@ -342,7 +339,7 @@ def build_table() -> pd.DataFrame:
             # Filter out seed sources
             real = fund[~fund["source"].isin(seed_src)].copy()
             # Add source rank
-            real["_src_rank"] = real["source"].map(lambda s: SOURCE_RANK.get(s, 30))
+            real["_src_rank"] = real["source"].map(source_rank)
             # Sort by ticker, then source rank (desc), then date (desc) - so highest rank + latest date wins
             real = real.sort_values(["ticker", "_src_rank", "as_of_date"], ascending=[True, False, False])
             # Take first (highest rank, latest date) per ticker
