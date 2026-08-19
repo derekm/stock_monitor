@@ -209,34 +209,51 @@ def _pick_tag(facts: dict, tag_list: list[str], prefer_order: bool = False):
             continue
         n_q = 0
         last_q_end = ""          # most recent QUARTERLY period end, not any end
+        q_vals = []
         for e in units:
             if not e.get("start"):
                 continue
             sm = _span_months(e)
             if sm is not None and 2 <= sm <= 4:
                 n_q += 1
+                v = e.get("val")
+                if isinstance(v, (int, float)):
+                    q_vals.append(abs(float(v)))
                 if e.get("end", "") > last_q_end:
                     last_q_end = e.get("end", "")
+        # Magnitude breaks ties between tags that are equally current and equally
+        # covered but measure DIFFERENT SCOPES. ABR (a mortgage REIT) files
+        # RealEstateRevenueNet and OperatingLeaseLeaseIncome with 36 quarters each and
+        # the same last period; falling through to fact count picked the lease line
+        # (median $1.51M) over the top line (median $7.88M), and that small
+        # denominator produced fcf_margin values in the hundreds. The broader measure
+        # is the larger one, so prefer it -- only when recency and coverage are equal,
+        # which keeps the discontinued-tag protection above intact.
+        med_q = 0.0
+        if q_vals:
+            q_vals.sort()
+            med_q = q_vals[len(q_vals) // 2]
         if n_q == 0:
             # No quarterly facts at all: keep as a last resort, ranked below any
             # tag that has them (CHKP files annual-only revenue).
             last_any = max((e.get("end", "") for e in units), default="")
-            score = ("", 0, last_any, len(units))
+            score = ("", 0, last_any, 0.0, len(units))
         else:
-            score = (last_q_end, n_q, "", len(units))
+            score = (last_q_end, n_q, "", med_q, len(units))
         if best is None or score > best[1]:
             best = (tag, score)
     return best[0] if best else None
 
 
-def _annual_series(facts: dict, tag_list: list[str]) -> pd.Series:
+def _annual_series(facts: dict, tag_list: list[str],
+                   prefer_order: bool = False) -> pd.Series:
     """12-month (annual) facts as a Series keyed by period end.
 
     Uses the same best-covered tag selection as the quarterly parsers, but keeps
     only ~12-month spans. This is the honest source of a trailing-twelve-month
     figure for filers that publish no quarterly data at all.
     """
-    tag = _pick_tag(facts, tag_list)
+    tag = _pick_tag(facts, tag_list, prefer_order=prefer_order)
     if not tag:
         return pd.Series(dtype=float)
     rows = {}
@@ -282,7 +299,8 @@ def _span_months(entry: dict):
         return None
 
 
-def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
+def parse_income_quarterly(facts: dict, tag_list: list[str],
+                           prefer_order: bool = False) -> pd.Series:
     """
     Parse quarterly income statement items.
     
@@ -291,8 +309,8 @@ def parse_income_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
     2. Also use entries with N/A frames (standalone quarterly values)
     3. For annual frames, compute Q4 by differencing if Q4 standalone missing
     """
-    # best-covered tag, not first-present -- see _pick_tag
-    _tag = _pick_tag(facts, tag_list)
+    # best-covered tag, unless the caller says the tags are not interchangeable
+    _tag = _pick_tag(facts, tag_list, prefer_order=prefer_order)
     tag_data = facts.get(_tag) if _tag else None
     if tag_data is None:
         return pd.Series(dtype=float)
@@ -653,20 +671,29 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
     #
     # Financial-sector filers report no `Revenues` at all. A bank's top line is
     # InterestAndDividendIncomeOperating (gross interest and dividend income), an
-    # insurer's is PremiumsEarnedNet, a REIT's is RealEstateRevenueNet or
-    # OperatingLeaseLeaseIncome. These are GROSS measures, comparable to revenue.
+    # insurer's is PremiumsEarnedNet, a REIT's is RealEstateRevenueNet.
     # InterestIncomeExpenseNet is deliberately excluded: it is net of interest
     # EXPENSE, so it behaves like a margin and would understate the top line by an
     # order of magnitude. NoninterestIncome is excluded for the same reason -- it is
     # one component of revenue, not the total.
+    #
+    # These names measure different SCOPES, so _pick_tag breaks recency/coverage ties
+    # on median magnitude: a REIT filing both RealEstateRevenueNet and
+    # OperatingLeaseLeaseIncome should get the top line, not one lease line.
+    #
+    # InterestIncomeOperating is the gross interest top line for mortgage REITs and
+    # specialty lenders. ABR files it at $235M/quarter while its only other listed tag
+    # still current is OperatingLeaseLeaseIncome at $1.51M -- a minor line that, used
+    # as a denominator, produced fcf_margin in the hundreds.
     REV_TAGS = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", 
                 "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet",
                 "Revenue", "RevenueFromContractsWithCustomers",
                 "RevenuesNetOfInterestExpense",
                 "InterestAndDividendIncomeOperating",
+                "InterestIncomeOperating",
+                "InterestAndFeeIncomeLoansAndLeases",
                 "PremiumsEarnedNet", "PremiumsEarnedNetPropertyCasualty",
-                "RealEstateRevenueNet", "OperatingLeaseLeaseIncome",
-                "InterestAndFeeIncomeLoansAndLeases"]
+                "RealEstateRevenueNet", "OperatingLeaseLeaseIncome"]
     NI_TAGS = ["NetIncomeLoss", "NetIncomeCommonStockholders",
                "ProfitLossAttributableToOwnersOfParent", "ProfitLoss"]
     OI_TAGS = ["OperatingIncomeLoss", "OperatingIncome",
