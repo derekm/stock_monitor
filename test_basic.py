@@ -859,6 +859,95 @@ def test_period_basis_consistency():
         print("  no impossible fcf_margin values in the panel ✓")
 
 
+def test_ifrs_taxonomy_selection():
+    """Foreign private issuers report ifrs-full; their us-gaap block may be stale.
+
+    A filer can carry BOTH taxonomies. Barrick (CIK 756894) has 248 us-gaap tags
+    whose newest fact is 2010-12-31 next to 301 ifrs-full tags current to
+    2025-12-31, so reading us-gaap alone yields no revenue and a decade-old balance
+    sheet. Selecting on tag COUNT would also pick the stale block; the newest fact
+    date is what distinguishes them.
+    """
+    import edgar_companyfacts_v2 as V
+
+    facts = {
+        "facts": {
+            "us-gaap": {"Revenues": {"units": {"USD": [
+                {"start": "2010-01-01", "end": "2010-12-31", "val": 1.0},
+            ]}}},
+            "ifrs-full": {"Revenue": {"units": {"USD": [
+                {"start": "2025-01-01", "end": "2025-12-31", "val": 2.0},
+            ]}}},
+        }
+    }
+    picked = V._facts(facts)
+    assert "Revenue" in picked, "must select ifrs-full when its facts are newer"
+    assert "Revenues" not in picked, "must not return the stale us-gaap block"
+
+    # a us-gaap-only filer is unaffected
+    only_gaap = {"facts": {"us-gaap": {"Revenues": {"units": {"USD": [
+        {"start": "2025-01-01", "end": "2025-12-31", "val": 3.0},
+    ]}}}}}
+    assert "Revenues" in V._facts(only_gaap)
+
+    # and us-gaap wins when IT is the current one
+    gaap_newer = {
+        "facts": {
+            "us-gaap": {"Revenues": {"units": {"USD": [
+                {"start": "2025-01-01", "end": "2025-12-31", "val": 1.0},
+            ]}}},
+            "ifrs-full": {"Revenue": {"units": {"USD": [
+                {"start": "2015-01-01", "end": "2015-12-31", "val": 2.0},
+            ]}}},
+        }
+    }
+    assert "Revenues" in V._facts(gaap_newer)
+
+    # the IFRS tag names the extractor needs must be present in the tag lists
+    src = (Path(__file__).parent / "edgar_companyfacts_v2.py").read_text(
+        encoding="utf-8")
+    for tag in ["ProfitLossAttributableToOwnersOfParent",
+                "CashFlowsFromUsedInOperatingActivities",
+                "EquityAttributableToOwnersOfParent"]:
+        assert tag in src, f"IFRS tag {tag} missing from the tag lists"
+    print("  ifrs-full selected over a stale us-gaap block ✓")
+    print("  us-gaap-only and us-gaap-newer filers unaffected ✓")
+
+
+def test_annual_only_filer_ttm():
+    """A filer with no quarterly facts must still get a TTM from annual figures.
+
+    Annual-only reporting is common among 40-F/20-F filers: AEM publishes 22
+    twelve-month revenue facts and zero three-month ones. Returning None for the
+    TTM there silently drops revenue for the whole ticker.
+    """
+    import edgar_companyfacts_v2 as V
+
+    empty = pd.Series(dtype=float)
+    annual = pd.Series(
+        [6.0e9, 8.0e9, 11.9e9],
+        index=pd.to_datetime(["2023-12-31", "2024-12-31", "2025-12-31"]),
+    )
+    fin = {
+        "revenue": empty, "net_income": empty, "operating_income": empty,
+        "depreciation_amortization": empty, "interest_expense": empty,
+        "operating_cash_flow": empty, "capital_expenditure": empty,
+        "assets": pd.Series([1.0e10], index=pd.to_datetime(["2025-12-31"])),
+        "equity": pd.Series([5.0e9], index=pd.to_datetime(["2025-12-31"])),
+        "debt": empty, "cash": empty, "shares": empty,
+        "annual_revenue": annual,
+        "annual_net_income": empty, "annual_operating_income": empty,
+        "annual_operating_cash_flow": empty, "annual_capital_expenditure": empty,
+        "fiscal_year_end": "1231",
+    }
+    rows = V.compute_quarterly_fundamentals(fin, "TESTQ")
+    assert rows, "annual-only filer produced no rows"
+    last = rows[-1]
+    assert last.get("revenue_ttm") == 11.9e9, (
+        f"expected the reported annual figure, got {last.get('revenue_ttm')}")
+    print("  annual-only filer resolves revenue_ttm from annual facts ✓")
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -917,6 +1006,8 @@ if __name__ == "__main__":
         ("Resident tensor kernels", test_resident_kernels),
         ("Single EDGAR extractor", test_single_edgar_extractor),
         ("Fundamentals canonical schema", test_fundamentals_canonical_schema),
+        ("IFRS taxonomy selection", test_ifrs_taxonomy_selection),
+        ("Annual-only filer TTM", test_annual_only_filer_ttm),
         ("Period basis consistency", test_period_basis_consistency),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),

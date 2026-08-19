@@ -55,8 +55,42 @@ def fetch_companyfacts(cik: str) -> dict:
 
 
 def _facts(d: dict) -> dict:
-    """Extract us-gaap facts."""
-    return d.get("facts", {}).get("us-gaap", {})
+    """Facts for the taxonomy this filer reports under.
+
+    Domestic filers report us-gaap. Foreign private issuers filing 40-F/20-F report
+    ifrs-full, and their us-gaap block is either absent or a stale remnant: Barrick
+    (CIK 756894) carries 248 us-gaap tags whose newest fact is 2010-12-31 alongside
+    301 ifrs-full tags current to 2025-12-31. Choosing by tag count alone would pick
+    the stale block, so pick the taxonomy with the NEWEST fact.
+    """
+    facts = d.get("facts", {})
+    candidates = [t for t in ("us-gaap", "ifrs-full") if facts.get(t)]
+    if not candidates:
+        return {}
+    if len(candidates) == 1:
+        return facts[candidates[0]]
+
+    best, best_end = None, ""
+    for tax in candidates:
+        newest = ""
+        for tag in facts[tax].values():
+            for arr in tag.get("units", {}).values():
+                for e in arr:
+                    end = e.get("end", "")
+                    if end > newest:
+                        newest = end
+        if newest > best_end:
+            best, best_end = tax, newest
+    return facts[best]
+
+
+def _taxonomy_of(d: dict) -> str:
+    """Name of the taxonomy _facts() would select, for logging and provenance."""
+    facts = d.get("facts", {})
+    for tax in ("us-gaap", "ifrs-full"):
+        if facts.get(tax) and facts[tax] is _facts(d):
+            return tax
+    return "unknown"
 
 
 def _parse_frame(frame: str) -> dict:
@@ -613,28 +647,42 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
     d = fetch_companyfacts(cik)
     facts = _facts(d)
     
-    # Tag lists
+    # Tag lists. US-GAAP names first, then the ifrs-full equivalents a foreign
+    # private issuer (40-F/20-F) reports instead. _pick_tag selects on coverage and
+    # recency, so listing both taxonomies is safe: only one of them has facts.
     REV_TAGS = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", 
-                "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet"]
-    NI_TAGS = ["NetIncomeLoss", "NetIncomeCommonStockholders"]
-    OI_TAGS = ["OperatingIncomeLoss", "OperatingIncome"]
-    DA_TAGS = ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet"]
-    INT_TAGS = ["InterestExpenseNonoperating", "InterestExpense", "InterestAndDebtExpense"]
+                "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet",
+                "Revenue", "RevenueFromContractsWithCustomers"]
+    NI_TAGS = ["NetIncomeLoss", "NetIncomeCommonStockholders",
+               "ProfitLossAttributableToOwnersOfParent", "ProfitLoss"]
+    OI_TAGS = ["OperatingIncomeLoss", "OperatingIncome",
+               "ProfitLossFromOperatingActivities"]
+    DA_TAGS = ["DepreciationDepletionAndAmortization", "DepreciationAmortizationAndAccretionNet",
+               "DepreciationAndAmortisationExpense",
+               "DepreciationAmortisationAndImpairmentLossReversalOfImpairmentLossRecognisedInProfitOrLoss"]
+    INT_TAGS = ["InterestExpenseNonoperating", "InterestExpense", "InterestAndDebtExpense",
+                "InterestExpenseOnBorrowings", "FinanceCosts"]
     OCF_TAGS = ["NetCashProvidedByUsedInOperatingActivities",
-                "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"]
+                "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+                "CashFlowsFromUsedInOperatingActivities"]
     CAPEX_TAGS = ["PaymentsToAcquirePropertyPlantAndEquipment",
                   "PaymentsToAcquirePropertyPlantAndEquipmentNet",
-                  "CapitalExpenditure"]
+                  "CapitalExpenditure",
+                  "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"]
     ASSET_TAGS = ["Assets"]
-    EQUITY_TAGS = ["StockholdersEquity", "CommonStockholdersEquity"]
+    EQUITY_TAGS = ["StockholdersEquity", "CommonStockholdersEquity",
+                   "EquityAttributableToOwnersOfParent", "Equity"]
     DEBT_TAGS = ["LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "Debt",
-                 "TotalDebt", "LongTermDebtNoncurrent"]
+                 "TotalDebt", "LongTermDebtNoncurrent",
+                 "Borrowings", "LongtermBorrowings"]
     CASH_TAGS = ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
                 "CashAndCashEquivalents", "CashCashEquivalentsAndShortTermInvestments"]
     SHARES_TAGS = ["CommonStockSharesOutstanding", "OrdinarySharesNumber",
                    "EntityCommonStockSharesOutstanding",
+                   "NumberOfSharesOutstanding",
                    "WeightedAverageNumberOfSharesOutstandingBasic",
-                   "WeightedAverageNumberOfDilutedSharesOutstanding"]
+                   "WeightedAverageNumberOfDilutedSharesOutstanding",
+                   "AdjustedWeightedAverageShares"]
     
     # Parse all series
     rev = parse_income_quarterly(facts, REV_TAGS)
@@ -734,7 +782,16 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
         ]:
             series = financials.get(src_key)
             if series is None or series.empty:
-                row[out_name] = None
+                # No quarterly facts at all. Annual-only filers exist -- an IFRS
+                # 40-F filer can publish 22 x 12-month revenue facts and zero
+                # 3-month ones -- so fall back to the reported annual figure
+                # rather than dropping the field.
+                ann = financials.get(f"annual_{src_key}")
+                if ann is not None and not ann.empty:
+                    aa = ann[ann.index <= qend_date].dropna()
+                    row[out_name] = float(aa.iloc[-1]) if len(aa) else None
+                else:
+                    row[out_name] = None
                 continue
             s = series[series.index <= qend_date].dropna().tail(4)
             # A real TTM needs four quarters that actually SPAN ~12 months. Some
