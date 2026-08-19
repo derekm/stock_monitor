@@ -274,8 +274,10 @@ def merge_into_fundamentals(new_rows: list[dict], force: bool = False) -> int:
                 src = result_cols["source"].copy()
                 src.loc[overwrite_mask] = "edgar_v2"
                 result_cols["source"] = src
-            # Fill missing in protected columns
-            remaining_mask = overlap_mask & protected_mask
+            # Rows the rank comparison REFUSED to overwrite can still have their
+            # gaps filled: declining to replace a better source's value is not a
+            # reason to leave a NULL where this batch has data.
+            remaining_mask = overlap_mask & ~allowed
             FILL_COLS = [
                 "market_cap", "market_cap_b", "total_assets", "total_assets_b",
                 "pb_ratio", "mktcap_to_assets", "ev_ebitda", "roe", "roic",

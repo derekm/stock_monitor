@@ -948,6 +948,51 @@ def test_annual_only_filer_ttm():
     print("  annual-only filer resolves revenue_ttm from annual facts ✓")
 
 
+def test_merge_flush_executes():
+    """merge_into_fundamentals must run end to end on a realistic batch.
+
+    The flush path is wrapped in a try/except that prints a warning and retries at
+    the next flush, so a NameError inside it does not stop the run: every flush
+    fails silently, the process still exits 0, and no rows are written. A merge is
+    therefore exercised here rather than trusted.
+    """
+    import backfill_edgar as B
+
+    path = Path(__file__).parent / "fundamentals.parquet"
+    if not path.exists():
+        print("  fundamentals.parquet missing; skipped")
+        return
+
+    before = pd.read_parquet(path, columns=["ticker", "as_of_date", "source"])
+    existing = before[before["source"] == "edgar_v2"]
+    if existing.empty:
+        print("  no edgar_v2 rows to re-merge; skipped")
+        return
+
+    # Re-merge an EXISTING (ticker, as_of_date) so the rank comparison has to decide
+    # whether to overwrite, which is the branch that referenced the stale name.
+    # Re-merge the row's OWN values so the panel is unchanged either way -- a test
+    # must not write placeholder numbers into live data.
+    full = pd.read_parquet(path)
+    key = full[(full["ticker"] == existing.iloc[0]["ticker"])
+               & (full["as_of_date"] == existing.iloc[0]["as_of_date"])]
+    if key.empty:
+        print("  could not locate the row; skipped")
+        return
+    src_row = key.iloc[0]
+    batch = [{
+        "ticker": src_row["ticker"],
+        "as_of_date": src_row["as_of_date"],
+        "revenue_ttm": src_row.get("revenue_ttm"),
+        "net_income_ttm": src_row.get("net_income_ttm"),
+        "source": "edgar_v2",
+    }]
+    n = B.merge_into_fundamentals(batch)
+    assert isinstance(n, int) and n > 0, (
+        f"merge_into_fundamentals returned {n!r}; the flush did not complete")
+    print(f"  merge executed on an existing edgar_v2 row -> {n:,} panel rows ✓")
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -1008,6 +1053,7 @@ if __name__ == "__main__":
         ("Fundamentals canonical schema", test_fundamentals_canonical_schema),
         ("IFRS taxonomy selection", test_ifrs_taxonomy_selection),
         ("Annual-only filer TTM", test_annual_only_filer_ttm),
+        ("Merge flush executes", test_merge_flush_executes),
         ("Period basis consistency", test_period_basis_consistency),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
