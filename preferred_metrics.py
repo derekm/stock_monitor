@@ -431,7 +431,7 @@ def build_table() -> pd.DataFrame:
         fm_df = fm_df.sort_values("as_of_date").groupby("ticker", as_index=False).tail(1)
         fair_mult_data = fm_df.set_index("ticker").to_dict("index")
 
-    # Compute revenue growth inline from total_revenue history
+    # Compute revenue growth inline from revenue_quarterly history
     # This is needed for life cycle classification and fair multiples
     if "revenue_quarterly" in fund.columns and fund["revenue_quarterly"].notna().sum() > 0:
         rev_growth_map = {}

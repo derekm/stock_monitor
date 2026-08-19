@@ -607,7 +607,7 @@ def main():
         # Compute FCF margin
         if "fcf_margin" not in fund.columns:
             if "free_cash_flow" in fund.columns and "revenue_quarterly" in fund.columns:
-                fund["fcf_margin"] = fund["free_cash_flow"] / fund["revenue_quarterly"]
+                fund["fcf_margin"] = fund["free_cash_flow"] / fund["revenue_ttm"]
             elif "fcf" in fund.columns and "revenue_quarterly" in fund.columns:
                 fund["fcf_margin"] = fund["fcf"] / fund["revenue_quarterly"]
             else:

@@ -117,8 +117,17 @@ def _parse_frame(frame: str) -> dict:
     return {"type": "unknown", "year": None, "quarter": None, "months": None}
 
 
-def _pick_tag(facts: dict, tag_list: list[str]):
+def _pick_tag(facts: dict, tag_list: list[str], prefer_order: bool = False):
     """Choose the BEST-COVERED tag from `tag_list`, not merely the first present.
+
+    `prefer_order=True` instead walks tag_list IN ORDER and returns the first tag
+    with any usable facts. Use it when the tags are NOT interchangeable measures
+    of the same quantity. SHARES_TAGS is that case: CommonStockSharesOutstanding
+    is a POINT-IN-TIME count, which is what a balance-sheet field needs, while
+    WeightedAverageNumberOfSharesOutstandingBasic is a period AVERAGE used for
+    EPS. Coverage ranking picked the weighted-average for AAPL purely because it
+    has more facts (234 vs 144), silently substituting a different metric. The
+    two are close for AAPL (14.61B vs 14.66B) but they are not the same quantity.
 
     All three parsers used to take the first tag that existed. That is wrong for
     revenue: "Revenues" leads REV_TAGS but is a legacy stub for most filers,
@@ -131,24 +140,41 @@ def _pick_tag(facts: dict, tag_list: list[str]):
       PANW  Revenues                       18 facts, ZERO quarterly, last 2018-07-31
             RevenueFromContract...Excluding 117 facts, 64 quarterly, last 2026-04-30
 
-    So AAPL's ttm_revenue came from a series that stopped in 2018 -- hence 265.6B
+    So AAPL's revenue_ttm came from a series that stopped in 2018 -- hence 265.6B
     against an actual FY24 revenue of 391.0B, and PANW/CHKP reporting rev=0/2
     usable points.
 
     Ranking: RECENCY FIRST, then quarterly coverage. Ordering by raw quarterly
     count is wrong -- SalesRevenueNet has MORE historical quarters than the modern
     tag (AAPL 136 vs 64) but was discontinued in 2018, and picking it gave
-    ttm_revenue 255.3B against an actual 391.0B (-34.7%). What matters is which
+    revenue_ttm 255.3B against an actual 391.0B (-34.7%). What matters is which
     tag is still being filed, so tags are compared on (last quarterly period end,
     quarterly count). NVDA is the case that keeps this general rather than a
     hardcoded reordering: there "Revenues" is genuinely correct (quarterly facts
     through 2026-04-26), and it still wins under this rule.
     """
+    if prefer_order:
+        for tag in tag_list:
+            if tag not in facts:
+                continue
+            units_all = facts[tag].get("units", {})
+            if any(units_all.get(k) for k in ("USD", "shares")):
+                return tag
+        return None
+
     best = None
     for tag in tag_list:
         if tag not in facts:
             continue
-        units = facts[tag].get("units", {}).get("USD", [])
+        units_all = facts[tag].get("units", {})
+        # Share counts are filed under units["shares"], monetary items under
+        # units["USD"]. Looking only at USD made this return None for every
+        # SHARES_TAGS entry, so parse_balance got tag_data=None and the shares
+        # series came back EMPTY for every ticker -- AAPL lost all 72 share
+        # counts even though CommonStockSharesOutstanding has 144 facts.
+        units = []
+        for unit_key in ("USD", "shares"):
+            units.extend(units_all.get(unit_key, []))
         if not units:
             continue
         n_q = 0
@@ -184,7 +210,11 @@ def _annual_series(facts: dict, tag_list: list[str]) -> pd.Series:
     if not tag:
         return pd.Series(dtype=float)
     rows = {}
-    for e in facts[tag].get("units", {}).get("USD", []):
+    units_all = facts[tag].get("units", {})
+    entries = []
+    for unit_key in ("USD", "shares"):
+        entries.extend(units_all.get(unit_key, []))
+    for e in entries:
         if not e.get("start"):
             continue
         sm = _span_months(e)
@@ -499,55 +529,74 @@ def parse_cashflow_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
     return series
 
 
-def parse_balance(facts: dict, tag_list: list[str]) -> pd.Series:
-    """Parse balance sheet items (point-in-time)."""
-    # best-covered tag, not first-present -- see _pick_tag
-    _tag = _pick_tag(facts, tag_list)
+def parse_balance(facts: dict, tag_list: list[str],
+                  prefer_order: bool = False) -> pd.Series:
+    """Parse balance sheet items (point-in-time).
+
+    `prefer_order` is passed through to _pick_tag. Set it for SHARES_TAGS, whose
+    entries measure DIFFERENT quantities (point-in-time count vs weighted-average
+    for EPS) and so must be tried in priority order rather than ranked by how many
+    facts each one happens to have.
+    """
+    _tag = _pick_tag(facts, tag_list, prefer_order=prefer_order)
     tag_data = facts.get(_tag) if _tag else None
     if tag_data is None:
         return pd.Series(dtype=float)
     
     rows = []
-    # Check USD units
-    for e in tag_data.get("units", {}).get("USD", []):
-        frame = e.get("frame", "")
-        parsed = _parse_frame(frame)
-        rows.append({
-            "end": e["end"], 
-            "val": e["val"], 
-            "filed": e.get("filed", ""),
-            "frame": frame,
-            "type": parsed["type"],
-            "year": parsed["year"],
-            "quarter": parsed["quarter"]
-        })
-    
-    # Also check shares units
-    for e in tag_data.get("units", {}).get("shares", []):
-        frame = e.get("frame", "")
-        parsed = _parse_frame(frame)
-        rows.append({
-            "end": e["end"], 
-            "val": e["val"], 
-            "filed": e.get("filed", ""),
-            "frame": frame,
-            "type": parsed["type"],
-            "year": parsed["year"],
-            "quarter": parsed["quarter"]
-        })
-    
+    # Both unit families in ONE loop -- the two were byte-identical apart from the
+    # unit key, and `start` was captured in neither, which is the bug below.
+    units_all = tag_data.get("units", {})
+    for unit_key in ("USD", "shares"):
+        for e in units_all.get(unit_key, []):
+            frame = e.get("frame", "")
+            parsed = _parse_frame(frame)
+            rows.append({
+                "end": e["end"],
+                "val": e["val"],
+                "filed": e.get("filed", ""),
+                "frame": frame,
+                "type": parsed["type"],
+                "year": parsed["year"],
+                "quarter": parsed["quarter"],
+                # span_months distinguishes a genuinely instantaneous balance
+                # value (no start -> None) from a DURATION fact. The weighted-
+                # average share tags are durations, and SpaceX (SPCX) files two
+                # facts at end=2026-06-30: a 6-month average of 4.879B and a
+                # 3-month average of 5.864B. Deduplicating on `end` alone kept
+                # whichever sorted first and silently returned the 6-month
+                # figure -- a 20% understatement of the latest quarter.
+                "span_months": _span_months(e),
+            })
     if not rows:
         return pd.Series(dtype=float)
     
     df = pd.DataFrame(rows)
     df["end"] = pd.to_datetime(df["end"])
-    
-    # Prefer instant frames for balance sheet items, then N/A frames, then others
-    # Sort by: end date, then frame type preference (instant > unknown > quarterly > cumulative > annual), then filed date
+
+    # One value per period end. Ordering, in priority:
+    #   1. instant vs duration -- a true instant fact IS the balance-sheet value
+    #   2. SHORTEST span -- for duration facts (the weighted-average share tags)
+    #      the 3-month figure describes the period ending here; a 6- or 12-month
+    #      average describes a longer window
+    #   3. frame type, then latest filing (restatements supersede originals)
+    #
+    # Span must outrank frame type. Ranking frame type first was still wrong for
+    # SpaceX (SPCX): at end=2026-06-30 the 3-month fact carries frame CY2026Q2 ->
+    # type "quarterly" (priority 2) while the 6-month fact has an EMPTY frame ->
+    # type "unknown" (priority 1), so the longer span won on type and the series
+    # returned 4.879B instead of the correct 5.864B. `_span_months` had it right
+    # (6 vs 3); the tiebreak order was the defect.
     type_priority = {"instant": 0, "unknown": 1, "quarterly": 2, "cumulative": 3, "annual": 4}
     df["type_priority"] = df["type"].map(type_priority).fillna(99)
-    df = df.sort_values(["end", "type_priority", "filed"]).drop_duplicates(subset=["end"], keep="first")
-    
+    # instant facts have no start -> span_months None; rank them first (-1), and
+    # never let a NaN sort ahead of a real short span
+    df["is_duration"] = df["span_months"].notna().astype(int)
+    df["span_rank"] = df["span_months"].fillna(-1)
+    df = (df.sort_values(["end", "is_duration", "span_rank", "type_priority", "filed"],
+                         ascending=[True, True, True, True, False])
+            .drop_duplicates(subset=["end"], keep="first"))
+
     return df.set_index("end")["val"]
 
 
@@ -608,7 +657,10 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
     equity = parse_balance(facts, EQUITY_TAGS)
     debt = parse_balance(facts, DEBT_TAGS)
     cash = parse_balance(facts, CASH_TAGS)
-    shares = parse_balance(facts, SHARES_TAGS)
+    # SHARES_TAGS entries are NOT interchangeable: CommonStockSharesOutstanding is
+    # a point-in-time count, the WeightedAverage* tags are period averages for EPS.
+    # Try them in priority order instead of ranking by fact count.
+    shares = parse_balance(facts, SHARES_TAGS, prefer_order=True)
     
     # Detect fiscal year end from equity dates
     fy_end = None
@@ -672,19 +724,29 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             "ticker": ticker,
             "as_of_date": qend_date.date() if hasattr(qend_date, "date") else qend_date,
         }
-        
-        # TTM income (4 quarters ending at qend_date)
-        for name, series in [
-            ("revenue", financials.get("revenue")),
-            ("net_income", financials.get("net_income")),
-            ("operating_income", financials.get("operating_income")),
-            ("depreciation_amortization", financials.get("depreciation_amortization")),
-            ("interest_expense", financials.get("interest_expense")),
-            ("operating_cash_flow", financials.get("operating_cash_flow")),
-            ("capital_expenditure", financials.get("capital_expenditure")),
+
+        # TTM income (4 quarters ending at qend_date).
+        #
+        # `out_name` is the CANONICAL panel column. Earlier this loop wrote
+        # ttm_<name> for every entry and a later block copied those into the
+        # canonical names WITHOUT removing the originals -- merge_into_fundamentals
+        # writes every key it is handed, so a real run silently re-created 11
+        # pre-migration columns (panel went 83 -> 94 cols). The canonical name is
+        # now the only key written. ttm_depreciation_amortization and
+        # ttm_interest_expense keep their names because those ARE the panel
+        # columns; there is no *_ttm variant of them.
+        for src_key, out_name in [
+            ("revenue", "revenue_ttm"),
+            ("net_income", "net_income_ttm"),
+            ("operating_income", "operating_income_ttm"),
+            ("depreciation_amortization", "ttm_depreciation_amortization"),
+            ("interest_expense", "ttm_interest_expense"),
+            ("operating_cash_flow", "operating_cash_flow_ttm"),
+            ("capital_expenditure", "capital_expenditure_ttm"),
         ]:
+            series = financials.get(src_key)
             if series is None or series.empty:
-                row[f"ttm_{name}"] = None
+                row[out_name] = None
                 continue
             s = series[series.index <= qend_date].dropna().tail(4)
             # A real TTM needs four quarters that actually SPAN ~12 months. Some
@@ -703,34 +765,44 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
                 if span_ok:
                     ttm_val = float(s.sum())
                 else:
-                    ann = financials.get(f"annual_{name}")
+                    ann = financials.get(f"annual_{src_key}")
                     if ann is not None and not ann.empty:
                         aa = ann[ann.index <= qend_date].dropna()
                         if len(aa) > 0:
                             ttm_val = float(aa.iloc[-1])
                     if ttm_val is None and len(s) >= 4:
                         ttm_val = float(s.sum())
-            row[f"ttm_{name}"] = ttm_val
-        
-        # Balance sheet values at quarter end
-        for name, series in [
-            ("assets", financials.get("assets")),
-            ("equity", financials.get("equity")),
-            ("debt", financials.get("debt")),
-            ("cash", financials.get("cash")),
-            ("shares", financials.get("shares")),
+            row[out_name] = ttm_val
+
+        # Balance sheet values at quarter end, written straight to the canonical
+        # column. `debt` is kept alongside total_debt because it is a real
+        # pre-existing panel column, not a leaked alias.
+        for src_key, out_name in [
+            ("assets", "total_assets"),
+            ("equity", "shareholders_equity"),
+            ("debt", "total_debt"),
+            ("cash", "cash_and_equivalents"),
+            ("shares", "shares_outstanding"),
         ]:
+            series = financials.get(src_key)
             if series is None or series.empty:
-                row[name] = None
+                row[out_name] = None
                 continue
             s = series[series.index <= qend_date].dropna()
-            row[name] = float(s.iloc[-1]) if len(s) > 0 else None
-        
+            row[out_name] = float(s.iloc[-1]) if len(s) > 0 else None
+
+        # shares_outstanding: reject values that cannot be a share count. This is
+        # the corruption that made the old `shares` column unusable (FITB
+        # 2010-09-30 held 7.96e14; BRK-B carried 1.65e12 against a true 1.4e9).
+        # Cleaned in clean_corrupt_shares.py; rejected at the source here.
+        _sh = row.get("shares_outstanding")
+        row["shares_outstanding"] = _sh if (_sh and 0 < _sh < 1e11) else None
+
         # Free Cash Flow = TTM OCF - |TTM CapEx|
         # If CapEx unavailable, use OCF as FCF proxy
-        ttm_ocf = row.get("ttm_operating_cash_flow")
-        ttm_capex = row.get("ttm_capital_expenditure")
-        
+        ttm_ocf = row.get("operating_cash_flow_ttm")
+        ttm_capex = row.get("capital_expenditure_ttm")
+
         if ttm_ocf is not None:
             if ttm_capex is not None:
                 row["free_cash_flow"] = ttm_ocf - abs(ttm_capex)
@@ -745,21 +817,47 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             row["free_cash_flow"] = None
             row["fcf_source"] = None
             row["fcf_provenance"] = "unavailable"
-        
+
+        # Single-quarter values. These are read back for provenance below, so they
+        # are assigned BEFORE the provenance blocks -- previously the provenance
+        # checks ran first and tested keys that did not exist yet, so
+        # revenue_provenance was "unavailable" on every row that in fact had
+        # revenue, and roe_provenance compared against a missing key.
+        rev_series = financials.get("revenue")
+        if rev_series is not None and not rev_series.empty:
+            s = rev_series[rev_series.index <= qend_date].dropna()
+            if len(s) > 0:
+                row["revenue_quarterly"] = float(s.iloc[-1])
+                row["total_revenue_provenance"] = "reported"
+
+        ni_series = financials.get("net_income")
+        if ni_series is not None and not ni_series.empty:
+            s = ni_series[ni_series.index <= qend_date].dropna()
+            if len(s) > 0:
+                row["net_income_quarterly"] = float(s.iloc[-1])
+                row["net_income_quarterly_provenance"] = "reported"
+
+        oi_series = financials.get("operating_income")
+        if oi_series is not None and not oi_series.empty:
+            s = oi_series[oi_series.index <= qend_date].dropna()
+            if len(s) > 0:
+                row["operating_income_quarterly"] = float(s.iloc[-1])
+                row["operating_income_quarterly_provenance"] = "reported"
+
         # Revenue provenance
-        if row.get("total_revenue") is not None:
+        if row.get("revenue_quarterly") is not None:
             row["revenue_provenance"] = "reported"
         else:
             row["revenue_provenance"] = "unavailable"
-        
+
         # Net Income provenance
         if row.get("net_income_quarterly") is not None:
             row["net_income_provenance"] = "reported"
         else:
             row["net_income_provenance"] = "unavailable"
-        
+
         # OCF provenance
-        if row.get("ttm_operating_cash_flow") is not None:
+        if row.get("operating_cash_flow_ttm") is not None:
             ocf_series = financials.get("operating_cash_flow", pd.Series(dtype=float))
             if len(ocf_series) > 0:
                 s = ocf_series[ocf_series.index <= qend_date].dropna()
@@ -771,9 +869,9 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
                 row["ocf_provenance"] = "missing"
         else:
             row["ocf_provenance"] = "missing"
-        
+
         # CapEx provenance
-        if row.get("ttm_capital_expenditure") is not None:
+        if row.get("capital_expenditure_ttm") is not None:
             capex_series = financials.get("capital_expenditure", pd.Series(dtype=float))
             if len(capex_series) > 0:
                 s = capex_series[capex_series.index <= qend_date].dropna()
@@ -785,24 +883,30 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
                 row["capex_provenance"] = "missing"
         else:
             row["capex_provenance"] = "missing"
-        
-        # Balance sheet provenance
-        for bs_field in ["assets", "equity", "debt", "cash", "shares"]:
-            if row.get(bs_field) is not None:
+
+        # Balance sheet provenance. The provenance column names are the
+        # pre-existing panel ones (assets_provenance, equity_provenance, ...) but
+        # they must be driven by the CANONICAL value columns.
+        for bs_field, canon in [("assets", "total_assets"),
+                                ("equity", "shareholders_equity"),
+                                ("debt", "total_debt"),
+                                ("cash", "cash_and_equivalents"),
+                                ("shares", "shares_outstanding")]:
+            if row.get(canon) is not None:
                 row[f"{bs_field}_provenance"] = "reported"
             else:
                 row[f"{bs_field}_provenance"] = "unavailable"
-        
+
         # Derived ratios
-        ttm_ni = row.get("ttm_net_income")
-        ttm_oi = row.get("ttm_operating_income")
+        ttm_ni = row.get("net_income_ttm")
+        ttm_oi = row.get("operating_income_ttm")
         ttm_da = row.get("ttm_depreciation_amortization")
         ttm_int = row.get("ttm_interest_expense")
-        total_debt = row.get("debt")
-        total_equity = row.get("equity")
-        total_assets = row.get("assets")
-        total_cash = row.get("cash")
-        total_shares = row.get("shares")
+        total_debt = row.get("total_debt")
+        total_equity = row.get("shareholders_equity")
+        total_assets = row.get("total_assets")
+        total_cash = row.get("cash_and_equivalents")
+        total_shares = row.get("shares_outstanding")
         
         # ROE
         if ttm_ni is not None and total_equity and total_equity > 0:
@@ -872,66 +976,12 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             row["market_cap_provenance"] = "missing_price_or_shares"
         
         # FCF Margin
-        if row.get("free_cash_flow") is not None and row.get("ttm_revenue") and row["ttm_revenue"] > 0:
-            row["fcf_margin"] = row["free_cash_flow"] / row["ttm_revenue"]
+        if row.get("free_cash_flow") is not None and row.get("revenue_ttm") and row["revenue_ttm"] > 0:
+            row["fcf_margin"] = row["free_cash_flow"] / row["revenue_ttm"]
             row["fcf_margin_provenance"] = row.get("fcf_provenance", "computed")
         else:
             row["fcf_margin_provenance"] = "unavailable"
-        
-        # Revenue (single quarter)
-        rev_series = financials.get("revenue")
-        if rev_series is not None and not rev_series.empty:
-            s = rev_series[rev_series.index <= qend_date].dropna()
-            if len(s) > 0:
-                row["total_revenue"] = float(s.iloc[-1])
-                row["total_revenue_provenance"] = "reported"
-        
-        # Net Income (single quarter)
-        ni_series = financials.get("net_income")
-        if ni_series is not None and not ni_series.empty:
-            s = ni_series[ni_series.index <= qend_date].dropna()
-            if len(s) > 0:
-                row["net_income_quarterly"] = float(s.iloc[-1])
-                row["net_income_quarterly_provenance"] = "reported"
-        
-        # Operating Income (single quarter)
-        oi_series = financials.get("operating_income")
-        if oi_series is not None and not oi_series.empty:
-            s = oi_series[oi_series.index <= qend_date].dropna()
-            if len(s) > 0:
-                row["operating_income"] = float(s.iloc[-1])
-                row["operating_income_quarterly_provenance"] = "reported"
 
-        # Canonical fundamentals.parquet schema (post-2026-08 migration).
-        #
-        # Names carry the period basis explicitly: *_quarterly is one fiscal
-        # quarter, *_ttm is a trailing-twelve-month sum. The internal working
-        # names above are short (equity/assets/debt/cash) and the ttm_* keys hold
-        # twelve-month sums; both are mapped here at the output boundary.
-        row["revenue_quarterly"] = row.get("total_revenue")
-        row["net_income_quarterly"] = row.get("net_income_quarterly")
-        row["operating_income_quarterly"] = row.get("operating_income")
-        row["revenue_ttm"] = row.get("ttm_revenue")
-        row["net_income_ttm"] = row.get("ttm_net_income")
-        row["operating_income_ttm"] = row.get("ttm_operating_income")
-        # These two previously wrote TTM values into the QUARTERLY names
-        # (operating_cash_flow = ttm_operating_cash_flow), which mislabelled a
-        # twelve-month sum as a single quarter. Now mapped to the _ttm names.
-        row["operating_cash_flow_ttm"] = row.get("ttm_operating_cash_flow")
-        row["capital_expenditure_ttm"] = row.get("ttm_capital_expenditure")
-        row["total_assets"] = row.get("assets")
-        row["shareholders_equity"] = row.get("equity")
-        row["total_debt"] = row.get("debt")
-        row["cash_and_equivalents"] = row.get("cash")
-        # shares_outstanding: reject the corrupt values that made the old `shares`
-        # column unusable (FITB 2010-09-30 held 7.96e14 -- 796 trillion shares;
-        # 45 of 73 unique rows were 0.0). No US listed company exceeds ~1e11.
-        _sh = row.get("shares")
-        row["shares_outstanding"] = _sh if (_sh and 0 < _sh < 1e11) else None
-        # NOTE: total_liabilities is NOT set from `debt`. Measured on the panel,
-        # total_liabilities / total_debt has a median ratio of 2.515 -- debt is a
-        # SUBSET of liabilities, so copying one into the other was wrong.
-        
         # Calendar fields
         if row.get("as_of_date"):
             dt = pd.Timestamp(row["as_of_date"])
@@ -944,15 +994,18 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             row["fiscal_q_num"] = dt.quarter
             row["fiscal_year_end_month"] = financials.get("fiscal_year_end")
 
-        # Shares outstanding
-        if total_shares:
-            row["shares_outstanding"] = int(total_shares)
-        
+        # NOTE: total_liabilities is deliberately NOT set from total_debt.
+        # Measured on the panel, total_liabilities / total_debt has a median ratio
+        # of 2.515 -- debt is a SUBSET of liabilities, so copying one into the
+        # other was wrong. shares_outstanding is assigned once, above, with the
+        # plausibility guard; re-assigning it here from an unguarded value is what
+        # let 7.96e14 share counts into the panel.
+
         row["source"] = "edgar_v2"
         row["fiscal_year_end"] = financials.get("fiscal_year_end")
         
         results.append(row)
-    
+
     return results
 
 
@@ -993,8 +1046,14 @@ if __name__ == "__main__":
             tickers = sorted(cik_map.keys())
     
     tickers = [t for t in tickers if t not in NO_COMPANYFACTS]
-    if args.max_tickers:
+    # --max-tickers is a guard for UNIVERSE runs only. It must not silently
+    # truncate an explicit --tickers list: the default of 10 quietly dropped 40
+    # of a 50-ticker sample and the run still reported success.
+    if args.max_tickers and not args.tickers:
         tickers = tickers[:args.max_tickers]
+    elif args.tickers and args.max_tickers and len(tickers) > args.max_tickers:
+        print(f"note: {len(tickers)} explicit tickers given; --max-tickers "
+              f"({args.max_tickers}) ignored for an explicit list")
     
     print(f"Processing {len(tickers)} tickers...")
 

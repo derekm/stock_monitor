@@ -803,6 +803,63 @@ def test_fundamentals_canonical_schema():
     return True
 
 
+def test_period_basis_consistency():
+    """Ratios must not mix a TTM numerator with a quarterly denominator.
+
+    The schema rename mapped total_revenue -> revenue_quarterly mechanically, which
+    silently turned `free_cash_flow / total_revenue` into a TTM-over-quarterly
+    division across 8 files. free_cash_flow is TTM (operating_cash_flow_ttm minus
+    |capital_expenditure_ttm|), so the margin inflated ~4x and 268 panel rows held
+    an impossible fcf_margin > 100% (median 0.365 vs a correct 0.102).
+
+    A stale COMMENT was what made it invisible: `# FCF margin = free_cash_flow /
+    total_revenue` still sat above the changed code, so it read as correct.
+    """
+    import re
+    from pathlib import Path
+
+    TTM = {"free_cash_flow", "revenue_ttm", "net_income_ttm",
+           "operating_income_ttm", "operating_cash_flow_ttm",
+           "capital_expenditure_ttm", "ebitda", "ebit"}
+    QTR = {"revenue_quarterly", "net_income_quarterly",
+           "operating_income_quarterly"}
+    SKIP = {"__pycache__", ".venv", "backfill_backups", "checkpoints",
+            "dashboard_data", ".git"}
+    # display/formatting lines legitimately print both bases side by side
+    ALLOW_SUBSTR = ("print(", "f'", 'f"', "to_string", "round(")
+
+    root = Path(__file__).parent
+    offenders = []
+    for p in sorted(root.glob("*.py")):
+        if p.name == Path(__file__).name or any(x in p.parts for x in SKIP):
+            continue
+        for lineno, line in enumerate(p.read_text(encoding="utf-8",
+                                                  errors="ignore").splitlines(), 1):
+            s = line.strip()
+            if s.startswith("#") or "/" not in line:
+                continue
+            if any(a in line for a in ALLOW_SUBSTR):
+                continue
+            t_hit = sorted(n for n in TTM if n in line)
+            q_hit = sorted(n for n in QTR if n in line)
+            if t_hit and q_hit:
+                offenders.append(f"{p.name}:{lineno} TTM={t_hit} QTR={q_hit}")
+
+    assert not offenders, (
+        "period-basis mismatch in a ratio (TTM numerator / quarterly denominator):\n"
+        + "\n".join("  " + o for o in offenders))
+    print(f"  no TTM/quarterly ratio mixing across {len(list(root.glob('*.py')))} files ✓")
+
+    # and the panel itself must not carry impossible margins from the old code
+    path = root / "fundamentals.parquet"
+    if path.exists():
+        import polars as pl
+        f = pl.read_parquet(path, columns=["fcf_margin"])
+        bad = f.filter(pl.col("fcf_margin") > 1.5).height
+        assert bad == 0, f"{bad} rows have fcf_margin > 150% (period-basis bug)"
+        print("  no impossible fcf_margin values in the panel ✓")
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -861,6 +918,7 @@ if __name__ == "__main__":
         ("Resident tensor kernels", test_resident_kernels),
         ("Single EDGAR extractor", test_single_edgar_extractor),
         ("Fundamentals canonical schema", test_fundamentals_canonical_schema),
+        ("Period basis consistency", test_period_basis_consistency),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),
     ]

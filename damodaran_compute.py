@@ -3,7 +3,7 @@
 damodaran_compute.py — Compute Damodaran life cycle, fair multiples, and revenue growth time series.
 
 Inputs:
-- fundamentals.parquet (with total_revenue, free_cash_flow, capital_expenditure, fcf_margin, reinvestment_rate)
+- fundamentals.parquet (with revenue_quarterly, revenue_ttm, free_cash_flow, capital_expenditure_ttm, fcf_margin, reinvestment_rate)
 
 Outputs:
 - revenue_growth.parquet      — ticker × as_of_date × revenue_growth_yoy/qoq
