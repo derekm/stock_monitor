@@ -22,7 +22,7 @@ hard threshold.
 **Soft stress posterior (replaces hard label):**
 
 $$
-p\_stress = P(\text{state} = \text{high\_vol\_stress} \mid \mathcal{F}_t)
+p_stress = P(state = high_vol_stress | F_t)
 $$
 
 from the HMM forward-backward algorithm (`hmm_regime_detection.py`).
@@ -30,7 +30,7 @@ from the HMM forward-backward algorithm (`hmm_regime_detection.py`).
 **Stress haircut (applied to composite score):**
 
 $$
-\text{score} \leftarrow \text{score} - 0.08 \times p\_stress
+score \leftarrow score - 0.08 \times p_stress
 $$
 
 The coefficient 0.08 was chosen so that p=1 (certain stress) gives the same
@@ -42,7 +42,7 @@ For each driver $x$ with estimated value $\hat{x}$ and estimation error
 $\sigma_x$ (cross-sectional std / 4):
 
 $$
-\text{contribution} = \mathbb{E}_{z \sim \mathcal{N}(0, \sigma_x)}[f(\hat{x} + z)]
+contribution = \mathbb{E}_{z \sim \mathcal{N}(0, \sigma_x)}[f(\hat{x} + z)]
 $$
 
 where $f$ is the piecewise-linear driver function (e.g., momentum step
@@ -67,7 +67,7 @@ For each decision $d$ and perturbation $\epsilon \sim \mathcal{N}(0, \sigma)$
 applied to every driver:
 
 $$
-\text{flip} = \mathbb{1}[\text{decision}(\hat{x} + \epsilon) \neq \text{decision}(\hat{x})]
+flip = \mathbb{1}[decision(\hat{x} + \epsilon) \neq decision(\hat{x})]
 $$
 
 Measured: hard regime cliff → 28.4% flips; momentum → 6.8%; factor → 5.1%.
@@ -78,4 +78,3 @@ After noise-robust: <1% flips at same noise level.
 - [buy_candidates.md](buy_candidates.md) — the decisions being audited
 - [hmm_regime_detection.md](hmm_regime_detection.md) — stress posterior source
 - [forecast_granite.md](forecast_granite.md) — Forecasting-Paradox upgrades
-- [buy_candidates.md](buy_candidates.md) — the decisions being audited

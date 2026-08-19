@@ -5,17 +5,17 @@
 ## Rule
 
 $$
-w^* = \mathrm{clip}\!\left(\frac{\sigma_{\text{target}}}{\sigma_{\text{asset}}},\; w_{\min},\; w_{\max}\right)
+w^* = \mathrm{clip}\!\left(\frac{\sigma_{target}}{\sigma_{asset}},\; w_{\min},\; w_{\max}\right)
 $$
 
-- $\sigma_{\text{asset}}$: annualized realized vol from log returns (default 21-day window)
-- $\sigma_{\text{target}}$: desired *standalone* position vol (default 25%)
+- $\sigma_{asset}$: annualized realized vol from log returns (default 21-day window)
+- $\sigma_{target}$: desired *standalone* position vol (default 25%)
 - $w_{\max}$: per-name weight cap (default 5%; higher-risk names may use 8%)
 
 Optional portfolio-budget mode:
 
 $$
-w^* = \mathrm{clip}\!\left(\frac{\sigma_{\text{port}}\cdot \text{risk budget}}{\sigma_{\text{asset}}},\; w_{\min},\; w_{\max}\right)
+w^* = \mathrm{clip}\!\left(\frac{\sigma_{port}\cdot risk budget}{\sigma_{asset}},\; w_{\min},\; w_{\max}\right)
 $$
 
 ## Usage

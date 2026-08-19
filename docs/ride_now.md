@@ -13,17 +13,17 @@ Same ride rule as [shock_ride.md](shock_ride.md):
 **Monthly returns & momenta (current month):**
 
 $$
-\text{mom}_{12}(t) = \frac{C(t)}{C(t-12)} - 1
+mom_{12}(t) = \frac{C(t)}{C(t-12)} - 1
 \quad
-\text{mom}_3(t) = \frac{C(t)}{C(t-3)} - 1
+mom_3(t) = \frac{C(t)}{C(t-3)} - 1
 \quad
-\text{mom}_1(t) = \frac{C(t)}{C(t-1)} - 1
+mom_1(t) = \frac{C(t)}{C(t-1)} - 1
 $$
 
 **Current ride position (same lagged logic as shock_ride):**
 
 $$
-\text{ride\_long} = \mathbb{1}\left[\text{mom}_{12} > 0.40 \;\land\; \text{mom}_3 > 0\right]
+ride_long = \mathbb{1}\left[mom_{12} > 0.40 \;\land\; mom_3 > 0\right]
 $$
 
 **Honest recommendation (plain-English interpretation surfaced in dashboard):**

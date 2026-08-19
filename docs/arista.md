@@ -18,24 +18,24 @@ On split/dividend-adjusted closes (`adj_close`, via `load_adj_prices_pandas`),
 all point-in-time (no lookahead):
 
 $$
-\text{mom}_3 = \frac{C_t}{C_{t-63}} - 1 \qquad
-\text{mom}_6 = \frac{C_t}{C_{t-126}} - 1
+mom_3 = \frac{C_t}{C_{t-63}} - 1 \qquad
+mom_6 = \frac{C_t}{C_{t-126}} - 1
 $$
 
 $$
-\text{decel} = \text{mom}_6 - \text{mom}_3
+decel = mom_6 - mom_3
 $$
 
-- $\text{decel} < 0$ → the 6-month trend slope is *less* than the 3-month
+- decel < 0 → the 6-month trend slope is *less* than the 3-month
   slope = momentum decelerating / rolling over (the **leading** tell).
 
 $$
-\text{downshare} = \frac{\sum_{20d} \text{Vol}\cdot\max(0,-\Delta P)}
-{\sum_{20d} \text{Vol}\cdot|\Delta P|}
+downshare = \frac{\sum_{20d} Vol \cdot \max(0,-\Delta P)}
+{\sum_{20d} Vol \cdot |\Delta P|}
 \qquad
-\text{from}_{20} = \frac{C_t}{\max_{20d} C} - 1
+from_{20} = \frac{C_t}{\max_{20d} C} - 1
 \qquad
-\text{atYear} = \frac{C_t}{\max_{252d} C}
+atYear = \frac{C_t}{\max_{252d} C}
 $$
 
 - `downshare` rising toward/above 0.5 → distribution (sellers stepping in).
@@ -45,7 +45,7 @@ $$
 **ARISTA signal (the actionable top):**
 
 $$
-\text{signal} = \big(\text{atYear} > 0.92\big) \land \big(\text{decel} < -0.05\big)
+signal = (atYear > 0.92) \land (decel < -0.05)
 $$
 
 Momentum diverging while still within ~8% of the 1-yr high.
@@ -54,14 +54,14 @@ Momentum diverging while still within ~8% of the 1-yr high.
 fixed caps, combined, then gated by high-proximity:
 
 $$
-\text{div}_n = \min\left(\frac{-\text{decel}}{0.15},1\right)\qquad
-\text{dist}_n = \min\left(\frac{\text{downshare}-0.5}{0.30},1\right)\qquad
-\text{roll}_n = \min\left(\frac{-\text{from}_{20}}{0.12},1\right)
+div_n = \min\left(\frac{-decel}{0.15},1\right) \qquad
+dist_n = \min\left(\frac{downshare-0.5}{0.30},1\right) \qquad
+roll_n = \min\left(\frac{-from_{20}}{0.12},1\right)
 $$
 
 $$
-\text{score} = \text{atYear}\big|_{0.80}^{1.0} \cdot
-\left(0.45\,\text{div}_n + 0.30\,\text{dist}_n + 0.25\,\text{roll}_n\right)
+score = atYear|_{0.80}^{1.0} \cdot
+\left(0.45\,div_n + 0.30\,dist_n + 0.25\,roll_n\right)
 $$
 
 So a healthy accelerating uptrend scores near 0; a genuine top (FTNT 7/2025:

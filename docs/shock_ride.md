@@ -21,48 +21,48 @@ shock framework has exploitable timing, with honest numbers per basket/ticker.
 
 $$
 r_\tau = \ln\left(\frac{C_\tau}{C_{\tau-1}}\right)
-\quad\text{where}\quad
+\quadwhere\quad
 C_\tau = \prod_{s=1}^\tau \left(1 + \bar{r}_s\right)
-\quad\text{and}\quad
+\quadand\quad
 \bar{r}_s = \frac{1}{|B_s|} \sum_{i \in B_s} \ln\left(\frac{P_{i,s}}{P_{i,s-1}}\right)
 $$
 
 **Momenta:**
 
 $$
-\text{mom}_{12}(\tau) = \frac{C_\tau}{C_{\tau-12}} - 1
+mom_{12}(\tau) = \frac{C_\tau}{C_{\tau-12}} - 1
 \qquad
-\text{mom}_3(\tau) = \frac{C_\tau}{C_{\tau-3}} - 1
+mom_3(\tau) = \frac{C_\tau}{C_{\tau-3}} - 1
 \qquad
-\text{mom}_1(\tau) = \frac{C_\tau}{C_{\tau-1}} - 1
+mom_1(\tau) = \frac{C_\tau}{C_{\tau-1}} - 1
 $$
 
 **Ride rule (per basket / per ticker, monthly, no lookahead):**
 
 $$
-\text{long}(\tau) = \mathbb{1}\left[\text{mom}_{12}(\tau-1) > 0.40
+long(\tau) = \mathbb{1}\left[mom_{12}(\tau-1) > 0.40
 \quad\land\quad
-\text{mom}_3(\tau-1) > 0\right]
+mom_3(\tau-1) > 0\right]
 $$
 
 Position enters the month *after* signals — no lookahead.
 
-**Exit:** when $\text{mom}_3(\tau) \le 0$ (rollover).
+**Exit:** when $mom_3(\tau) \le 0$ (rollover).
 
 **Ride return vs buy-hold:**
 
 $$
-\text{ride} = \sum_\tau \text{long}(\tau) \cdot r_\tau
+ride = \sum_\tau long(\tau) \cdot r_\tau
 \qquad
-\text{BH} = \sum_\tau r_\tau
+BH = \sum_\tau r_\tau
 \qquad
-\text{excess} = \text{ride} - \text{BH}
+excess = ride - BH
 $$
 
 **Max drawdown:**
 
 $$
-\text{maxDD} = \min_\tau \left(\frac{C_\tau}{\max_{s \le \tau} C_s} - 1\right)
+maxDD = \min_\tau \left(\frac{C_\tau}{\max_{s \le \tau} C_s} - 1\right)
 $$
 
 **Current-state recommendation (honest — same logic as [ride_now.md](ride_now.md)):**

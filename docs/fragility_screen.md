@@ -8,8 +8,8 @@ fragility score composed of independent drivers, each noise-robust.
 
 **Driver z-scores (cross-sectional, per date):**
 
-For each driver $d \in \{\text{leverage}, \text{tail\_alpha}, \text{gap\_share},
-\text{illiquidity}, \text{iv\_skew}, \text{kurtosis}\}$:
+For each driver $d$ in {leverage, tail_alpha, gap_share,
+illiquidity, iv_skew, kurtosis}:
 
 $$
 z_d(i,t) = \frac{x_d(i,t) - \mu_d(t)}{\sigma_d(t)}
@@ -21,14 +21,14 @@ monitored universe at date $t$.
 **Composite fragility score (noise-robust):**
 
 $$
-\text{fragility}(i,t) = \sum_{d} \text{contribution}_d(i,t)
+fragility(i,t) = \sum_{d} contribution_d(i,t)
 $$
 
 where each driver's contribution is the **noise-convolved expectation** (from
 [hidden_optionality_audit.md](hidden_optionality_audit.md)):
 
 $$
-\text{contribution}_d = \mathbb{E}_{z \sim \mathcal{N}(0, \sigma_d)}[f_d(x_d + z)]
+contribution_d = \mathbb{E}_{z \sim \mathcal{N}(0, \sigma_d)}[f_d(x_d + z)]
 $$
 
 with $\sigma_d = \sigma_{x_d} / 4$ (cross-sectional std / 4).
@@ -36,7 +36,7 @@ with $\sigma_d = \sigma_{x_d} / 4$ (cross-sectional std / 4).
 **Fragile flag:**
 
 $$
-\text{fragile\_flag}(i,t) = \mathbb{1}[\text{fragility}(i,t) > \text{pctile}_{95}(t)]
+fragile_flag(i,t) = \mathbb{1}[fragility(i,t) > pctile_{95}(t)]
 $$
 
 Top 5% most fragile names flagged.

@@ -26,7 +26,7 @@ $$
 **Rotation score (per sleeve, monthly):**
 
 $$
-\text{score}_g(t) = \text{mom}_{12,g}(t) \cdot \mathbb{1}[\text{regime} \neq \text{high\_vol\_stress}]
+score_g(t) = mom_{12,g}(t) \cdot \mathbb{1}[regime \neq high-vol-stress]
 $$
 
 Only rotate into a sleeve if it has positive 12m momentum AND the current
@@ -35,10 +35,10 @@ regime is NOT `high_vol_stress` (regime from `hmm_regime_states.csv`).
 **Defensive allocation weight:**
 
 $$
-w_g(t) = \frac{\text{score}_g(t)_+}{\sum_h \text{score}_h(t)_+} \times (1 - \alpha \cdot p\_stress)
+w_g(t) = \frac{score_g(t)_+}{\sum_h score_h(t)_+} \times (1 - \alpha \cdot p_stress)
 $$
 
-where $p\_stress$ = HMM stress posterior (from `hmm_regime_states.csv`);
+where $p_stress$ = HMM stress posterior (from `hmm_regime_states.csv`);
 $\alpha = 0.5$ scales the allocation down as stress rises.
 
 ## Outputs

@@ -13,7 +13,7 @@ everywhere**, the fixed `SECTORS` dict was replaced by run-time construction.
 
 1. **All GICS sectors** — every sector in `sp500_constituents.parquet`
    (current members), id `gics_<sector>`.
-2. **All GICS sub-industries** — every sub-industry with ≥ 2 members having
+2. **All GICS sub-industries** — every sub-industry with >= 2 members having
    price history, id `sub_<subindustry>`.
 3. **All factor groups** — every group in `factor_groups.csv` via
    `factor_group_members.csv`, open-ended membership only (valid_to
@@ -21,7 +21,7 @@ everywhere**, the fixed `SECTORS` dict was replaced by run-time construction.
 
 Any ticker already in `daily_prices.parquet` is picked up automatically
 when it appears in GICS or factor-group membership — including the former
-"amplifiers" (TSM, ASML, SCCO, AEM, BTI, …). No per-basket ticker list
+"amplifiers" (TSM, ASML, SCCO, AEM, BTI, ...). No per-basket ticker list
 exists in code.
 
 Commodity legs attach by **name pattern** (`COMMODITY_MAP` regexes against
@@ -33,23 +33,32 @@ PCOPPUSDM.
 **Monthly basket momentum (12m):**
 
 $$
-\text{mom}_{12}(t) = \frac{C(t)}{C(t-12)} - 1
-\quad\text{where}\quad
+mom_{12}(t) = \frac{C(t)}{C(t-12)} - 1
+$$
+
+where
+
+$$
 C(t) = \prod_{\tau=1}^t \left(1 + \bar{r}_\tau\right)
-\quad\text{and}\quad
+$$
+
+and
+
+$$
 \bar{r}_\tau = \frac{1}{|B_\tau|} \sum_{i \in B_\tau} r_{i,\tau}
 $$
 
-$B_\tau$ = available basket members at month $\tau$; $r_{i,\tau}$ = monthly log return of member $i$.
+B_tau = available basket members at month tau; r_i,tau = monthly log return of member i.
 
 **Shock score (z-standardized composite):**
 
+If commodity mapped:
 $$
-\text{shock\_score} = 
-\begin{cases}
-\frac{z(\text{mom}_{12,\text{basket}}) + z(\text{mom}_{12,\text{commodity}})}{2} & \text{if commodity mapped} \\
-z(\text{mom}_{12,\text{basket}}) & \text{otherwise}
-\end{cases}
+shock_score = \frac{z(mom_{12,basket}) + z(mom_{12,commodity})}{2}
+$$
+Otherwise:
+$$
+shock_score = z(mom_{12,basket})
 $$
 
 where $z(x) = \frac{x - \mu_x}{\sigma_x}$ over the full history of the basket.
@@ -58,9 +67,9 @@ where $z(x) = \frac{x - \mu_x}{\sigma_x}$ over the full history of the basket.
 
 | Zone | Condition |
 |---|---|
-| `shock` | $\text{mom}_{12,\text{basket}} \geq 0.80$ |
-| `elevated` | $0.40 \leq \text{mom}_{12,\text{basket}} < 0.80$ |
-| `benign` | $\text{mom}_{12,\text{basket}} < 0.40$ |
+| `shock` | $mom_{12,basket} \geq 0.80$ |
+| `elevated` | $0.40 \leq mom_{12,basket} < 0.80$ |
+| `benign` | $mom_{12,basket} < 0.40$ |
 
 **Commodity mapping** (`COMMODITY_MAP` regexes against basket id, first match wins):
 - `copper|sub_copper|industry_copper` → PCOPPUSDM

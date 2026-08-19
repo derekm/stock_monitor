@@ -6,25 +6,21 @@
 
 Each name contributes the same share of portfolio **variance**:
 
-
 $$
-RC_i = w_i\,(\Sigma w)_i = \frac{\sigma_p^2}{N}
+RC_i = w_i (\Sigma w)_i = \frac{\sigma_p^2}{N}
 $$
-
 
 | Solver | Notes |
-|--------|--------|
+|--------|-------|
 | **Multiplicative** | Fast; can drive some weights to 0 when correlations are awkward |
-| **SLSQP + weight floor** | Preferred long-only ERC — equalizes RC with `w_i ≥ floor` (default 2%) |
+| **SLSQP + weight floor** | Preferred long-only ERC — equalizes RC with `w_i >= floor` (default 2%) |
 | **Inverse-vol** | Diagonal approximation $w \propto 1/\sigma$; ignores correlations |
 
 ## Global Minimum Variance (GMV)
 
-
 $$
-\min_w \; w^\top \Sigma w \quad \text{s.t.} \quad \mathbf{1}^\top w = 1
+\min_w w^\top \Sigma w \quad s.t. \quad \mathbf{1}^\top w = 1
 $$
-
 
 | Variant | Constraint |
 |---------|------------|
@@ -45,16 +41,16 @@ python maintain_analytics.py optimize
 
 ## Outputs
 
-- `erc_gmv_strategies.csv` — weight & RC by strategy × ticker  
-- `erc_gmv_summary.csv` — portfolio vol, return, RC dispersion, max name weight  |
+- `erc_gmv_strategies.csv` — weight & RC by strategy x ticker
+- `erc_gmv_summary.csv` — portfolio vol, return, RC dispersion, max name weight
 
 ## How this differs from vol targeting
 
 | Method | Objective |
 |--------|-----------|
-| **Vol targeting** | Cap / scale **one** name to a σ budget |
+| **Vol targeting** | Cap / scale **one** name to a sigma budget |
 | **Inv-vol / ERC** | Balance risk **across** the book |
-| **GMV** | Lowest achievable portfolio σ |
+| **GMV** | Lowest achievable portfolio sigma |
 
 Practical stack: **GMV or ERC for core**, **vol-target cap on individual names** as a risk governor.
 

@@ -19,7 +19,7 @@ $$
 **21-day rolling annualized volatility:**
 
 $$
-\text{vol}_{21}(t) = \sqrt{252} \cdot \text{std}\left(\bar{r}_{t-20:t}\right)
+vol_{21}(t) = \sqrt{252} \cdot std\left(\bar{r}_{t-20:t}\right)
 $$
 
 **21-day rolling average pairwise correlation (intra-basket):**
@@ -28,13 +28,13 @@ For each day $t$, compute the correlation matrix of member returns over the
 trailing 21 days, then average the upper triangle:
 
 $$
-\text{avg\_corr}(t) = \frac{2}{k(k-1)} \sum_{i<j} \text{corr}\left(r_{i,t-20:t}, r_{j,t-20:t}\right)
+avg_corr(t) = \frac{2}{k(k-1)} \sum_{i<j} corr\left(r_{i,t-20:t}, r_{j,t-20:t}\right)
 $$
 
 **HMM features (daily):**
 
 $$
-X_t = \left[\text{mkt\_ret}_t,\; \text{vol}_{21}(t),\; \text{avg\_corr}(t)\right]
+X_t = \left[mkt_ret_t,\; vol_{21}(t),\; avg_corr(t)\right]
 $$
 
 Fit a 3-state Gaussian HMM on $X_t$ (full covariance, 200 iterations).
@@ -43,14 +43,14 @@ Label states by their mean (vol, corr): `low_vol`, `normal`, `high_vol_stress`.
 **Stress posterior:**
 
 $$
-p(\text{stress} \mid \mathcal{F}_t) = P(\text{state} = \text{high\_vol\_stress} \mid X_{1:t})
+p(stress \mid \mathcal{F}_t) = P(state = high_vol_stress \mid X_{1:t})
 $$
 
 from the HMM forward-backward algorithm.
 
 **Lead test (stress leading ride exit):**
 
-At every ride exit (3m mom rollover), record whether $p(\text{stress}) > 0.8$
+At every ride exit (3m mom rollover), record whether $p(stress) > 0.8$
 at $t-10, t-20, t-30$ days before the exit.
 
 ## Honest measured answer on "leading collapse"

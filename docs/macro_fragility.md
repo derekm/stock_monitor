@@ -19,50 +19,50 @@ Palley's own reduced form has bank credit ΔD₁ with unit impact on AD.
 **All-sectors Debt / GDP ratio (quarterly):**
 
 $$
-\text{debt\_gdp\_ratio}(t) = \frac{\text{TCMDO}(t)}{\text{GDP}(t)}
+debt_gdp_ratio(t) = \frac{TCMDO(t)}{GDP(t)}
 $$
 
-where TCMDO = FRED total credit market debt (all sectors, millions USD, 
+where TCMDO = FRED total credit market debt (all sectors, millions USD,
 divided by 1000 to billions); GDP = FRED nominal GDP (already annualized,
 do NOT re-annualize).
 
 **Debt impulse (Keen's ΔD/GDP, annualized):**
 
 $$
-\text{debt\_impulse}(t) = \frac{D(t) - D(t-4)}{\text{GDP}(t)}
+debt_impulse(t) = \frac{D(t) - D(t-4)}{GDP(t)}
 $$
 
-where $D(t)$ = TCMDO at quarter $t$; the 4-quarter change annualizes the
+where D(t) = TCMDO at quarter t; the 4-quarter change annualizes the
 quarterly change to approximate "flow per year".
 
 **Velocity-scaled impulse (Keen 2014 §9 — effective demand):**
 
 $$
-\text{debt\_impulse\_v}(t) = \text{debt\_impulse}(t) \times \text{M2V}(t)
+debt_impulse_v(t) = debt_impulse(t) \times M2V(t)
 $$
 
-Keen 2014: $E = Y + v \cdot \Delta D$ — the true demand impact of a debt
-change is LARGER than the bare change when M2 velocity $v > 1$.
+Keen 2014: E = Y + v · ΔD — the true demand impact of a debt
+change is LARGER than the bare change when M2 velocity v > 1.
 Measured: 2007 peak bare 0.369 → v-scaled 0.729 (~2×).
 
 **Credit Accelerator (Biggs-Mayer-Pick / Keen §13):**
 
 $$
-\text{debt\_acceleration}(t) = \frac{D(t) - 2D(t-1) + D(t-2)}{\text{GDP}(t)}
+debt_acceleration(t) = \frac{D(t) - 2D(t-1) + D(t-2)}{GDP(t)}
 $$
 
 Second difference of debt scaled by GDP — the Biggs-Mayer-Pick channel:
 it's the CHANGE in debt growth that predicts unemployment, not the level.
-Historical $r = +0.79$ vs house-price changes. Currently re-accelerating
+Historical r = +0.79 vs house-price changes. Currently re-accelerating
 (0.05-0.07 after 2023-24 near zero).
 
 **Minsky Signal (stability breeds instability):**
 
 $$
-\text{minsky\_signal}(t) = \text{debt\_impulse}(t) \times (1 - p\_stress(t))
+minsky_signal(t) = debt_impulse(t) \times (1 - p_stress(t))
 $$
 
-Fragility accumulates DURING calm: when HMM stress posterior $p\_stress$
+Fragility accumulates DURING calm: when HMM stress posterior p_stress
 is low (tranquil regime), a high debt impulse means the system is quietly
 levering. The signal is highest exactly when markets feel safest — validated:
 its top quarters are 2007Q2-Q4 (debt building at ~37% of GDP/yr while

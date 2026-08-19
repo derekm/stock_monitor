@@ -14,17 +14,17 @@ proportional to how certain the regime model is, not a hard cliff.
 
 **Trading calendar (month-end dates from `daily_prices.parquet`):**
 
-Let $D = \{d_1, d_2, ..., d_N\}$ be the sorted unique trading dates from
+Let $D = {d_1, d_2, ..., d_N}$ be the sorted unique trading dates from
 `daily_prices.parquet`. Month-end dates are:
 
 $$
-\mathcal{E} = \left\{ \max\{d \in D : d \in \text{month } m\} : m \in \text{last } M \text{ months} \right\}
+\mathcal{E} = \left{ \max{d \in D : d \in month  m} : m \in last  M  months \right}
 $$
 
 **Stress probability (from HMM posterior):**
 
 $$
-p_t = P(\text{state} = \text{high\_vol\_stress} \mid \mathcal{F}_t)
+p_t = P(state = high_vol_stress \mid \mathcal{F}_t)
 $$
 
 recovered from `hmm_regime_states.csv` columns `p_state_*` — the state
@@ -33,17 +33,17 @@ whose label contains "stress".
 **Turnover band (soft, continuous in posterior):**
 
 $$
-\text{band}(p) = 
+band(p) = 
 \begin{cases}
-0.5 & \text{if } p \ge 0.99 \quad\text{(reduced\_rebalance)} \\
-1 - 0.5 \cdot p & \text{if } 0.01 \le p < 0.99 \quad\text{(partial\_rebalance)} \\
-1.0 & \text{if } p < 0.01 \quad\text{(full\_rebalance)}
+0.5  if  p \ge 0.99 \quad(reduced_rebalance) \\
+1 - 0.5 \cdot p  if  0.01 \le p < 0.99 \quad(partial_rebalance) \\
+1.0  if  p < 0.01 \quad(full_rebalance)
 \end{cases}
 $$
 
 - At $p = 1$ (certain stress): band = 0.5 (half turnover, matches old hard rule)
 - At $p = 0$ (certain calm): band = 1.0 (full rebalance)
-- Linear interpolation in between: $\text{band} = 1 - 0.5p$
+- Linear interpolation in between: $band = 1 - 0.5p$
 
 **Action labels:**
 
@@ -56,7 +56,7 @@ $$
 **Dual-core count (informational):**
 
 $$
-n_{\text{dual\_core}} = |\{i : \text{decision}_i = \text{INCLUDE\_CORE}\}|
+n_{dual_core} = |{i : decision_i = INCLUDE_CORE}|
 $$
 
 from `preferred_metrics.csv` where `decision == "INCLUDE_CORE"`.

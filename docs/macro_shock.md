@@ -16,23 +16,23 @@ debt-driven signal cannot see one. This layer is the supply-side twin.
 **Oil momentum (12m):**
 
 $$
-\text{oil\_mom}_{12}(t) = \frac{O(t)}{O(t-12)} - 1
+oil_mom_12(t) = \frac{O(t)}{O(t-12)} - 1
 $$
 
-where $O(t)$ = crude price (spliced IMF OILPRICE 1946-2013 + WTI 1986-).
+where O(t) = crude price (spliced IMF OILPRICE 1946-2013 + WTI 1986-).
 
 **Inflation surprise:**
 
 $$
-\text{inflation\_surprise}(t) = \pi(t) - \frac{1}{36} \sum_{s=1}^{36} \pi(t-s)
+inflation_surprise(t) = \pi(t) - \frac{1}{36} \sum_{s=1}^{36} \pi(t-s)
 $$
 
-where $\pi(t)$ = CPI YoY; the trailing 3-year average is the "norm".
+where \pi(t) = CPI YoY; the trailing 3-year average is the "norm".
 
 **Real rate (ex-post):**
 
 $$
-\text{real\_rate}(t) = \text{fed\_funds}(t) - \pi(t)
+real_rate(t) = fed_funds(t) - \pi(t)
 $$
 
 Deeply negative real rates are the supply-shock signature (1974-75, 2022
@@ -41,7 +41,7 @@ at −7.8%).
 **Energy divergence (12m energy-producer basket vs equal-weight market):**
 
 $$
-\text{energy\_divergence}(t) = \text{mom}_{12,\text{energy}}(t) - \text{mom}_{12,\text{market}}(t)
+energy_divergence(t) = mom_12_energy(t) - mom_12_market(t)
 $$
 
 Energy rising while the market falls = supply shock. Caveat: only 2-3
@@ -52,7 +52,7 @@ the composite score.
 **Composite shock score (z-standardized):**
 
 $$
-\text{shock\_score} = z(\text{oil\_mom}_{12}) + z(\text{inflation\_surprise}) - z(\text{real\_rate})
+shock_score = z(oil_mom_12) + z(inflation_surprise) - z(real_rate)
 $$
 
 The three robust legs (oil momentum, inflation surprise, negative real

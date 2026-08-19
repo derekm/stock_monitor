@@ -10,7 +10,7 @@ ensemble averages hide.
 **Tail index (from tail_index.py):**
 
 $$
-\alpha \approx \frac{1}{\text{Hill}(r)}
+\alpha \approx \frac{1}{\mathrm{Hill}(r)}
 $$
 
 where $\alpha$ = tail exponent; $\alpha < 3$ ⇒ fat tails (finite variance,
@@ -19,11 +19,11 @@ infinite higher moments); $\alpha \to 2$ ⇒ Cauchy territory.
 **Ruin probability at horizon $H$:**
 
 $$
-P_{\text{ruin}}(H) = P\left(\min_{1 \le h \le H} W_h < 0.5 W_0\right)
+P_{\mathrm{ruin}}(H) = P\left(\min_{1 \le h \le H} W_h < 0.5 W_0\right)
 $$
 
 Estimated via Monte Carlo using the fitted tail model (Pareto above $u$ +
-Gaussian body). Equivalent: $P(\text{terminal wealth} < 0.5 W_0)$.
+Gaussian body). Equivalent: $P(\mathrm{terminal\ wealth} < 0.5 W_0)$.
 
 **Ergodicity gap (ensemble vs time average):**
 
