@@ -993,6 +993,97 @@ def test_merge_flush_executes():
     print(f"  merge executed on an existing edgar_v2 row -> {n:,} panel rows ✓")
 
 
+def test_negative_equity_emits_rows():
+    """Quarters with negative book equity must still produce a row.
+
+    Post-SPAC issuers classify redeemable shares outside equity and report negative
+    book equity in every quarter; distressed companies carry deficits exceeding
+    paid-in capital. Skipping those quarters discards the ticker's revenue, assets
+    and cash flow along with the equity. Equity-denominated ratios guard
+    total_equity > 0 individually, so they stay unset rather than dividing by a
+    negative denominator.
+    """
+    import edgar_companyfacts_v2 as V
+
+    idx = pd.to_datetime(["2024-03-31", "2024-06-30", "2024-09-30", "2024-12-31"])
+    fin = {
+        "revenue": pd.Series([10.0e6] * 4, index=idx),
+        "net_income": pd.Series([-2.0e6] * 4, index=idx),
+        "operating_income": pd.Series(dtype=float),
+        "depreciation_amortization": pd.Series(dtype=float),
+        "interest_expense": pd.Series(dtype=float),
+        "operating_cash_flow": pd.Series(dtype=float),
+        "capital_expenditure": pd.Series(dtype=float),
+        "assets": pd.Series([50.0e6] * 4, index=idx),
+        # every quarter negative, as BAERW reports
+        "equity": pd.Series([-8.0e6, -9.0e6, -1.0e7, -1.1e7], index=idx),
+        "debt": pd.Series(dtype=float), "cash": pd.Series(dtype=float),
+        "shares": pd.Series(dtype=float),
+        "annual_revenue": pd.Series(dtype=float),
+        "annual_net_income": pd.Series(dtype=float),
+        "annual_operating_income": pd.Series(dtype=float),
+        "annual_operating_cash_flow": pd.Series(dtype=float),
+        "annual_capital_expenditure": pd.Series(dtype=float),
+        "fiscal_year_end": "1231",
+    }
+    rows = V.compute_quarterly_fundamentals(fin, "NEGEQ")
+    assert len(rows) == 4, (
+        f"negative equity dropped rows: got {len(rows)} of 4")
+    last = rows[-1]
+    assert last.get("revenue_ttm") == 4.0e7, (
+        f"revenue lost on a negative-equity row: {last.get('revenue_ttm')}")
+    assert last.get("shareholders_equity") == -1.1e7, "equity value not preserved"
+    assert last.get("roe") is None, "roe must stay unset when equity <= 0"
+    assert last.get("debt_to_equity") is None, "D/E must stay unset when equity <= 0"
+    print("  negative-equity quarters emit rows; equity ratios stay unset ✓")
+
+
+def test_financial_sector_revenue_tags():
+    """Banks, insurers and REITs need their own top-line tags.
+
+    None of them report `Revenues`. A bank's gross top line is
+    InterestAndDividendIncomeOperating, an insurer's is PremiumsEarnedNet, a REIT's
+    is RealEstateRevenueNet or OperatingLeaseLeaseIncome.
+
+    InterestIncomeExpenseNet and NoninterestIncome must NOT be used: the first is net
+    of interest expense and behaves like a margin, the second is one component of
+    revenue. Either would understate a bank's top line severalfold.
+    """
+    # Parse the actual list literal. Scanning the raw source text instead would also
+    # read the comment above it, which NAMES the excluded tags in order to explain
+    # why they are excluded -- so a prose mention would fail the exclusion check.
+    import ast
+
+    path = Path(__file__).parent / "edgar_companyfacts_v2.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    rev_tags = None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "REV_TAGS":
+                rev_tags = [
+                    e.value for e in node.value.elts
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str)
+                ]
+    assert rev_tags, "REV_TAGS list literal not found"
+
+    for tag in ["InterestAndDividendIncomeOperating", "PremiumsEarnedNet",
+                "RealEstateRevenueNet", "OperatingLeaseLeaseIncome"]:
+        assert tag in rev_tags, f"financial revenue tag {tag} missing from REV_TAGS"
+
+    for bad in ["InterestIncomeExpenseNet", "NoninterestIncome"]:
+        assert bad not in rev_tags, (
+            f"{bad} is a net/partial measure and must not be a revenue tag")
+
+    # `Revenues` must still rank ahead of the sector-specific fallbacks, so a filer
+    # reporting both keeps the general top line.
+    assert rev_tags.index("Revenues") < rev_tags.index(
+        "InterestAndDividendIncomeOperating")
+    print(f"  {len(rev_tags)} revenue tags: financial top lines present, "
+          "net measures excluded ✓")
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -1054,6 +1145,8 @@ if __name__ == "__main__":
         ("IFRS taxonomy selection", test_ifrs_taxonomy_selection),
         ("Annual-only filer TTM", test_annual_only_filer_ttm),
         ("Merge flush executes", test_merge_flush_executes),
+        ("Negative equity emits rows", test_negative_equity_emits_rows),
+        ("Financial revenue tags", test_financial_sector_revenue_tags),
         ("Period basis consistency", test_period_basis_consistency),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),

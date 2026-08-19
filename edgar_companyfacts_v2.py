@@ -650,9 +650,23 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
     # Tag lists. US-GAAP names first, then the ifrs-full equivalents a foreign
     # private issuer (40-F/20-F) reports instead. _pick_tag selects on coverage and
     # recency, so listing both taxonomies is safe: only one of them has facts.
+    #
+    # Financial-sector filers report no `Revenues` at all. A bank's top line is
+    # InterestAndDividendIncomeOperating (gross interest and dividend income), an
+    # insurer's is PremiumsEarnedNet, a REIT's is RealEstateRevenueNet or
+    # OperatingLeaseLeaseIncome. These are GROSS measures, comparable to revenue.
+    # InterestIncomeExpenseNet is deliberately excluded: it is net of interest
+    # EXPENSE, so it behaves like a margin and would understate the top line by an
+    # order of magnitude. NoninterestIncome is excluded for the same reason -- it is
+    # one component of revenue, not the total.
     REV_TAGS = ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", 
                 "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueNet",
-                "Revenue", "RevenueFromContractsWithCustomers"]
+                "Revenue", "RevenueFromContractsWithCustomers",
+                "RevenuesNetOfInterestExpense",
+                "InterestAndDividendIncomeOperating",
+                "PremiumsEarnedNet", "PremiumsEarnedNetPropertyCasualty",
+                "RealEstateRevenueNet", "OperatingLeaseLeaseIncome",
+                "InterestAndFeeIncomeLoansAndLeases"]
     NI_TAGS = ["NetIncomeLoss", "NetIncomeCommonStockholders",
                "ProfitLossAttributableToOwnersOfParent", "ProfitLoss"]
     OI_TAGS = ["OperatingIncomeLoss", "OperatingIncome",
@@ -756,7 +770,15 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
     results = []
     
     for qend_date, eq_val in equity.items():
-        if eq_val is None or eq_val <= 0:
+        # Negative or zero book equity is REAL, not corrupt: post-SPAC issuers
+        # classify redeemable shares outside equity (BAERW reports negative equity in
+        # all 19 of its quarters), and distressed companies carry accumulated deficits
+        # exceeding paid-in capital. Skipping those quarters discarded the ticker
+        # entirely -- revenue, assets and cash flow with it. Every equity-denominated
+        # ratio below (roe, roic, debt_to_equity, pb_ratio) already requires
+        # total_equity > 0 on its own, so the row is emitted and those ratios are
+        # simply left unset.
+        if eq_val is None or not np.isfinite(eq_val):
             continue
         
         row = {
