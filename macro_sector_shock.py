@@ -42,6 +42,11 @@ MIN_OBS_PER_TICKER = 250
 # Optional commodity attachment by basket name pattern (NOT ticker lists).
 # First match wins. Keys are regexes against basket id (lowercased).
 COMMODITY_MAP = [
+    # Precious metals before the materials fallback: a gold or silver miner matches
+    # ^gics_materials$ too, and PALLFNFINDEXM is an all-commodity index dominated by
+    # energy and agriculture, so the fallback attaches the wrong driver.
+    (r"gold|precious.?metal", "gold"),
+    (r"silver", "gold"),
     (r"copper|sub_copper|industry_copper", "PCOPPUSDM"),
     (r"nickel", "PNICKUSDM"),
     (r"zinc|industrial.?metal", "PZINCUSDM"),
@@ -258,10 +263,22 @@ def main(save: bool = True):
         if series:
             if series not in com_cache:
                 try:
-                    com = _fetch_fred(series, DATA_DIR / "macro_data" / f"{series}.csv")
+                    # Series with a local parquet in macro_data/ are loaded directly;
+                    # gold has no usable USD/oz series on FRED (the IMF and LBMA IDs
+                    # 404), so fetch_gold.py builds macro_data/gold.parquet from
+                    # COMEX futures. Everything else is a FRED ID.
+                    local = DATA_DIR / "macro_data" / f"{series}.parquet"
+                    if local.exists() and series.islower():
+                        com = pd.read_parquet(local)
+                        value_col = [c for c in com.columns
+                                     if c != "observation_date"][0]
+                    else:
+                        com = _fetch_fred(series,
+                                          DATA_DIR / "macro_data" / f"{series}.csv")
+                        value_col = series
                     com["observation_date"] = pd.to_datetime(com["observation_date"])
                     com = com.dropna().set_index("observation_date")
-                    c = com[series]
+                    c = com[value_col]
                     com_cache[series] = (c / c.shift(12) - 1)
                 except Exception as e:
                     print(f"  commodity {series} fail ({e})")

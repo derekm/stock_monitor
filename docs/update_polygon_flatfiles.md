@@ -48,6 +48,12 @@ python update_polygon_flatfiles.py --days 5 --save
 
 ## Related programs
 
-- `update_polygon.py` — the per-ticker REST bulk path (grouped endpoint)
+- `update_polygon.py` — the per-ticker REST bulk path (grouped endpoint), and the
+  only Polygon/Massive price feed in the daily run
 - `daily_prices.parquet` — the shared price spine
-- `run_daily_automation.py` — registered as `polygon_flatfiles` job
+
+## Not in the daily automation
+
+This script is a manual tool, not a DAG stage. `GetObject` on the flat files
+returns 403 under the current plan, so a scheduled run can only ever consume its
+300s slot and fail. Run it by hand if the subscription gains flat-file downloads.

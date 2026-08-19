@@ -120,7 +120,6 @@ def load_hardcoded_dag() -> tuple[dict, dict]:
         "taleb_barbell": (["barbell_check.py"], None),
         "taleb_optionality": (["hidden_optionality_audit.py"], None),
         "polygon_prices": (["update_polygon.py", "--days", "5", "--save"], 300),
-        "polygon_flatfiles": (["update_polygon_flatfiles.py", "--days", "5", "--save"], 300),
         "export": (["export_dashboard_data.py"], None),
     }
     
@@ -172,7 +171,6 @@ def load_hardcoded_dag() -> tuple[dict, dict]:
         "factor_rot": set(),
         "taleb_ride_now": set(),
         "polygon_prices": set(),
-        "polygon_flatfiles": set(),
         "acq_backfill": set(),
         "export": {"aggregate", "technical", "econ_cal", "est_rev", "shadow",
                    "taleb_tail", "taleb_gap", "taleb_iv_skew", "taleb_ergodic", "taleb_fragility",

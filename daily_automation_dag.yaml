@@ -248,11 +248,6 @@ jobs:
     timeout: 300
     desc: "Polygon prices"
   
-  polygon_flatfiles:
-    cmd: ["update_polygon_flatfiles.py", "--days", "5", "--save"]
-    timeout: 300
-    desc: "Polygon flatfiles"
-  
   export:
     cmd: ["export_dashboard_data.py"]
     timeout: null
@@ -307,7 +302,6 @@ dependencies:
   factor_rot: []
   taleb_ride_now: []
   polygon_prices: []
-  polygon_flatfiles: []
   acq_backfill: []
   export: [aggregate, technical, econ_cal, est_rev, shadow,
            taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility,
