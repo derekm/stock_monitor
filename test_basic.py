@@ -1084,6 +1084,39 @@ def test_financial_sector_revenue_tags():
           "net measures excluded ✓")
 
 
+def test_no_legacy_prior_estimate_columns():
+    """prior_estimate_* twins must follow their base column's rename.
+
+    backfill_edgar writes a future EDGAR quarter as prior_estimate_<col> for every
+    name in ESTIMATE_COLS, so every base rename has an estimate counterpart. Renaming
+    only the base columns strands the twins under names nothing reads:
+    prior_estimate_net_income (5 rows) and prior_estimate_operating_income (2)
+    survived the 92->83 migration that way.
+    """
+    import backfill_edgar as B
+    import migrate_fundamentals_schema as M
+
+    # every legacy base name must have an estimate mapping
+    legacy = set(M.COALESCE) | set(M.RENAME)
+    for name in legacy:
+        twin = "prior_estimate_" + name
+        assert twin in M.ESTIMATE_COALESCE or twin in M.ESTIMATE_RENAME, (
+            f"{twin} has no migration mapping")
+
+    # and the panel must carry no legacy estimate column
+    path = Path(__file__).parent / "fundamentals.parquet"
+    if not path.exists():
+        print("  fundamentals.parquet missing; mapping checked only")
+        return
+    cols = set(pd.read_parquet(path).columns)
+    canonical = {"prior_estimate_" + c for c in B.ESTIMATE_COLS}
+    stale = {c for c in cols
+             if c.startswith("prior_estimate_") and c not in canonical}
+    assert not stale, f"legacy prior_estimate_ columns in the panel: {sorted(stale)}"
+    print(f"  {len(legacy)} base renames have estimate twins; panel has no legacy "
+          "prior_estimate_ column ✓")
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -1147,6 +1180,7 @@ if __name__ == "__main__":
         ("Merge flush executes", test_merge_flush_executes),
         ("Negative equity emits rows", test_negative_equity_emits_rows),
         ("Financial revenue tags", test_financial_sector_revenue_tags),
+        ("No legacy prior_estimate cols", test_no_legacy_prior_estimate_columns),
         ("Period basis consistency", test_period_basis_consistency),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),

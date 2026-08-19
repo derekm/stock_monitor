@@ -133,10 +133,34 @@ PROV_RENAME = {
 }
 
 
+def _estimate_maps() -> tuple[dict, dict]:
+    """prior_estimate_* twins of COALESCE and RENAME.
+
+    backfill_edgar stores a future EDGAR quarter as prior_estimate_<col> for every
+    name in ESTIMATE_COLS, so each base rename has a prior_estimate_ counterpart.
+    Renaming only the base columns leaves the estimate twins under names no current
+    code writes or reads -- prior_estimate_net_income (5 rows),
+    prior_estimate_operating_income (2) and prior_estimate_total_revenue survived the
+    92->83 migration that way.
+    """
+    p = "prior_estimate_"
+    coalesce = {p + a: p + c for a, c in COALESCE.items()}
+    rename = {p + s: p + d for s, d in RENAME.items()}
+    # total_revenue -> revenue -> revenue_quarterly collapses to one hop here,
+    # because the intermediate name is not what the estimate twin should end on.
+    coalesce.pop(p + "total_revenue", None)
+    rename[p + "total_revenue"] = p + "revenue_quarterly"
+    return coalesce, rename
+
+
+ESTIMATE_COALESCE, ESTIMATE_RENAME = _estimate_maps()
+
+
 def plan(df: pd.DataFrame) -> dict:
     """What the migration would do to this frame, without doing it."""
     out = {"coalesce": [], "rename": [], "drop": [], "skip": []}
-    for alias, canon in list(COALESCE.items()) + list(COALESCE_TTM.items()):
+    for alias, canon in (list(COALESCE.items()) + list(COALESCE_TTM.items())
+                         + list(ESTIMATE_COALESCE.items())):
         if alias not in df.columns:
             out["skip"].append(f"{alias} (absent)")
             continue
@@ -145,7 +169,8 @@ def plan(df: pd.DataFrame) -> dict:
             continue
         fills = int((df[canon].isna() & df[alias].notna()).sum())
         out["coalesce"].append((alias, canon, fills))
-    for src, dst in list(RENAME.items()) + list(RENAME_LATE.items()):
+    for src, dst in (list(RENAME.items()) + list(RENAME_LATE.items())
+                     + list(ESTIMATE_RENAME.items())):
         if src not in df.columns:
             out["skip"].append(f"{src} (already renamed or absent)")
             continue
@@ -161,8 +186,10 @@ def plan(df: pd.DataFrame) -> dict:
 
 def migrate(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    # 1. coalesce aliases (canonical wins; alias only fills NULLs)
-    for alias, canon in COALESCE.items():
+    # 1. coalesce aliases (canonical wins; alias only fills NULLs). prior_estimate_
+    #    twins go through the same step so an estimate is not stranded under a name
+    #    no current code writes.
+    for alias, canon in list(COALESCE.items()) + list(ESTIMATE_COALESCE.items()):
         if alias in df.columns and canon in df.columns:
             df[canon] = df[canon].where(df[canon].notna(), df[alias])
             df = df.drop(columns=[alias])
@@ -180,12 +207,18 @@ def migrate(df: pd.DataFrame) -> pd.DataFrame:
     for c in DROP:
         if c in df.columns:
             df = df.drop(columns=[c])
-    # 4. explicit period basis
-    for mapping in (RENAME, RENAME_LATE):
-        ren = {s: d for s, d in mapping.items()
-               if s in df.columns and d not in df.columns}
-        if ren:
-            df = df.rename(columns=ren)
+    # 4. explicit period basis. When BOTH names exist the rename cannot just be
+    #    skipped -- that leaves live values under the legacy name -- so merge the
+    #    source into the target and drop it.
+    for mapping in (RENAME, RENAME_LATE, ESTIMATE_RENAME):
+        for src, dst in mapping.items():
+            if src not in df.columns:
+                continue
+            if dst in df.columns:
+                df[dst] = df[dst].where(df[dst].notna(), df[src])
+                df = df.drop(columns=[src])
+            else:
+                df = df.rename(columns={src: dst})
     return df
 
 
