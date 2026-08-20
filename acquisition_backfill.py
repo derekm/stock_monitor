@@ -316,7 +316,7 @@ def backfill_target_fundamentals(ticker: str) -> bool:
     try:
         # Use the canonical retrieval from backfill_edgar
         from backfill_edgar import fetch_ticker, build_rows
-        from analytics_common import load_adj_prices_pandas
+        from analytics_common import load_adj_prices_pandas, atomic_write_parquet
         
         # Fetch from SEC
         frames = fetch_ticker(ticker, cik)
@@ -343,7 +343,7 @@ def backfill_target_fundamentals(ticker: str) -> bool:
             else:
                 combined = new_df
             
-            combined.to_parquet(FUND, index=False)
+            atomic_write_parquet(combined, FUND)
             print(f"  Backfilled {len(rows)} fundamental rows for {ticker}")
             return True
         
@@ -397,7 +397,7 @@ def backfill_target_fundamentals_yfinance(ticker: str) -> bool:
                     else:
                         combined = new_df
                     
-                    combined.to_parquet(FUND, index=False)
+                    atomic_write_parquet(combined, FUND)
                     print(f"  Backfilled {len(rows)} fundamental rows from yfinance for {ticker}")
                     return True
         except Exception:

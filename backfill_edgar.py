@@ -18,6 +18,8 @@ import numpy as np
 import pyarrow.parquet as pq
 import requests
 
+from analytics_common import atomic_write_parquet
+
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
@@ -318,33 +320,13 @@ def merge_into_fundamentals(new_rows: list[dict], force: bool = False) -> int:
 
 
 def _atomic_write_parquet(df: pd.DataFrame, path: Path) -> None:
-    """Write via temp file + os.replace so an interrupt cannot truncate `path`.
+    """Delegate to the shared writer in analytics_common.
 
-    A direct df.to_parquet(path) leaves a partially-written file if the process
-    dies mid-write. That is how a 40-ticker run once took fundamentals.parquet
-    from 33.5 MB to 4.6 MB and required restoring from a dated backup. os.replace
-    is atomic on the same filesystem, so the original file survives any crash.
-
-    A sanity floor guards the other half of that incident: refuse to shrink the
-    panel by more than 20% in one write, since every legitimate merge here is
-    additive.
+    Kept as a thin wrapper so existing call sites in this module keep working;
+    the implementation lives in one place so every table gets the same
+    crash-safety and shrink guard.
     """
-    if path.exists():
-        try:
-            prev_rows = pq.ParquetFile(path).metadata.num_rows
-            if prev_rows > 100 and len(df) < prev_rows * 0.8:
-                raise RuntimeError(
-                    f"refusing to write {len(df):,} rows over {prev_rows:,} existing "
-                    f"({len(df)/prev_rows:.1%}); merges here are additive, so this "
-                    "indicates dropped data. Inspect before overwriting."
-                )
-        except RuntimeError:
-            raise
-        except Exception:
-            pass  # unreadable metadata: fall through to the normal write
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    df.to_parquet(tmp, index=False)
-    os.replace(tmp, path)
+    atomic_write_parquet(df, path)
 
 
 def _backup_fundamentals() -> Path:
@@ -369,7 +351,7 @@ def purge_test_tickers() -> int:
         return 0
     _backup_fundamentals()
     out = f[~mask].copy()
-    out.to_parquet(FUND, index=False)
+    _atomic_write_parquet(out, FUND)
     print(f"  {len(f)} -> {len(out)} rows")
     return n
 
@@ -416,7 +398,7 @@ def migrate_future_estimates() -> int:
     for col in actual.columns:
         if pd.api.types.is_numeric_dtype(actual[col]):
             actual[col] = pd.to_numeric(actual[col], errors="coerce").astype("float64")
-    actual.to_parquet(FUND, index=False)
+    _atomic_write_parquet(actual, FUND)
     print(f"  {len(f)} -> {len(actual)} rows; {moved} estimate values preserved")
     return moved
 

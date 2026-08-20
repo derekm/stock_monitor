@@ -17,6 +17,7 @@ Strategy:
 
 import json
 import pandas as pd
+from analytics_common import atomic_write_parquet
 import numpy as np
 from pathlib import Path
 import yfinance as yf
@@ -486,11 +487,11 @@ def main():
         
         # Save progress every 5 batches
         if (i // BATCH_SIZE) % 5 == 0:
-            existing_fund.to_parquet(FUNDAMENTALS_FILE, index=False)
+            atomic_write_parquet(existing_fund, FUNDAMENTALS_FILE)
             print(f"  Saved progress to {FUNDAMENTALS_FILE}")
     
     # Final save
-    existing_fund.to_parquet(FUNDAMENTALS_FILE, index=False)
+    atomic_write_parquet(existing_fund, FUNDAMENTALS_FILE)
     print(f"\nFundamentals saved: {len(existing_fund):,} rows")
     
     # ===== PRICES =====
@@ -566,7 +567,7 @@ def main():
             print(f"  Derived BRK-A prices from BRK-B: {len(brk_a_prices)} rows")
     
     # Final save
-    existing_fund.to_parquet(FUNDAMENTALS_FILE, index=False)
+    atomic_write_parquet(existing_fund, FUNDAMENTALS_FILE)
     existing_prices.to_parquet(PRICES_FILE, index=False)
     
     print(f"\n{'='*60}")

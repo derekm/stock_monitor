@@ -22,6 +22,45 @@ except ImportError:
 
 DATA_DIR = Path(__file__).resolve().parent
 
+
+def atomic_write_parquet(df, path, shrink_floor: float = 0.8) -> None:
+    """Write a parquet via temp file + os.replace, refusing a large shrink.
+
+    A direct df.to_parquet(path) leaves a CORRUPT file if the process dies
+    mid-write: the bytes land but the footer never does, and every reader then
+    fails with "ColumnOrder union has no variant set" or a thrift deserialize
+    error. Restoring from a dated backup is the only recovery.
+
+    os.replace is atomic on one filesystem, so `path` either holds the old file
+    or the complete new one -- never a half-written body. The shrink floor is the
+    second guard: a write that drops more than 1 - shrink_floor of the existing
+    rows is refused, because merges into these panels are additive.
+
+    Use this for every write to a shared table (fundamentals.parquet,
+    daily_prices.parquet, and any other file a second process may read).
+    """
+    import os
+
+    import pyarrow.parquet as _pq
+
+    path = Path(path)
+    if path.exists() and shrink_floor:
+        try:
+            prev_rows = _pq.ParquetFile(path).metadata.num_rows
+            if prev_rows > 100 and len(df) < prev_rows * shrink_floor:
+                raise RuntimeError(
+                    f"refusing to write {len(df):,} rows over {prev_rows:,} "
+                    f"existing ({len(df)/prev_rows:.1%}); writes here are additive, "
+                    "so this indicates dropped data. Inspect before overwriting."
+                )
+        except RuntimeError:
+            raise
+        except Exception:
+            pass  # unreadable metadata: fall through to the normal write
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)
+
 # ── Canonical dual-pass / INCLUDE_CORE thresholds ───────────────────────────
 # Single source of truth for the quality/value dual-pass gates. Consumers:
 # preferred_metrics.py, fundamentals_history.py, threshold_logic.py,

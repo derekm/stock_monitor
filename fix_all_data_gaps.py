@@ -8,6 +8,7 @@ Comprehensive data gap fix for fundamentals.parquet
 """
 
 import pandas as pd
+from analytics_common import atomic_write_parquet
 import numpy as np
 from pathlib import Path
 
@@ -205,7 +206,7 @@ fund = fund.sort_values(['ticker', 'as_of_date']).drop_duplicates(
 
 # Save
 print("\nSaving...")
-fund.to_parquet(FUND_PATH, index=False)
+atomic_write_parquet(fund, FUND_PATH)
 print(f"Saved: {len(fund)} rows, {fund['ticker'].nunique()} tickers")
 
 # ============================================================

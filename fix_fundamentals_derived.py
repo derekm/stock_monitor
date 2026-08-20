@@ -6,6 +6,7 @@ debt_to_equity, interest_coverage, ev_ebitda, pb_ratio, market_cap, shares_outst
 """
 
 import pandas as pd
+from analytics_common import atomic_write_parquet
 import numpy as np
 from pathlib import Path
 
@@ -158,7 +159,7 @@ fund = fund.drop(columns=['price_at_date'])
 
 # Save
 print("\nSaving updated fundamentals...")
-fund.to_parquet(FUND_PATH, index=False)
+atomic_write_parquet(fund, FUND_PATH)
 print(f"Saved: {len(fund)} rows")
 
 # Verify improvements

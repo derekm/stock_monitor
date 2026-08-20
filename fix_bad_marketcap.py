@@ -16,6 +16,7 @@ This module also exports `bad_marketcap_mask(df)` so writers
 ingestion time.
 """
 import pandas as pd
+from analytics_common import atomic_write_parquet
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent
@@ -45,7 +46,7 @@ def main() -> None:
     print(bad.to_string(index=False))
 
     df.loc[mask, ["market_cap", "market_cap_b"]] = None
-    df.to_parquet(FUND, index=False)
+    atomic_write_parquet(df, FUND)
 
     # verify
     chk = pd.read_parquet(FUND)

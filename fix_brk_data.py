@@ -4,6 +4,7 @@ Fix BRK-A/BRK-B data gaps and ensure consistent data
 """
 
 import pandas as pd
+from analytics_common import atomic_write_parquet
 import numpy as np
 from pathlib import Path
 
@@ -153,7 +154,7 @@ fund = fund.drop(columns=['price_at_date'])
 
 # Save
 print("\nSaving...")
-fund.to_parquet(FUND_PATH, index=False)
+atomic_write_parquet(fund, FUND_PATH)
 
 # Verify
 brk_b_check = fund[fund['ticker'] == 'BRK-B'].sort_values('as_of_date')
