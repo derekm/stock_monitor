@@ -23,7 +23,8 @@ except ImportError:
 DATA_DIR = Path(__file__).resolve().parent
 
 
-def atomic_write_parquet(df, path, shrink_floor: float = 0.8) -> None:
+def atomic_write_parquet(df, path, shrink_floor: float = 0.8,
+                         attempts: int = 40, backoff: float = 0.25) -> None:
     """Write a parquet via temp file + os.replace, refusing a large shrink.
 
     A direct df.to_parquet(path) leaves a CORRUPT file if the process dies
@@ -31,15 +32,25 @@ def atomic_write_parquet(df, path, shrink_floor: float = 0.8) -> None:
     fails with "ColumnOrder union has no variant set" or a thrift deserialize
     error. Restoring from a dated backup is the only recovery.
 
-    os.replace is atomic on one filesystem, so `path` either holds the old file
-    or the complete new one -- never a half-written body. The shrink floor is the
-    second guard: a write that drops more than 1 - shrink_floor of the existing
-    rows is refused, because merges into these panels are additive.
+    WINDOWS SHARING: os.replace is atomic on POSIX even against open readers, but
+    on Windows it raises PermissionError (WinError 5 / WinError 32) whenever ANY
+    process has the destination open -- measured 37 failures in 40 writes with a
+    single concurrent reader. A caller that swallows that error and "retries at
+    the next flush" silently drops every batch in between, and a caller that
+    falls back to writing in place reintroduces the torn-footer corruption this
+    function exists to prevent. So the replace is retried with backoff and, if it
+    still cannot land, the error is RAISED: losing a batch loudly beats
+    corrupting the panel quietly.
+
+    The shrink floor is the second guard: a write that drops more than
+    1 - shrink_floor of the existing rows is refused, because writes into these
+    panels are additive.
 
     Use this for every write to a shared table (fundamentals.parquet,
     daily_prices.parquet, and any other file a second process may read).
     """
     import os
+    import time
 
     import pyarrow.parquet as _pq
 
@@ -59,7 +70,23 @@ def atomic_write_parquet(df, path, shrink_floor: float = 0.8) -> None:
             pass  # unreadable metadata: fall through to the normal write
     tmp = path.with_suffix(path.suffix + ".tmp")
     df.to_parquet(tmp, index=False)
-    os.replace(tmp, path)
+    last = None
+    for i in range(max(1, attempts)):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as exc:  # WinError 5/32: a reader holds the file
+            last = exc
+            time.sleep(backoff * (i + 1))
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    raise OSError(
+        f"could not replace {path.name} after {attempts} attempts over "
+        f"~{backoff * attempts * (attempts + 1) / 2:.0f}s: another process holds it "
+        f"open. Batch NOT written (the panel is intact). Original error: {last}"
+    )
 
 # ── Canonical dual-pass / INCLUDE_CORE thresholds ───────────────────────────
 # Single source of truth for the quality/value dual-pass gates. Consumers:
