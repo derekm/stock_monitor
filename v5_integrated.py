@@ -334,6 +334,7 @@ class V5Pipeline:
             max_depth=self.config.lgb_max_depth,
             early_stopping_rounds=self.config.lgb_early_stopping,
             num_boost_round=self.config.lgb_num_boost_round,
+            num_threads=self.config.lgb_num_threads,
             use_gpu=self.config.use_gpu,
         )
         
@@ -503,6 +504,14 @@ class V5Pipeline:
             sized_for_bt, returns_wide,
             sectors=sectors, adv=adv, borrow_bps_annual=borrow,
             config=bt_config,
+            # NOT passing weights_df. It looks like free reuse -- STEP 3 just built
+            # weights for these exact dates in parallel -- but the two paths produce
+            # DIFFERENT weights: _build_one_date runs build_capped_portfolio, which
+            # applies per-name / ADV-participation / borrow caps, while the backtest
+            # uses uncapped sector-neutral HRP. Measured on 60 dates, reusing them
+            # moved turnover by up to 1.31 and net_ret by ~1e-2, and saved only 11%
+            # (1.40s -> 1.24s) because estimate_betas is already hoisted and the
+            # cov/corr memo absorbs the repeat work. Wrong numbers for no speed.
         )
         diag = {}
         

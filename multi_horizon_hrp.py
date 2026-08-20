@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Tuple
@@ -330,7 +331,15 @@ def expanding_multih_ranker(
     panel = panel.copy()
     panel["date"] = pd.to_datetime(panel["date"])
     dates = np.array(sorted(panel["date"].unique()))
-    
+
+    # NOTE: isin() masks look wasteful here (they scan the panel and copy per window),
+    # and positional iloc views over a date-sorted panel look like the obvious fix.
+    # Measured, that is 6x SLOWER: 103 windows took 34.8s with masks vs 211.3s with
+    # views. A mask produces a freshly compacted block, so the trainer's
+    # df[feature_cols].to_numpy(float32) is a contiguous read; an iloc row-slice of a
+    # 2D block is strided, and the dtype conversion then gathers row by row. The copy
+    # is cheaper than the strided reads it avoids. Do not "optimise" this back.
+
     oos_parts = []
     window_stats = []
     last_bundle = None
@@ -476,6 +485,14 @@ universe. Above it the GPU wins by an order of magnitude, which is what makes th
 """
 
 
+_COV_CACHE: "OrderedDict[tuple, Tuple[np.ndarray, np.ndarray]]" = OrderedDict()
+_COV_CACHE_SIZE = 64
+_COV_CACHE_MAX_N = 2000
+"""Bound the cov/corr memo. 64 entries of a 497x497 float64 pair is ~250MB worst
+case; above _COV_CACHE_MAX_N names the matrices are too large to be worth holding
+(a 10k x 10k pair is 1.6GB) so those bypass the cache entirely."""
+
+
 def _cov_corr(rets: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
     """Covariance and correlation of a wide return frame, as raw numpy.
 
@@ -489,6 +506,12 @@ def _cov_corr(rets: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
     indexing cost the callers were just freed from. Column order is preserved,
     so caller-side `rets.columns` remains the label mapping.
 
+    Results are memoised on (id-free) content keys: the same trailing window gets
+    clustered repeatedly within a run -- once per sleeve, and again by the book
+    backtest for the same date -- so the identical matmul was being redone several
+    times. The cache is bounded and keyed on shape + column identity + the raw
+    bytes of the block, so a different window can never collide with a cached one.
+
     float64 throughout on CPU. The GPU path computes in float32 (the MX550 has no
     usable f64 compute for this, and DirectML lacks f64 sqrt entirely) and casts
     back, which is fine for a correlation used only to build a clustering tree.
@@ -499,6 +522,26 @@ def _cov_corr(rets: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
         z = np.zeros((n, n), dtype=np.float64)
         return z, z
 
+    key = None
+    if n <= _COV_CACHE_MAX_N:
+        Xc_bytes = np.ascontiguousarray(X)
+        key = (T, n, hash(tuple(rets.columns)), Xc_bytes.tobytes())
+        hit = _COV_CACHE.get(key)
+        if hit is not None:
+            _COV_CACHE.move_to_end(key)
+            return hit
+
+    result = _cov_corr_compute(X, T, n)
+
+    if key is not None:
+        _COV_CACHE[key] = result
+        if len(_COV_CACHE) > _COV_CACHE_SIZE:
+            _COV_CACHE.popitem(last=False)
+    return result
+
+
+def _cov_corr_compute(X: np.ndarray, T: int, n: int) -> Tuple[np.ndarray, np.ndarray]:
+    """The actual covariance/correlation math. See _cov_corr for rationale."""
     if n >= _CUDA_MIN_NAMES:
         try:
             import torch

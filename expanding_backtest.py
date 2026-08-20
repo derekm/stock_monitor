@@ -225,6 +225,7 @@ def build_book_backtest(
     adv: Optional[pd.Series] = None,
     borrow_bps_annual: Optional[pd.Series] = None,
     config: Optional[BacktestConfig] = None,
+    precomputed_weights: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
     Run full book backtest with HRP portfolio + costs.
@@ -236,6 +237,12 @@ def build_book_backtest(
         adv: Average daily volume in $
         borrow_bps_annual: Annual borrow cost in bps
         config: BacktestConfig
+        precomputed_weights: Optional ticker x date weight matrix. When supplied,
+            the per-date HRP build is SKIPPED and these columns are used directly.
+            The caller (v5_integrated STEP 3) already builds exactly these weights
+            for exactly these dates, in parallel; recomputing the same HRP here was
+            duplicated work and the single most expensive part of this function.
+            Dates missing from the matrix fall back to building weights inline.
         
     Returns:
         DataFrame with daily book returns, costs, weights
@@ -262,6 +269,18 @@ def build_book_backtest(
     # v5_integrated's weight loop, where the dates are genuinely independent.
     betas_all = estimate_betas(returns_wide)
 
+    # Precomputed weights are keyed by the same date strings STEP 3 stamped on each
+    # column (w_final.name = str(date)). Normalise to Timestamps once so the per-date
+    # lookup is a dict hit rather than a string-format guess inside the loop.
+    pre_cols = {}
+    if precomputed_weights is not None and len(precomputed_weights.columns):
+        for c in precomputed_weights.columns:
+            try:
+                pre_cols[pd.to_datetime(c)] = c
+            except (ValueError, TypeError):
+                continue
+    n_pre = n_built = 0
+
     for dt, g in sized.groupby("date"):
         dt = pd.to_datetime(dt)
         
@@ -274,7 +293,15 @@ def build_book_backtest(
         day_sizes = g.set_index("ticker")["size_raw"].astype(float)
         
         # Build target weights using sector-neutral HRP
-        if config.sector_neutral and sectors is not None:
+        if dt in pre_cols:
+            # Already built (in parallel) by the caller: reuse, do not recompute.
+            w_new = pd.to_numeric(
+                precomputed_weights[pre_cols[dt]], errors="coerce"
+            ).dropna()
+            w_new = w_new[w_new != 0.0]
+            n_pre += 1
+        elif config.sector_neutral and sectors is not None:
+            n_built += 1
             sec = sectors.reindex(day_sizes.index)
             from portfolio_construction import SectorNeutralConfig
             sn_config = SectorNeutralConfig(
@@ -364,6 +391,10 @@ def build_book_backtest(
         
         w_prev = w_new
     
+    if n_pre or n_built:
+        print(f"  book backtest: {n_pre} dates reused precomputed weights, "
+              f"{n_built} rebuilt")
+
     return pd.DataFrame(rows).set_index("date").sort_index()
 
 
