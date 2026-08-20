@@ -249,7 +249,19 @@ def build_book_backtest(
     
     w_prev = pd.Series(dtype=float)
     rows = []
-    
+
+    # Betas are hoisted out of the loop. build_sector_neutral_hrp_weights recomputes
+    # them from scratch when betas is None, and this loop called it once per date --
+    # ~500 names re-estimated on ~1,900 dates. They are a slow-moving 60-day
+    # regression, so a single estimate over the full history is the right granularity
+    # here; re-estimating per date was cost without signal.
+    #
+    # NOTE this loop CANNOT be parallelised: w_prev threads through every iteration
+    # (turnover and cost depend on the previous day's book), so date N+1 needs date
+    # N's result. That is why the fix is vectorisation, not a process pool -- unlike
+    # v5_integrated's weight loop, where the dates are genuinely independent.
+    betas_all = estimate_betas(returns_wide)
+
     for dt, g in sized.groupby("date"):
         dt = pd.to_datetime(dt)
         
@@ -271,7 +283,8 @@ def build_book_backtest(
                 gross_target=config.gross_target,
             )
             w_new = build_sector_neutral_hrp_weights(
-                day_sizes, sec, hist, config=sn_config
+                day_sizes, sec, hist, config=sn_config,
+                betas=betas_all.reindex(day_sizes.index).fillna(1.0),
             )
         else:
             # Simple HRP without sector neutralization

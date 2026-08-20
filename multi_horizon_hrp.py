@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Tuple
 
@@ -210,13 +211,16 @@ def _fit_lambdarank(
         "lambdarank_truncation_level": config.lambdarank_truncation_level,
         "label_gain": list(range(config.n_bins)),
         "verbose": config.verbose,
-        # Bound the thread pool. Measured on this box (12 logical cores, 200 groups
-        # x 100 rows, 50 rounds): 1 thread 0.25s, 6 threads 0.10s, 12 threads 0.15s
-        # -- past ~half the cores the sync overhead outweighs the extra workers, and
-        # asking for all of them actively hurts. It matters more when the ranker runs
-        # beside the process pool in STEP 3, where unbounded threads would fight the
-        # date workers for the same cores.
-        "num_threads": config.num_threads or max(1, (os.cpu_count() or 4) // 2),
+        # Use every core by default. An earlier default of cpu_count()//2 came from a
+        # toy benchmark (200 groups x 100 rows) where 6 threads beat 12; at the real
+        # ranker shape the ordering INVERTS. Measured, 735,000 rows / 1,500 groups /
+        # 200 rounds on 12 logical cores:
+        #     4 threads 28.41s | 6 threads 22.63s | 8 threads 21.29s
+        #    10 threads 22.18s | 12 threads 18.49s  <- fastest
+        # Small-data thread benchmarks do not transfer: sync overhead dominates when
+        # there is little work per thread, and that is not this workload.
+        "num_threads": config.num_threads or (os.cpu_count() or 4),
+        "force_row_wise": True,  # skips LightGBM's own row/col-wise probe overhead
     }
     if config.use_gpu:
         # NOTE: this requires a LightGBM built with -DUSE_GPU=1. The wheel installed
@@ -566,20 +570,46 @@ def estimate_betas(
     lookback: int = 60,
     market_col: Optional[str] = None,
 ) -> pd.Series:
-    """Rolling beta vs market (or equal-weight portfolio)."""
+    """Rolling beta vs market (or equal-weight portfolio), vectorised.
+
+    One closed-form OLS slope for every name at once: beta_i = cov(y_i, m)/var(m).
+    The previous version looped over columns, pulling each one out of the DataFrame
+    (returns_wide[col] -> _get_item -> _box_col_values -> arrow __getitem__) and
+    fitting a separate sklearn LinearRegression per name. py-spy caught the book
+    backtest sitting in exactly that loop: with ~500 names re-fit on every one of
+    ~1,900 dates it was the dominant cost of the whole backtest.
+
+    NaN handling matches the loop it replaces: a name needs >= 20 overlapping
+    finite observations with the market, otherwise its beta is 1.0. Names with zero
+    market variance also fall back to 1.0.
+    """
     rw = returns_wide.dropna(how="all").iloc[-lookback:]
+    if rw.shape[1] == 0:
+        return pd.Series(dtype=float)
     mkt = rw[market_col] if market_col and market_col in rw.columns else rw.mean(axis=1)
-    betas = {}
-    x = mkt.values.reshape(-1, 1)
-    for c in rw.columns:
-        y = rw[c].values
-        mask = np.isfinite(y) & np.isfinite(x.ravel())
-        if mask.sum() < 20:
-            betas[c] = 1.0
-            continue
-        lr = LinearRegression().fit(x[mask], y[mask])
-        betas[c] = float(lr.coef_[0])
-    return pd.Series(betas)
+
+    Y = rw.to_numpy(dtype=np.float64, copy=False)
+    m = np.asarray(mkt, dtype=np.float64)
+
+    valid = np.isfinite(Y) & np.isfinite(m)[:, None]
+    n_obs = valid.sum(axis=0)
+
+    # Per-column means over the valid overlap only (zeros where invalid).
+    Yz = np.where(valid, Y, 0.0)
+    Mz = np.where(valid, m[:, None], 0.0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cnt = np.maximum(n_obs, 1)
+        y_bar = Yz.sum(axis=0) / cnt
+        m_bar = Mz.sum(axis=0) / cnt
+        yc = np.where(valid, Y - y_bar, 0.0)
+        mc = np.where(valid, m[:, None] - m_bar, 0.0)
+        cov = (yc * mc).sum(axis=0)
+        var = (mc * mc).sum(axis=0)
+        beta = np.divide(cov, var, out=np.ones_like(cov), where=var > 0)
+
+    beta = np.where(n_obs >= 20, beta, 1.0)
+    beta = np.where(np.isfinite(beta), beta, 1.0)
+    return pd.Series(beta, index=rw.columns)
 
 
 def sector_neutralize_scores(
@@ -732,6 +762,15 @@ def build_sector_neutral_hrp_weights(
         return out if side == "long" else -out
     
     longs, shorts = s[s > 0], s[s < 0]
+
+    # The two sleeves ARE independent (separate correlation matrices, no shared state
+    # until the assignments below), so this looks like the one parallelisable spot
+    # inside a date. Measured, it is not: a ThreadPoolExecutor(2) over the two sleeves
+    # ran 0.76x -- SLOWER on every date tried (33->40ms, 31->40ms, 52->75ms).
+    # After the numpy/positional work each sleeve is only ~15ms, and thread startup
+    # plus the contended BLAS pool cost more than the overlap saves. Parallelism at
+    # this granularity is below the useful threshold; the win is at the date level
+    # (v5_integrated's process pool, 4.15x). Left serial deliberately.
     wl, ws = sleeve(longs, "long"), sleeve(shorts, "short")
     
     if len(wl):
