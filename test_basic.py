@@ -1117,6 +1117,40 @@ def test_no_legacy_prior_estimate_columns():
           "prior_estimate_ column ✓")
 
 
+def test_no_duplicated_hrp_implementations():
+    """portfolio_construction must IMPORT the HRP stack, not redefine it.
+
+    These nine names existed as independent copies in portfolio_construction and
+    multi_horizon_hrp. They had already diverged: the portfolio_construction copy
+    used label-based cov.loc[items, items] and a pandas-Series _quasi_diag, making
+    it ~8x slower while returning the same numbers. A fix applied to one copy
+    silently missed the other, which is exactly how the V5 hot path stayed slow
+    after _cluster_var was optimised. Identity, not equality, is the assertion:
+    the objects must be the same object.
+    """
+    import portfolio_construction as P
+    import multi_horizon_hrp as M
+
+    shared = [
+        "_correl_dist", "_quasi_diag", "_cluster_var", "hrp_weights_from_returns",
+        "estimate_betas", "SectorNeutralConfig", "sector_neutralize_scores",
+        "project_weights_factor_neutral", "build_sector_neutral_hrp_weights",
+    ]
+    for name in shared:
+        assert getattr(P, name) is getattr(M, name), (
+            f"{name} has re-forked: portfolio_construction defines its own copy "
+            "instead of importing from multi_horizon_hrp"
+        )
+
+    # And the canonical _cluster_var must be positional, not label-based: a
+    # DataFrame argument would silently reintroduce the pandas-indexing cost.
+    import numpy as np
+    cov = np.array([[4.0, 1.0, 0.0], [1.0, 9.0, 0.0], [0.0, 0.0, 16.0]])
+    v = M._cluster_var(cov, np.array([0, 2]))
+    assert np.isfinite(v) and v > 0, f"_cluster_var returned {v}"
+    print("  HRP stack is shared, not duplicated; _cluster_var is positional \u2713")
+
+
 def test_feature_store_returns_roundtrip():
     """read_returns_wide() must return every ticker when none are requested.
 
@@ -1213,6 +1247,7 @@ if __name__ == "__main__":
         ("Negative equity emits rows", test_negative_equity_emits_rows),
         ("Financial revenue tags", test_financial_sector_revenue_tags),
         ("No legacy prior_estimate cols", test_no_legacy_prior_estimate_columns),
+        ("No duplicated HRP impls", test_no_duplicated_hrp_implementations),
         ("Feature store returns roundtrip", test_feature_store_returns_roundtrip),
         ("Period basis consistency", test_period_basis_consistency),
         ("Centralized device logic", test_no_duplicate_device_logic),

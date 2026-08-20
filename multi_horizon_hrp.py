@@ -399,26 +399,46 @@ def _correl_dist(corr: pd.DataFrame) -> pd.DataFrame:
 
 
 def _quasi_diag(link: np.ndarray) -> List:
-    """Quasi-diagonalization of linkage matrix."""
+    """Quasi-diagonalization of a linkage matrix, returning leaf order.
+
+    Iterative stack walk over the linkage tree instead of the classic
+    pandas-Series version, which rebuilt and re-sorted an index on every pass and
+    showed up as the largest remaining cost in this function after _cluster_var was
+    made positional. Same output: leaves left-to-right in cluster order.
+    """
     link = link.astype(int)
-    sort_ix = pd.Series([link[-1, 0], link[-1, 1]])
-    num_items = link[-1, 3]
-    while sort_ix.max() >= num_items:
-        sort_ix.index = range(0, sort_ix.shape[0] * 2, 2)
-        df0 = sort_ix[sort_ix >= num_items]
-        i, j = df0.index, df0.values - num_items
-        sort_ix[i] = link[j, 0]
-        sort_ix = pd.concat([sort_ix, pd.Series(link[j, 1], index=i + 1)]).sort_index()
-        sort_ix.index = range(sort_ix.shape[0])
-    return sort_ix.tolist()
+    n_items = int(link[-1, 3])
+    n_leaves = link.shape[0] + 1
+    order: List[int] = []
+    stack = [2 * link.shape[0]]  # root node id in scipy's numbering
+    while stack:
+        node = stack.pop()
+        if node < n_leaves:
+            order.append(node)
+            continue
+        row = link[node - n_leaves]
+        # push right then left so the left subtree is emitted first
+        stack.append(int(row[1]))
+        stack.append(int(row[0]))
+    return order[:n_items]
 
 
-def _cluster_var(cov: pd.DataFrame, items: List) -> float:
-    """Cluster variance for HRP."""
-    sub = cov.loc[items, items]
-    w = 1.0 / np.diag(sub.values)
-    w = w / w.sum()
-    return float(w @ sub.values @ w)
+def _cluster_var(cov: np.ndarray, items: np.ndarray) -> float:
+    """Inverse-variance cluster variance for HRP, positional.
+
+    Takes a raw numpy covariance matrix and integer positions, NOT a labelled
+    DataFrame. The label form (cov.loc[items, items]) made this the pipeline's
+    bottleneck: it is the innermost step of the recursive bisection below, so it
+    runs for every cluster split, on every date, for every sector sleeve, and each
+    call paid full pandas index alignment plus dtype inference. A py-spy dump of a
+    stalled run showed the entire stack under this line was pandas machinery
+    (__getitem__ -> _getitem_lowerdim -> get_indexer -> is_numeric_dtype ->
+    pandas_dtype) rather than arithmetic. np.ix_ does the same slice positionally.
+    """
+    sub = cov[np.ix_(items, items)]
+    w = 1.0 / np.diag(sub)
+    w /= w.sum()
+    return float(w @ sub @ w)
 
 
 def hrp_weights_from_returns(returns: pd.DataFrame) -> pd.Series:
@@ -431,21 +451,31 @@ def hrp_weights_from_returns(returns: pd.DataFrame) -> pd.Series:
     dist = _correl_dist(corr)
     link = sch.linkage(ssd.squareform(dist.values, checks=False), method="single")
     order = [corr.index[i] for i in _quasi_diag(link)]
-    w = pd.Series(1.0, index=order)
-    clusters = [order]
-    
+
+    # Bisect over integer POSITIONS into cov_v, so the hot loop never touches a
+    # pandas index. pos maps each ticker to its column in the covariance matrix;
+    # weights accumulate in a plain float array and only become a Series at the end.
+    cov_v = cov.to_numpy(dtype=float, copy=False)
+    pos = {t: i for i, t in enumerate(cov.index)}
+    order_ix = np.fromiter((pos[t] for t in order), dtype=np.intp, count=len(order))
+    w_v = np.ones(len(cov_v), dtype=float)
+
+    clusters = [order_ix]
     while clusters:
         nxt = []
         for cl in clusters:
             if len(cl) <= 1:
                 continue
-            c1, c2 = cl[:len(cl)//2], cl[len(cl)//2:]
-            v1, v2 = _cluster_var(cov, c1), _cluster_var(cov, c2)
+            half = len(cl) // 2
+            c1, c2 = cl[:half], cl[half:]
+            v1, v2 = _cluster_var(cov_v, c1), _cluster_var(cov_v, c2)
             a = 1.0 - v1 / (v1 + v2 + 1e-12)
-            w[c1] *= a
-            w[c2] *= (1.0 - a)
+            w_v[c1] *= a
+            w_v[c2] *= (1.0 - a)
             nxt += [c1, c2]
         clusters = nxt
+
+    w = pd.Series(w_v[order_ix], index=order)
     
     return (w / w.sum()).reindex(returns.columns).fillna(0.0)
 
