@@ -216,6 +216,8 @@ class BacktestConfig:
     cost: Optional[CostModel] = None
     sector_neutral: bool = True
     conf_blend: float = 0.3         # HRP/confidence blend
+    rebalance_every: int = 1        # Trading days between rebalances (1 = daily)
+    drift_band: float = 0.0         # No-trade band; 0 disables
 
 
 def build_book_backtest(
@@ -280,8 +282,11 @@ def build_book_backtest(
             except (ValueError, TypeError):
                 continue
     n_pre = n_built = 0
+    bar_i = -1
+    w_held = None
 
     for dt, g in sized.groupby("date"):
+        bar_i += 1
         dt = pd.to_datetime(dt)
         
         # Trailing returns strictly before dt (no lookahead)
@@ -292,8 +297,14 @@ def build_book_backtest(
         
         day_sizes = g.set_index("ticker")["size_raw"].astype(float)
         
-        # Build target weights using sector-neutral HRP
-        if dt in pre_cols:
+        # Build target weights using sector-neutral HRP.
+        # On a non-rebalance day the target is never used (the held book is carried
+        # forward below), so skip the whole HRP build -- with rebalance_every=21 that
+        # removes ~95% of the expensive work in this loop.
+        skip_build = (bar_i % max(1, config.rebalance_every)) != 0
+        if skip_build and w_held is not None:
+            w_new = w_held
+        elif dt in pre_cols:
             # Already built (in parallel) by the caller: reuse, do not recompute.
             w_new = pd.to_numeric(
                 precomputed_weights[pre_cols[dt]], errors="coerce"
@@ -345,7 +356,35 @@ def build_book_backtest(
         
         if w_prev.empty:
             w_prev = pd.Series(0.0, index=w_new.index)
-        
+
+        # Holding-period control. The target weights above are recomputed every day,
+        # but ACTING on them every day is what produced 105% daily turnover and
+        # 15.3%/yr of cost against 1.4%/yr of gross alpha. Two independent brakes:
+        #
+        #   rebalance_every: only trade on every Nth day. On the other days the book
+        #     is HELD -- weights drift with realised returns rather than being reset,
+        #     so drift is what a real held portfolio experiences, and turnover on
+        #     those days is zero.
+        #   drift_band: even on a rebalance day, only trade names whose target has
+        #     moved more than this much in absolute weight. Small target changes are
+        #     mostly estimation noise and are not worth the spread.
+        #
+        # The signal's primary horizon is 21 days (see horizon_weights), so daily
+        # rebalancing was paying a daily cost to chase a monthly forecast.
+        is_reb_day = (bar_i % max(1, config.rebalance_every)) == 0
+        if not is_reb_day:
+            w_target = w_held if w_held is not None else w_prev
+        else:
+            w_target = w_new
+            if config.drift_band > 0 and not w_prev.empty:
+                idx = w_target.index.union(w_prev.index)
+                tgt = w_target.reindex(idx).fillna(0.0)
+                prv = w_prev.reindex(idx).fillna(0.0)
+                hold = (tgt - prv).abs() < config.drift_band
+                tgt[hold] = prv[hold]
+                w_target = tgt
+        w_new = w_target
+
         # Calculate costs
         sigmas = estimate_sigmas(hist)
         reb_cost, cost_diag = calculate_total_costs(
@@ -368,9 +407,20 @@ def build_book_backtest(
         gross_ret = float((w_new.reindex(common).fillna(0.0) * nxt.reindex(common)).sum())
         net_ret = gross_ret - reb_cost
         
-        # Beta exposure
-        betas = estimate_betas(hist)
-        book_beta = float((w_new.reindex(betas.index).fillna(0) * betas).sum())
+        # Beta exposure (betas_all is hoisted; estimate_betas(hist) here re-fit every
+        # name on every date for a number that barely moves)
+        book_beta = float((w_new.reindex(betas_all.index).fillna(0) * betas_all).sum())
+
+        # Carry the book forward with realised returns. A held position's weight
+        # changes as its price moves, so the next day starts from the DRIFTED book,
+        # not the same numbers. Without this, "holding" would silently re-normalise
+        # to the original targets each day and understate both drift and the
+        # turnover a real rebalance has to pay to get back on target.
+        w_drift = w_new.reindex(common).fillna(0.0) * (1.0 + nxt.reindex(common).fillna(0.0))
+        g_abs = w_drift.abs().sum()
+        if g_abs > 0:
+            w_drift = w_drift * (config.gross_target / g_abs)
+        w_held = w_drift
         
         rows.append({
             "date": dt,

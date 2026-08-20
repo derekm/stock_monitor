@@ -124,12 +124,46 @@ def confidence_from_set(pred_set: set[int], p_pos: float) -> float:
     return 0.0
 
 
+def _smoothed_bet_size(p_pos, conf, max_size, min_conf, gamma, sigma, info):
+    """E[bet_size(p_pos + eps)] for eps ~ N(0, sigma), by Gauss-Hermite quadrature.
+
+    The exact sizer is a step-and-kink function of p_pos: the SIGN flips at the
+    conformal set boundary and the magnitude is clamped to zero below min_conf.
+    buy_candidates._step_expectation can integrate its drivers in closed form
+    because each is a pure sum of steps; this sizer is not (conf_score depends on
+    p_pos inside the surviving branch, and the branch itself depends on q_hat), so
+    the expectation is taken numerically.
+
+    21-node Gauss-Hermite is exact for polynomials up to degree 41 and converges
+    fast for a smooth-away-from-thresholds integrand; the cost is ~21 evaluations
+    of arithmetic already being done once. p_pos is a probability, so nodes are
+    clipped to (0, 1) rather than allowed to wander outside the domain.
+    """
+    nodes, weights = np.polynomial.hermite_e.hermegauss(21)
+    total_w = weights.sum()
+    acc = 0.0
+    for z, w in zip(nodes, weights):
+        p = float(np.clip(p_pos + sigma * z, 1e-9, 1.0 - 1e-9))
+        pred_set = conformal_predict_set(p, conf.q_hat)
+        cs = confidence_from_set(pred_set, p)
+        if pred_set == {0, 1} or len(pred_set) == 0 or cs < min_conf:
+            continue  # contributes 0 to the expectation
+        strength = (cs - min_conf) / (1.0 - min_conf + 1e-12)
+        strength = float(np.clip(strength, 0.0, 1.0) ** gamma)
+        sign = 1.0 if pred_set == {1} else -1.0
+        acc += w * sign * max_size * strength
+    size = acc / total_w
+    info["noise_sigma"] = float(sigma)
+    return float(np.clip(size, -max_size, max_size)), info
+
+
 def bet_size_from_conformal(
     p_pos: float,
     conf: ConformalState,
     max_size: float = 1.0,
     min_conf: float = 0.55,
     gamma: float = 1.5,
+    noise_sigma: float = 0.0,
 ) -> tuple[float, dict]:
     """
     Convert conformal prediction set to signed bet size.
@@ -154,7 +188,24 @@ def bet_size_from_conformal(
         "conf": conf_score,
         "q_hat": conf.q_hat,
     }
-    
+
+    # Noise-convolved path: E[size(p + eps)] for eps ~ N(0, noise_sigma), the same
+    # Taleb/American-options treatment buy_candidates._step_expectation applies to
+    # its step drivers. Three knife edges live in the exact path below:
+    #   1. conf_score < min_conf -> 0, so a hair either side of the floor is a full
+    #      position or nothing;
+    #   2. sign = +-1 from set membership, so near p_pos = 0.5 the SIGN of the bet
+    #      is a coin toss on estimation noise;
+    #   3. pred_set == {0,1} -> 0, itself a thresholded function of p_pos.
+    # At 105% daily turnover these flips are not academic: a name oscillating
+    # around a threshold gets bought and sold on noise, paying spread each way.
+    # Smoothing preserves the asymptotes (deep-confidence bets keep full size) and
+    # only softens the transitions, so it cannot manufacture conviction.
+    if noise_sigma and noise_sigma > 0:
+        return _smoothed_bet_size(
+            p_pos, conf, max_size, min_conf, gamma, noise_sigma, info
+        )
+
     # Empty or ambiguous set -> no trade
     if pred_set == {0, 1} or len(pred_set) == 0:
         return 0.0, info
@@ -285,6 +336,7 @@ def expanding_conformal_sizes(
     recal_every: int = 21,
     embargo: int = 5,
     min_conf: float = 0.55,
+    noise_sigma: float = 0.0,
 ) -> pd.DataFrame:
     """
     Expanding binary model + conformal on OOS ranker scores.
@@ -364,7 +416,7 @@ def expanding_conformal_sizes(
         for a in alpha_grid:
             c = fit_conformal(d_cal["y_bin"].values, p_cal, a)
             sizes = np.array([
-                bet_size_from_conformal(float(p), c, min_conf=min_conf)[0] 
+                bet_size_from_conformal(float(p), c, min_conf=min_conf, noise_sigma=noise_sigma)[0] 
                 for p in p_cal
             ])
             pnl = sizes * (d_cal["y_bin"].values * 2 - 1)
@@ -378,7 +430,7 @@ def expanding_conformal_sizes(
         # Apply to test
         p_te = model.predict(d_te[feats])
         sizes = [
-            bet_size_from_conformal(float(p), conf, min_conf=min_conf)[0] 
+            bet_size_from_conformal(float(p), conf, min_conf=min_conf, noise_sigma=noise_sigma)[0] 
             for p in p_te
         ]
         

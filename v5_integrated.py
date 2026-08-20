@@ -114,6 +114,12 @@ class V5Config:
     
     # Conformal
     conformal_alpha: float = 0.1
+    # Holding-period / noise controls. Daily rebalancing (rebalance_every=1)
+    # cost 15.3%/yr against 1.4%/yr gross alpha; the signal's primary horizon is
+    # 21 days, so these exist to test 1 vs 21 vs anything between.
+    rebalance_every: int = 1
+    drift_band: float = 0.0
+    conformal_noise_sigma: float = 0.0
     conformal_calib_frac: float = 0.3
     conformal_min_calib: int = 100
     exp_conformal_halflife: int = 63
@@ -367,6 +373,7 @@ class V5Pipeline:
             min_train_dates=self.config.min_train_dates // 2,
             recal_every=self.config.step,
             embargo=self.config.embargo_dates,
+            noise_sigma=self.config.conformal_noise_sigma,
         )
         
         self.results["conformal_summary"] = {
@@ -499,6 +506,8 @@ class V5Pipeline:
             ),
             sector_neutral=True,
             conf_blend=self.config.conf_blend,
+            rebalance_every=self.config.rebalance_every,
+            drift_band=self.config.drift_band,
         )
         book_results = build_book_backtest(
             sized_for_bt, returns_wide,
