@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import json
 import warnings
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from datetime import datetime, timezone
@@ -82,6 +84,12 @@ class V5Config:
     """Master configuration for V5 pipeline."""
     
     # Data
+    # Parallelism. n_jobs=None -> cpu_count()-2 (leave headroom for the OS and
+    # for LightGBM's own threads). lgb_num_threads bounds the ranker so it does
+    # not oversubscribe the box when it runs alongside anything else.
+    n_jobs: Optional[int] = None
+    lgb_num_threads: Optional[int] = None
+
     store_root: str | Path = "./v5_feature_store"
     feature_cols: List[str] = field(default_factory=lambda: [
         "ret_1", "ret_5", "ret_10", "vol_10", "vol_20", "ma_gap",
@@ -160,6 +168,27 @@ class V5Config:
 # =============================================================================
 # V5 Pipeline
 # =============================================================================
+
+def _build_one_date(task, sectors, adv, borrow, betas, cap_config):
+    """Build one date's capped portfolio. Module level so it is picklable.
+
+    Returns (weights, diagnostics) with weights.name set to the date string, or
+    (None, None) when the date cannot be built. Exceptions are swallowed per date
+    deliberately: one bad window must not abort a 2,000-date run, and the caller
+    counts how many dates came back.
+    """
+    date_str, sizes, hist_returns = task
+    try:
+        sigmas = hist_returns.std() * np.sqrt(252)
+        sigmas = sigmas.replace(0, np.nan).fillna(sigmas.median())
+        w_final, diag = build_capped_portfolio(
+            sizes, hist_returns, sectors, adv, borrow, sigmas, betas, cap_config,
+        )
+        w_final.name = date_str
+        return w_final, diag
+    except Exception as exc:  # noqa: BLE001
+        print(f"    !! {date_str}: {type(exc).__name__}: {exc}")
+        return None, None
 
 class V5Pipeline:
     """
@@ -334,29 +363,61 @@ class V5Pipeline:
         # Per-day portfolio construction
         all_weights = []
         all_diagnostics = []
-        
-        for date in sorted(sized["date"].unique()):
+
+        dates = sorted(sized["date"].unique())
+
+        # Each date is independent: it reads its own trailing 120-day window and
+        # produces one weight vector, so the loop is embarrassingly parallel. It is
+        # also the dominant cost of this step (one HRP per long/short sleeve per
+        # date), which is why this is parallelised and the ranker is not.
+        #
+        # Processes, not threads: the work is numpy/scipy/pandas under the GIL, and
+        # scipy.linkage is single-threaded CPU. Payload per task is only the day's
+        # sizes plus a 120-row window slice.
+        #
+        # GPU note: _cov_corr routes to CUDA above _CUDA_MIN_NAMES names. A 10k x 10k
+        # fp32 matrix is 0.40GB against ~1.65GB free on this card, so N workers each
+        # holding one would OOM. Workers are therefore capped so that at most a few
+        # can be resident, and each worker frees its device memory per call.
+        workers = self.config.n_jobs
+        if workers in (None, 0):
+            workers = max(1, (os.cpu_count() or 2) - 2)
+        workers = max(1, min(workers, len(dates)))
+
+        tasks = []
+        for date in dates:
             day_sized = sized[sized["date"] == date].set_index("ticker")
-            sizes = day_sized["size_raw"]
-            
-            # Get historical returns up to this date
             hist_returns = returns_wide[returns_wide.index < date].tail(120)
-            
             if len(hist_returns) < 20:
                 continue
-            
-            # Estimate sigmas
-            sigmas = hist_returns.std() * np.sqrt(252)
-            sigmas = sigmas.replace(0, np.nan).fillna(sigmas.median())
-            
-            w_final, diag = build_capped_portfolio(
-                sizes, hist_returns, sectors, adv, borrow,
-                sigmas,
-                betas,
-                cap_config,
-            )
-            
-            w_final.name = str(date)
+            tasks.append((str(date), day_sized["size_raw"], hist_returns))
+
+        if workers == 1 or len(tasks) <= 1:
+            results = [
+                _build_one_date(t, sectors, adv, borrow, betas, cap_config)
+                for t in tasks
+            ]
+        else:
+            print(f"  building {len(tasks)} dates across {workers} processes...")
+            results = [None] * len(tasks)
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                futs = {
+                    pool.submit(
+                        _build_one_date, t, sectors, adv, borrow, betas, cap_config
+                    ): i
+                    for i, t in enumerate(tasks)
+                }
+                done = 0
+                for fut in as_completed(futs):
+                    i = futs[fut]
+                    results[i] = fut.result()
+                    done += 1
+                    if done % 200 == 0 or done == len(tasks):
+                        print(f"    {done}/{len(tasks)} dates")
+
+        for w_final, diag in results:
+            if w_final is None:
+                continue
             all_weights.append(w_final)
             all_diagnostics.append(diag)
         
