@@ -431,7 +431,17 @@ class ParquetFeatureStore:
         
         if isinstance(data, pd.DataFrame):
             file_path = run_dir / f"{artifact_name}.parquet"
-            data.to_parquet(file_path, compression=self.config.compression, index=False)
+            # index=False silently DISCARDED a meaningful index: book_backtest is
+            # indexed by date, so the artifact came back with an int64 0..N-1 index
+            # and every dated diagnostic read from it was wrong (a later
+            # pd.to_datetime turned positions 0,1,2 into 1970-01-01). Named indexes
+            # are promoted to a real column; only an anonymous RangeIndex is dropped.
+            out = data
+            if data.index.name is not None or not isinstance(data.index, pd.RangeIndex):
+                out = data.reset_index()
+                if "index" in out.columns and data.index.name is None:
+                    out = out.rename(columns={"index": "row_index"})
+            out.to_parquet(file_path, compression=self.config.compression, index=False)
         else:
             file_path = run_dir / f"{artifact_name}.json"
             file_path.write_text(json.dumps(data, indent=2, default=str))

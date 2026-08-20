@@ -169,6 +169,62 @@ class V5Config:
 # V5 Pipeline
 # =============================================================================
 
+def _book_summary(book: pd.DataFrame) -> Dict[str, float]:
+    """Derive scalar book metrics from the per-DAY backtest frame.
+
+    build_book_backtest emits one row per trading day with net_ret / gross_ret /
+    cost / borrow_cost / turnover / book_beta. STEP 4 used to look for pre-aggregated
+    columns instead ("net_sharpe", "max_drawdown", "cum_net", "avg_turnover"), which
+    the backtest never produces -- so every lookup fell through to its `else np.nan`
+    and the promotion gate was handed nan for Sharpe and drawdown. A gate can only
+    reject on nan, never pass, so a strategy could not be promoted on book quality
+    even in principle. The aggregation happens here instead.
+
+    Sharpe is annualised from daily returns (252). Drawdown is on the compounded
+    equity curve and returned POSITIVE (0.20 = a 20% peak-to-trough loss) because
+    PromotionGate compares it against max_drawdown as a magnitude.
+    """
+    out = {
+        "net_sharpe": float("nan"), "gross_sharpe": float("nan"),
+        "avg_cost": float("nan"), "avg_borrow": float("nan"),
+        "avg_turnover": float("nan"), "max_drawdown": float("nan"),
+        "avg_book_beta": float("nan"), "cum_net": float("nan"),
+    }
+    if book is None or len(book) == 0:
+        return out
+
+    def _ann_sharpe(col: str) -> float:
+        if col not in book.columns:
+            return float("nan")
+        r = pd.to_numeric(book[col], errors="coerce").dropna()
+        if len(r) < 2:
+            return float("nan")
+        sd = r.std()
+        if not np.isfinite(sd) or sd <= 0:
+            return float("nan")
+        return float(r.mean() / sd * np.sqrt(252.0))
+
+    out["net_sharpe"] = _ann_sharpe("net_ret")
+    out["gross_sharpe"] = _ann_sharpe("gross_ret")
+
+    for key, col in (("avg_cost", "cost"), ("avg_borrow", "borrow_cost"),
+                     ("avg_turnover", "turnover"), ("avg_book_beta", "book_beta")):
+        if col in book.columns:
+            v = pd.to_numeric(book[col], errors="coerce").mean()
+            out[key] = float(v) if np.isfinite(v) else float("nan")
+
+    if "net_ret" in book.columns:
+        r = pd.to_numeric(book["net_ret"], errors="coerce").fillna(0.0)
+        eq = (1.0 + r).cumprod()
+        out["cum_net"] = float(eq.iloc[-1] - 1.0)
+        peak = eq.cummax()
+        dd = (eq / peak - 1.0).min()
+        # positive magnitude: gates treat max_drawdown as "no worse than X"
+        out["max_drawdown"] = float(-dd) if np.isfinite(dd) else float("nan")
+
+    return out
+
+
 def _build_one_date(task, sectors, adv, borrow, betas, cap_config):
     """Build one date's capped portfolio. Module level so it is picklable.
 
@@ -475,18 +531,20 @@ class V5Pipeline:
             lambda g: g["score"].corr(g["y"])
             if g["y"].nunique() > 1 and g["score"].nunique() > 1 else np.nan
         )
-        
+
+        book = _book_summary(book_results)
+
         metrics = ModelMetrics(
             ic_mean=float(np.nanmean(ic)),
             ic_ir=float(np.nanmean(ic) / (np.nanstd(ic) + 1e-12)),
-            book_sharpe=float(book_results["net_sharpe"].iloc[-1]) if "net_sharpe" in book_results.columns else np.nan,
-            gross_sharpe=float(book_results["gross_sharpe"].iloc[-1]) if "gross_sharpe" in book_results.columns else np.nan,
-            avg_cost=float(book_results["avg_cost"].mean()) if "avg_cost" in book_results.columns else np.nan,
-            avg_borrow=float(book_results["avg_borrow"].mean()) if "avg_borrow" in book_results.columns else np.nan,
-            avg_turnover=float(book_results["avg_turnover"].mean()) if "avg_turnover" in book_results.columns else np.nan,
-            max_drawdown=float(book_results["max_drawdown"].iloc[-1]) if "max_drawdown" in book_results.columns else np.nan,
-            avg_book_beta=0.0,
-            cum_net=float(book_results["cum_net"].iloc[-1]) if "cum_net" in book_results.columns else np.nan,
+            book_sharpe=book["net_sharpe"],
+            gross_sharpe=book["gross_sharpe"],
+            avg_cost=book["avg_cost"],
+            avg_borrow=book["avg_borrow"],
+            avg_turnover=book["avg_turnover"],
+            max_drawdown=book["max_drawdown"],
+            avg_book_beta=book["avg_book_beta"],
+            cum_net=book["cum_net"],
             n_oos_rows=len(oos_scores),
             n_test_days=oos_scores["date"].nunique(),
         )
