@@ -1117,6 +1117,38 @@ def test_no_legacy_prior_estimate_columns():
           "prior_estimate_ column ✓")
 
 
+def test_feature_store_returns_roundtrip():
+    """read_returns_wide() must return every ticker when none are requested.
+
+    The reader built its column list as cols = ["date"] and only extended it when a
+    ticker subset was passed, so a default read asked parquet for the date column
+    alone and produced a (dates x 0) frame. v5_integrated.load_data() then raised
+    "No data in feature store" even though the panel and static maps were intact --
+    the store looked broken when only the reader was.
+    """
+    import tempfile
+
+    from feature_store import ParquetFeatureStore, StoreConfig
+
+    idx = pd.date_range("2024-01-01", periods=8, freq="B")
+    wide = pd.DataFrame(
+        {"AAA": np.linspace(0.01, 0.08, 8), "BBB": np.linspace(-0.01, -0.08, 8)},
+        index=idx)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = ParquetFeatureStore(StoreConfig(root=Path(tmp)))
+        store.write_returns_wide(wide)
+
+        full = store.read_returns_wide()
+        assert list(full.columns) == ["AAA", "BBB"], (
+            f"default read lost tickers: got {list(full.columns)}")
+        assert full.shape == (8, 2), f"expected (8, 2), got {full.shape}"
+
+        subset = store.read_returns_wide(tickers=["AAA"])
+        assert list(subset.columns) == ["AAA"], "column pruning broke"
+    print("  read_returns_wide returns all tickers by default, prunes on request ✓")
+
+
 def test_no_duplicate_device_logic():
     """No module may reimplement device selection; all must defer to tensor_ops."""
     print("Testing centralized device handling...")
@@ -1181,6 +1213,7 @@ if __name__ == "__main__":
         ("Negative equity emits rows", test_negative_equity_emits_rows),
         ("Financial revenue tags", test_financial_sector_revenue_tags),
         ("No legacy prior_estimate cols", test_no_legacy_prior_estimate_columns),
+        ("Feature store returns roundtrip", test_feature_store_returns_roundtrip),
         ("Period basis consistency", test_period_basis_consistency),
         ("Centralized device logic", test_no_duplicate_device_logic),
         ("Daily partitioned", test_daily_partitioned),

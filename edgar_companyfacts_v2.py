@@ -1101,8 +1101,14 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
 
 if __name__ == "__main__":
     import argparse
+    import pathlib
     ap = argparse.ArgumentParser(description="Extract quarterly fundamentals from EDGAR")
     ap.add_argument("--tickers", help="Comma-separated tickers")
+    # A resume list can run to thousands of names, which overflows the OS argument
+    # limit ("Argument list too long") -- the process then never starts and the log
+    # is empty, which reads like a silent hang. Pass a file instead.
+    ap.add_argument("--tickers-file",
+                    help="File of tickers (comma and/or newline separated)")
     # No default cap: omitting --max-tickers means the whole universe. A default
     # would silently truncate a full run and still exit 0 reporting success.
     ap.add_argument("--max-tickers", type=int, default=None,
@@ -1123,8 +1129,12 @@ if __name__ == "__main__":
     cik_map.update(CIK_OVERRIDES)
     
     # Determine tickers
-    if args.tickers:
-        tickers = [t.strip().upper() for t in args.tickers.split(",")]
+    explicit = args.tickers
+    if args.tickers_file:
+        raw = pathlib.Path(args.tickers_file).read_text(encoding="utf-8")
+        explicit = raw.replace("\n", ",")
+    if explicit:
+        tickers = [t.strip().upper() for t in explicit.split(",") if t.strip()]
     else:
         # Universe is daily_prices.parquet. monitored_stocks.parquet is
         # deprecated and must not drive a backfill: it is an optional sleeve
@@ -1142,9 +1152,9 @@ if __name__ == "__main__":
     tickers = [t for t in tickers if t not in NO_COMPANYFACTS]
     # --max-tickers caps UNIVERSE runs only; an explicit --tickers list is always
     # processed in full so a cap cannot silently drop requested tickers.
-    if args.max_tickers and not args.tickers:
+    if args.max_tickers and not explicit:
         tickers = tickers[:args.max_tickers]
-    elif args.tickers and args.max_tickers and len(tickers) > args.max_tickers:
+    elif explicit and args.max_tickers and len(tickers) > args.max_tickers:
         print(f"note: {len(tickers)} explicit tickers given; --max-tickers "
               f"({args.max_tickers}) ignored for an explicit list")
     
