@@ -88,11 +88,6 @@ jobs:
     timeout: null
     desc: "Backtest screens"
   
-  edgar_backfill:
-    cmd: ["backfill_edgar.py", "--quarantine"]
-    timeout: 7200
-    desc: "EDGAR backfill (2hr timeout)"
-  
   backfill_new_tickers:
     cmd: ["acquisition_backfill.py"]
     timeout: 1800
@@ -267,9 +262,8 @@ dependencies:
   tail_hedge: [rolling, hmm]
   allpairs: [preferred]
   screen_bt: [preferred, inclusion]
-  edgar_backfill: []
-  backfill_new_tickers: [edgar_backfill, acq_backfill]
-  fund_snap: [edgar_backfill, backfill_new_tickers]
+  backfill_new_tickers: [acq_backfill]
+  fund_snap: [backfill_new_tickers]
   dupont: [preferred]
   growth: [preferred, dupont]
   peer: [preferred]
@@ -282,7 +276,7 @@ dependencies:
   est_rev: []
   shadow: [preferred, aggregate]
   damodaran: [preferred]
-  lookthrough: [edgar_backfill, backfill_new_tickers]
+  lookthrough: [backfill_new_tickers]
   taleb_tail: [preferred]
   taleb_gap: [preferred]
   taleb_iv_skew: [preferred]
