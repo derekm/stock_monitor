@@ -261,28 +261,28 @@ def simulate_pair(
             elif bars >= max_hold:
                 exit_reason = "time"
             if exit_reason:
-                pnl = pos * (zv - entry_z_val)
-                pa0 = float(wide[a].loc[:entry_dt].dropna().iloc[-1])
-                pb0 = float(wide[b].loc[:entry_dt].dropna().iloc[-1])
-                pa1 = float(wide[a].loc[dt])
-                pb1 = float(wide[b].loc[dt])
-                ret_b = pb1 / pb0 - 1 if pb0 > 0 else 0.0
-                ret_a = pa1 / pa0 - 1 if pa0 > 0 else 0.0
-                hedged = pos * (ret_b - beta * ret_a)
-                trades.append({
-                    "pair_id": f"{a}|{b}",
-                    "entry_date": entry_dt.date(),
-                    "exit_date": dt.date(),
-                    "entry_z": round(entry_z_val, 3),
-                    "exit_z": round(zv, 3),
-                    "bars_held": bars,
-                    "exit_reason": exit_reason,
-                    "hedged_pnl": round(hedged, 5),
-                    "z_pnl": round(pnl, 3),
-                })
-                pos = 0
-                entry_dt = None
-                entry_z_val = 0.0
+                            pnl = pos * (zv - entry_z_val)
+                            pa0 = float(wide[a].loc[:entry_dt].dropna().iloc[-1])
+                            pb0 = float(wide[b].loc[:entry_dt].dropna().iloc[-1])
+                            pa1 = float(wide[a].loc[dt])
+                            pb1 = float(wide[b].loc[dt])
+                            ret_b = pb1 / pb0 - 1 if pb0 > 0 else 0.0
+                            ret_a = pa1 / pa0 - 1 if pa0 > 0 else 0.0
+                            hedged = pos * (ret_b - beta * ret_a)
+                            trades.append({
+                                "pair_id": f"{a}|{b}",
+                                "entry_date": pd.Timestamp(entry_dt).date(),
+                                "exit_date": pd.Timestamp(dt).date(),
+                                "entry_z": round(entry_z_val, 3),
+                                "exit_z": round(zv, 3),
+                                "bars_held": bars,
+                                "exit_reason": exit_reason,
+                                "hedged_pnl": round(hedged, 5),
+                                "z_pnl": round(pnl, 3),
+                            })
+                            pos = 0
+                            entry_dt = None
+                            entry_z_val = 0.0
     return trades
 
 

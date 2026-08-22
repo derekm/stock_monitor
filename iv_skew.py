@@ -150,15 +150,15 @@ def skew_for_ticker(ticker: str, spot: float) -> dict | None:
         skew = float(np.median(skew_vals))
         skew_vol_pts = round((skew - 1.0) * 100, 2)
         return {
-            "ticker": ticker.upper(),
-            "date": date.today().isoformat(),
-            "skew": round(skew, 4),
-            "skew_vol_pts": skew_vol_pts,
-            "iv_atm": round(np.median(atm_vals), 4) if atm_vals else None,
-            "iv_otm": round(np.median(d25_vals), 4) if d25_vals else None,
-            "n_options": len(skew_vals),
-            "expiry": expiries[0] if expiries else None,
-        }
+                    "ticker": ticker.upper(),
+                    "date": pd.Timestamp(date.today()),
+                    "skew": round(skew, 4),
+                    "skew_vol_pts": skew_vol_pts,
+                    "iv_atm": round(np.median(atm_vals), 4) if atm_vals else None,
+                    "iv_otm": round(np.median(d25_vals), 4) if d25_vals else None,
+                    "n_options": len(skew_vals),
+                    "expiry": expiries[0] if expiries else None,
+                }
     except Exception as e:
         print(f"  !! {ticker}: {e}")
         return None
@@ -184,7 +184,8 @@ def main():
     existing = set()
     if args.skip_existing and OUT.exists():
         e = pd.read_parquet(OUT)
-        existing = set(e["ticker"].astype(str).str.upper())
+        e["ticker"] = e["ticker"].astype(str).str.upper()
+        existing = set(e["ticker"])
 
     rows = []
     for t in tickers:

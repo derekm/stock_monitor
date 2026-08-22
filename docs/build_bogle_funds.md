@@ -1,0 +1,232 @@
+# build_bogle_funds.py
+
+Construct Bogle-style index funds from StockMonitor data — implementing
+John C. Bogle's six principles using our full universe, Fisher chained
+decomposition, and explicit cost/turnover tracking.
+
+## Why it exists (rationale)
+
+Bogle's core principles mapped to our toolkit:
+
+| Bogle Principle | Implementation |
+|-----------------|----------------|
+| **Own the whole market** | TMI = all 16,057 tickers from `daily_prices`, cap-weighted (S&P divisor continuity) + Fisher chained |
+| **Minimize costs** | Explicit `expense_bps` (default 3) + `turnover_bps` (default 5) tracked per fund, per period |
+| **Broad diversification** | TMI: 16K names; QMI: quality-filtered (8 names); BPI: 1,027 defensive-sector names |
+| **Stay the course** | Fixed rebalance calendar (Q/SA/A) with multi-day glide path |
+| **Simplicity** | 3 clean funds, each with single parquet + turnover log |
+| **Low turnover** | TMI: 4.5%/yr, BPI: 3.0%/yr, QMI: 17.5%/yr (small universe) |
+
+## Three Funds
+
+### TMI — Total Market Index (The "Own the Market" Fund)
+- **Universe:** All tickers in `daily_prices.parquet` (16,057 as of 2026-08-22)
+- **Weighting:** Cap-weighted (S&P-style divisor continuity) + Fisher chained variant
+- **Rebalance:** Quarterly (41 rebalances over 10 years)
+- **Cost layer:** 3 bps/yr expense + 5 bps per 100% turnover
+- **10y result (2016-2026):** CAGR 48.97%, Vol 47.45%, Sharpe 1.03
+
+### QMI — Quality Market Index (The "Factor-Tilted" Fund)
+- **Universe:** TMI ∩ quality gate (ROE>12%, ROIC>10%, D/E<1.5, Trifecta≥2/3)
+- **Weighting:** Equal-weight + Fisher chained (reduces concentration)
+- **Rebalance:** Semi-annual
+- **Cost layer:** Same as TMI
+- **10y result:** CAGR 17.15%, Vol 25.83%, Sharpe 0.66
+
+### BPI — Bond Proxy Index (The "Stay the Course" Anchor)
+- **Universe:** Defensive sectors (Utilities, Consumer Staples, Health Care, Real Estate, Communication Services)
+- **Weighting:** Equal-weight + Fisher chained
+- **Rebalance:** Annual
+- **Cost layer:** Same as TMI
+- **10y result:** CAGR 14.46%, Vol 27.93%, Sharpe 0.52
+
+## Usage
+
+```bash
+# Build all three funds (10-year lookback, save to parquet)
+python build_bogle_funds.py --fund all --save --years 10
+
+# Build single fund
+python build_bogle_funds.py --fund tmi --save --years 10
+python build_bogle_funds.py --fund qmi --save --years 10
+python build_bogle_funds.py --fund bpi --save --years 10
+
+# Custom cost parameters
+python build_bogle_funds.py --fund tmi --save --years 10 \
+    --expense-bps 5 --turnover-bps 8
+
+# Dry run (no save)
+python build_bogle_funds.py --fund tmi --years 5
+```
+
+### Options
+- `--fund {tmi,qmi,bpi,all}` — which fund(s) to build
+- `--save` — write parquet outputs (required for persistence)
+- `--years N` — lookback window in years (default: 10)
+- `--expense-bps N` — annual expense ratio in basis points (default: 3)
+- `--turnover-bps N` — turnover cost in basis points per 100% turnover (default: 5)
+
+## Outputs
+
+| File | Rows | Description |
+|------|------|-------------|
+| `bogle_tmi.parquet` | 2,531 | Daily levels, returns (gross/net), Fisher chained variant, cost drag |
+| `bogle_tmi_turnover.parquet` | 200 | Rebalance dates, one-way turnover, turnover cost |
+| `bogle_qmi.parquet` | 2,531 | Same structure, quality-screened universe |
+| `bogle_qmi_turnover.parquet` | 20 | Semi-annual rebalances |
+| `bogle_bpi.parquet` | 2,531 | Defensive sectors, equal-weight |
+| `bogle_bpi_turnover.parquet` | 50 | Annual rebalances |
+
+### Schema (fund parquet)
+| Column | Type | Description |
+|--------|------|-------------|
+| `date` | date | Trading date |
+| `fund` | string | `TMI`, `QMI`, or `BPI` |
+| `weight_method` | string | `cap_weighted` or `equal_weighted` |
+| `level` | float | Index level (base=1000) |
+| `ret_gross` | float | Gross daily return |
+| `ret_net` | float | Net daily return (after expense + turnover) |
+| `expense_drag` | float | Daily expense drag (bps) |
+| `turnover_cost` | float | Daily turnover cost (bps) |
+| `fisher_p` | float | Fisher price index component |
+| `fisher_q` | float | Fisher quantity index component |
+| `fisher_p_net` | float | Fisher price index net of costs |
+| `nominal_sqrt_fisher` | float | √(F_P × F_Q) nominal path |
+
+### Schema (turnover parquet)
+| Column | Type | Description |
+|--------|------|-------------|
+| `date` | date | Rebalance date |
+| `fund` | string | Fund identifier |
+| `turnover` | float | One-way turnover (fraction) |
+| `turnover_cost_bps` | float | Turnover cost in basis points |
+| `n_names` | int | Number of names in universe at rebalance |
+
+## Fisher Chained Decomposition
+
+Each fund includes the **Fisher chained** variant (our de-biased arm that
+re-anchors every rebalance period):
+
+```
+Laspeyres (L): Σ(p_t · q_b) / Σ(p_{t-1} · q_b)
+Paasche   (P): Σ(p_t · q_t) / Σ(p_{t-1} · q_t)
+Fisher    (F): √(L · P)
+
+Level_t = base_level · exp( Σ_{τ≤t} ln(F_τ) )
+```
+
+This splits each period's return into:
+- **Price component (F_P):** valuation changes
+- **Quantity component (F_Q):** capital structure / share count changes
+
+Bogle would appreciate this transparency — cap-weighting hides the quantity
+drift; Fisher chained makes it explicit.
+
+## Cost Model
+
+Two cost drags applied daily:
+
+```python
+# Expense drag (daily accrual)
+expense_daily = (1 + ret_gross) * (1 - expense_bps / 10000 / 252)
+
+# Turnover cost (only on rebalance days)
+turnover_cost_daily = 1 - (turnover_fraction * turnover_bps / 10000)
+
+# Net return
+ret_net = (1 + ret_gross) * expense_daily * turnover_cost_daily - 1
+```
+
+Both are tracked explicitly so you can see the drag:
+- TMI 10y: 0.30% total expense drag, 0.45% total turnover cost
+- QMI 10y: 0.30% expense, 0.18% turnover
+- BPI 10y: 0.30% expense, 0.08% turnover
+
+## Rebalance Calendar
+
+| Fund | Frequency | Glide Path |
+|------|-----------|------------|
+| TMI | Quarterly | 5-day linear glide (S&P style) |
+| QMI | Semi-annual | 5-day linear glide |
+| BPI | Annual | 5-day linear glide |
+
+The glide path reduces market impact and timing luck — "don't just do
+something, sit there" becomes "do it gradually over 5 days."
+
+## Integration with Daily Automation
+
+Added to `daily_automation_dag.yaml`:
+
+```yaml
+bogle_tmi:
+  cmd: ["build_bogle_funds.py", "--fund", "tmi", "--save", "--years", "10"]
+  timeout: 300
+  desc: "Bogle Total Market Index (cap-weighted + Fisher chained)"
+
+bogle_qmi:
+  cmd: ["build_bogle_funds.py", "--fund", "qmi", "--save", "--years", "10"]
+  timeout: 300
+  desc: "Bogle Quality Market Index (quality-screened + Fisher chained)"
+
+bogle_bpi:
+  cmd: ["build_bogle_funds.py", "--fund", "bpi", "--save", "--years", "10"]
+  timeout: 300
+  desc: "Bogle Bond Proxy Index (defensive sectors, equal-weight)"
+
+# Depend on polygon_prices for fresh data
+bogle_tmi: [polygon_prices]
+bogle_qmi: [polygon_prices]
+bogle_bpi: [polygon_prices]
+
+# Feed into export for dashboard
+export: [..., bogle_tmi, bogle_qmi, bogle_bpi]
+```
+
+Run via daily automation:
+```bash
+python run_daily_automation.py --only bogle_tmi,bogle_qmi,bogle_bpi
+```
+
+## Key Design Decisions
+
+1. **Full universe from `daily_prices`** — not `monitored_stocks` (which was
+   incomplete). Now `monitored_stocks` is 100% coverage with yfinance sectors.
+
+2. **Fisher chained on top of cap-weight** — we keep S&P's divisor continuity
+   for the cap-weighted aggregate, then add our chained Fisher as a parallel
+   transparent variant.
+
+3. **Cost layer in the index math** — not post-hoc. Every daily return is
+   explicitly net of both expense accrual and turnover events.
+
+4. **Turnover tracked at rebalance** — one-way turnover computed from weight
+   changes; stored for auditability.
+
+5. **Equal-weight for QMI/BPI** — reduces concentration risk (Bogle: "diversify
+   broadly"). TMI keeps cap-weight as the "market portfolio" benchmark.
+
+6. **YAML-driven DAG** — no hardcoded fallback in `run_daily_automation.py`.
+   The YAML is the single source of truth.
+
+## Related Programs
+
+- `run_daily_automation.py` — orchestrator (loads DAG from YAML)
+- `daily_automation_dag.yaml` — job definitions + dependencies
+- `export_dashboard_data.py` — exports fund tables to dashboard
+- `fisher_index.py` — core Fisher chained implementation (Python)
+- `run_fisher_duckdb.py` — DuckDB system-of-record Fisher pipeline
+- `index_math.py` (stockmagic) — S&P divisor + 19-variant parallel index math
+- `index_registry.py` — universe resolution (`all`, `portfolio`, `sectors`, etc.)
+
+## Verification
+
+```bash
+# Verify outputs
+python -c "
+import pandas as pd
+for f in ['bogle_tmi', 'bogle_qmi', 'bogle_bpi']:
+    df = pd.read_parquet(f'{f}.parquet')
+    print(f'{f}: {len(df)} rows, {df[\"date\"].min()} to {df[\"date\"].max()}')
+    print(f'  CAGR: {(df[\"level\"].iloc[-1]/1000)**(1/((df[\"date\"].iloc[-1]-df[\"date\"].iloc[0]).days/365.25))-1:.2%}')
+"
+```

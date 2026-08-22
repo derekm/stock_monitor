@@ -32,149 +32,34 @@ DAG_FILE = DATA_DIR / "daily_automation_dag.yaml"
 
 
 def load_dag() -> tuple[dict, dict]:
-    """Load JOBS and DEPS from YAML file."""
+    """Load JOBS and DEPS from YAML file (single source of truth)."""
     if not HAS_YAML:
-        print("WARNING: PyYAML not installed, using hardcoded fallback")
-        return load_hardcoded_dag()
+        raise RuntimeError("PyYAML not installed. Install with: pip install pyyaml")
     
     if not DAG_FILE.exists():
-        print(f"WARNING: {DAG_FILE} not found, using hardcoded fallback")
-        return load_hardcoded_dag()
+        raise FileNotFoundError(f"DAG file not found: {DAG_FILE}")
     
-    try:
-        with open(DAG_FILE) as f:
-            dag = yaml.safe_load(f)
-        
-        jobs = {}
-        for name, spec in dag.get("jobs", {}).items():
-            cmd = spec.get("cmd", [])
-            timeout = spec.get("timeout")
-            if timeout is not None:
-                timeout = int(timeout)
-            jobs[name] = (cmd, timeout)
-        
-        deps = {}
-        for name, dep_list in dag.get("dependencies", {}).items():
-            deps[name] = set(dep_list)
-        
-        # Ensure all jobs have dep entries
-        for name in jobs:
-            if name not in deps:
-                deps[name] = set()
-        
-        print(f"Loaded DAG from {DAG_FILE}: {len(jobs)} jobs")
-        return jobs, deps
-    except Exception as e:
-        print(f"WARNING: Failed to load DAG from YAML: {e}, using hardcoded fallback")
-        return load_hardcoded_dag()
-
-
-def load_hardcoded_dag() -> tuple[dict, dict]:
-    """Fallback hardcoded DAG (original inline definitions)."""
-    jobs = {
-        "hmm": (["hmm_regime_detection.py", "--n-states", "3", "--save"], None),
-        "market_cap": (["add_daily_marketcap.py"], None),
-        "rebalance": (["rebalance_calendar.py", "--months", "18", "--save"], None),
-        "preferred": (["preferred_metrics.py", "--save"], None),
-        "implied_r": (["implied_r_screen.py", "--save"], None),
-        "momentum": (["momentum_analytics.py", "--save"], None),
-        "inclusion": (["inclusion_criteria.py", "--explore-defensive", "--save"], None),
-        "stress": (["stress_dual_pass.py", "--save"], None),
-        "crisis": (["crisis_correlation.py", "--save"], None),
-        "factor_rot": (["factor_rotation_defense.py", "run", "--save"], None),
-        "risk_enrich": (["risk_enrich.py"], None),
-        "rolling": (["rolling_window_analysis.py", "--universe", "all", "--save"], None),
-        "rolling_corr": (["rolling_correlation_windows.py", "--save"], None),
-        "tail_hedge": (["tail_risk_hedging.py", "--save"], None),
-        "allpairs": (["allpairs_correlations.py", "--window", "63", "--step", "21", "--max-assets", "80"], None),
-        "fund_snap": (["fundamentals_history.py", "snapshot"], None),
-                "screen_bt": (["fundamentals_history.py", "backtest-screens"], None),
-                "backfill_new_tickers": (["acquisition_backfill.py"], 1800),
-                "dupont": (["dupont_analysis.py", "--save"], None),
-        "growth": (["growth_tech_analytics.py"], None),
-        "peer": (["peer_analytics.py", "--save"], None),
-        "earnings": (["earnings_catalyst.py", "--save"], None),
-        "pairs": (["pair_engine.py", "--save"], None),
-        "cross": (["cross_section.py", "--save"], None),
-        "aggregate": (["signal_aggregator.py", "--save"], None),
-        "technical": (["technical_signals.py", "--save"], None),
-        "econ_cal": (["economic_calendar.py", "--save"], None),
-        "est_rev": (["estimate_revisions.py", "--save"], None),
-        "shadow": (["shadow_book.py", "--save"], None),
-        "damodaran": (["damodaran_quality.py", "--all"], None),
-        "lookthrough": (["lookthrough_engine.py"], None),
-        "acq_backfill": (["acquisition_backfill.py"], None),
-        "taleb_tail": (["tail_index.py"], None),
-        "taleb_gap": (["gap_risk.py"], None),
-        "taleb_iv_skew": (["iv_skew.py", "--max-tickers", "100", "--skip-existing"], 600),
-        "taleb_ergodic": (["ergodicity_ruin.py"], None),
-        "taleb_fragility": (["fragility_screen.py"], None),
-        "taleb_minsky": (["macro_fragility.py", "--save"], None),
-        "taleb_shock": (["macro_shock.py", "--save"], None),
-        "taleb_sector_shock": (["macro_sector_shock.py", "--save"], None),
-        "taleb_shock_ride": (["shock_ride.py", "--save"], None),
-        "taleb_arista": (["arista.py", "--save"], None),
-        "taleb_ride_now": (["ride_now.py", "--save"], None),
-        "taleb_subindustry_regime": (["subindustry_regime.py", "--save"], None),
-        "taleb_barbell": (["barbell_check.py"], None),
-        "taleb_optionality": (["hidden_optionality_audit.py"], None),
-        "polygon_prices": (["update_polygon.py", "--days", "5", "--save"], 300),
-        "export": (["export_dashboard_data.py"], None),
-    }
+    with open(DAG_FILE) as f:
+        dag = yaml.safe_load(f)
     
-    deps = {
-        "rebalance": {"hmm"},
-        "market_cap": set(),
-        "inclusion": {"preferred"},
-        "implied_r": {"preferred"},
-        "momentum": {"preferred"},
-        "stress": {"preferred", "inclusion"},
-        "risk_enrich": {"preferred"},
-        "rolling": {"risk_enrich"},
-        "rolling_corr": {"preferred", "risk_enrich"},
-        "tail_hedge": {"rolling", "hmm"},
-                "allpairs": {"preferred"},
-                "screen_bt": {"preferred", "inclusion"},
-                "backfill_new_tickers": {"acq_backfill"},
-                "fund_snap": {"backfill_new_tickers"},
-                "dupont": {"preferred"},
-        "growth": {"preferred", "dupont"},
-        "peer": {"preferred"},
-        "earnings": {"growth", "peer"},
-        "pairs": {"peer", "earnings"},
-        "cross": {"peer", "earnings", "pairs"},
-        "aggregate": {"cross", "earnings", "pairs", "peer", "preferred"},
-        "technical": {"aggregate"},
-        "econ_cal": set(),
-        "est_rev": set(),
-        "shadow": {"preferred", "aggregate"},
-        "damodaran": {"preferred"},
-                "lookthrough": {"backfill_new_tickers"},
-                "taleb_tail": {"preferred"},
-        "taleb_gap": {"preferred"},
-        "taleb_iv_skew": {"preferred"},
-        "taleb_ergodic": {"taleb_tail"},
-        "taleb_fragility": {"taleb_tail", "taleb_gap", "taleb_iv_skew"},
-        "taleb_minsky": {"hmm", "taleb_fragility"},
-        "taleb_shock": {"hmm"},
-        "taleb_sector_shock": {"hmm"},
-        "taleb_shock_ride": {"taleb_sector_shock"},
-        "taleb_arista": set(),
-        "taleb_subindustry_regime": {"taleb_sector_shock"},
-        "taleb_barbell": {"taleb_fragility", "taleb_ergodic"},
-        "taleb_optionality": {"aggregate", "preferred"},
-        "hmm": set(),
-        "preferred": set(),
-        "crisis": set(),
-        "factor_rot": set(),
-        "taleb_ride_now": set(),
-        "polygon_prices": set(),
-        "acq_backfill": set(),
-        "export": {"aggregate", "technical", "econ_cal", "est_rev", "shadow",
-                   "taleb_tail", "taleb_gap", "taleb_iv_skew", "taleb_ergodic", "taleb_fragility",
-                   "taleb_minsky", "taleb_shock", "taleb_sector_shock", "taleb_shock_ride", "taleb_arista",
-                   "taleb_subindustry_regime", "taleb_barbell", "taleb_optionality", "lookthrough", "damodaran"},
-    }
+    jobs = {}
+    for name, spec in dag.get("jobs", {}).items():
+        cmd = spec.get("cmd", [])
+        timeout = spec.get("timeout")
+        if timeout is not None:
+            timeout = int(timeout)
+        jobs[name] = (cmd, timeout)
+    
+    deps = {}
+    for name, dep_list in dag.get("dependencies", {}).items():
+        deps[name] = set(dep_list)
+    
+    # Ensure all jobs have dep entries
+    for name in jobs:
+        if name not in deps:
+            deps[name] = set()
+    
+    print(f"Loaded DAG from {DAG_FILE}: {len(jobs)} jobs")
     return jobs, deps
 
 

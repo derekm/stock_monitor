@@ -32,7 +32,7 @@ OUT_SUMMARY = DATA_DIR / "allpairs_corr_summary.parquet"
 
 def pairwise_long(corr: np.ndarray, cols: list[str], date, window: int, kind: str) -> list[dict]:
     """Upper-triangular pairs of a correlation matrix, vectorized.
-    
+
     np.triu_indices gives all (i, j) with j > i in one shot.
     """
     k = len(cols)
@@ -88,9 +88,11 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
 
     # Pre-compute sector mapping and column indices
     sector_map = stocks.set_index("ticker")["sector"].to_dict()
+    # Filter out NaN sectors and convert to string for consistent sorting
+    sector_vals = [str(v) for v in sector_map.values() if pd.notna(v)]
     sector_cols = {sec: [t for t in tickers if sector_map.get(t) == sec]
-                   for sec in sorted(set(sector_map.values()))}
-    
+                   for sec in sorted(set(sector_vals))}
+
     # Pre-compute sector column indices for fast EW calculation
     sector_col_indices = {}
     all_cols = list(wide.columns)
@@ -109,7 +111,7 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
             continue
         start = max(0, loc - window + 1)
         block = rets_np[start:loc + 1]  # (window, k)
-        
+
         # Vectorized correlation: standardize then X.T @ X / (n-1)
         valid = ~np.isnan(block).any(axis=0)
         if valid.sum() < 2:
@@ -121,7 +123,7 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
         block_v = block_v / std
         corr = block_v.T @ block_v / (block_v.shape[0] - 1)
         np.fill_diagonal(corr, 1.0)
-        
+
         valid_cols = [c for i, c in enumerate(all_cols) if valid[i]]
         asset_rows.extend(pairwise_long(corr, valid_cols, dt, window, "asset"))
 
@@ -132,7 +134,7 @@ def run(window: int = 63, step: int = 21, max_assets: int = 80, save: bool = Tru
             sec_valid = [i for i in indices if valid[i]]
             if len(sec_valid) >= 2:
                 sret_dict[sec] = block[:, sec_valid].mean(axis=1)
-        
+
         if len(sret_dict) >= 2:
             sret_df = pd.DataFrame(sret_dict)
             sc = sret_df.corr()
