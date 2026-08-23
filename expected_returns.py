@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""
+expected_returns.py — Ilmanen 4-pillar expected-return scores.
+
+Pillars (cross-sectional percentile ranks, higher = more attractive):
+  carry      earnings yield + FCF yield (NI_ttm / mcap, FCF / mcap)
+  value      B/M + E/P + FCF yield + S/P
+  momentum   12-1 price momentum (252d return, skip last 21d)
+  defensive  low 60d vol + low |beta| + quality (ROE, ROIC, −D/E)
+
+Composite expected_return is the equal-weight mean of available pillars.
+
+Output (month-end, long): expected_returns_decomp.parquet
+  date, ticker, carry, value, momentum, defensive, expected_return
+"""
+from __future__ import annotations
+
+import argparse
+import shutil
+import tempfile
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+DATA_DIR = Path(__file__).parent
+
+
+def _snapshot(src: Path) -> Path:
+    """Copy parquet before read so a writer can still os.replace the live file."""
+    tmp = Path(tempfile.gettempdir()) / f"er_{src.name}"
+    shutil.copy2(src, tmp)
+    return tmp
+
+
+def _to_date_index(idx) -> pd.DatetimeIndex:
+    return pd.DatetimeIndex(pd.to_datetime(pd.Index(idx), errors="coerce"))
+
+
+def _pivot_fund(fund: pd.DataFrame, col: str, calendar: pd.DatetimeIndex) -> pd.DataFrame:
+    if col not in fund.columns:
+        return pd.DataFrame(index=calendar)
+    d = fund.dropna(subset=["date", "ticker", col]).copy()
+    d["ticker"] = d["ticker"].astype(str).str.upper()
+    d = d.drop_duplicates(subset=["date", "ticker"], keep="last")
+    piv = d.pivot(index="date", columns="ticker", values=col)
+    piv.index = _to_date_index(piv.index)
+    piv = piv.sort_index().ffill().reindex(calendar).ffill()
+    return piv
+
+
+def _rank(wide: pd.DataFrame) -> pd.DataFrame:
+    return wide.replace([np.inf, -np.inf], np.nan).rank(axis=1, pct=True)
+
+
+def _mean_legs(legs: list[pd.DataFrame]) -> pd.DataFrame:
+    if not legs:
+        return pd.DataFrame()
+    idx = legs[0].index
+    cols = legs[0].columns
+    for g in legs[1:]:
+        idx = idx.union(g.index)
+        cols = cols.union(g.columns)
+    acc = None
+    cnt = None
+    for g in legs:
+        a = g.reindex(index=idx, columns=cols)
+        acc = a.fillna(0) if acc is None else acc.add(a.fillna(0))
+        present = a.notna().astype("float64")
+        cnt = present if cnt is None else cnt.add(present)
+    return acc.div(cnt.replace(0, np.nan))
+
+
+def load_close_mcap() -> tuple[pd.DataFrame, pd.DataFrame]:
+    src = _snapshot(DATA_DIR / "daily_prices.parquet")
+    prices = pd.read_parquet(src, columns=["date", "ticker", "close", "market_cap"])
+    prices["ticker"] = prices["ticker"].astype(str).str.upper()
+    prices = prices.drop_duplicates(subset=["date", "ticker"], keep="last")
+    close = prices.pivot(index="date", columns="ticker", values="close")
+    mcap = prices.pivot(index="date", columns="ticker", values="market_cap")
+    close.index = _to_date_index(close.index)
+    mcap.index = _to_date_index(mcap.index)
+    close = close.sort_index().ffill(limit=5)
+    mcap = mcap.sort_index().ffill()
+    return close, mcap
+
+
+def load_fundamentals() -> pd.DataFrame:
+    src = _snapshot(DATA_DIR / "fundamentals.parquet")
+    fund = pd.read_parquet(src)
+    date_col = "as_of_date" if "as_of_date" in fund.columns else "date"
+    fund = fund.rename(columns={date_col: "date"})
+    fund["ticker"] = fund["ticker"].astype(str).str.upper()
+    return fund
+
+
+def compute_carry(fund: pd.DataFrame, mcap: pd.DataFrame) -> pd.DataFrame:
+    """Equity carry: earnings yield + FCF yield, ranked."""
+    ni = _pivot_fund(fund, "net_income_ttm", mcap.index)
+    fcf = _pivot_fund(fund, "free_cash_flow", mcap.index)
+    m = mcap.replace(0, np.nan)
+    legs = []
+    if not ni.empty:
+        legs.append(_rank(ni.reindex(index=m.index, columns=m.columns).div(m)))
+    if not fcf.empty:
+        legs.append(_rank(fcf.reindex(index=m.index, columns=m.columns).div(m)))
+    return _mean_legs(legs)
+
+
+def compute_value(fund: pd.DataFrame, mcap: pd.DataFrame) -> pd.DataFrame:
+    """Value: B/M, E/P, FCF yield, S/P, ranked then averaged."""
+    m = mcap.replace(0, np.nan)
+    specs = [
+        ("shareholders_equity", False),
+        ("net_income_ttm", False),
+        ("free_cash_flow", False),
+        ("revenue_ttm", False),
+    ]
+    legs = []
+    for col, _ in specs:
+        piv = _pivot_fund(fund, col, m.index)
+        if piv.empty:
+            continue
+        legs.append(_rank(piv.reindex(index=m.index, columns=m.columns).div(m)))
+    return _mean_legs(legs)
+
+
+def compute_momentum(close: pd.DataFrame, lookback: int = 252, skip: int = 21) -> pd.DataFrame:
+    """12-1 momentum (Jegadeesh/Titman)."""
+    mom = close.pct_change(lookback).shift(skip)
+    return _rank(mom)
+
+
+def compute_defensive(close: pd.DataFrame, fund: pd.DataFrame) -> pd.DataFrame:
+    """Low vol, low |beta|, high quality."""
+    rets = close.pct_change()
+    vol = rets.rolling(60, min_periods=40).std() * np.sqrt(252)
+    low_vol = _rank(-vol)
+
+    mkt = rets.mean(axis=1)
+    cov = rets.rolling(252, min_periods=126).cov(mkt)
+    var = mkt.rolling(252, min_periods=126).var()
+    beta = cov.div(var.replace(0, np.nan), axis=0)
+    low_beta = _rank(-beta.abs())
+
+    legs = [low_vol, low_beta]
+    for col, invert in (("roe", False), ("roic", False), ("debt_to_equity", True)):
+        piv = _pivot_fund(fund, col, close.index)
+        if piv.empty:
+            continue
+        aligned = piv.reindex(index=close.index, columns=close.columns)
+        legs.append(_rank(-aligned if invert else aligned))
+    return _mean_legs(legs)
+
+
+def month_end_long(pillars: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Stack month-end ranks to long ticker×date."""
+    sample = next(iter(pillars.values()))
+    me = sample.resample("ME").last().index
+    frames = {}
+    for name, wide in pillars.items():
+        if wide is None or wide.empty:
+            continue
+        frames[name] = wide.reindex(me).ffill()
+    if not frames:
+        return pd.DataFrame(columns=["date", "ticker", "expected_return"])
+    stacked = pd.concat({k: v.stack(future_stack=True) for k, v in frames.items()}, axis=1)
+    stacked["expected_return"] = stacked.mean(axis=1, skipna=True)
+    out = stacked.reset_index()
+    out.columns = ["date", "ticker", *stacked.columns]
+    out["date"] = pd.to_datetime(out["date"]).dt.date
+    out["ticker"] = out["ticker"].astype(str).str.upper()
+    return out
+
+
+def main() -> pd.DataFrame:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--save", action="store_true")
+    ap.add_argument("--lookback", type=int, default=252)
+    args = ap.parse_args()
+
+    print("Loading prices (snapshot)...")
+    close, mcap = load_close_mcap()
+    print(f"  {close.shape[0]} dates × {close.shape[1]} tickers")
+
+    print("Loading fundamentals (snapshot)...")
+    fund = load_fundamentals()
+
+    print("Computing pillars...")
+    print("  carry (EY + FCF yield)")
+    carry = compute_carry(fund, mcap)
+    print("  value (B/M E/P FCFY S/P)")
+    value = compute_value(fund, mcap)
+    print("  momentum (12-1)")
+    momentum = compute_momentum(close, args.lookback)
+    print("  defensive (vol/beta/quality)")
+    defensive = compute_defensive(close, fund)
+
+    out = month_end_long({
+        "carry": carry,
+        "value": value,
+        "momentum": momentum,
+        "defensive": defensive,
+    })
+
+    if args.save:
+        path = DATA_DIR / "expected_returns_decomp.parquet"
+        out.to_parquet(path, index=False)
+        print(f"\nSaved {path} ({len(out):,} rows)")
+
+    print("\n=== Coverage (month-end long) ===")
+    for col in [c for c in out.columns if c not in ("date", "ticker")]:
+        n = int(out[col].notna().sum())
+        print(f"  {col}: {n:,} / {len(out):,} ({n / max(len(out), 1) * 100:.1f}%)")
+    if not out.empty:
+        last = out["date"].max()
+        latest = out[out["date"] == last].nlargest(10, "expected_return")
+        print(f"\n=== Top 10 ER @ {last} ===")
+        cols = [c for c in ["ticker", "carry", "value", "momentum", "defensive", "expected_return"] if c in latest]
+        print(latest[cols].to_string(index=False))
+    return out
+
+
+if __name__ == "__main__":
+    main()

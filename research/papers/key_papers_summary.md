@@ -42,6 +42,43 @@
 - **Market-impact-aware and Game-theoretic Execution** when not pure price taker
 - **Robust Optimization and DRO** for portfolio construction under model uncertainty
 
+## Priority Deep Dive Researchers (Phase 1)
+
+### 1. Fama/French + Novy-Marx — Factor Construction Validation
+- **Fama & French** — "The Cross-Section of Expected Stock Returns" (1992); "A Five-Factor Asset Pricing Model" (2015)
+- **Novy-Marx** — "The Other Side of Value: The Gross Profitability Premium" (2013); "Quality Investing" (2014)
+- **Implementation:** `factor_library.py` — FF5+MOM + Novy-Marx quality factors on our universe
+
+### 2. Ilmanen + Ang — Expected Return Framework
+- **Ilmanen** — *Expected Returns* (2011); "Carry" (2013); "Expected Returns: An Investor's Guide to Harvesting Market Rewards"
+- **Ang** — *Asset Management: A Systematic Approach to Factor Investing* (2014); "Factor Timing" (2020)
+- **Implementation:** `expected_returns.py` — 4-pillar decomposition (carry/value/momentum/defensive)
+
+### 3. Asness/Pedersen — Signal Aggregation + Cost-Aware Weighting
+- **Asness, Moskowitz, Pedersen** — "Value and Momentum Everywhere" (2013)
+- **Pedersen** — *Efficiently Inefficient* (2015); AQR "Factor Timing" (2020)
+- **Target:** Dynamic IC-weighted signal aggregation, cost-aware optimization, signal decay curves
+
+### 4. Taleb/Spitznagel/Haghani — Hardened Taleb Layer
+- **Taleb** — *Statistical Consequences of Fat Tails* (2020); *The Black Swan*; *Antifragile*
+- **Spitznagel** — *Safe Haven: Investing for Financial Storms* (2020); "Tail Hedging"
+- **Haghani & White** — *The Missing Billionaires: A Guide to Better Financial Decisions* (2023)
+- **Target:** Tail index (Hill), fragility veto, barbell construction, leverage space
+
+### 5. López de Prado — ML Regime Work Upgrade
+- **López de Prado** — *Advances in Financial Machine Learning* (2018): CPCV, meta-labeling, regime clustering, triple-barrier
+- **Target:** Meta-labeling, CPCV, hierarchical risk parity + regime clustering, triple-barrier labeling
+
+### 6. Hoffstein/Vince — Sequence Risk + Leverage Space
+- **Hoffstein** — "Rebalancing Luck" (2019); "Sequence Risk" (2020)
+- **Vince** — *Leverage Space Trading Model* (2009); *The Leverage Space Model* (2013)
+- **Target:** Rebalancing luck quantification, glide optimization, sequence risk, leverage space sizing
+
+### 7. Lo/Amodei — Adaptive Markets + LLM Forecasting
+- **Lo** — *Adaptive Markets Hypothesis* (2004/2017)
+- **Amodei et al.** — *Constitutional AI* (2022); Granite TTM papers (IBM 2023-2024)
+- **Target:** Adaptive HMM, population dynamics, LLM forecasting, conformal prediction
+
 ## Venues to Monitor
 - arXiv: q-fin.TR, q-fin.CP, q-fin.ST, q-fin.PM, stat.ML, cs.LG
 - SSRN (Harvey, AQR, academic finance)
