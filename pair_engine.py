@@ -4,14 +4,11 @@ pair_engine.py — Pair / relative-value engine: cointegration + residual
 mean-reversion inside industry groups, with stops and time exits.
 
 Vectorized implementation:
-  1. Universe: pairs inside same industry group (min 2 names per group).
-  2. Pre-filter pairs using ADF test first (fast vectorized ADF via numpy OLS).
-  3. Engle-Granger cointegration t-stat only on ADF-surviving pairs.
-  4. FDR-corrected across all candidate pairs.
-  5. Walk-forward OOS trading.
+  1. Universe: pairs inside the same industry, cap --max-per-group (coverage-ranked).
+  2. Return-correlation screen before Engle-Granger.
+  3. FDR across surviving pairs; walk-forward OOS trading.
 
-Performance: ADF pre-filter eliminates ~90% of EG tests (expensive statsmodels
-calls). Remaining EG tests run only on pre-qualified pairs.
+Daily DAG: --max-per-group 40 --n-folds 1 (uncapped 16k names is ~1.2M pairs/fold).
 """
 from __future__ import annotations
 
@@ -32,16 +29,31 @@ OUT_TRADES = DATA_DIR / "pair_engine_trades.parquet"
 OUT_STATS = DATA_DIR / "pair_engine_stats.parquet"
 
 
-def _groups() -> dict[str, list[str]]:
+def _groups(max_per_group: int = 40, rank: pd.Series | None = None) -> dict[str, list[str]]:
+    """Industry groups from monitored_stocks, capped by rank (coverage/liquidity)."""
     stocks = pd.read_parquet(STOCKS) if STOCKS.exists() else pd.DataFrame()
     if stocks.empty or "ticker" not in stocks.columns:
         return {}
-    groups: dict[str, list[str]] = {}
-    for _, r in stocks.iterrows():
-        g = str(r.get("industry") or r.get("sector") or "unknown")
-        tk = str(r["ticker"]).upper()
-        groups.setdefault(g, []).append(tk)
-    return {g: sorted(set(ts)) for g, ts in groups.items() if len(set(ts)) >= 2}
+    s = pd.DataFrame({
+        "ticker": stocks["ticker"].astype(str).str.upper(),
+        "group": (stocks["industry"] if "industry" in stocks.columns else stocks.get("sector", "unknown")).astype(str),
+    })
+    s = s[s["group"].str.strip().ne("") & s["group"].ne("nan") & s["group"].ne("None")]
+    s = s.drop_duplicates("ticker")
+    if rank is None and "sp500_member" in stocks.columns:
+        rank = pd.Series(
+            stocks["sp500_member"].fillna(False).astype(float).to_numpy(),
+            index=stocks["ticker"].astype(str).str.upper(),
+        )
+    if rank is not None:
+        s["rank"] = s["ticker"].map(rank).fillna(0.0)
+        s = s.sort_values(["group", "rank"], ascending=[True, False])
+    else:
+        s = s.sort_values(["group", "ticker"])
+    if max_per_group and max_per_group > 0:
+        s = s.groupby("group", sort=False).head(int(max_per_group))
+    out = s.groupby("group")["ticker"].agg(lambda x: sorted(set(x))).to_dict()
+    return {g: ts for g, ts in out.items() if len(ts) >= 2}
 
 
 def fast_adf_residual(x: np.ndarray) -> tuple[float, float]:
@@ -140,35 +152,38 @@ def half_life(spread: np.ndarray) -> float:
     return -np.log(2) / np.log(rho)
 
 
-def select_pairs(wide: pd.DataFrame, groups: dict[str, list[str]], lookback: int = 504, alpha: float = 0.10) -> pd.DataFrame:
-    """EG + FDR on trailing lookback window. ADF pre-filter eliminates most pairs."""
+def select_pairs(
+    wide: pd.DataFrame,
+    groups: dict[str, list[str]],
+    lookback: int = 504,
+    alpha: float = 0.10,
+    corr_min: float = 0.35,
+    corr_max: float = 0.95,
+) -> pd.DataFrame:
+    """EG + FDR on trailing lookback. Return-corr screen before EG."""
     rows: list[dict] = []
     lpx = np.log(wide)
-    total_tested = 0
-    adf_passed = 0
-    
+    n_cand = 0
+    n_corr = 0
+
     for g, tks in groups.items():
         tks = [t for t in tks if t in lpx.columns]
+        if len(tks) < 2:
+            continue
+        sub = lpx[tks].iloc[-lookback:]
+        corr = sub.diff().corr().to_numpy()
         for i in range(len(tks)):
             for j in range(i + 1, len(tks)):
-                a, b = tks[i], tks[j]
-                sa = lpx[a].dropna().tail(lookback)
-                sb = lpx[b].dropna().tail(lookback)
-                idx = sa.index.intersection(sb.index)
-                if len(idx) < 200:
+                n_cand += 1
+                rho = corr[i, j]
+                if not np.isfinite(rho) or abs(rho) < corr_min or abs(rho) > corr_max:
                     continue
-                
-                x = sa.loc[idx].to_numpy()
-                y = sb.loc[idx].to_numpy()
-                
-                total_tested += 1
-                
-                # ADF pre-filter: fast, eliminates ~90% of expensive EG calls
-                if not adf_pre_filter(x, y):
+                n_corr += 1
+                pair = sub[[tks[i], tks[j]]].dropna()
+                if len(pair) < 200:
                     continue
-                
-                adf_passed += 1
-                
+                x = pair.iloc[:, 0].to_numpy()
+                y = pair.iloc[:, 1].to_numpy()
                 try:
                     tstat, pval, beta = engle_granger(x, y)
                 except Exception:
@@ -176,23 +191,24 @@ def select_pairs(wide: pd.DataFrame, groups: dict[str, list[str]], lookback: int
                 spread = y - beta * x
                 hl = half_life(spread)
                 rows.append({
-                    "pair_id": f"{a}|{b}",
+                    "pair_id": f"{tks[i]}|{tks[j]}",
                     "group": g,
-                    "asset_a": a,
-                    "asset_b": b,
+                    "asset_a": tks[i],
+                    "asset_b": tks[j],
                     "coint_t": tstat,
                     "p_value": pval,
                     "beta": beta,
                     "half_life": hl,
+                    "ret_corr": float(rho),
                 })
-    
-    print(f"  ADF pre-filter: {total_tested} tested, {adf_passed} passed ({100*adf_passed/max(1,total_tested):.1f}%)")
-    
+
+    print(f"  corr screen: {n_cand} candidates, {n_corr} in [{corr_min}, {corr_max}], {len(rows)} EG-ok")
+
     if not rows:
-            return pd.DataFrame(columns=["pair_id", "group", "asset_a", "asset_b", "coint_t", "p_value", "beta", "half_life", "fdr_survive", "usable"])
+        return pd.DataFrame(columns=["pair_id", "group", "asset_a", "asset_b", "coint_t",
+                                    "p_value", "beta", "half_life", "ret_corr", "fdr_survive", "usable"])
     df = pd.DataFrame(rows)
-    pvals = df["p_value"].to_numpy()
-    df["fdr_survive"] = bh_fdr(pvals, alpha=alpha)
+    df["fdr_survive"] = bh_fdr(df["p_value"].to_numpy(), alpha=alpha)
     df["usable"] = (
         df["fdr_survive"]
         & np.isfinite(df["half_life"])
@@ -296,9 +312,13 @@ def build(
     max_hold: int = 60,
     alpha: float = 0.20,
     max_pairs: int = 400,
+    max_per_group: int = 40,
+    corr_min: float = 0.35,
+    corr_max: float = 0.95,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    groups = _groups()
+    groups = _groups(max_per_group=max_per_group)
     tickers = sorted({t for ts in groups.values() for t in ts})
+    print(f"  groups={len(groups)} names={len(tickers)} max_per_group={max_per_group}")
     prices = load_adj_prices_pandas(tickers=tickers)
     wide = wide_closes(prices).sort_index().dropna(how="all")
     if len(wide) < lookback + test_days + 50:
@@ -315,7 +335,8 @@ def build(
         test_start_pos = test_end_pos - test_days
         train_end_pos = test_start_pos - 1
         sel_wide = wide.iloc[: train_end_pos + 1]
-        pairs = select_pairs(sel_wide, groups, lookback=lookback, alpha=alpha)
+        pairs = select_pairs(sel_wide, groups, lookback=lookback, alpha=alpha,
+                             corr_min=corr_min, corr_max=corr_max)
         usable = pairs[pairs["usable"]].head(max_pairs)
         usable = usable.copy()
         usable["fold"] = k
@@ -387,6 +408,10 @@ def main():
     ap.add_argument("--max-hold", type=int, default=60)
     ap.add_argument("--alpha", type=float, default=0.20, help="FDR level")
     ap.add_argument("--max-pairs", type=int, default=400)
+    ap.add_argument("--max-per-group", type=int, default=40,
+                    help="cap names per industry (ranked by lookback coverage)")
+    ap.add_argument("--corr-min", type=float, default=0.35)
+    ap.add_argument("--corr-max", type=float, default=0.95)
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
@@ -394,6 +419,7 @@ def main():
         lookback=args.lookback, test_days=args.test_days, n_folds=args.n_folds,
         entry_z=args.entry_z, exit_z=args.exit_z, stop_z=args.stop_z,
         max_hold=args.max_hold, alpha=args.alpha, max_pairs=args.max_pairs,
+        max_per_group=args.max_per_group, corr_min=args.corr_min, corr_max=args.corr_max,
     )
     n_sel = int(pairs["usable"].sum()) if len(pairs) and "usable" in pairs else 0
     print(f"=== walk-forward pairs selected (FDR + half-life): {n_sel} across {args.n_folds} folds ===")
