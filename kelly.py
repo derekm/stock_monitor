@@ -29,6 +29,7 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -184,6 +185,32 @@ def cmd_pypl_example(args):
     print("Current price context ~$46; low P/B ~2x; strong FCF supporting buybacks.")
 
 
+def cmd_leverage_space(args):
+    tmi = pd.read_parquet(DATA_DIR / "bogle_tmi.parquet")
+    bpi = pd.read_parquet(DATA_DIR / "bogle_bpi.parquet")
+    tmi["date"] = pd.to_datetime(tmi["date"])
+    bpi["date"] = pd.to_datetime(bpi["date"])
+    m = tmi.merge(bpi, on="date", suffixes=("_t", "_b"))
+    rt = m["ret_net_t"].fillna(0).to_numpy()
+    rb = m["ret_net_b"].fillna(0).to_numpy()
+    grid = np.linspace(0.0, 1.5, 16)
+    rows = []
+    best = (-np.inf, 0, 0)
+    for ft in grid:
+        for fb in grid:
+            if ft + fb > 1.5:
+                continue
+            wealth = np.prod(1 + ft * rt + fb * rb)
+            if not np.isfinite(wealth) or wealth <= 0:
+                continue
+            rows.append({"f_tmi": ft, "f_bpi": fb, "terminal": float(wealth)})
+            if wealth > best[0]:
+                best = (wealth, ft, fb)
+    out = pd.DataFrame(rows)
+    out.to_parquet(DATA_DIR / "leverage_space_allocation.parquet", index=False)
+    print(f"max terminal {best[0]:.2f} at f_tmi={best[1]:.2f} f_bpi={best[2]:.2f}  n={len(out)}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Kelly criterion position-sizing estimators",
@@ -193,24 +220,27 @@ def main():
     sub = parser.add_subparsers(dest="cmd")
 
     p = sub.add_parser("continuous", help="f* = (μ − r) / σ²")
-    p.add_argument("--mu", type=float, help="Expected annualized return (decimal, e.g. 0.13)")
-    p.add_argument("--sigma", type=float, help="Annualized volatility (decimal, e.g. 0.35)")
-    p.add_argument("--r", type=float, default=0.04, help="Risk-free rate (decimal, default 0.04)")
-    p.add_argument("--ticker", help="Use stored mid-point params for this ticker")
-    p.add_argument("--fraction", type=float, help="Also show custom fraction of full Kelly")
+    p.add_argument("--mu", type=float)
+    p.add_argument("--sigma", type=float)
+    p.add_argument("--r", type=float, default=0.04)
+    p.add_argument("--ticker")
+    p.add_argument("--fraction", type=float)
     p.set_defaults(func=cmd_continuous)
 
-    p = sub.add_parser("binary", help="f* = (b·p − q) / b")
-    p.add_argument("--p", type=float, required=True, help="Win probability (0–1)")
-    p.add_argument("--b", type=float, required=True, help="Net odds (profit per unit risked)")
+    p = sub.add_parser("binary")
+    p.add_argument("--p", type=float, required=True)
+    p.add_argument("--b", type=float, required=True)
     p.set_defaults(func=cmd_binary)
 
-    p = sub.add_parser("show", help="Show stored Kelly parameters")
+    p = sub.add_parser("show")
     p.add_argument("--ticker")
     p.set_defaults(func=cmd_show)
 
-    p = sub.add_parser("pypl", help="Reproduce the attached PayPal example")
+    p = sub.add_parser("pypl")
     p.set_defaults(func=cmd_pypl_example)
+
+    p = sub.add_parser("leverage-space")
+    p.set_defaults(func=cmd_leverage_space)
 
     args = parser.parse_args()
     if not args.cmd:

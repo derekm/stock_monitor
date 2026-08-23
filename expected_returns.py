@@ -222,11 +222,67 @@ def apply_er_eligibility(out: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def oos_direction() -> pd.DataFrame:
+    """Top-quintile ER vs EW, next calendar month, eligible names only."""
+    import tempfile
+    er = pd.read_parquet(DATA_DIR / "expected_returns_decomp.parquet")
+    er = er.dropna(subset=["expected_return"])
+    er["date"] = pd.to_datetime(er["date"])
+    snap = Path(tempfile.gettempdir()) / "ph_daily_prices.parquet"
+    px = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
+    px["ticker"] = px["ticker"].astype(str).str.upper()
+    keep = set(er["ticker"].unique())
+    px = px[px["ticker"].isin(keep)]
+    px["date"] = pd.to_datetime(px["date"]).dt.normalize()
+    px["px"] = px["adj_close"].where(px["adj_close"].notna(), px["close"])
+    last = px.sort_values("date").groupby(["ticker", px["date"].dt.to_period("M")]).tail(1)
+    last["month"] = last["date"].dt.to_period("M")
+    wide = last.pivot(index="month", columns="ticker", values="px")
+    fwd = wide.shift(-1) / wide - 1.0
+    rows = []
+    for dt, g in er.groupby(er["date"].dt.to_period("M")):
+        if dt not in fwd.index:
+            continue
+        r = fwd.loc[dt]
+        g = g.drop_duplicates("ticker").set_index("ticker")
+        both = g.index.intersection(r.dropna().index)
+        if len(both) < 50:
+            continue
+        sc = g.loc[both, "expected_return"]
+        rr = r.loc[both]
+        q = sc.quantile(0.80)
+        top = rr[sc >= q]
+        rows.append({
+            "month": str(dt),
+            "n": int(len(both)),
+            "ew": float(rr.mean()),
+            "top": float(top.mean()),
+            "hit_top": float((top > 0).mean()),
+            "hit_ew": float((rr > 0).mean()),
+        })
+    out = pd.DataFrame(rows)
+    if out.empty:
+        print("OOS: no overlapping months")
+        return out
+    edge = out["top"].mean() - out["ew"].mean()
+    hit_edge = out["hit_top"].mean() - out["hit_ew"].mean()
+    print(out.tail(8).round(4).to_string(index=False))
+    print(f"months {len(out)}  top-EW {edge:.3%}  hit-edge {hit_edge:.1%}  "
+          f"(gate +5% ret or +5pp hit)")
+    out.to_parquet(DATA_DIR / "er_oos_direction.parquet", index=False)
+    return out
+
+
 def main() -> pd.DataFrame:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--save", action="store_true")
     ap.add_argument("--lookback", type=int, default=252)
+    ap.add_argument("--oos", action="store_true",
+                    help="Month-end ER top-quintile vs EW next-month return (no price write)")
     args = ap.parse_args()
+
+    if args.oos:
+        return oos_direction()
 
     print("Loading prices (snapshot)...")
     close, mcap_px = load_close_mcap()

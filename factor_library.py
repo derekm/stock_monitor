@@ -411,6 +411,59 @@ def compute_regime_factor_premia() -> pd.DataFrame:
     return out
 
 
+def residual_ic() -> pd.DataFrame:
+    """Spearman IC of latest nm_score vs next-month residual (HML+RMW+CMA+MOM, no MKT)."""
+    import tempfile
+    from numpy.linalg import lstsq
+    er = pd.read_parquet(DATA_DIR / "expected_returns_decomp.parquet",
+                         columns=["date", "ticker", "expected_return"])
+    er = er.dropna(subset=["expected_return"])
+    er["ticker"] = er["ticker"].astype(str).str.upper()
+    er["month"] = pd.to_datetime(er["date"]).dt.to_period("M")
+    names = er[er["month"] == er["month"].max()].nlargest(400, "expected_return")["ticker"].tolist()
+    ff = pd.read_parquet(DATA_DIR / "ff5_factors.parquet")
+    if "date" not in ff.columns:
+        ff = ff.reset_index().rename(columns={ff.index.name or "index": "date"})
+    ff["date"] = pd.to_datetime(ff["date"]).dt.normalize()
+    legs = [c for c in ["HML", "RMW", "CMA", "MOM"] if c in ff.columns]
+    snap = Path(tempfile.gettempdir()) / "ph_daily_prices.parquet"
+    px = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
+    px["ticker"] = px["ticker"].astype(str).str.upper()
+    px = px[px["ticker"].isin(names)]
+    px["date"] = pd.to_datetime(px["date"]).dt.normalize()
+    px["px"] = px["adj_close"].where(px["adj_close"].notna(), px["close"])
+    last = px.sort_values("date").groupby(["ticker", px["date"].dt.to_period("M")]).tail(1)
+    last["month"] = last["date"].dt.to_period("M")
+    wide = last.pivot(index="month", columns="ticker", values="px")
+    rets = wide.pct_change()
+    ff["month"] = ff["date"].dt.to_period("M")
+    fmonth = ff.groupby("month")[legs].mean()
+    ics = []
+    for m in rets.index[1:]:
+        if m not in fmonth.index:
+            continue
+        y = rets.loc[m].dropna()
+        sc_m = er[er["month"] == m].drop_duplicates("ticker").set_index("ticker")["expected_return"]
+        both = y.index.intersection(sc_m.index)
+        if len(both) < 40:
+            continue
+        y = y.loc[both]
+        sc = sc_m.loc[both]
+        X = np.column_stack([np.ones(len(y)), np.full((len(y), len(legs)), fmonth.loc[m, legs].to_numpy())])
+        beta, *_ = lstsq(X, y.to_numpy(), rcond=None)
+        resid = y.to_numpy() - X @ beta
+        ic = pd.Series(resid, index=both).corr(sc, method="spearman")
+        if np.isfinite(ic):
+            ics.append({"month": str(m), "ic": float(ic), "n": int(len(both))})
+    out = pd.DataFrame(ics)
+    print(out.tail(8).to_string(index=False) if len(out) else "no IC")
+    if len(out):
+        mu = float(out["ic"].mean())
+        print(f"mean residual IC {mu:.4f}  n_months={len(out)}  bar +0.02")
+        out.to_parquet(DATA_DIR / "residual_ic.parquet", index=False)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description="Compute factor library")
     ap.add_argument("--save", action="store_true", help="Save outputs to parquet")
@@ -421,7 +474,12 @@ def main():
                     help="Ang regime-conditional FF premia from hmm + ff5_factors")
     ap.add_argument("--hml", action="store_true",
                     help="Write HML/RMW/CMA onto ff5_factors (stock, 10y, snapshot)")
+    ap.add_argument("--residual-ic", action="store_true",
+                    help="Rank IC of nm_score vs returns residualized on HML/RMW/CMA/MOM (no MKT)")
     args = ap.parse_args()
+
+    if args.residual_ic:
+        return residual_ic(), None
 
     if args.hml:
         print("HML/RMW/CMA (stock, 10y, PIT mcap)...")

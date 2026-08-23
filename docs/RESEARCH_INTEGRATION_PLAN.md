@@ -19,7 +19,7 @@
 - [x] QMI = NM `nm_score` top quintile (≥2 legs); dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median
 - [x] `ff5_factors.parquet` daily MKT/SMB/MOM; `--hml` writes HML/RMW/CMA (stock, 10y, snapshot)
 - [x] `factor_attribution.py` named to actual factor columns
-- [ ] Residual IC ≥ +0.02 after HML/RMW exist
+- [x] Residual IC of PIT ER vs HML/RMW/CMA/MOM residual: **−0.0024** (121m, bar +0.02 — **fail**)
 
 **Success metric (measured):** Gate ∩ NM-quality = **60%** (62% after D/E recompute). Residual IC: **not measured**.
 
@@ -47,7 +47,7 @@
 - [x] Ang regime-conditional FF means → `regime_factor_premia.parquet` (`factor_library.py --regime-premia`)
 - [x] Carry into `macro_fragility.py` (`equity_carry` = median ER carry by quarter)
 - [x] `expected_return_report` deferred; ER eligibility + panel mcap wired
-- [ ] OOS direction accuracy vs EW ≥ +5%
+- [x] OOS direction: 224m hit-edge **+5.8pp** (bar +5pp — pass); top−EW **−42%** (Apr-26 junk 2.53 — fail on return)
 
 **Measured now:** HMM ∩ FF5 = 223 days (low_vol 128 / stress 48 / normal 47). MKT ann. +2.4% / −18.8% / −44.9%. SMB/MOM magnitudes are the un-winsorized FF5 series — do not trade them. CF>DR on 61 / 496 (median gap −1.8pp).
 
@@ -72,7 +72,7 @@
 **Deliverables:**
 - [x] Bias-corrected Hill + k-stability → `tail_index_robust.parquet` (`tail_index.py`)
 - [x] Fragility veto (Hill α<2) → `fragility_veto.parquet` (SMCI raw α=1.98)
-- [ ] Barbell 90/10 TMI / long-vol
+- [x] 90/10 TMI/BPI barbell: maxDD ratio **0.98** (bar <0.50 — fail; BPI is not long-vol)
 - [ ] Hidden optionality v2
 - [ ] Vince leverage space
 **Target files:** `tail_index.py`, `fragility_screen.py`, `barbell_check.py`, `ergodicity_ruin.py`, `hidden_optionality_audit.py`, `buy_candidates.py`
@@ -113,6 +113,12 @@
 ---
 
 ### 6. Hoffstein/Vince — Sequence Risk + Leverage Space
+**Status:** **Started (2026-08-23)**
+- [x] Rebalance luck: TMI 41q, median std **1.68%** → `rebalance_luck_distribution.parquet`
+- [x] Vince 2-asset grid TMI/BPI: max at **f_tmi=1.50, f_bpi=0** (no hedge) → `leverage_space_allocation.parquet`
+- [ ] Optimal glide
+- [ ] CDaR / sequence risk in perf_metrics
+- [ ] Multi-period Kelly
 **Target files:** `rebalance_calendar.py`, `vol_target.py`, `kelly.py`, `portfolio_optimization.py`, `risk_parity_analytics.py`
 **Core papers:** Hoffstein "Rebalancing Luck" (2019), "Sequence Risk" (2020), Vince *Leverage Space Trading Model* (2009), *The Leverage Space Model* (2013)
 **Deliverables:**

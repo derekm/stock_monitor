@@ -32,7 +32,53 @@ DATA_DIR = Path(__file__).resolve().parent
 TRADING_DAYS = 252
 
 
+def spitznagel_barbell() -> pd.DataFrame:
+    """90% TMI + 10% BPI. Crisis DD vs TMI core."""
+    tmi = pd.read_parquet(DATA_DIR / "bogle_tmi.parquet")
+    bpi = pd.read_parquet(DATA_DIR / "bogle_bpi.parquet")
+    tmi["date"] = pd.to_datetime(tmi["date"]).dt.normalize()
+    bpi["date"] = pd.to_datetime(bpi["date"]).dt.normalize()
+    m = tmi[["date", "ret_net"]].merge(bpi[["date", "ret_net"]], on="date", suffixes=("_tmi", "_bpi"))
+    m["ret_bb"] = 0.90 * m["ret_net_tmi"] + 0.10 * m["ret_net_bpi"]
+    m["lvl_tmi"] = (1 + m["ret_net_tmi"]).cumprod()
+    m["lvl_bb"] = (1 + m["ret_bb"]).cumprod()
+
+    def maxdd(s):
+        peak = s.cummax()
+        return float((s / peak - 1).min())
+
+    def win(s, a, b):
+        w = m[(m["date"] >= a) & (m["date"] <= b)]
+        if w.empty:
+            return np.nan
+        return float((1 + w[s]).prod() - 1)
+
+    rows = [
+        {"metric": "cagr_tmi", "value": (m["lvl_tmi"].iloc[-1]) ** (252 / len(m)) - 1},
+        {"metric": "cagr_bb", "value": (m["lvl_bb"].iloc[-1]) ** (252 / len(m)) - 1},
+        {"metric": "maxdd_tmi", "value": maxdd(m["lvl_tmi"])},
+        {"metric": "maxdd_bb", "value": maxdd(m["lvl_bb"])},
+        {"metric": "covid_tmi", "value": win("ret_net_tmi", "2020-02-19", "2020-03-23")},
+        {"metric": "covid_bb", "value": win("ret_bb", "2020-02-19", "2020-03-23")},
+        {"metric": "y2022_tmi", "value": win("ret_net_tmi", "2022-01-01", "2022-12-31")},
+        {"metric": "y2022_bb", "value": win("ret_bb", "2022-01-01", "2022-12-31")},
+    ]
+    out = pd.DataFrame(rows)
+    out.to_parquet(DATA_DIR / "barbell_portfolio.parquet", index=False)
+    print(out.to_string(index=False))
+    dd_t, dd_b = out.set_index("metric").loc["maxdd_tmi", "value"], out.set_index("metric").loc["maxdd_bb", "value"]
+    print(f"maxDD barbell/core {dd_b/dd_t:.2f}  (bar <0.50)")
+    return out
+
+
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tmi-bpi", action="store_true")
+    args = ap.parse_args()
+    if args.tmi_bpi:
+        spitznagel_barbell()
+        return
     # portfolio: equal-weight daily returns (aligned on real dates)
     cols = ["date", "ticker", "close"]
     d = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=cols)

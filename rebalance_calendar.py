@@ -148,11 +148,37 @@ def build(months: int = 12) -> pd.DataFrame:
     return out
 
 
+def rebalance_luck() -> pd.DataFrame:
+    """Hoffstein: TMI quarterly return as-if rebalanced on each of first 15 days."""
+    tmi = pd.read_parquet(DATA_DIR / "bogle_tmi.parquet")
+    tmi["date"] = pd.to_datetime(tmi["date"]).dt.normalize()
+    tmi["q"] = tmi["date"].dt.to_period("Q")
+    tmi["ret"] = tmi["ret_net"].fillna(0)
+    rows = []
+    for q, g in tmi.groupby("q"):
+        g = g.sort_values("date")
+        if len(g) < 20:
+            continue
+        for i in range(min(15, len(g) - 5)):
+            w = g.iloc[i:]
+            r = float((1 + w["ret"]).prod() - 1)
+            rows.append({"quarter": str(q), "offset": i, "ret": r})
+    out = pd.DataFrame(rows)
+    luck = out.groupby("quarter")["ret"].std()
+    print(f"quarters {luck.size}  median luck std {luck.median():.3%}  mean {luck.mean():.3%}")
+    out.to_parquet(DATA_DIR / "rebalance_luck_distribution.parquet", index=False)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--months", type=int, default=18)
     ap.add_argument("--save", action="store_true")
+    ap.add_argument("--luck", action="store_true")
     args = ap.parse_args()
+    if args.luck:
+        rebalance_luck()
+        return
     df = build(args.months)
     print(df.tail(12).to_string(index=False))
     if args.save:
