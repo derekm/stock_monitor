@@ -10,10 +10,10 @@
 **Target files:** `peer_analytics.py`, `preferred_metrics.py`, `factor_rotation_defense.py`, `signal_aggregator.py`
 **Core papers:** FF 1993/2015 (5-factor), Novy-Marx 2013 (gross profitability), 2014 (quality)
 **Deliverables:**
-- [ ] Replicate FF 5-factor + momentum on our `daily_prices` universe → `ff_factors.parquet` (daily)
-- [ ] Validate our quality gate (ROE>12%, ROIC>10%, D/E<1.5, trifecta≥2) against Novy-Marx "quality" (gross profit/assets + low accruals + safe leverage) → `quality_gate_comparison.csv`
-- [ ] Map each signal family (preferred/peer/cross/pairs/earnings) to FF factor loadings → `signal_factor_loadings.parquet`
-- [ ] Update `signal_aggregator.py` OOS-IC weights with factor-adjusted IC (residualize signals on FF5+MOM)
+- [x] Replicate FF 5-factor + momentum on our `daily_prices` universe → `ff5_factors.parquet` (daily)
+- [x] Validate our quality gate (ROE>12%, ROIC>10%, D/E<1.5, trifecta≥2) against Novy-Marx "quality" (gross profit/assets + low accruals + safe leverage) → `docs/QUALITY_GATE_COMPARISON.md`
+- [x] Map each signal family (preferred/peer/cross/pairs/earnings) to FF factor loadings → `signal_factor_loadings.parquet`
+- [x] Update `signal_aggregator.py` OOS-IC weights with factor-adjusted IC (residualize signals on FF5+MOM) — added `--use-residuals` flag
 - [ ] Add `factor_attribution.py` script: daily factor decomposition of portfolio/aggregate returns
 
 **Success metric:** Signal IC improves ≥0.02 after factor adjustment; quality gate overlap with Novy-Marx ≥80%
@@ -24,7 +24,7 @@
 **Target files:** `implied_r_screen.py`, `damodaran_quality.py`, `preferred_metrics.py`, `macro_fragility.py`
 **Core papers:** Ilmanen *Expected Returns* (2011), Ang *Asset Management* (2014), Ilmanen et al. "Carry" (2013)
 **Deliverables:**
-- [ ] Implement Ilmanen's 4-pillar expected return decomposition for every ticker:
+- [x] **ACTIVE** Implement Ilmanen's 4-pillar expected return decomposition for every ticker:
   - Carry (yield + roll-down)
   - Value (mean reversion)
   - Momentum (trend)
@@ -221,7 +221,7 @@
 
 | Gate | Criteria | Decision |
 |------|----------|----------|
-| **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | Continue Phase 1 |
+| **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | **✅ PASSED** — Continue Phase 1 |
 | **Gate 2 (Week 8)** | Dynamic signal weighting beats static; expected return decomposition live | Continue Phase 1 |
 | **Gate 3 (Week 14)** | Taleb layer hardened; barbell portfolio backtested | Enter Phase 2 |
 | **Gate 4 (Week 26)** | ML regime upgraded; sequence risk metrics live | Enter Phase 3 |
