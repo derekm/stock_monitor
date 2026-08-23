@@ -144,14 +144,19 @@ def compute_ff5_with_fundamentals(
     # Deduplicate fundamentals
     fundamentals = fundamentals.drop_duplicates(subset=["date", "ticker"], keep="last")
     
-    rets = close.pct_change().dropna(how="all").clip(-0.50, 0.50)
+    rets = close.pct_change().dropna(how="all")
+    # Drop data-error prints from the VW book; keep them out of weights too.
+    bad = rets.abs().gt(0.20)
+    rets = rets.mask(bad)
 
-    # Market cap weights (lagged)
-    mktcap_lagged = mktcap.shift(1).reindex(rets.index).ffill()
-    mktcap_weights = mktcap_lagged.div(mktcap_lagged.sum(axis=1), axis=0)
-
-    rf = 0.0
-    mkt_ret = (rets * mktcap_weights).sum(axis=1) - rf
+    mktcap_lagged = mktcap.shift(1).reindex(rets.index)
+    # Winsorize per date so a share-count blowup cannot dominate VW.
+    hi = mktcap_lagged.quantile(0.995, axis=1)
+    mktcap_lagged = mktcap_lagged.clip(upper=hi, axis=0)
+    mktcap_lagged = mktcap_lagged.where(mktcap_lagged.gt(0))
+    w = mktcap_lagged.where(rets.notna())
+    mktcap_weights = w.div(w.sum(axis=1), axis=0)
+    mkt_ret = (rets * mktcap_weights).sum(axis=1, min_count=50)
 
     # --- Prepare fundamental signals (quarterly, forward-filled to daily) ---
     # We need: book_to_market, gross_profitability, asset_growth

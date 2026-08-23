@@ -17,11 +17,11 @@
 - [x] `nm_quality` separate from `buffett_pass`; AG clipped ±100% for ranks
 - [x] Component D/E + `D/E ≥ 0` (code; persist on next `--save`)
 - [x] QMI = NM `nm_score` top quintile (≥2 legs); dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median
-- [x] `ff5_factors.parquet` daily MKT/SMB/MOM; `--hml` writes HML/RMW/CMA (stock, 10y, snapshot)
+- [x] `ff5_factors.parquet` MKT: drop |r|>20% from VW, winsorize mcap 99.5%. **MKT −6.44% ann / 16.1% vol** (was −75%/62%). RMW still 0 (no GP). TMI is the market benchmark (+22%/23%).
 - [x] `factor_attribution.py` named to actual factor columns
 - [x] Residual IC of PIT ER vs HML/RMW/CMA/MOM residual: **−0.0024** (121m, bar +0.02 — **fail**)
 
-**Success metric (measured):** Gate ∩ NM-quality = **60%** (62% after D/E recompute). Residual IC: **not measured**.
+**Success metric (measured):** Gate ∩ NM-quality = **60%**. Residual IC **−0.0024** (fail +0.02).
 
 **Parked (later — not gate-loosening):**
 1. Backfill `gross_profit` then GP/A
@@ -30,7 +30,7 @@
    - [x] `daily_mcap.parquet` — PIT shares × adj_close, stock-only, `--save` does not touch `daily_prices`
    - [x] As-of share join (merge_asof backward) — TSM last mcap $2.16T
    - [ ] Point ER/TMI/FF5 at the panel; do not write `market_cap` onto `daily_prices` while DAG/`pairs` holds the file
-   - [ ] HMC/BAYRY 20-F fundamentals (0 NI/FCF/equity rows) before ER can score them
+   - [x] HMC FY26 from 6-K (JPY): NI −¥423.9B, equity ¥12.15T, ROE −3.5%. `html_20f` rank 110. v2 filled FY21–FY25. BAYRY AR25 already merged.
    - [ ] Implied-r HPQ/CAG ROE-P/B garbage
    - [ ] Ride/crisis coverage for the personal book
    - **Migrate derived attributes to panels? Yes.** `daily_prices` stays OHLCV (+ optional stale mcap). Shares, PIT mcap, AG, NM, ER, FF5 live in their own parquet. Writers never `os.replace` the price file for a derived column.
@@ -47,7 +47,7 @@
 - [x] Ang regime-conditional FF means → `regime_factor_premia.parquet` (`factor_library.py --regime-premia`)
 - [x] Carry into `macro_fragility.py` (`equity_carry` = median ER carry by quarter)
 - [x] `expected_return_report` deferred; ER eligibility + panel mcap wired
-- [x] OOS direction: 224m hit-edge **+5.8pp** (bar +5pp — pass); top−EW **−42%** (Apr-26 junk 2.53 — fail on return)
+- [x] OOS direction: 224m, drop |ret|>50%; hit-edge **+6.3pp** (pass); top−EW **+1.4%** (fail +5% return)
 
 **Measured now:** HMM ∩ FF5 = 223 days (low_vol 128 / stress 48 / normal 47). MKT ann. +2.4% / −18.8% / −44.9%. SMB/MOM magnitudes are the un-winsorized FF5 series — do not trade them. CF>DR on 61 / 496 (median gap −1.8pp).
 

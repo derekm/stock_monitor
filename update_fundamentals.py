@@ -46,7 +46,9 @@ PRICES = DATA_DIR / "daily_prices.parquet"
 SOURCE_RANK = {
     "edgar_v2": 110,
     "html_10q": 110,
+    "html_20f": 110,
     "edgar": 100,
+    "bayer_ir_excel": 100,
     "manual": 80,
     "yfinance_history": 60,
     "polygon_financials": 55,

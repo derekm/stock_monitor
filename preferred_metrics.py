@@ -382,6 +382,22 @@ def build_table() -> pd.DataFrame:
         use = eq.notna() & (eq > 0) & debt.notna() & np.isfinite(comp)
         fund.loc[use, "debt_to_equity"] = comp[use]
 
+    hist = pd.read_parquet(FUND, columns=["ticker", "as_of_date", "net_income_ttm"])
+    hist["ticker"] = hist["ticker"].astype(str).str.upper()
+    hist["net_income_ttm"] = pd.to_numeric(hist["net_income_ttm"], errors="coerce")
+    hist = hist.dropna(subset=["ticker", "net_income_ttm"]).sort_values(["ticker", "as_of_date"])
+    hist = hist.groupby("ticker", as_index=False).tail(8)
+    if len(hist):
+        g = hist.groupby("ticker")["net_income_ttm"]
+        n = g.size()
+        mu = g.apply(lambda s: float(s.abs().mean()))
+        sd = g.std()
+        cv = sd / mu.replace(0, np.nan)
+        stab = (1.0 / (1.0 + cv)).clip(0, 1)
+        stab = stab.where(n >= 4)
+        fund["ticker"] = fund["ticker"].astype(str).str.upper()
+        fund["earnings_stability"] = fund["ticker"].map(stab)
+
     # Quality-TREND guard (generalized RF-demotion rule): a name whose quality
     # is deteriorating should not hold INCLUDE_CORE even if it still clears the
     # level thresholds. Compare first vs latest quarter in the fundamentals

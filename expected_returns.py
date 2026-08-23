@@ -250,6 +250,12 @@ def oos_direction() -> pd.DataFrame:
             continue
         sc = g.loc[both, "expected_return"]
         rr = r.loc[both]
+        rr = rr[rr.abs().le(0.50)]
+        both = rr.index.intersection(sc.index)
+        if len(both) < 50:
+            continue
+        sc = sc.loc[both]
+        rr = rr.loc[both]
         q = sc.quantile(0.80)
         top = rr[sc >= q]
         rows.append({
