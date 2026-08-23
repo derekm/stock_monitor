@@ -21,31 +21,28 @@ DATA_DIR = Path(__file__).parent
 
 
 def load_prices() -> pd.DataFrame:
-    """Load daily prices, return close pivot (date × ticker)."""
-    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet")
-    # Ensure date is datetime.date
-    if prices["date"].dtype != "datetime64[ns]":
-        prices["date"] = pd.to_datetime(prices["date"]).dt.date
-    # Deduplicate: keep last entry per (date, ticker)
+    """Load daily adj close, snapshot first (Windows lock)."""
+    import shutil, tempfile
+    snap = Path(tempfile.gettempdir()) / "fl_daily_prices.parquet"
+    shutil.copy2(DATA_DIR / "daily_prices.parquet", snap)
+    prices = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
+    prices["ticker"] = prices["ticker"].astype(str).str.upper()
     prices = prices.drop_duplicates(subset=["date", "ticker"], keep="last")
-    # Pivot to wide: date index, ticker columns, close values
-    close = prices.pivot(index="date", columns="ticker", values="close")
+    px = prices["adj_close"].where(prices["adj_close"].notna(), prices["close"])
+    close = prices.assign(px=px).pivot(index="date", columns="ticker", values="px")
     close.index = pd.to_datetime(close.index)
-    close = close.sort_index()
-    # Forward-fill missing (max 5 days) then drop all-NaN columns
-    close = close.ffill(limit=5).dropna(axis=1, how="all")
-    return close
+    return close.sort_index().ffill(limit=5).dropna(axis=1, how="all")
 
 
 def load_fundamentals() -> pd.DataFrame:
-    """Load fundamentals, return latest quarterly per ticker."""
-    fund = pd.read_parquet(DATA_DIR / "fundamentals.parquet")
-    # Ensure as_of_date is datetime.date
+    """Load fundamentals snapshot."""
+    import shutil, tempfile
+    snap = Path(tempfile.gettempdir()) / "fl_fundamentals.parquet"
+    shutil.copy2(DATA_DIR / "fundamentals.parquet", snap)
+    fund = pd.read_parquet(snap)
     if "as_of_date" in fund.columns:
-        if fund["as_of_date"].dtype != "datetime64[ns]":
-            fund["as_of_date"] = pd.to_datetime(fund["as_of_date"]).dt.date
-        # Rename for consistency
         fund = fund.rename(columns={"as_of_date": "date"})
+    fund["ticker"] = fund["ticker"].astype(str).str.upper()
     return fund
 
 
@@ -147,7 +144,7 @@ def compute_ff5_with_fundamentals(
     # Deduplicate fundamentals
     fundamentals = fundamentals.drop_duplicates(subset=["date", "ticker"], keep="last")
     
-    rets = close.pct_change().dropna(how="all")
+    rets = close.pct_change().dropna(how="all").clip(-0.50, 0.50)
 
     # Market cap weights (lagged)
     mktcap_lagged = mktcap.shift(1).reindex(rets.index).ffill()
@@ -422,7 +419,35 @@ def main():
                     help="Novy-Marx panels only; no daily_prices read")
     ap.add_argument("--regime-premia", action="store_true",
                     help="Ang regime-conditional FF premia from hmm + ff5_factors")
+    ap.add_argument("--hml", action="store_true",
+                    help="Write HML/RMW/CMA onto ff5_factors (stock, 10y, snapshot)")
     args = ap.parse_args()
+
+    if args.hml:
+        from datetime import timedelta
+        print("HML/RMW/CMA (stock, 10y)...")
+        close = load_prices()
+        stocks = DATA_DIR / "monitored_stocks.parquet"
+        if stocks.exists():
+            ms = pd.read_parquet(stocks, columns=["ticker", "instrument_type"])
+            keep = ms.loc[ms["instrument_type"].eq("stock"), "ticker"].astype(str).str.upper()
+            close = close.reindex(columns=[c for c in close.columns if c in set(keep)])
+        cutoff = close.index.max() - pd.Timedelta(days=int(10 * 365.25))
+        close = close.loc[close.index >= cutoff]
+        print(f"  {close.shape[0]} dates × {close.shape[1]} tickers")
+        fund = load_fundamentals()
+        shares = fund.dropna(subset=["ticker", "shares_outstanding"]).sort_values("date")
+        sh = shares.groupby("ticker")["shares_outstanding"].last()
+        mktcap = compute_market_cap(close, sh)
+        factors = compute_ff5_with_fundamentals(close, mktcap, fund)
+        if args.save:
+            path = DATA_DIR / "ff5_factors.parquet"
+            factors.to_parquet(path)
+            print(f"Saved {path} {factors.shape} cols={list(factors.columns)}")
+        print(factors.describe().T[["mean", "std"]].to_string())
+        for c in factors.columns:
+            print(f"  {c} ann {factors[c].mean()*252:.2%} vol {factors[c].std()*np.sqrt(252):.2%} nn {int(factors[c].notna().sum())}")
+        return factors, None
 
     if args.regime_premia:
         premia = compute_regime_factor_premia()

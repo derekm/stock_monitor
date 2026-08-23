@@ -348,6 +348,23 @@ def apply_pedersen_weights(ic_df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def solve_optimal_weights(ic_df: pd.DataFrame, lam: float = 1.0) -> pd.DataFrame:
+    """Pedersen Ch.9: max w·IC − λ‖w‖² − τ·turnover, w≥0, 1'w=1."""
+    from cost_model import ROUND_TRIP_BPS
+    out = apply_pedersen_weights(ic_df)
+    ic = out["ic"].clip(lower=0).fillna(0.0).to_numpy(dtype=float)
+    to = out["turnover_ann"].to_numpy(dtype=float)
+    tau = ROUND_TRIP_BPS / 1e4
+    n = len(ic)
+    # unconstrained: (2λ I) w = IC − τ·to, then simplex project
+    raw = (ic - tau * to) / (2.0 * lam)
+    raw = np.clip(raw, 0.0, None)
+    s = raw.sum()
+    out["weight_opt"] = (raw / s) if s > 0 else np.zeros(n)
+    out["weight_opt"] = out["weight_opt"].round(4)
+    return out
+
+
 def build(cutoff: pd.Timestamp | None = None, lindy: bool = False, use_residuals: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
     scores = load_scores(use_residuals=use_residuals)
     # Load prices once, derive both cutoff and forward series
@@ -419,18 +436,23 @@ def main():
                     help="Pedersen weights: IC / (turnover×cost) × decay × regime-conf")
     ap.add_argument("--from-ic", action="store_true",
                     help="Apply --dynamic to existing signal_aggregator_ic.parquet (no prices)")
+    ap.add_argument("--qp", action="store_true",
+                    help="Pedersen Ch.9 QP weights → optimal_signal_weights.parquet")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
-    if args.from_ic:
+    if args.from_ic or args.qp:
         if not OUT_IC.exists():
             raise SystemExit("missing signal_aggregator_ic.parquet")
-        ic_df = apply_pedersen_weights(pd.read_parquet(OUT_IC))
-        print("=== Pedersen dynamic weights (from stored IC) ===")
+        raw = pd.read_parquet(OUT_IC)
+        ic_df = solve_optimal_weights(raw) if args.qp else apply_pedersen_weights(raw)
+        label = "QP" if args.qp else "dynamic"
+        print(f"=== Pedersen {label} weights (from stored IC) ===")
         print(ic_df.to_string(index=False))
         if args.save:
-            ic_df.to_parquet(OUT_W_DYN, index=False)
-            print(f"Wrote {OUT_W_DYN}")
+            dest = DATA_DIR / "optimal_signal_weights.parquet" if args.qp else OUT_W_DYN
+            ic_df.to_parquet(dest, index=False)
+            print(f"Wrote {dest}")
         return
 
     scores, ic_df = build(cutoff=args.cutoff, lindy=args.lindy, use_residuals=args.use_residuals)

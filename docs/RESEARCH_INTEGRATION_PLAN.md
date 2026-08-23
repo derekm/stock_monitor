@@ -17,7 +17,7 @@
 - [x] `nm_quality` separate from `buffett_pass`; AG clipped ±100% for ranks
 - [x] Component D/E + `D/E ≥ 0` (code; persist on next `--save`)
 - [x] QMI = NM `nm_score` top quintile (≥2 legs); dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median
-- [x] `ff5_factors.parquet` daily **MKT/SMB/MOM**; `--full` mapped, not written
+- [x] `ff5_factors.parquet` daily MKT/SMB/MOM; `--hml` writes HML/RMW/CMA (stock, 10y, snapshot)
 - [x] `factor_attribution.py` named to actual factor columns
 - [ ] Residual IC ≥ +0.02 after HML/RMW exist
 
@@ -37,7 +37,7 @@
 - [x] Ilmanen 4-pillar ranks → `expected_returns_decomp.parquet` (mcap = daily else shares×px; ER requires ≥2 pillars)
 - [x] CF vs DR: `cf_yield = ROE / P/B`, `discount_rate = 2·ROE/(P/B+1)` → `implied_r_decomp.parquet` (496 names)
 - [x] Ang regime-conditional FF means → `regime_factor_premia.parquet` (`factor_library.py --regime-premia`)
-- [ ] Carry into `macro_fragility.py`
+- [x] Carry into `macro_fragility.py` (`equity_carry` = median ER carry by quarter)
 - [ ] `expected_return_report.py` dashboard tile
 - [ ] OOS direction accuracy vs EW ≥ +5%
 
@@ -51,7 +51,7 @@
 **Deliverables:**
 - [x] Pedersen `w ∝ max(IC,0) / (turnover × cost) × decay × regime-conf` → `signal_weights_dynamic.parquet`
 - [x] Family half-lives → `signal_decay_params.json` (preferred 126 / peer 63 / cross 21 / pair 10 / earnings 5)
-- [ ] Cost-aware QP → `optimal_signal_weights.parquet`
+- [x] Cost-aware QP → `optimal_signal_weights.parquet` (`signal_aggregator.py --qp`)
 - [ ] `shadow_book.py` paper book on dynamic weights → `shadow_dynamic.parquet`
 - [ ] Dynamic Sharpe − static Sharpe ≥ 0.15 after costs
 

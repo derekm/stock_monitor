@@ -227,6 +227,19 @@ def main(save: bool = True):
     # percentile of the Minsky signal over the FULL history (what "high" means)
     df["minsky_pctile"] = df["minsky_signal"].rank(pct=True).round(3)
 
+    # Ilmanen equity carry: median CS carry rank of eligible ER names, quarter-end.
+    er_path = DATA_DIR / "expected_returns_decomp.parquet"
+    if er_path.exists():
+        er = pd.read_parquet(er_path, columns=["date", "carry", "expected_return"])
+        er = er[er["expected_return"].notna() & er["carry"].notna()]
+        er["date"] = pd.to_datetime(er["date"])
+        q = er.groupby(er["date"].dt.to_period("Q"))["carry"].median()
+        q.index = q.index.to_timestamp()
+        df["date"] = pd.to_datetime(df["date"])
+        df["equity_carry"] = df["date"].map(q).astype(float)
+    else:
+        df["equity_carry"] = float("nan")
+
     # regime context: hard label for readability only (decision uses p_stress)
     ctx = []
     try:
@@ -243,7 +256,7 @@ def main(save: bool = True):
     df = df.dropna(subset=["debt_impulse"]).tail(240)  # 60y window
     out_cols = ["date", "debt_gdp_ratio", "debt_impulse", "debt_impulse_v",
                 "debt_acceleration", "velocity", "p_stress",
-                "minsky_signal", "minsky_pctile", "danger_zone", "regime_ctx"]
+                "minsky_signal", "minsky_pctile", "danger_zone", "regime_ctx", "equity_carry"]
     df = df[out_cols]
     df["debt_gdp_ratio"] = df["debt_gdp_ratio"].round(3)
     df["debt_impulse"] = df["debt_impulse"].round(4)
