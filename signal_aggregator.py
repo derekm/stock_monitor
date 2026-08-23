@@ -43,15 +43,27 @@ OUT_IC = DATA_DIR / "signal_aggregator_ic.parquet"
 
 FORWARD_HORIZON = 21
 
+# Factor-adjusted residual scores (optional enhancement)
+FACTOR_RESIDUALS = DATA_DIR / "signal_residual_scores.parquet"
+
 
 def _norm(s: pd.Series) -> pd.Series:
     """Robust [0,1] normalize by percentile rank (ties averaged)."""
     return s.rank(pct=True, na_option="keep")
 
 
-def load_scores() -> pd.DataFrame:
+def load_scores(use_residuals: bool = False) -> pd.DataFrame:
     """One row per ticker with a raw score per family (higher = better).
-    Vectorized: single pass merges instead of per-ticker filtering."""
+    Vectorized: single pass merges instead of per-ticker filtering.
+
+    If use_residuals=True, use factor-adjusted residual scores instead of
+    raw family scores (for factor-neutral signal aggregation).
+    """
+    # Load factor-adjusted residuals if requested
+    residuals = None
+    if use_residuals and FACTOR_RESIDUALS.exists():
+        residuals = pd.read_parquet(FACTOR_RESIDUALS)
+
     pref = pd.read_parquet(PREF) if PREF.exists() else pd.DataFrame()
     peer = pd.read_parquet(PEER) if PEER.exists() else pd.DataFrame()
     cross = pd.read_parquet(CROSS) if CROSS.exists() else pd.DataFrame()
@@ -67,28 +79,48 @@ def load_scores() -> pd.DataFrame:
     idx = pd.Index(sorted(tickers), name="ticker")
     out = pd.DataFrame(index=idx)
 
-    # preferred: composite_score
-    if not pref.empty and "composite_score" in pref.columns:
-        p = pref[["ticker", "composite_score"]].copy()
-        p["ticker"] = p["ticker"].astype(str).str.upper()
-        p = p.groupby("ticker")["composite_score"].last()
-        out["preferred"] = p.reindex(idx)
+    # Helper to get score (raw or residual)
+    def get_score(df, col_name, fam_name):
+        if df.empty or col_name not in df.columns:
+            return pd.Series(dtype=float, index=idx)
+        d = df[["ticker", col_name]].copy()
+        d["ticker"] = d["ticker"].astype(str).str.upper()
+        d = d.groupby("ticker")[col_name].last()
+        s = d.reindex(idx)
+        return s
 
-    # peer: best_sharpe_rank
-    if not peer.empty and "best_sharpe_rank" in peer.columns:
-        p = peer[["ticker", "best_sharpe_rank"]].copy()
-        p["ticker"] = p["ticker"].astype(str).str.upper()
-        p = p.groupby("ticker")["best_sharpe_rank"].last()
-        out["peer"] = p.reindex(idx)
+    # preferred: composite_score or preferred_residual
+    if use_residuals and residuals is not None and "preferred_residual" in residuals.columns:
+        r = residuals[["ticker", "preferred_residual"]].copy()
+        r["ticker"] = r["ticker"].astype(str).str.upper()
+        r = r.groupby("ticker")["preferred_residual"].last()
+        out["preferred"] = r.reindex(idx)
+    else:
+        out["preferred"] = get_score(pref, "composite_score", "preferred")
 
-    # cross_section: bucket 1..5 → (bucket-1)/4
-    if not cross.empty and "bucket" in cross.columns:
-        c = cross[["ticker", "bucket"]].copy()
-        c["ticker"] = c["ticker"].astype(str).str.upper()
-        c = c.groupby("ticker")["bucket"].last()
-        out["cross"] = ((c - 1) / 4).reindex(idx)
+    # peer: best_sharpe_rank or peer_residual
+    if use_residuals and residuals is not None and "peer_residual" in residuals.columns:
+        r = residuals[["ticker", "peer_residual"]].copy()
+        r["ticker"] = r["ticker"].astype(str).str.upper()
+        r = r.groupby("ticker")["peer_residual"].last()
+        out["peer"] = r.reindex(idx)
+    else:
+        out["peer"] = get_score(peer, "best_sharpe_rank", "peer")
 
-    # pair_engine: z_now → min(|z|/2, 1)
+    # cross_section: bucket 1..5 → (bucket-1)/4 or cross_residual
+    if use_residuals and residuals is not None and "cross_residual" in residuals.columns:
+        r = residuals[["ticker", "cross_residual"]].copy()
+        r["ticker"] = r["ticker"].astype(str).str.upper()
+        r = r.groupby("ticker")["cross_residual"].last()
+        out["cross"] = r.reindex(idx)
+    else:
+        if not cross.empty and "bucket" in cross.columns:
+            c = cross[["ticker", "bucket"]].copy()
+            c["ticker"] = c["ticker"].astype(str).str.upper()
+            c = c.groupby("ticker")["bucket"].last()
+            out["cross"] = ((c - 1) / 4).reindex(idx)
+
+    # pair_engine: z_now → min(|z|/2, 1) (no residual for pair yet)
     if not pair.empty and "z_now" in pair.columns:
         pa = pair[["asset_a", "z_now"]].rename(columns={"asset_a": "ticker"})
         pb = pair[["asset_b", "z_now"]].rename(columns={"asset_b": "ticker"})
@@ -97,12 +129,14 @@ def load_scores() -> pd.DataFrame:
         p = p.groupby("ticker")["z_now"].last()
         out["pair"] = np.clip(np.abs(p.reindex(idx)) / 2.0, 0, 1)
 
-    # earnings: catalyst_score
-    if not earn.empty and "catalyst_score" in earn.columns:
-        e = earn[["ticker", "catalyst_score"]].copy()
-        e["ticker"] = e["ticker"].astype(str).str.upper()
-        e = e.groupby("ticker")["catalyst_score"].last()
-        out["earnings"] = e.reindex(idx)
+    # earnings: catalyst_score or earnings_residual
+    if use_residuals and residuals is not None and "earnings_residual" in residuals.columns:
+        r = residuals[["ticker", "earnings_residual"]].copy()
+        r["ticker"] = r["ticker"].astype(str).str.upper()
+        r = r.groupby("ticker")["earnings_residual"].last()
+        out["earnings"] = r.reindex(idx)
+    else:
+        out["earnings"] = get_score(earn, "catalyst_score", "earnings")
 
     return out
 
@@ -257,8 +291,8 @@ def estimate_ic_by_regime(scores: pd.DataFrame, fwd_series: pd.DataFrame,
     return ic_df
 
 
-def build(cutoff: pd.Timestamp | None = None, lindy: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
-    scores = load_scores()
+def build(cutoff: pd.Timestamp | None = None, lindy: bool = False, use_residuals: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+    scores = load_scores(use_residuals=use_residuals)
     # Load prices once, derive both cutoff and forward series
     prices = load_adj_prices_pandas()
     if cutoff is None:
@@ -322,10 +356,12 @@ def main():
     ap.add_argument("--lindy", action="store_true",
                     help="Lindy-weight the IC: scale each family weight by its survival "
                          "history (older signals get more weight — Taleb)")
+    ap.add_argument("--use-residuals", action="store_true",
+                    help="Use factor-adjusted residual scores (factor-neutral)")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
-    scores, ic_df = build(cutoff=args.cutoff, lindy=args.lindy)
+    scores, ic_df = build(cutoff=args.cutoff, lindy=args.lindy, use_residuals=args.use_residuals)
     print("=== Trailing-window IC (rank corr vs forward 21d return) ===")
     print(ic_df.to_string(index=False))
     print("\n=== Top 20 composite ===")
