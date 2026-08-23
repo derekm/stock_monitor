@@ -73,6 +73,10 @@ def classify_instrument_type(ticker: str) -> str:
             return "otc_foreign"
         if last == "Y":
             return "adr"
+        if last == "P":
+            return "preferred"
+        if last == "Z":
+            return "warrant"
     return "stock"
 
 

@@ -190,6 +190,22 @@ def month_end_long(pillars: dict[str, pd.DataFrame]) -> pd.DataFrame:
     out.columns = ["date", "ticker", *stacked.columns]
     out["date"] = pd.to_datetime(out["date"]).dt.date
     out["ticker"] = out["ticker"].astype(str).str.upper()
+    return apply_er_eligibility(out)
+
+
+def apply_er_eligibility(out: pd.DataFrame) -> pd.DataFrame:
+    """ER is defined only for common stock with at least one of carry/value."""
+    out = out.copy()
+    stocks = DATA_DIR / "monitored_stocks.parquet"
+    itype = pd.Series("stock", index=out["ticker"].unique())
+    if stocks.exists():
+        ms = pd.read_parquet(stocks, columns=["ticker", "instrument_type"])
+        ms["ticker"] = ms["ticker"].astype(str).str.upper()
+        itype = ms.drop_duplicates("ticker").set_index("ticker")["instrument_type"]
+    out["instrument_type"] = out["ticker"].map(itype).fillna("stock")
+    fund = out["carry"].notna() | out["value"].notna()
+    ok = (out["instrument_type"] == "stock") & fund & out["expected_return"].notna()
+    out.loc[~ok, "expected_return"] = np.nan
     return out
 
 
@@ -239,7 +255,7 @@ def main() -> pd.DataFrame:
             n = int(latest[col].notna().sum())
             print(f"  {col}: {n:,} / {len(latest):,} ({n / max(len(latest), 1) * 100:.1f}%)")
         shown = latest.dropna(subset=["expected_return"]).nlargest(10, "expected_return")
-        print(f"\n=== Top 10 ER @ {last} (≥2 pillars) ===")
+        print(f"\n=== Top 10 ER @ {last} (stock + carry|value) ===")
         cols = [c for c in ["ticker", "n_pillars", "carry", "value", "momentum", "defensive", "expected_return"] if c in shown]
         print(shown[cols].to_string(index=False))
     return out

@@ -10,7 +10,7 @@ Ilmanen 4-pillar expected-return ranks on the `daily_prices` universe.
 | value | Mean rank of B/M, E/P, FCF yield, S/P on the same mcap |
 | momentum | Rank of 12-1 return (252d, skip last 21d) |
 | defensive | Mean rank of −60d vol, −|beta| vs EW market, ROE, ROIC, −D/E |
-| expected_return | Equal-weight mean of available pillars; **NaN unless ≥2 pillars** |
+| expected_return | Equal-weight mean of available pillars; **NaN unless ≥2 pillars, `instrument_type=stock`, and carry or value is present** |
 
 ## Usage
 
