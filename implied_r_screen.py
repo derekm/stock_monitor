@@ -421,6 +421,13 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
     df["fwd_pe_bench"] = 1.0 / df["implied_r"].replace(0, np.nan)
     df["bvps"] = df["price"] / df["pb_ratio"]
 
+    # Cochrane/Ilmanen CF vs DR: profitability vs required return from the multiple.
+    df["cf_yield"] = df["roe"]
+    df["discount_rate"] = df["implied_r"]
+    df["cf_minus_dr"] = df["cf_yield"] - df["discount_rate"]
+    df["er_from_cf"] = df["cf_yield"]
+    df["er_from_dr"] = df["discount_rate"]
+
     # Triplet sanity
     df["r_gt_roe"] = df["implied_r"] > df["roe"]
     df["pb_lt_1"] = df["pb_ratio"] < 1.0
@@ -588,6 +595,13 @@ def main():
     if args.save:
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), OUT_PQ)
         print(f"\nWrote {OUT_PQ} ({len(df)} rows)")
+        decomp_cols = [c for c in ["ticker", "cf_yield", "discount_rate", "cf_minus_dr",
+                                    "er_from_cf", "er_from_dr", "implied_r", "roe", "pb_ratio"]
+                       if c in df.columns]
+        decomp = df[decomp_cols].copy()
+        decomp_path = DATA_DIR / "implied_r_decomp.parquet"
+        decomp.to_parquet(decomp_path, index=False)
+        print(f"Wrote {decomp_path} ({len(decomp)} rows)")
 
 
 if __name__ == "__main__":
