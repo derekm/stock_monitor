@@ -541,11 +541,49 @@ def free_gpu():
 
 
 if __name__ == "__main__":
-    # Quick smoke test
-    import numpy as np
-    import pandas as pd
-    
-    print("Testing research hygiene modules...")
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--book-barriers", action="store_true")
+    ap.add_argument("--save", action="store_true")
+    args = ap.parse_args()
+    if args.book_barriers:
+        import shutil, tempfile
+        from pathlib import Path
+        src = Path(__file__).parent
+        snap = Path(tempfile.gettempdir()) / "ph_daily_prices.parquet"
+        BOOK = ["BAYRY", "CAG", "HMC", "HPQ", "KHC", "MOS", "PFE", "SMCI", "T",
+                "ALL", "EOG", "GL", "BEN"]
+        px = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
+        px["ticker"] = px["ticker"].astype(str).str.upper()
+        px = px[px["ticker"].isin(BOOK)]
+        px["date"] = pd.to_datetime(px["date"]).dt.normalize()
+        px["px"] = px["adj_close"].where(px["adj_close"].notna(), px["close"])
+        rows = []
+        for t, g in px.groupby("ticker"):
+            s = g.sort_values("date").drop_duplicates("date").set_index("date")["px"]
+            if len(s) < 80:
+                continue
+            vol = get_daily_vol(s)
+            events = s.index[::21]
+            events = events.intersection(vol.dropna().index)
+            lab = triple_barrier_labels(s, events, TripleBarrierConfig(max_holding=21))
+            if lab.empty:
+                continue
+            vc = lab["bin"].value_counts(normalize=True)
+            rows.append({
+                "ticker": t, "n": len(lab),
+                "pt": float(vc.get(1, 0)), "sl": float(vc.get(-1, 0)),
+                "vb": float(vc.get(0, 0)), "mean_ret": float(lab["ret"].mean()),
+            })
+        out = pd.DataFrame(rows)
+        print(out.round(3).to_string(index=False))
+        if args.save:
+            dest = src / "triple_barrier_labels.parquet"
+            out.to_parquet(dest, index=False)
+            print(f"Saved {dest}")
+        raise SystemExit(0)
+    print("use --book-barriers --save")
+    raise SystemExit(0)
     
     # Create synthetic price data
     np.random.seed(42)

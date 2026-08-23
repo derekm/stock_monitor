@@ -27,16 +27,70 @@ import json
 import numpy as np
 import pandas as pd
 
-DATA_DIR = __import__("pathlib").Path(__file__).resolve().parent
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parent
 
 
 def load_close(tickers=None):
-    cols = ["date", "ticker", "close"]
-    d = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=cols)
+    import shutil, tempfile
+    snap = Path(tempfile.gettempdir()) / "ti_daily_prices.parquet"
+    src = DATA_DIR / "daily_prices.parquet"
+    if not snap.exists():
+        shutil.copy2(src, snap)
+    cols = ["date", "ticker", "adj_close", "close"]
+    d = pd.read_parquet(snap, columns=cols)
+    d["ticker"] = d["ticker"].astype(str).str.upper()
     if tickers:
-        d = d[d["ticker"].isin(tickers)]
-    d = d.sort_values(["ticker", "date"])
-    return d
+        d = d[d["ticker"].isin([t.upper() for t in tickers])]
+    d["close"] = d["adj_close"].where(d["adj_close"].notna(), d["close"])
+    return d.sort_values(["ticker", "date"])
+
+
+def hill_alpha(x, k_frac=0.10):
+    """Hill estimator for the tail index of the RIGHT tail (positive extremes).
+    Uses the largest k = k_frac*n order statistics. alpha = 1/mean(log(x/x_k))."""
+    x = np.asarray(x, dtype=float)
+    x = x[np.isfinite(x) & (x > 0)]
+    n = len(x)
+    if n < 10:
+        return np.nan
+    k = max(5, int(k_frac * n))
+    k = min(k, n - 1)
+    xs = np.sort(x)[::-1][:k]
+    return float(k / np.sum(np.log(xs / xs[-1]))) if xs[-1] > 0 else np.nan
+
+
+def hill_alpha_dekkers(x, k_frac=0.10):
+    """Dekkers–Einmahl–de Haan bias-corrected Hill (Taleb SCFT)."""
+    x = np.asarray(x, dtype=float)
+    x = np.sort(x[np.isfinite(x) & (x > 0)])[::-1]
+    n = len(x)
+    if n < 20:
+        return np.nan
+    k = max(10, int(k_frac * n))
+    k = min(k, n - 2)
+    logs = np.log(x[:k] / x[k])
+    m1 = logs.mean()
+    m2 = np.mean(logs ** 2)
+    if m1 <= 0:
+        return np.nan
+    gamma = m1
+    # bias correction: 1 − (M2/M1² − 1)⁻¹ when second moment exists
+    ratio = m2 / (m1 * m1) if m1 else np.nan
+    if not np.isfinite(ratio) or abs(ratio - 2) < 1e-6:
+        return float(1.0 / gamma)
+    corr = 1.0 - (ratio - 1.0) ** -1
+    g = gamma * (1.0 + corr) if np.isfinite(corr) else gamma
+    return float(1.0 / g) if g > 0 else np.nan
+
+
+def hill_stability(x, fracs=(0.05, 0.08, 0.10, 0.15)):
+    vals = [hill_alpha_dekkers(x, f) for f in fracs]
+    vals = [v for v in vals if np.isfinite(v)]
+    if len(vals) < 2:
+        return np.nan, np.nan
+    return float(np.mean(vals)), float(np.std(vals))
 
 
 def returns_by_ticker(d):
@@ -109,11 +163,15 @@ def main():
 
     rows = []
     for t, r in rets.items():
-        alpha = hill_alpha(np.abs(r))  # absolute tails (two-sided extremes)
+        alpha = hill_alpha(np.abs(r))
+        alpha_bc, alpha_sd = hill_stability(np.abs(r))
         probs = {k: (emp, gauss, ratio) for k, emp, gauss, ratio in tail_probs(r)}
         row = {
             "ticker": t, "n_obs": len(r),
             "tail_alpha_hill": round(alpha, 2) if np.isfinite(alpha) else None,
+            "tail_alpha_hill_bc": round(alpha_bc, 2) if np.isfinite(alpha_bc) else None,
+            "hill_k_stability": round(alpha_sd, 3) if np.isfinite(alpha_sd) else None,
+            "alpha_lt_2": bool(np.isfinite(alpha_bc) and alpha_bc < 2.0),
             "emp_p_gt_3sd": round(probs.get(3, (None,))[0], 5) if 3 in probs else None,
             "gauss_p_gt_3sd": round(probs.get(3, (None,))[1], 5) if 3 in probs else None,
             "tail_ratio_3sd": round(probs.get(3, (None,))[2], 1) if 3 in probs else None,
@@ -125,6 +183,9 @@ def main():
         rows.append(row)
     df = pd.DataFrame(rows).sort_values("ticker")
     df.to_parquet(DATA_DIR / "tail_index.parquet")
+    robust = df[["ticker", "n_obs", "tail_alpha_hill", "tail_alpha_hill_bc",
+                 "hill_k_stability", "alpha_lt_2"]].copy()
+    robust.to_parquet(DATA_DIR / "tail_index_robust.parquet", index=False)
 
     # portfolio-level: equal-weight average of standardized returns (aligned on REAL dates)
     port_srs = None

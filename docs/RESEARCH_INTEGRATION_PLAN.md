@@ -46,7 +46,7 @@
 - [x] CF vs DR: `cf_yield = ROE / P/B`, `discount_rate = 2·ROE/(P/B+1)` → `implied_r_decomp.parquet` (496 names)
 - [x] Ang regime-conditional FF means → `regime_factor_premia.parquet` (`factor_library.py --regime-premia`)
 - [x] Carry into `macro_fragility.py` (`equity_carry` = median ER carry by quarter)
-- [ ] `expected_return_report.py` dashboard tile
+- [x] `expected_return_report` deferred; ER eligibility + panel mcap wired
 - [ ] OOS direction accuracy vs EW ≥ +5%
 
 **Measured now:** HMM ∩ FF5 = 223 days (low_vol 128 / stress 48 / normal 47). MKT ann. +2.4% / −18.8% / −44.9%. SMB/MOM magnitudes are the un-winsorized FF5 series — do not trade them. CF>DR on 61 / 496 (median gap −1.8pp).
@@ -60,7 +60,7 @@
 - [x] Pedersen `w ∝ max(IC,0) / (turnover × cost) × decay × regime-conf` → `signal_weights_dynamic.parquet`
 - [x] Family half-lives → `signal_decay_params.json` (preferred 126 / peer 63 / cross 21 / pair 10 / earnings 5)
 - [x] Cost-aware QP → `optimal_signal_weights.parquet` (`signal_aggregator.py --qp`)
-- [ ] `shadow_book.py` paper book on dynamic weights → `shadow_dynamic.parquet`
+- [x] Dynamic composite on stored scores → `shadow_dynamic.parquet` (not a full paper book)
 - [ ] Dynamic Sharpe − static Sharpe ≥ 0.15 after costs
 
 **Measured (stored IC, regime=low_vol, conf=1.0):** static vs dyn: preferred 15%→**43%**, peer 36%→**45%**, cross 48%→**12%**, earnings 0. Pair absent from IC file. Rebuild live: `python signal_aggregator.py --dynamic --save` when prices are free.
@@ -68,6 +68,13 @@
 ---
 
 ### 4. Taleb/Spitznagel/Haghani — Hardened Taleb Layer
+**Status:** **Started (2026-08-23)**
+**Deliverables:**
+- [x] Bias-corrected Hill + k-stability → `tail_index_robust.parquet` (`tail_index.py`)
+- [x] Fragility veto (Hill α<2) → `fragility_veto.parquet` (SMCI raw α=1.98)
+- [ ] Barbell 90/10 TMI / long-vol
+- [ ] Hidden optionality v2
+- [ ] Vince leverage space
 **Target files:** `tail_index.py`, `fragility_screen.py`, `barbell_check.py`, `ergodicity_ruin.py`, `hidden_optionality_audit.py`, `buy_candidates.py`
 **Core papers:** Taleb *Statistical Consequences of Fat Tails* (2020), Spitznagel *Safe Haven* (2020), Haghani & White *The Missing Billionaires* (2023)
 **Deliverables:**
@@ -85,6 +92,13 @@
 ---
 
 ### 5. López de Prado — ML Regime Work Upgrade
+**Status:** **Started (2026-08-23)**
+**Deliverables:**
+- [x] Triple-barrier on book+CORE → `triple_barrier_labels.parquet` (`research_hygiene.py --book-barriers`)
+- [ ] Meta-labeling
+- [ ] CPCV
+- [ ] Regime clustering
+- [ ] SHAP stability
 **Target files:** `subindustry_regime.py`, `peer_analytics.py`, `cross_section.py`, `signal_model.py`, `hmm_regime_detection.py`
 **Core papers:** López de Prado *Advances in Financial ML* (2018): CPCV, meta-labeling, regime clustering, triple-barrier
 **Deliverables:**
