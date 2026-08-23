@@ -39,6 +39,43 @@ DEFAULT_SPY500_SECTOR = None
 DEFAULT_SPY500_DATE_ADDED = None
 
 
+def classify_instrument_type(ticker: str) -> str:
+    """NASDAQ/NYSE ticker structure. Warrants/units/preferreds are not common stock."""
+    t = str(ticker).upper().strip()
+    if not t:
+        return "stock"
+    if t.endswith("-WT") or t.endswith("-WS") or t.endswith("-W"):
+        return "warrant"
+    if t.endswith("-U") or t.endswith("-UN") or t.endswith("-UU"):
+        return "unit"
+    if t.endswith("-R"):
+        return "right"
+    if "-" in t:
+        suf = t.split("-", 1)[1]
+        if suf in {"WT", "WTS", "WS", "W"}:
+            return "warrant"
+        if suf in {"U", "UN", "UU"}:
+            return "unit"
+        if suf and suf.isalpha() and len(suf) <= 2:
+            return "preferred"
+        return "stock"
+    if len(t) >= 5:
+        if t.endswith(("WW", "WS", "WT")):
+            return "warrant"
+        last = t[-1]
+        if last == "W":
+            return "warrant"
+        if last == "U":
+            return "unit"
+        if last == "R":
+            return "right"
+        if last == "F":
+            return "otc_foreign"
+        if last == "Y":
+            return "adr"
+    return "stock"
+
+
 def fetch_yfinance_info(ticker: str, max_retries: int = 3) -> dict | None:
     """Fetch sector/industry from yfinance with retries."""
     for attempt in range(max_retries):
@@ -48,8 +85,9 @@ def fetch_yfinance_info(ticker: str, max_retries: int = 3) -> dict | None:
             sector = info.get("sector")
             industry = info.get("industry")
             name = info.get("longName") or info.get("shortName") or ticker
+            quote_type = info.get("quoteType")
             if sector or industry or name != ticker:
-                return {"name": name, "sector": sector, "industry": industry}
+                return {"name": name, "sector": sector, "industry": industry, "quoteType": quote_type}
             return None
         except Exception as e:
             if attempt == max_retries - 1:
@@ -66,6 +104,8 @@ def main():
     ap.add_argument("--force", action="store_true", help="Update sector/industry on EXISTING monitored tickers")
     ap.add_argument("--max-new", type=int, default=None, help="Max new tickers to add this run (ignored with --all)")
     ap.add_argument("--delay", type=float, default=0.5, help="Delay between yfinance calls (seconds)")
+    ap.add_argument("--reclass-instruments", action="store_true",
+                    help="Recompute instrument_type from ticker structure (no yfinance)")
     args = ap.parse_args()
 
     # Load existing monitored stocks
@@ -83,6 +123,19 @@ def main():
         ])
         existing_tickers = set()
         print("No existing monitored_stocks.parquet - starting fresh")
+
+    if args.reclass_instruments:
+        if monitored.empty:
+            print("No monitored_stocks to reclass.")
+            return
+        monitored["instrument_type"] = monitored["ticker"].map(classify_instrument_type)
+        print(monitored["instrument_type"].value_counts().to_string())
+        if args.save:
+            monitored.to_parquet(MONITORED, index=False)
+            print(f"Wrote {len(monitored)} rows → {MONITORED}")
+        else:
+            print("Dry-run. Use --save to write.")
+        return
 
     # Get all tickers from daily_prices
     print("Reading daily_prices universe...")
@@ -148,7 +201,7 @@ def main():
             "growth_sleeve": DEFAULT_GROWTH_SLEEVE,
             "value_sleeve": DEFAULT_VALUE_SLEEVE,
             "dual_pass_member": DEFAULT_DUAL_PASS,
-            "instrument_type": DEFAULT_INSTRUMENT_TYPE,
+            "instrument_type": classify_instrument_type(ticker),
             "sp500_member": DEFAULT_SPY500_MEMBER,
             "sp500_sector": DEFAULT_SPY500_SECTOR,
             "sp500_date_added": DEFAULT_SPY500_DATE_ADDED,
