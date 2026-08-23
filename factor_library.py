@@ -359,8 +359,9 @@ def main():
         fund = pd.read_parquet(snap)
         if "as_of_date" in fund.columns:
             fund = fund.rename(columns={"as_of_date": "date"})
-        dates = pd.to_datetime(fund["date"], errors="coerce").dropna()
-        calendar = pd.bdate_range(dates.min(), dates.max())
+        dates = pd.to_datetime(fund["date"], errors="coerce").dropna().drop_duplicates().sort_values()
+        calendar = pd.DatetimeIndex(dates)
+        print(f"  filing calendar: {len(calendar)} dates")
         close = pd.DataFrame(index=calendar)
         mktcap = pd.DataFrame(index=calendar)
         print("Computing Novy-Marx quality...")

@@ -1,15 +1,15 @@
 # Quality Gate vs Novy-Marx
 
 **As of:** 2026-08-23  
-**Inputs:** `preferred_metrics.parquet` (8,669 tickers), `fundamentals.parquet` (323,150 dated rows), `quality_gate_comparison.parquet`
+**Inputs:** `preferred_metrics.parquet` (8,669), `novymarx_*.parquet` (filing calendar, 3,665 dates), `quality_gate_comparison.parquet`
 
 Live quality gate (`analytics_common.BASE_THRESHOLDS`): **ROE ≥ 15%, ROIC ≥ 15%, D/E ≤ 1.0**. `buffett_pass` is all three.
 
-Novy-Marx legs (latest filing per ticker):
+Novy-Marx legs (last non-null filing per ticker):
 
 | Leg | Definition | Quality direction |
 |-----|------------|-------------------|
-| Profitability | `revenue_ttm / total_assets` (Rev/A; no COGS panel) | high |
+| Profitability | `revenue_ttm / total_assets` (Rev/A; no COGS) | high |
 | Investment | consecutive-filing `%Δ total_assets` | low |
 | Accruals | `(NI_ttm − OCF_ttm) / total_assets` | low |
 | Leverage | `total_debt / shareholders_equity` | low |
@@ -40,20 +40,27 @@ ADBE, AEM, AGI, ALL, BBY, BEN, CAG, CF, EOG, GL, HBM, KGC, MSFT, PYPL, SBUX, SMG
 
 ---
 
-## Novy-Marx latest cross-section (dated `total_assets`)
+## Novy-Marx panels (dated `total_assets`, ≥2 filings)
 
-8,992 names have ≥2 asset observations (median 23 dates). Latest-filing coverage:
+`factor_library.py --quality-only` on the filing calendar (3,665 dates, not a 1967–2026 daily grid).
 
-| Metric | Latest n | All median | buffett_pass n | Gate median | Gate %ile | vs NM quality |
-|--------|----------|------------|----------------|-------------|-----------|---------------|
-| Gross profitability (Rev/A) | 4,837 | 0.358 | 43 | **0.825** | **75** | more profitable |
+| Panel | Tickers | Latest non-null |
+|-------|---------|-----------------|
+| `novymarx_asset_growth` | **8,983** | 8,983 |
+| `novymarx_gross_profitability` | 9,121 | 6,281 |
+| `novymarx_accruals` | 9,123 | 7,031 |
+| `novymarx_debt_to_equity` | 9,005 | 6,101 |
+| `novymarx_book_to_market` | 8,924 | 5,499 |
+
+| Metric | n | All median | buffett_pass n | Gate median | Gate %ile | vs NM quality |
+|--------|---|------------|----------------|-------------|-----------|---------------|
+| Gross profitability (Rev/A) | 6,281 | 0.369 | 81 | **0.682** | **68** | more profitable |
 | Asset growth (filing %Δ) | 8,983 | +0.77% | 84 | **0.00%** | **39** | slightly conservative |
-| Accruals (NI−OCF)/A | 5,556 | −0.033 | 42 | −0.038 | **47** | neutral |
-| Debt/Equity (fund) | 5,242 | 0.320 | 46 | 0.333 | **51** | no leverage tilt |
-| Book/Market | 4,509 | 0.406 | 42 | 0.115 | **26** | **growth, not value** |
-| Book/Market (1 / P/B) | 521 | 0.287 | 72 | 0.170 | **34** | not cheap |
+| Accruals (NI−OCF)/A | 7,031 | −0.036 | 79 | −0.022 | **58** | *higher* accruals |
+| Debt/Equity (fund) | 6,101 | 0.289 | 81 | 0.341 | **53** | no leverage tilt |
+| Book/Market | 5,499 | 0.388 | 79 | 0.132 | **29** | **growth, not value** |
 
-Universe NM-quality: **3,293 / 7,081** names with ≥2 legs (46.5%).
+Universe NM-quality: **3,796 / 8,126** (46.7%).
 
 ---
 
@@ -61,12 +68,12 @@ Universe NM-quality: **3,293 / 7,081** names with ≥2 legs (46.5%).
 
 | Set | Eligible (≥2 NM legs) | NM-quality | Overlap |
 |-----|----------------------|------------|---------|
-| buffett_pass (85) | 46 | 31 | **67%** |
-| INCLUDE_QUALITY (21) | 3 | 2 | **67%** (n=3) |
+| buffett_pass (85) | 82 | 49 | **60%** |
+| INCLUDE_QUALITY (21) | 21 | 10 | **48%** |
 
-**Verdict:** with dated assets, the gate is a **high-Rev/A, slightly low-investment** cut. Accruals and fund D/E are universe-median. It is **not** a value screen. Overlap **67% < 80%** — Gate 1 quality-overlap metric **fails**.
+**Verdict:** on the expanded ≥2-date panel the gate is **high Rev/A, slightly low investment**. Accruals and fund D/E are not quality-tilted. It is **not** a value screen. Overlap **60% < 80%** — Gate 1 quality-overlap metric **fails**.
 
-15 `buffett_pass` names with ≥2 NM legs miss NM-quality. Lowest NM scores: MLM, GOOG, MSI, SAGT (AG +705%), APH, GL, JBL, GE, MA, EXP. Typical miss: high asset growth and/or high fund D/E despite passing preferred D/E.
+33 `buffett_pass` names miss NM-quality. Lowest scores: SCHW, SAGT (AG +705%), MLM, GOOG/GOOGL, MSI, HUBB, APH, GL, JBL, SMG, AEM. Typical miss: high asset growth and/or high fund D/E.
 
 QMI’s 8-name book is the same tightness: `buffett_pass` is 1% of names; INCLUDE_CORE is 0.
 
@@ -74,27 +81,25 @@ QMI’s 8-name book is the same tightness: `buffett_pass` is 1% of names; INCLUD
 
 ## What the 85-name list is
 
-A Buffett ROE/ROIC/D/E cut on `preferred_metrics`. It is **not** Novy-Marx QMJ (GP/A + low investment + low accruals). Rev/A is the GP proxy until COGS exists.
+A Buffett ROE/ROIC/D/E cut on `preferred_metrics`. It is **not** Novy-Marx QMJ. Rev/A is the GP proxy until COGS exists.
 
 ---
 
-## Follow-up: gate corrections (do not ship without a remeasure)
+## Follow-up (do not loosen 15/15/1.0)
 
-Do **not** loosen ROE/ROIC/D/E to chase the 80% bar. That would inflate `buffett_pass` without adding QMJ content.
-
-1. **Split the screens.** Keep `buffett_pass` as the ROE/ROIC/D/E cut. Add a separate `nm_quality` flag (rank ≥0.5 on ≥2 of GP / low AG / low accruals / low fund D/E) and require it for QMI / INCLUDE_QUALITY if the goal is QMJ.
-2. **Reconcile D/E.** Preferred-gate D/E ≤ 1.0 but latest fund D/E for the 85 is universe-median (51st %ile). Same name, two series — pick one for the gate.
-3. **INCLUDE_CORE = 0.** Dual-pass (quality ∧ value trifecta) never fires at these thresholds. Either the trifecta is the wrong value definition, or dual-pass should use NM B/M / EY instead of EV/EBITDA + P/B + MCA.
-4. **QMI 8 names.** Same root: the quality gate is 1% of the universe. A QMJ sleeve should rank, not hard-threshold 15/15/1.0.
-5. **True GP/A.** Rev/A overstates profitability for high-COGS names. Need `gross_profit` / COGS from companyfacts before treating GP as validated.
-6. **Winsorize AG.** SAGT +705% is a restatement/unit change, not investment. Cap AG at, say, ±100% before ranking.
-7. **FF5 HML/RMW.** Still empty in `ff5_factors.parquet` (price-only MKT/SMB/MOM). Wire `shareholders_equity` / Rev/A / filing AG into `compute_ff5_with_fundamentals` before factor-adjusting signals again.
-8. **IC ≥ +0.02 after residual.** Not re-measured on the dated panel. Re-run `signal_aggregator.py --use-residuals` only after HML/RMW exist.
+1. Separate `nm_quality` flag; do not reuse `buffett_pass` as QMJ.
+2. Reconcile preferred D/E vs fund D/E (gate names sit at the 53rd %ile of fund D/E).
+3. INCLUDE_CORE = 0 — dual-pass needs B/M or EY, not the current trifecta.
+4. QMI: rank QMJ instead of hard-threshold 15/15/1.0.
+5. True GP/A needs COGS.
+6. Winsorize AG before ranking (SAGT +705%).
+7. Wire HML/RMW/CMA from equity / Rev/A / filing AG.
+8. Re-run residual IC only after (7).
 
 ---
 
 ## Artifacts
 
-- `quality_gate_comparison.parquet` — one row/ticker: gate flags + latest NM columns
-- `fundamentals.parquet` — dated `total_assets` (323,150 rows)
-- Rebuild comparison: latest-filing join of `fundamentals` → consecutive-filing `%Δ assets` → rank vs `preferred_metrics`
+- `novymarx_{gross_profitability,asset_growth,accruals,debt_to_equity,book_to_market}.parquet` — filing-date panels
+- `quality_gate_comparison.parquet` — one row/ticker
+- Rebuild: `python factor_library.py --quality-only --save`

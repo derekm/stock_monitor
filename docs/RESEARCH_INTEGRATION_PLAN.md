@@ -7,7 +7,7 @@
 ## Phase 1: Priority Deep Dives (Weeks 1–14)
 
 ### 1. Fama/French + Novy-Marx — Factor Construction Validation
-**Status:** **Closed (2026-08-23)** — comparison done on dated `total_assets`. Overlap **67%** (bar 80%). Gate is Buffett ROE/ROIC/D/E, not QMJ.
+**Status:** **Closed (2026-08-23)** — re-run on dated `total_assets` (≥2 filings = 8,983 AG names). Overlap **49/82 = 60%** (bar 80%). Gate is Buffett ROE/ROIC/D/E, not QMJ.
 **Target files:** `peer_analytics.py`, `preferred_metrics.py`, `factor_rotation_defense.py`, `signal_aggregator.py`
 **Core papers:** FF 1993/2015 (5-factor), Novy-Marx 2013 (gross profitability), 2014 (quality)
 **Deliverables:**
@@ -17,7 +17,7 @@
 - [x] `signal_aggregator.py --use-residuals` (re-measure IC after HML/RMW exist)
 - [x] `factor_attribution.py` (named to actual factor columns)
 
-**Success metric (measured):** Gate ∩ NM-quality = **31/46 = 67%** (bar was ≥80% — **fail**). Signal IC ≥ +0.02 after residual: **not re-measured** on dated assets.
+**Success metric (measured):** Gate ∩ NM-quality = **49/82 = 60%** (bar was ≥80% — **fail**). Signal IC ≥ +0.02 after residual: **not re-measured** (HML/RMW empty).
 
 **Follow-up (do not loosen 15/15/1.0 to chase 80%):**
 1. Separate `nm_quality` flag; do not reuse `buffett_pass` as QMJ
@@ -232,7 +232,7 @@
 
 | Gate | Criteria | Decision |
 |------|----------|----------|
-| **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | **Closed.** Overlap **67%** (bar 80%). `buffett_pass` ≠ QMJ. HML/RMW empty. Continue Phase 1; do not loosen 15/15/1.0. |
+| **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | **Closed.** Overlap **60%** on 8,983-name AG panel (bar 80%). `buffett_pass` ≠ QMJ. HML/RMW empty. Do not loosen 15/15/1.0. |
 | **Gate 2 (Week 8)** | Dynamic signal weighting beats static; expected return decomposition live | Continue Phase 1 |
 | **Gate 3 (Week 14)** | Taleb layer hardened; barbell portfolio backtested | Enter Phase 2 |
 | **Gate 4 (Week 26)** | ML regime upgraded; sequence risk metrics live | Enter Phase 3 |
