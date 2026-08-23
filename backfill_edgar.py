@@ -210,7 +210,10 @@ def merge_into_fundamentals(new_rows: list[dict], force: bool = False) -> int:
         nd = new_df.copy()
         for df in (ex, nd):
             for col in df.columns:
-                if pd.api.types.is_numeric_dtype(df[col]):
+                if str(df[col].dtype) == "null" or df[col].isna().all():
+                    if col not in idx:
+                        df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
+                elif pd.api.types.is_numeric_dtype(df[col]):
                     df[col] = df[col].astype("float64")
         # Merge with suffixes
         merged = ex.merge(nd, on=idx, how="left", suffixes=("_old", "_new"))
@@ -286,6 +289,7 @@ def merge_into_fundamentals(new_rows: list[dict], force: bool = False) -> int:
                 "debt_to_equity", "shares_outstanding", "interest_coverage",
                 "earnings_stability", "revenue_quarterly", "operating_income_quarterly", "net_income_quarterly",
                 "free_cash_flow", "operating_cash_flow_ttm", "capital_expenditure_ttm",
+                "gross_profit", "gross_profit_ttm", "cogs",
             ]
             for c in FILL_COLS:
                 old_col, new_col = f"{c}_old", f"{c}_new"

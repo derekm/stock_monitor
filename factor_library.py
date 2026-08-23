@@ -16,6 +16,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from analytics_common import winsor_abs, winsor_cs
 
 DATA_DIR = Path(__file__).parent
 
@@ -151,8 +152,7 @@ def compute_ff5_with_fundamentals(
 
     mktcap_lagged = mktcap.shift(1).reindex(rets.index)
     # Winsorize per date so a share-count blowup cannot dominate VW.
-    hi = mktcap_lagged.quantile(0.995, axis=1)
-    mktcap_lagged = mktcap_lagged.clip(upper=hi, axis=0)
+    mktcap_lagged = winsor_cs(mktcap_lagged, 0.995)
     mktcap_lagged = mktcap_lagged.where(mktcap_lagged.gt(0))
     w = mktcap_lagged.where(rets.notna())
     mktcap_weights = w.div(w.sum(axis=1), axis=0)
@@ -389,7 +389,7 @@ def attach_nm_quality(df: pd.DataFrame) -> pd.DataFrame:
         "nm_debt_to_equity": last_nn("debt_to_equity"),
         "nm_book_to_market": last_nn("book_to_market"),
     })
-    ag = nm["nm_asset_growth"].clip(-AG_WINSOR, AG_WINSOR)
+    ag = winsor_abs(nm["nm_asset_growth"], AG_WINSOR)
     nm["gp_q"] = nm["nm_gross_profitability"].rank(pct=True)
     nm["ag_q"] = (1 - ag.rank(pct=True))
     nm["ac_q"] = 1 - nm["nm_accruals"].rank(pct=True)

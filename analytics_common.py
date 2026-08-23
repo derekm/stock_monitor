@@ -242,6 +242,18 @@ def clip_returns(rets: pd.DataFrame, clip: float = 0.35) -> pd.DataFrame:
     return rets
 
 
+def winsor_abs(s, limit: float):
+    """Symmetric hard clip. Series or DataFrame."""
+    return s.clip(lower=-limit, upper=limit)
+
+
+def winsor_cs(df: pd.DataFrame, q: float = 0.995) -> pd.DataFrame:
+    """Per-date cross-section: clip each row to its [1-q, q] quantiles."""
+    lo = df.quantile(1.0 - q, axis=1)
+    hi = df.quantile(q, axis=1)
+    return df.clip(lower=lo, upper=hi, axis=0)
+
+
 def load_membership() -> pd.DataFrame:
     """Universe membership. Prefer daily_prices tickers; sleeve flags optional."""
     prices = DATA_DIR / "daily_prices.parquet"
