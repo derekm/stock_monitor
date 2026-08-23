@@ -93,6 +93,16 @@ def _taxonomy_of(d: dict) -> str:
     return "unknown"
 
 
+def _unit_entries(tag_data: dict) -> list[dict]:
+    """Facts from the single most-covered non-pure unit. One currency per series."""
+    units = (tag_data or {}).get("units", {}) or {}
+    keys = [k for k in units if k and str(k).lower() != "pure"]
+    if not keys:
+        return []
+    key = max(keys, key=lambda k: len(units.get(k) or []))
+    return list(units.get(key) or [])
+
+
 def _parse_frame(frame: str) -> dict:
     """
     Parse XBRL frame strings to extract calendar/fiscal info.
@@ -190,8 +200,7 @@ def _pick_tag(facts: dict, tag_list: list[str], prefer_order: bool = False):
         for tag in tag_list:
             if tag not in facts:
                 continue
-            units_all = facts[tag].get("units", {})
-            if any(units_all.get(k) for k in ("USD", "shares")):
+            if _unit_entries(facts[tag]):
                 return tag
         return None
 
@@ -199,12 +208,7 @@ def _pick_tag(facts: dict, tag_list: list[str], prefer_order: bool = False):
     for tag in tag_list:
         if tag not in facts:
             continue
-        units_all = facts[tag].get("units", {})
-        # Share counts are filed under units["shares"], monetary items under
-        # units["USD"]; both must be considered or share tags yield nothing.
-        units = []
-        for unit_key in ("USD", "shares"):
-            units.extend(units_all.get(unit_key, []))
+        units = _unit_entries(facts[tag])
         if not units:
             continue
         n_q = 0
@@ -257,11 +261,7 @@ def _annual_series(facts: dict, tag_list: list[str],
     if not tag:
         return pd.Series(dtype=float)
     rows = {}
-    units_all = facts[tag].get("units", {})
-    entries = []
-    for unit_key in ("USD", "shares"):
-        entries.extend(units_all.get(unit_key, []))
-    for e in entries:
+    for e in _unit_entries(facts[tag]):
         if not e.get("start"):
             continue
         sm = _span_months(e)
@@ -316,7 +316,7 @@ def parse_income_quarterly(facts: dict, tag_list: list[str],
         return pd.Series(dtype=float)
     
     rows = []
-    for e in tag_data.get("units", {}).get("USD", []):
+    for e in _unit_entries(tag_data):
         frame = e.get("frame", "")
         end = e.get("end", "")
         val = e.get("val")
@@ -461,7 +461,7 @@ def parse_cashflow_quarterly(facts: dict, tag_list: list[str]) -> pd.Series:
         return pd.Series(dtype=float)
     
     rows = []
-    for e in tag_data.get("units", {}).get("USD", []):
+    for e in _unit_entries(tag_data):
         frame = e.get("frame", "")
         end = e.get("end", "")
         val = e.get("val")
@@ -589,28 +589,19 @@ def parse_balance(facts: dict, tag_list: list[str],
         return pd.Series(dtype=float)
     
     rows = []
-    # Both unit families share one loop; `start` is captured so span_months below
-    # can tell an instant balance value from a duration fact.
-    units_all = tag_data.get("units", {})
-    for unit_key in ("USD", "shares"):
-        for e in units_all.get(unit_key, []):
-            frame = e.get("frame", "")
-            parsed = _parse_frame(frame)
-            rows.append({
-                "end": e["end"],
-                "val": e["val"],
-                "filed": e.get("filed", ""),
-                "frame": frame,
-                "type": parsed["type"],
-                "year": parsed["year"],
-                "quarter": parsed["quarter"],
-                # span_months distinguishes a genuinely instantaneous balance
-                # value (no start -> None) from a DURATION fact. The weighted-
-                # average share tags are durations. SpaceX (SPCX) files two facts
-                # at end=2026-06-30 -- a 6-month average of 4.879B and a 3-month
-                # average of 5.864B -- so `end` alone cannot identify the value.
-                "span_months": _span_months(e),
-            })
+    for e in _unit_entries(tag_data):
+        frame = e.get("frame", "")
+        parsed = _parse_frame(frame)
+        rows.append({
+            "end": e["end"],
+            "val": e["val"],
+            "filed": e.get("filed", ""),
+            "frame": frame,
+            "type": parsed["type"],
+            "year": parsed["year"],
+            "quarter": parsed["quarter"],
+            "span_months": _span_months(e),
+        })
     if not rows:
         return pd.Series(dtype=float)
     
@@ -710,7 +701,7 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
                   "PaymentsToAcquirePropertyPlantAndEquipmentNet",
                   "CapitalExpenditure",
                   "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"]
-    ASSET_TAGS = ["Assets"]
+    ASSET_TAGS = ["Assets", "TotalAssets"]
     EQUITY_TAGS = ["StockholdersEquity", "CommonStockholdersEquity",
                    "EquityAttributableToOwnersOfParent", "Equity"]
     DEBT_TAGS = ["LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "Debt",
@@ -879,11 +870,10 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             s = series[series.index <= qend_date].dropna()
             row[out_name] = float(s.iloc[-1]) if len(s) > 0 else None
 
-        # Reject values that cannot be a share count: filings carry scale errors
-        # (7.96e14 shares, or 1.65e12 for a company with 1.4e9). No US listed
-        # company exceeds ~1e11. clean_corrupt_shares.py repairs stored rows.
+        # Keep real mega-share counts (HCMC is ~3.8e11). Drop non-positive
+        # or >= 1e14 values — those are scale errors, not share counts.
         _sh = row.get("shares_outstanding")
-        row["shares_outstanding"] = _sh if (_sh and 0 < _sh < 1e11) else None
+        row["shares_outstanding"] = _sh if (_sh and 0 < _sh < 1e14) else None
 
         # Free Cash Flow = TTM OCF - |TTM CapEx|
         # If CapEx unavailable, use OCF as FCF proxy
@@ -1201,14 +1191,13 @@ if __name__ == "__main__":
             eq_count = len(fin.get("equity", pd.Series()))
             print(f"  {t}: rev={rev_count}, ocf={ocf_count}, capex={capex_count}, eq={eq_count}")
 
+            rows = compute_quarterly_fundamentals(fin, t)
+            print(f"    → {len(rows)} quarters")
+            done += 1
             if args.dry_run:
                 continue
-
-            rows = compute_quarterly_fundamentals(fin, t)
             results.extend(rows)
             pending.extend(rows)
-            done += 1
-            print(f"    → {len(rows)} quarters")
 
             if args.flush_every and done % args.flush_every == 0:
                 _flush()
