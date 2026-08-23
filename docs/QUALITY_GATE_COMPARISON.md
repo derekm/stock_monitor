@@ -30,12 +30,12 @@ ADBE, AEM, AGI, ALL, BBY, BEN, CAG, CF, EOG, GL, HBM, KGC, MSFT, PYPL, SBUX, SMG
 
 ## Novy-Marx latest cross-section
 
-Asset growth exists only where `total_assets` has **≥2 filing dates**. That is 111 tickers (113 consecutive pairs). The fundamentals panel is ~1 row/ticker (mean 1.07), so investment coverage is structural, not a resampling choice.
+`total_assets` is a dated series on `fundamentals.parquet` (323,150 rows, 9,155 tickers). **8,992** names have ≥2 asset observations (median 23 dates; AAPL 77, 2008-09-27–2026-06-30). Asset growth is consecutive-filing `%Δ`. Writer: `compute_quarterly_fundamentals` emits one row per `as_of_date` on the union of assets and equity instants; `backfill_edgar.merge_into_fundamentals` is additive on `(ticker, as_of_date)`.
 
 | Metric | Latest n | All median | buffett_pass n | Gate median | Gate %ile | Direction vs NM quality |
 |--------|----------|------------|----------------|-------------|-----------|-------------------------|
 | Gross profitability (Rev/A) | 113 | 0.438 | 19 | **0.620** | **64** | higher profitability |
-| Asset growth (filing %Δ) | 111 | −0.0025 | 18 | −0.0024 | **50** | no investment tilt |
+| Asset growth (filing %Δ) | 8,983 | 0.0077 | — | — | — | latest CS; 8,992 names have ≥2 obs |
 | Accruals (NI−OCF)/A | 127 | −0.024 | 21 | −0.004 | **64** | *higher* accruals |
 | Debt/Equity | 366 | 0.272 | 7 | **0.076** | **32** | lower leverage |
 | Book/Market (fund mcap) | 176 | 0.200 | 22 | 0.142 | **43** | not cheap |

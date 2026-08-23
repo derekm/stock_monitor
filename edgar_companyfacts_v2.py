@@ -791,23 +791,17 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
     - pb_ratio, ev_ebitda (if price data provided)
     """
     equity = financials.get("equity", pd.Series(dtype=float))
-    if equity.empty:
+    assets = financials.get("assets", pd.Series(dtype=float))
+    spine = equity.index.union(assets.index)
+    if spine.empty:
         return []
-    
+
     results = []
-    
-    for qend_date, eq_val in equity.items():
-        # Negative or zero book equity is REAL, not corrupt: post-SPAC issuers
-        # classify redeemable shares outside equity (BAERW reports negative equity in
-        # all 19 of its quarters), and distressed companies carry accumulated deficits
-        # exceeding paid-in capital. Skipping those quarters discarded the ticker
-        # entirely -- revenue, assets and cash flow with it. Every equity-denominated
-        # ratio below (roe, roic, debt_to_equity, pb_ratio) already requires
-        # total_equity > 0 on its own, so the row is emitted and those ratios are
-        # simply left unset.
-        if eq_val is None or not np.isfinite(eq_val):
-            continue
-        
+
+    for qend_date in spine.sort_values():
+        eq_val = equity.get(qend_date) if len(equity) else None
+        # Negative/zero book equity is real. Emit the row; ratio fields
+        # that need equity > 0 stay unset below.
         row = {
             "ticker": ticker,
             "as_of_date": qend_date.date() if hasattr(qend_date, "date") else qend_date,
