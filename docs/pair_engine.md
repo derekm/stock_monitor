@@ -9,14 +9,8 @@ The RF-style analysis exposed that sector peers co-move; the tradeable question
 is whether a *spread* between two names in the same industry mean-reverts.
 This engine answers it honestly:
 
-1. **Universe** — pairs within `industry` (fallback `sector`) groups, min 2 names.
-2. **Selection (trailing window only)** — Engle-Granger cointegration t-stat
-   (statsmodels OLS + ADF on residual), OU half-life of the spread, then
-   **Benjamini-Hochberg FDR** across ALL tested pairs (alpha 0.20 default).
-   Usable = FDR-survive AND half-life ∈ [2, 250] days. The half-life bounds are
-   the anti-spurious filter: EG p-values are ~0 for nearly every trending pair,
-   so FDR alone lets nonsense pairs through (e.g. startup vs blue-chip with
-   hl ≈ 0.1d = white noise, no persistence to harvest).
+1. **Universe** — pairs within `industry` (fallback `sector`), cap `--max-per-group` (default 40; SPX members first). Daily DAG uses `--n-folds 1`.
+2. **Selection** — return-corr screen `|ρ| ∈ [corr_min, corr_max]`, then Engle-Granger + OU half-life, then BH-FDR. Usable = FDR-survive AND half-life ∈ [2, 250] days.
 3. **Trading (next window)** — z-score entry ±2 (skip |z| > 6: relationship
    broke, not reversion), exit at z=0, stop at ±4, time exit after 60 bars.
    Position is beta-hedged: `pos × (ret_b − beta·ret_a)`.
@@ -26,7 +20,7 @@ This engine answers it honestly:
 ## Usage
 
 ```bash
-python pair_engine.py --save
+python pair_engine.py --save --max-per-group 40 --n-folds 1
 python pair_engine.py --save --lookback 378 --test-days 252 --n-folds 3 \
     --entry-z 2.0 --exit-z 0.0 --stop-z 4.0 --max-hold 60 --alpha 0.20
 ```
