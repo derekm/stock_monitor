@@ -32,13 +32,13 @@
    - [x] ER/TMI/FF5 read `daily_mcap.parquet`. Do not write `market_cap` onto `daily_prices`.
    - [x] HMC FY26 from 6-K (JPY): NI −¥423.9B, equity ¥12.15T, ROE −3.5%. `html_20f` rank 110. v2 filled FY21–FY25. BAYRY AR25 already merged.
    - [x] Implied-r: NaN unless ROE>0 and P/B>0 (HPQ/CAG garbage gated)
-   - [ ] Ride/crisis coverage for the personal book
+   - [x] Ride on the book → `ride_book.parquet`. Scores 0.34–0.49 (none extend). SMCI 0.34 worst.
    - **Migrate derived attributes to panels? Yes.** `daily_prices` stays OHLCV (+ optional stale mcap). Shares, PIT mcap, AG, NM, ER, FF5 live in their own parquet. Writers never `os.replace` the price file for a derived column.
 
 ---
 
 ### 2. Ilmanen + Ang — Expected Return Framework
-**Status:** **Active (2026-08-23)** — 4-pillar ER written; CF/DR + regime premia landed. OOS +5% gate **not measured**.
+**Status:** **Active (2026-08-23)** — 4-pillar ER written; CF/DR + regime premia landed. OOS hit-edge **+6.3pp** pass; top−EW **+1.4%** fail.
 **Target files:** `expected_returns.py`, `implied_r_screen.py`, `factor_library.py`
 **Core papers:** Ilmanen *Expected Returns* (2011), Ang *Asset Management* (2014), Cochrane (2011)
 **Deliverables:**
@@ -54,16 +54,16 @@
 ---
 
 ### 3. Asness/Pedersen — Signal Aggregation + Cost-Aware Weighting
-**Status:** **Active (2026-08-23)** — dynamic weights landed on stored IC. Sharpe ≥+0.15 **not measured**.
+**Status:** **Active (2026-08-23)** — live IC + dyn weights landed. Sharpe dyn−static **−0.14** (bar +0.15 fail). Do not size on `--dynamic`.
 **Target files:** `signal_aggregator.py`, `cost_model.py`
 **Deliverables:**
 - [x] Pedersen `w ∝ max(IC,0) / (turnover × cost) × decay × regime-conf` → `signal_weights_dynamic.parquet`
 - [x] Family half-lives → `signal_decay_params.json` (preferred 126 / peer 63 / cross 21 / pair 10 / earnings 5)
 - [x] Cost-aware QP → `optimal_signal_weights.parquet` (`signal_aggregator.py --qp`)
 - [x] Dynamic composite on stored scores → `shadow_dynamic.parquet` (not a full paper book)
-- [ ] Dynamic Sharpe − static Sharpe ≥ 0.15 after costs
+- [x] Dynamic Sharpe − static Sharpe: **−0.14** (1.41 vs 1.55, 225m, net 10bps — bar +0.15 **fail**). Family snapshots are not PIT; test used dated ER pillars + Pedersen HLs.
 
-**Measured (stored IC, regime=low_vol, conf=1.0):** static vs dyn: preferred 15%→**43%**, peer 36%→**45%**, cross 48%→**12%**, earnings 0. Pair absent from IC file. Rebuild live: `python signal_aggregator.py --dynamic --save` when prices are free.
+**Measured (live IC, 2026-08-20, regime=low_vol):** IC pref 0.047 / peer 0.166 / cross 0.029 / earn 0.015 / pair NaN. Dyn w: peer 60% / pref 38% / cross 2%. **Sharpe dyn−static = −0.14** (fail +0.15).
 
 ---
 

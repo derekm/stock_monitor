@@ -424,6 +424,93 @@ def build(cutoff: pd.Timestamp | None = None, lindy: bool = False, use_residuals
     return out, ic_df
 
 
+def measure_sharpe_dyn_static() -> pd.DataFrame:
+    """PIT ER pillars, trailing IC → static vs Pedersen dyn top-quintile, net 10bps."""
+    from cost_model import ROUND_TRIP_BPS
+    from analytics_common import winsor_abs
+    er = pd.read_parquet(
+        DATA_DIR / "expected_returns_decomp.parquet",
+        columns=["date", "ticker", "carry", "value", "momentum", "defensive", "expected_return"],
+    )
+    er = er.dropna(subset=["expected_return"])
+    er["ticker"] = er["ticker"].astype(str).str.upper()
+    er["date"] = pd.to_datetime(er["date"])
+    er["month"] = er["date"].dt.to_period("M")
+    last = er.sort_values("date").groupby(["month", "ticker"], as_index=False).tail(1)
+    names = last.loc[last["month"] == last["month"].max(), "ticker"].unique().tolist()
+    px = load_adj_prices_pandas(tickers=names)
+    wide = wide_closes(px).sort_index()
+    me = wide.resample("ME").last()
+    mret = winsor_abs(me.pct_change(), 0.50)
+    mret["month"] = mret.index.to_period("M")
+    pillars = ["carry", "value", "momentum", "defensive"]
+    months = sorted(last["month"].unique())
+    cost = ROUND_TRIP_BPS / 1e4
+    rows = []
+    prev_s, prev_d = set(), set()
+    for i, m in enumerate(months):
+        if i < 36 or i + 1 >= len(months):
+            continue
+        nxt = months[i + 1]
+        yrow = mret.loc[mret["month"] == nxt]
+        if yrow.empty:
+            continue
+        y = yrow.drop(columns=["month"]).iloc[0].dropna()
+        slc = last[last["month"] == m]
+        ics = {}
+        for p in pillars:
+            sc = slc.set_index("ticker")[p].dropna()
+            both = sc.index.intersection(y.index)
+            if len(both) < 40:
+                ics[p] = 0.0
+                continue
+            ic = float(sc.loc[both].corr(y.loc[both], method="spearman"))
+            ics[p] = max(ic, 0.0) if np.isfinite(ic) else 0.0
+        ssum = sum(ics.values()) or 1.0
+        w_s = {k: v / ssum for k, v in ics.items()}
+        hl = {"carry": 126.0, "value": 63.0, "momentum": 21.0, "defensive": 63.0}
+        raw = {k: ics[k] * (0.5 ** (21.0 / hl[k])) / ((252.0 / hl[k]) * max(cost, 1e-4)) for k in pillars}
+        dsum = sum(raw.values()) or 1.0
+        w_d = {k: v / dsum for k, v in raw.items()}
+        rnk = slc.set_index("ticker")[pillars].rank(pct=True)
+
+        def book(w):
+            sc = sum(w[p] * rnk[p].fillna(0.5) for p in pillars)
+            hold = sc.index[sc >= sc.quantile(0.80)]
+            r = y.reindex(hold).dropna()
+            r = r[r.abs() <= 0.50]
+            return (float(r.mean()) if len(r) >= 20 else np.nan), set(r.index)
+
+        rs, ns = book(w_s)
+        rd, nd = book(w_d)
+        to_s = 0.0 if not prev_s else 1.0 - len(ns & prev_s) / max(len(ns | prev_s), 1)
+        to_d = 0.0 if not prev_d else 1.0 - len(nd & prev_d) / max(len(nd | prev_d), 1)
+        prev_s, prev_d = ns, nd
+        if np.isfinite(rs) and np.isfinite(rd):
+            rows.append({
+                "month": str(m),
+                "ret_static": rs - to_s * cost,
+                "ret_dyn": rd - to_d * cost,
+                "to_static": to_s,
+                "to_dyn": to_d,
+                "n_static": len(ns),
+                "n_dyn": len(nd),
+            })
+    out = pd.DataFrame(rows)
+    if out.empty:
+        print("no Sharpe months")
+        return out
+    def _sh(s):
+        return float(s.mean() / s.std() * np.sqrt(12)) if s.std() > 0 else np.nan
+    sh_s, sh_d = _sh(out["ret_static"]), _sh(out["ret_dyn"])
+    print(f"months {len(out)}  Sharpe static {sh_s:.2f}  dyn {sh_d:.2f}  "
+          f"delta {sh_d-sh_s:+.2f}  (bar +0.15)  "
+          f"CAGR s {(1+out.ret_static).prod()**(12/len(out))-1:.1%}  "
+          f"d {(1+out.ret_dyn).prod()**(12/len(out))-1:.1%}")
+    out.to_parquet(DATA_DIR / "signal_sharpe_dyn_static.parquet", index=False)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cutoff", default=None, help="YYYY-MM-DD (default: last price date)")
@@ -438,8 +525,14 @@ def main():
                     help="Apply --dynamic to existing signal_aggregator_ic.parquet (no prices)")
     ap.add_argument("--qp", action="store_true",
                     help="Pedersen Ch.9 QP weights → optimal_signal_weights.parquet")
+    ap.add_argument("--sharpe", action="store_true",
+                    help="PIT ER-pillar dyn vs static top-Q Sharpe, net 10bps")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
+
+    if args.sharpe:
+        measure_sharpe_dyn_static()
+        return
 
     if args.from_ic or args.qp:
         if not OUT_IC.exists():

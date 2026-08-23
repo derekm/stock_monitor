@@ -478,3 +478,27 @@ def structural_gate(close: pd.Series, *, mode: str = "hybrid",
         "in_market_fraction": round(float(pos.mean()), 4),
         "target_vol": target_vol,
     }
+
+
+if __name__ == "__main__":
+    import argparse
+    from analytics_common import DATA_DIR, load_adj_prices_pandas
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--book", action="store_true")
+    args = ap.parse_args()
+    if not args.book:
+        raise SystemExit("use --book")
+    book = ["BAYRY", "CAG", "HMC", "HPQ", "KHC", "MOS", "PFE", "SMCI", "T"]
+    px = load_adj_prices_pandas(tickers=book)
+    rows = []
+    for t, g in px.groupby("ticker"):
+        g = g.sort_values("date")
+        s = long_ride_score(g.set_index("date")["close"])
+        rec = s.iloc[-1].to_dict() if isinstance(s, pd.DataFrame) else {"long_ride_score": float(s.iloc[-1])}
+        rec["ticker"] = t
+        rows.append(rec)
+    out = pd.DataFrame(rows)
+    dest = DATA_DIR / "ride_book.parquet"
+    out.to_parquet(dest, index=False)
+    print(out.to_string(index=False))
+    print("Wrote", dest)
