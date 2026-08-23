@@ -16,7 +16,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 OUT_PANEL = DATA_DIR / "daily_mcap.parquet"
-SHARES_MIN = 1e6
+SHARES_MIN = 5e5
 SHARES_MAX = 2e11
 
 

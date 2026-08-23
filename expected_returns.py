@@ -89,8 +89,18 @@ def load_close_mcap() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def mcap_from_fund(fund: pd.DataFrame, close: pd.DataFrame, mcap: pd.DataFrame) -> pd.DataFrame:
-    """Fill missing daily mcap from fundamentals shares × close, then fund market_cap."""
+    """Prefer PIT daily_mcap.parquet; else shares × close; else fund market_cap."""
     out = mcap.reindex(index=close.index, columns=close.columns)
+    panel_path = DATA_DIR / "daily_mcap.parquet"
+    if panel_path.exists():
+        panel = pd.read_parquet(panel_path)
+        panel["ticker"] = panel["ticker"].astype(str).str.upper()
+        panel["date"] = pd.to_datetime(panel["date"]).dt.normalize()
+        wide = panel.pivot(index="date", columns="ticker", values="market_cap")
+        idx = pd.to_datetime(close.index).normalize()
+        wide = wide.reindex(index=idx, columns=close.columns)
+        wide.index = close.index
+        out = wide.where(wide.notna() & (wide > 0), out)
     shares = _pivot_fund(fund, "shares_outstanding", close.index)
     if not shares.empty:
         sh = shares.reindex(index=close.index, columns=close.columns)

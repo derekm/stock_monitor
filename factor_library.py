@@ -445,6 +445,11 @@ def main():
             close = close.groupby(level=0).last()
             mktcap = mktcap.reindex(index=close.index, columns=close.columns)
             print(f"  PIT mcap last nn {int(mktcap.iloc[-1].notna().sum()):,}")
+            last_m = mktcap.iloc[-1]
+            big = last_m.index[last_m.ge(1e9)]
+            close = close.reindex(columns=big)
+            mktcap = mktcap.reindex(columns=big)
+            print(f"  mcap>=$1B: {len(big)} names")
         else:
             fund = load_fundamentals()
             shares = fund.dropna(subset=["ticker", "shares_outstanding"]).sort_values("date")
