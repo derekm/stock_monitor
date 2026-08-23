@@ -42,7 +42,7 @@ This repo is a **personal portfolio intelligence stack** (Python + DuckDB + a st
 - **pass8 RPT sweep saves checkpoints via `--ckpt-dir checkpoints/regime`** — filenames `rpt__<TICKER>__<steps>__<lr>.pt` (regime is NOT in the filename; the mapping lives in `regime_model_best_rpt.csv`). Sweep covers 140 monitored tickers × 3 regimes × 2 steps × 2 caps ≈ 1,680 cells, ~4 min/cell on MX550 → multi-day, resume-safe via `--resume`.
 - **Granite config constants live in `granite_config.py`** (a leaf module: `DEFAULT_MODEL`, `CONTEXT=512`, `HORIZON=96`). `granite_daily.py` re-exports them; `window_padding.py`/`forecast_granite.py` import from `granite_config` — **never** import them from `granite_daily` (circular-import trap: granite_daily's chain imports window_padding).
 - **Regime-model checkpoints** (`checkpoints/regime/*.pt`) are named `<TICKER>__<regime>__<steps>__<lr>.pt` and carry `n_channels` (1=close-only, 3=close+return+vol20) + `trained_on`. The serving side (`regime_serving.py`) matches by current HMM regime + `regime_model_best.csv` config; mismatched names silently fall back to the general model (`no_checkpoint` reason) — verify with `python regime_serving.py`.
-- **pass5/6/7/8 share machinery**: `pass6.py` imports `tag_windows`/`temporal_split` from itself and `windows_with_dates` from `regime_forecast.py`; `pass7.py` imports `train_regime_model` from `pass6`; `pass8.py` imports the same plus the pass6 hooks (`_CUSTOM_BASE_CKPT` for custom bases, `_exog_channel`/`_load_event_dates` for the exog channel). The resume dedupe key is the full cell identity (ticker, regime, split_frac, steps, cap, lr, composition) — not the combined arm string. pass6's `--head-only` freezes the backbone (TTM-paper mode); `--exog` adds the calendar-event channel; `--rpt` probes the base and falls back truthfully (RPT needs a base PRE-TRAINED with `num_patches=9` — see pass8).
+- **pass5/6/7/8 share machinery**: `pass6.py` imports `tag_windows`/`temporal_split` from itself and `windows_with_dates` from `regime_forecast.py`; `pass7.py` imports `train_regime_model` from `pass6`; `pass8.py` imports the same plus the pass6 hooks (`_CUSTOM_BASE_CKPT` for custom bases, `_exog_channel`/`_load_event_dates` for the exog channel). The resume dedupe key is the full cell identity (ticker, regime, split_frac, steps, cap, lr, composition) — not the combined arm string. pass6's `--head-only` freezes the backbone (TTM-paper mode); `--exog` adds the calendar-event channel; `--rpt` probes the base and falls back truthfully (`rpt=False` in the result) when the base wasn't RPT-pretrained. Serving RPT checkpoints requires `frequency_token_vocab_size = 10` (matching pass8's vocab=10 base) — the old hardcoded 5 in `forecast_granite.py` broke RPT loading; `load_granite_model(base="rpt")` reads `checkpoints/rpt_base/`.
 - `signal_aggregator.py` weights are **per-regime OOS-IC-derived** (current HMM regime picks the weights); the composite is consumed by `buy_candidates.py` and `shadow_book.py`.
 - **buy_candidates decisions are noise-robust (don't "simplify" them back to thresholds).** The stress haircut reads the HMM **posterior** (`regime_stress_prob()` — score −= 0.08·p(stress)); every numeric driver's contribution is the **noise-convolved expectation** `_step_expectation(x, sig, baseline, steps)` over its estimation error (`_est_error` = cross-sectional std/4). The `*STEPS` configs (`MOMENTUM_STEPS`, `FACTOR_STEPS`, `COMPOSITE_STEPS`, `RESID_MOM_STEPS`, `LIQUIDITY_STEPS`, `SKEW_STEPS`) are the single source of truth for the thresholds; `sig=0` reproduces the old exact thresholds. This came from the hidden-optionality audit (hard regime cliff flipped 28.4% of decisions; momentum 6.8% → ~6% with the knife-edges gone). `hidden_optionality_audit.py` (the `taleb_optionality` job) re-measures flip rates daily.
 - **Forecast uncertainty is Student-t, not Gaussian.** `forecast_ttm_mc_dropout` returns `(mean, std, nu)` — ν from the MC sample kurtosis (kurt_t = 6/(ν−4), clamped [4,30]); emitted as `forecast_nu`. `--epistemic-error EPS` widens std by √(1+EPS²) (the Forecasting-Paradox 50/50 σ(1±EPS) scale mixture) and thins ν accordingly.
@@ -54,13 +54,14 @@ This repo is a **personal portfolio intelligence stack** (Python + DuckDB + a st
 
 ## Documentation layout
 
-- `docs/SYSTEM_OVERVIEW.md` — investment thesis, screens, risk, regime tools, S&P-500 design.
-- `docs/SYSTEM_ORCHESTRATION.md` — data flow, service map, "what an agent should know before running analytics."
-- `docs/SCHEMAS.md` — every output file → script → schema family (single catalog).
-- `docs/<script>.md` — one doc per script (description, rationale, outputs, cross-links).
-- `README.md` — quick start + "How to update / re-run."
-- `docs/diagrams/` — framework PNGs + Mermaid sources (re-render via `render_mermaid.py`).
-- [GLOSSARY.md](https://github.com/derekm/stockmagic/blob/master/GLOSSARY.md) — cross-repo acronym dictionary (lives in the parent repo).
+| `docs/SYSTEM_OVERVIEW.md` | investment thesis, screens, risk, regime tools, S&P-500 design. |
+| `docs/SYSTEM_ORCHESTRATION.md` | data flow, service map, "what an agent should know before running analytics." |
+| `docs/SCHEMAS.md` | every output file → script → schema family (single catalog). |
+| `docs/<script>.md` | one doc per script (description, rationale, outputs, cross-links). |
+| `README.md` | quick start + "How to update / re-run." |
+| `docs/diagrams/` | framework PNGs + Mermaid sources (re-render via `render_mermaid.py`). |
+| `docs/RESEARCH_INTEGRATION_PLAN.md` | 22-researcher integration roadmap with phases, deliverables, and gates. |
+| [GLOSSARY.md](https://github.com/derekm/stockmagic/blob/master/GLOSSARY.md) | cross-repo acronym dictionary (lives in the parent repo). |
 
 ## Gotchas from history (so you don't repeat them)
 
