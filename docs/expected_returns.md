@@ -6,11 +6,11 @@ Ilmanen 4-pillar expected-return ranks on the `daily_prices` universe.
 
 | Pillar | Definition |
 |--------|------------|
-| carry | Cross-sectional rank of earnings yield (`net_income_ttm` / `market_cap`) and FCF yield |
-| value | Mean rank of B/M, E/P, FCF yield, S/P using fundamentals / daily `market_cap` |
+| carry | Rank of EY + FCF yield. Mcap = daily `market_cap`, else `shares_outstanding × adj_close`, else fund `market_cap`. |
+| value | Mean rank of B/M, E/P, FCF yield, S/P on the same mcap |
 | momentum | Rank of 12-1 return (252d, skip last 21d) |
 | defensive | Mean rank of −60d vol, −|beta| vs EW market, ROE, ROIC, −D/E |
-| expected_return | Equal-weight mean of available pillars |
+| expected_return | Equal-weight mean of available pillars; **NaN unless ≥2 pillars** |
 
 ## Usage
 

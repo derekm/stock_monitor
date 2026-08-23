@@ -73,16 +73,34 @@ def _mean_legs(legs: list[pd.DataFrame]) -> pd.DataFrame:
 
 def load_close_mcap() -> tuple[pd.DataFrame, pd.DataFrame]:
     src = _snapshot(DATA_DIR / "daily_prices.parquet")
-    prices = pd.read_parquet(src, columns=["date", "ticker", "close", "market_cap"])
+    cols = ["date", "ticker", "adj_close", "close", "market_cap"]
+    prices = pd.read_parquet(src, columns=cols)
     prices["ticker"] = prices["ticker"].astype(str).str.upper()
     prices = prices.drop_duplicates(subset=["date", "ticker"], keep="last")
-    close = prices.pivot(index="date", columns="ticker", values="close")
+    px = prices["adj_close"].where(prices["adj_close"].notna(), prices["close"])
+    prices = prices.assign(px=px)
+    close = prices.pivot(index="date", columns="ticker", values="px")
     mcap = prices.pivot(index="date", columns="ticker", values="market_cap")
     close.index = _to_date_index(close.index)
     mcap.index = _to_date_index(mcap.index)
     close = close.sort_index().ffill(limit=5)
     mcap = mcap.sort_index().ffill()
     return close, mcap
+
+
+def mcap_from_fund(fund: pd.DataFrame, close: pd.DataFrame, mcap: pd.DataFrame) -> pd.DataFrame:
+    """Fill missing daily mcap from fundamentals shares × close, then fund market_cap."""
+    out = mcap.reindex(index=close.index, columns=close.columns)
+    shares = _pivot_fund(fund, "shares_outstanding", close.index)
+    if not shares.empty:
+        sh = shares.reindex(index=close.index, columns=close.columns)
+        implied = sh * close
+        out = out.where(out.notna() & (out > 0), implied)
+    fund_m = _pivot_fund(fund, "market_cap", close.index)
+    if not fund_m.empty:
+        fm = fund_m.reindex(index=close.index, columns=close.columns)
+        out = out.where(out.notna() & (out > 0), fm)
+    return out.replace(0, np.nan)
 
 
 def load_fundamentals() -> pd.DataFrame:
@@ -165,7 +183,9 @@ def month_end_long(pillars: dict[str, pd.DataFrame]) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame(columns=["date", "ticker", "expected_return"])
     stacked = pd.concat({k: v.stack(future_stack=True) for k, v in frames.items()}, axis=1)
-    stacked["expected_return"] = stacked.mean(axis=1, skipna=True)
+    stacked["n_pillars"] = stacked[["carry", "value", "momentum", "defensive"]].notna().sum(axis=1)
+    stacked["expected_return"] = stacked[["carry", "value", "momentum", "defensive"]].mean(axis=1, skipna=True)
+    stacked.loc[stacked["n_pillars"] < 2, "expected_return"] = np.nan
     out = stacked.reset_index()
     out.columns = ["date", "ticker", *stacked.columns]
     out["date"] = pd.to_datetime(out["date"]).dt.date
@@ -180,11 +200,13 @@ def main() -> pd.DataFrame:
     args = ap.parse_args()
 
     print("Loading prices (snapshot)...")
-    close, mcap = load_close_mcap()
+    close, mcap_px = load_close_mcap()
     print(f"  {close.shape[0]} dates × {close.shape[1]} tickers")
 
     print("Loading fundamentals (snapshot)...")
     fund = load_fundamentals()
+    mcap = mcap_from_fund(fund, close, mcap_px)
+    print(f"  mcap coverage last: {int(mcap.iloc[-1].notna().sum()):,} / {mcap.shape[1]}")
 
     print("Computing pillars...")
     print("  carry (EY + FCF yield)")
@@ -208,16 +230,18 @@ def main() -> pd.DataFrame:
         out.to_parquet(path, index=False)
         print(f"\nSaved {path} ({len(out):,} rows)")
 
-    print("\n=== Coverage (month-end long) ===")
-    for col in [c for c in out.columns if c not in ("date", "ticker")]:
-        n = int(out[col].notna().sum())
-        print(f"  {col}: {n:,} / {len(out):,} ({n / max(len(out), 1) * 100:.1f}%)")
+    print("\n=== Coverage (month-end, last date) ===")
     if not out.empty:
         last = out["date"].max()
-        latest = out[out["date"] == last].nlargest(10, "expected_return")
-        print(f"\n=== Top 10 ER @ {last} ===")
-        cols = [c for c in ["ticker", "carry", "value", "momentum", "defensive", "expected_return"] if c in latest]
-        print(latest[cols].to_string(index=False))
+        latest = out[out["date"] == last]
+        print(f"  as-of {last}  n={len(latest):,}")
+        for col in [c for c in latest.columns if c not in ("date", "ticker")]:
+            n = int(latest[col].notna().sum())
+            print(f"  {col}: {n:,} / {len(latest):,} ({n / max(len(latest), 1) * 100:.1f}%)")
+        shown = latest.dropna(subset=["expected_return"]).nlargest(10, "expected_return")
+        print(f"\n=== Top 10 ER @ {last} (≥2 pillars) ===")
+        cols = [c for c in ["ticker", "n_pillars", "carry", "value", "momentum", "defensive", "expected_return"] if c in shown]
+        print(shown[cols].to_string(index=False))
     return out
 
 
