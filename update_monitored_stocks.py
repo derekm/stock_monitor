@@ -56,7 +56,10 @@ def classify_instrument_type(ticker: str) -> str:
             return "warrant"
         if suf in {"U", "UN", "UU"}:
             return "unit"
-        if suf and suf.isalpha() and len(suf) <= 2:
+        if suf in {"R"}:
+            return "right"
+        # Preferred series: -P, -PA, -PM, -PR. Class common is -A/-B (BRK-B).
+        if suf == "P" or (suf.startswith("P") and suf.isalpha() and 2 <= len(suf) <= 3):
             return "preferred"
         return "stock"
     if len(t) >= 5:

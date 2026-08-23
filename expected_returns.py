@@ -203,8 +203,11 @@ def apply_er_eligibility(out: pd.DataFrame) -> pd.DataFrame:
         ms["ticker"] = ms["ticker"].astype(str).str.upper()
         itype = ms.drop_duplicates("ticker").set_index("ticker")["instrument_type"]
     out["instrument_type"] = out["ticker"].map(itype).fillna("stock")
-    fund = out["carry"].notna() | out["value"].notna()
-    ok = (out["instrument_type"] == "stock") & fund & out["expected_return"].notna()
+    legs = [c for c in ["carry", "value", "momentum", "defensive"] if c in out.columns]
+    out["n_pillars"] = out[legs].notna().sum(axis=1)
+    out["expected_return"] = out[legs].mean(axis=1, skipna=True)
+    fund = out["carry"].notna() | out["value"].notna() if "carry" in out.columns else False
+    ok = (out["instrument_type"] == "stock") & fund & (out["n_pillars"] >= 2)
     out.loc[~ok, "expected_return"] = np.nan
     return out
 
