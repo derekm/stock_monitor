@@ -30,21 +30,18 @@
 ---
 
 ### 2. Ilmanen + Ang — Expected Return Framework
-**Target files:** `implied_r_screen.py`, `damodaran_quality.py`, `preferred_metrics.py`, `macro_fragility.py`
-**Core papers:** Ilmanen *Expected Returns* (2011), Ang *Asset Management* (2014), Ilmanen et al. "Carry" (2013)
+**Status:** **Active (2026-08-23)** — 4-pillar ER written; CF/DR + regime premia landed. OOS +5% gate **not measured**.
+**Target files:** `expected_returns.py`, `implied_r_screen.py`, `factor_library.py`
+**Core papers:** Ilmanen *Expected Returns* (2011), Ang *Asset Management* (2014), Cochrane (2011)
 **Deliverables:**
-- [x] **ACTIVE** Implement Ilmanen's 4-pillar expected return decomposition for every ticker:
-  - Carry (yield + roll-down)
-  - Value (mean reversion)
-  - Momentum (trend)
-  - Defensive (low risk anomaly)
-  → `expected_returns_decomp.parquet` (ticker × date × pillar)
-- [ ] Replace `implied_r_screen.py` single-number ICC with Ilmanen's **cash-flow vs. discount-rate** decomposition (Cochrane 2011) → `implied_r_decomp.parquet`
-- [ ] Integrate Ang's **factor timing** framework: regime-conditional factor premia → `regime_factor_premia.parquet`
-- [ ] Add carry metrics to `macro_fragility.py` (sovereign carry, credit carry, equity carry)
-- [ ] Build `expected_return_report.py`: dashboard tile showing forward-looking ER by pillar/sector
+- [x] Ilmanen 4-pillar ranks → `expected_returns_decomp.parquet` (mcap = daily else shares×px; ER requires ≥2 pillars)
+- [x] CF vs DR: `cf_yield = ROE / P/B`, `discount_rate = 2·ROE/(P/B+1)` → `implied_r_decomp.parquet` (496 names)
+- [x] Ang regime-conditional FF means → `regime_factor_premia.parquet` (`factor_library.py --regime-premia`)
+- [ ] Carry into `macro_fragility.py`
+- [ ] `expected_return_report.py` dashboard tile
+- [ ] OOS direction accuracy vs EW ≥ +5%
 
-**Success metric:** Out-of-sample direction accuracy of pillar-weighted forecast > equal-weight benchmark by ≥5%
+**Measured now:** HMM ∩ FF5 = 223 days (low_vol 128 / stress 48 / normal 47). MKT ann. +2.4% / −18.8% / −44.9%. SMB/MOM magnitudes are the un-winsorized FF5 series — do not trade them. CF>DR on 61 / 496 (median gap −1.8pp).
 
 ---
 

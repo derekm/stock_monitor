@@ -390,13 +390,48 @@ def attach_nm_quality(df: pd.DataFrame) -> pd.DataFrame:
     return out.merge(nm[keep], on="ticker", how="left")
 
 
+def compute_regime_factor_premia() -> pd.DataFrame:
+    """Ang-style regime-conditional means of available FF factors."""
+    ff = pd.read_parquet(DATA_DIR / "ff5_factors.parquet")
+    if "date" not in ff.columns:
+        ff = ff.reset_index()
+    ff["date"] = pd.to_datetime(ff["date"]).dt.normalize()
+    hmm = pd.read_parquet(DATA_DIR / "hmm_regime_states.parquet")
+    hmm["date"] = pd.to_datetime(hmm["date"]).dt.normalize()
+    hmm = hmm.drop_duplicates("date", keep="last")
+    fac = [c for c in ["MKT", "SMB", "HML", "RMW", "CMA", "MOM"] if c in ff.columns]
+    m = ff.merge(hmm[["date", "regime"]], on="date", how="inner")
+    rows = []
+    for regime, g in m.groupby("regime"):
+        row = {"regime": regime, "n_days": int(len(g))}
+        for c in fac:
+            s = pd.to_numeric(g[c], errors="coerce")
+            row[f"{c}_mean"] = float(s.mean())
+            row[f"{c}_ann"] = float(s.mean() * 252)
+            row[f"{c}_vol"] = float(s.std() * np.sqrt(252))
+        rows.append(row)
+    out = pd.DataFrame(rows).sort_values("n_days", ascending=False)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description="Compute factor library")
     ap.add_argument("--save", action="store_true", help="Save outputs to parquet")
     ap.add_argument("--full", action="store_true", help="Compute full FF5 with fundamentals (slower)")
     ap.add_argument("--quality-only", action="store_true",
                     help="Novy-Marx panels only; no daily_prices read")
+    ap.add_argument("--regime-premia", action="store_true",
+                    help="Ang regime-conditional FF premia from hmm + ff5_factors")
     args = ap.parse_args()
+
+    if args.regime_premia:
+        premia = compute_regime_factor_premia()
+        print(premia.to_string(index=False))
+        if args.save:
+            path = DATA_DIR / "regime_factor_premia.parquet"
+            premia.to_parquet(path, index=False)
+            print(f"Saved {path} ({len(premia)} regimes)")
+        return premia, None
 
     if args.quality_only:
         print("Loading fundamentals...")

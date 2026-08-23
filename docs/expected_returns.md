@@ -19,3 +19,11 @@ python expected_returns.py --save
 ```
 
 Reads snapshots of `daily_prices.parquet` and `fundamentals.parquet` (does not hold the live files). Writes month-end long `expected_returns_decomp.parquet`: `date`, `ticker`, pillar ranks, `expected_return`.
+
+## CF vs DR (`implied_r_decomp.parquet`)
+
+`cf_yield = ROE / P/B` (clean-surplus earnings yield). `discount_rate = 2·ROE/(P/B+1)` (RIV). Gap = CF − DR.
+
+## Regime premia
+
+`python factor_library.py --regime-premia --save` → `regime_factor_premia.parquet` (HMM × available FF columns).

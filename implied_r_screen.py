@@ -421,8 +421,10 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
     df["fwd_pe_bench"] = 1.0 / df["implied_r"].replace(0, np.nan)
     df["bvps"] = df["price"] / df["pb_ratio"]
 
-    # Cochrane/Ilmanen CF vs DR: profitability vs required return from the multiple.
-    df["cf_yield"] = df["roe"]
+    # Cochrane/Ilmanen: CF yield = ROE/P/B (clean-surplus EY); DR = RIV implied r.
+    pb = pd.to_numeric(df["pb_ratio"], errors="coerce")
+    roe = pd.to_numeric(df["roe"], errors="coerce")
+    df["cf_yield"] = roe / pb.replace(0, np.nan)
     df["discount_rate"] = df["implied_r"]
     df["cf_minus_dr"] = df["cf_yield"] - df["discount_rate"]
     df["er_from_cf"] = df["cf_yield"]
