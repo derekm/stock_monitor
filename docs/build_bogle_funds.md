@@ -12,10 +12,10 @@ Bogle's core principles mapped to our toolkit:
 |-----------------|----------------|
 | **Own the whole market** | TMI = all 16,057 tickers from `daily_prices`, cap-weighted (S&P divisor continuity) + Fisher chained |
 | **Minimize costs** | Explicit `expense_bps` (default 3) + `turnover_bps` (default 5) tracked per fund, per period |
-| **Broad diversification** | TMI: 16K names; QMI: quality-filtered (8 names); BPI: 1,027 defensive-sector names |
-| **Stay the course** | Fixed rebalance calendar (Q/SA/A) with multi-day glide path |
-| **Simplicity** | 3 clean funds, each with single parquet + turnover log |
-| **Low turnover** | TMI: 4.5%/yr, BPI: 3.0%/yr, QMI: 17.5%/yr (small universe) |
+| **Broad diversification** | TMI: 16k names; QMI: 287 liquid NM-quality; QMI_STRICT: 183 Buffett 15/15/1.0; BPI: defensive-sector EW |
+| **Stay the course** | Fixed rebalance calendar (Q/SA/Y) with multi-day glide path |
+| **Simplicity** | Four books, each with a parquet + turnover log |
+| **Low turnover** | QMI 3.5%/yr, QMI_STRICT 4.5%/yr (liquid EW) |
 
 ## Three Funds
 
@@ -26,12 +26,17 @@ Bogle's core principles mapped to our toolkit:
 - **Cost layer:** 3 bps/yr expense + 5 bps per 100% turnover
 - **10y result (2016-2026):** CAGR 48.97%, Vol 47.45%, Sharpe 1.03
 
-### QMI — Quality Market Index (The "Factor-Tilted" Fund)
-- **Universe:** TMI ∩ quality gate (ROE>12%, ROIC>10%, D/E<1.5, Trifecta≥2/3)
-- **Weighting:** Equal-weight + Fisher chained (reduces concentration)
+### QMI — Quality Market Index (NM rank)
+- **Universe:** NM `nm_score` top quintile (≥2 legs), then liquid: last ≥ $5, coverage ≥ 80%, no +100% day (287 names)
+- **Weighting:** Equal-weight + Fisher chained
 - **Rebalance:** Semi-annual
-- **Cost layer:** Same as TMI
-- **10y result:** CAGR 17.15%, Vol 25.83%, Sharpe 0.66
+- **10y net (2016-08-22–2026-08-20):** CAGR 15.48%, vol 21.88%, Sharpe 0.71, max DD −42.7%; COVID −38.8%; 2022 −26.6%
+
+### QMI_STRICT — Buffett cut
+- **Universe:** ROE ≥ 15%, ROIC ≥ 15%, 0 ≤ D/E ≤ 1.0, same liquidity screen (183 names)
+- **Weighting / rebalance:** same as QMI
+- **10y net:** CAGR 23.50%, vol 19.94%, Sharpe 1.18, max DD −37.2%; COVID −37.2%; 2022 −17.3%
+- Kept beside QMI: higher CAGR/Sharpe and milder 2022 than the broad NM book. COVID still worse than BPI.
 
 ### BPI — Bond Proxy Index (The "Stay the Course" Anchor)
 - **Universe:** Defensive sectors (Utilities, Consumer Staples, Health Care, Real Estate, Communication Services)

@@ -4,7 +4,8 @@ build_bogle_funds.py — Construct Bogle-style index funds from StockMonitor dat
 
 Three funds implementing John C. Bogle's principles:
   1. TMI (Total Market Index)      — Own the whole market, cap-weighted + Fisher chained
-  2. QMI (Quality Market Index)    — Factor-tilted: quality gate + Fisher chained
+  2. QMI (Quality Market Index)    — NM top quintile, liquid, EW + Fisher
+     QMI_STRICT                     — Buffett 15/15/1.0, liquid, EW + Fisher
   3. BPI (Bond Proxy Index)        — Defensive anchor: equal-weight, low turnover
 
 Usage:
@@ -36,9 +37,11 @@ FUNDAMENTALS_FILE = DATA_DIR / "fundamentals.parquet"
 # Output files
 TMI_FILE = DATA_DIR / "bogle_tmi.parquet"
 QMI_FILE = DATA_DIR / "bogle_qmi.parquet"
+QMI_STRICT_FILE = DATA_DIR / "bogle_qmi_strict.parquet"
 BPI_FILE = DATA_DIR / "bogle_bpi.parquet"
 TMI_TURNOVER_FILE = DATA_DIR / "bogle_tmi_turnover.parquet"
 QMI_TURNOVER_FILE = DATA_DIR / "bogle_qmi_turnover.parquet"
+QMI_STRICT_TURNOVER_FILE = DATA_DIR / "bogle_qmi_strict_turnover.parquet"
 BPI_TURNOVER_FILE = DATA_DIR / "bogle_bpi_turnover.parquet"
 
 # Default cost parameters (Bogle: "costs are the only certain thing")
@@ -52,29 +55,33 @@ BPI_REBAL_FREQ = "Y"   # Annual (was "A", deprecated in pandas)
 
 
 def load_prices(tickers: list[str] | None = None, years: float | None = None) -> pd.DataFrame:
-    """Load price panel: date x ticker -> close price."""
+    """Load price panel: date x ticker -> close price. Snapshot first (Windows lock)."""
+    import shutil, tempfile
     print(f"Loading prices from {PRICES_FILE}...")
-    df = pd.read_parquet(PRICES_FILE, columns=["ticker", "date", "close"])
+    snap = Path(tempfile.gettempdir()) / "bogle_daily_prices.parquet"
+    shutil.copy2(PRICES_FILE, snap)
+    df = pd.read_parquet(snap, columns=["ticker", "date", "close"])
     if tickers:
         df = df[df["ticker"].isin(tickers)]
     if years:
         cutoff = df["date"].max() - timedelta(days=int(years * 365.25))
         df = df[df["date"] >= cutoff]
-    # Pivot to wide: date index, ticker columns
     panel = df.pivot_table(index="date", columns="ticker", values="close").sort_index()
     print(f"  Price panel: {panel.shape[0]} dates x {panel.shape[1]} tickers")
     return panel
 
 
 def load_fundamentals(tickers: list[str] | None = None) -> pd.DataFrame:
-    """Load latest PIT fundamentals for quality screening."""
+    """Load latest PIT fundamentals for quality screening. Snapshot first."""
+    import shutil, tempfile
     if not FUNDAMENTALS_FILE.exists():
         print("  No fundamentals file found")
         return pd.DataFrame()
-    df = pd.read_parquet(FUNDAMENTALS_FILE)
+    snap = Path(tempfile.gettempdir()) / "bogle_fundamentals.parquet"
+    shutil.copy2(FUNDAMENTALS_FILE, snap)
+    df = pd.read_parquet(snap)
     if tickers:
         df = df[df["ticker"].isin(tickers)]
-    # Keep latest as_of per ticker
     if "as_of_date" in df.columns:
         df = df.sort_values("as_of_date").groupby("ticker").tail(1)
     print(f"  Fundamentals: {len(df)} tickers")
@@ -96,6 +103,38 @@ def quality_gate(fund: pd.DataFrame) -> pd.Series:
     print(f"  Quality gate (NM top quintile): {int(passed.sum())} / {len(scored)}")
     print(f"    nm_legs>=2: {int(eligible.sum())}, nm_quality: {int(scored.get('nm_quality', pd.Series(False)).fillna(False).sum())}")
     return passed
+
+
+def quality_gate_strict(fund: pd.DataFrame) -> pd.Series:
+    """Tiny QMI: live Buffett ROE/ROIC/D/E (15/15/1.0, D/E ≥ 0)."""
+    if fund.empty:
+        return pd.Series(dtype=bool)
+    from analytics_common import ROE_MIN, ROIC_MIN, DE_MAX
+    t = fund.copy()
+    t["ticker"] = t["ticker"].astype(str).str.upper()
+    roe = pd.to_numeric(t["roe"], errors="coerce") if "roe" in t.columns else pd.Series(np.nan, index=t.index)
+    roic = pd.to_numeric(t["roic"], errors="coerce") if "roic" in t.columns else pd.Series(np.nan, index=t.index)
+    de = pd.to_numeric(t["debt_to_equity"], errors="coerce") if "debt_to_equity" in t.columns else pd.Series(np.nan, index=t.index)
+    passed = roe.ge(ROE_MIN) & roic.ge(ROIC_MIN) & de.ge(0) & de.le(DE_MAX)
+    passed.index = t["ticker"]
+    print(f"  Quality gate (Buffett 15/15/1.0): {int(passed.sum())} / {len(t)}")
+    return passed
+
+
+def liquid_names(prices: pd.DataFrame, tickers: list[str],
+                 min_last: float = 5.0, min_cov: float = 0.80, max_day: float = 1.0) -> list[str]:
+    """Keep names with last price, coverage, and no +100% day (data-error guard)."""
+    cols = [t for t in tickers if t in prices.columns]
+    if not cols:
+        return []
+    sub = prices[cols]
+    last = sub.iloc[-1]
+    cov = sub.notna().mean()
+    mx = sub.pct_change().max()
+    ok = last.ge(min_last) & cov.ge(min_cov) & mx.le(max_day)
+    kept = ok[ok].index.astype(str).tolist()
+    print(f"  liquidity: {len(kept)} / {len(cols)} (last>={min_last}, cov>={min_cov}, max_day<={max_day})")
+    return kept
 
 
 def compute_cap_weights(prices: pd.DataFrame, shares: pd.Series) -> pd.DataFrame:
@@ -299,23 +338,25 @@ def build_tmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
     return levels, turnover
 
 
-def build_qmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_qmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float,
+              gate=None, fund_name: str = "QMI") -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build Quality Market Index: quality-screened + Fisher chained."""
-    print("Building QMI (Quality Market Index)...")
+    gate = gate or quality_gate
+    print(f"Building {fund_name}...")
 
-    # Load fundamentals and apply quality gate
     fund = load_fundamentals(prices.columns.tolist())
     if fund.empty:
         print("  WARNING: No fundamentals, falling back to all tickers")
         q_tickers = prices.columns.tolist()
     else:
-        passed = quality_gate(fund)
+        passed = gate(fund)
         q_tickers = [t for t in passed.index[passed.fillna(False)] if t in prices.columns]
         if len(q_tickers) == 0:
             print("  WARNING: No tickers passed quality gate, using all")
             q_tickers = prices.columns.tolist()
 
-    print(f"  QMI universe: {len(q_tickers)} tickers")
+    q_tickers = liquid_names(prices, q_tickers)
+    print(f"  {fund_name} universe: {len(q_tickers)} tickers")
 
     # Subset prices
     q_prices = prices[q_tickers].dropna(axis=1, how="all")
@@ -354,13 +395,13 @@ def build_qmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
     fisher_cols["date"] = pd.to_datetime(fisher_cols["date"])
     levels = levels.merge(fisher_cols, on="date", how="left")
 
-    levels["fund"] = "QMI"
+    levels["fund"] = fund_name
     levels["weight_method"] = "equal_weighted"
     levels["rebalance_freq"] = QMI_REBAL_FREQ
     levels["expense_bps"] = expense_bps
     levels["turnover_bps"] = turnover_bps
 
-    turnover["fund"] = "QMI"
+    turnover["fund"] = fund_name
     return levels, turnover
 
 
@@ -441,6 +482,11 @@ def save_fund(fund: str, levels: pd.DataFrame, turnover: pd.DataFrame):
         turnover.to_parquet(QMI_TURNOVER_FILE, index=False)
         print(f"  Saved {QMI_FILE} ({len(levels)} rows)")
         print(f"  Saved {QMI_TURNOVER_FILE} ({len(turnover)} rebalances)")
+    elif fund == "QMI_STRICT":
+        levels.to_parquet(QMI_STRICT_FILE, index=False)
+        turnover.to_parquet(QMI_STRICT_TURNOVER_FILE, index=False)
+        print(f"  Saved {QMI_STRICT_FILE} ({len(levels)} rows)")
+        print(f"  Saved {QMI_STRICT_TURNOVER_FILE} ({len(turnover)} rebalances)")
     elif fund == "BPI":
         levels.to_parquet(BPI_FILE, index=False)
         turnover.to_parquet(BPI_TURNOVER_FILE, index=False)
@@ -450,7 +496,7 @@ def save_fund(fund: str, levels: pd.DataFrame, turnover: pd.DataFrame):
 
 def main():
     ap = argparse.ArgumentParser(description="Build Bogle-style index funds")
-    ap.add_argument("--fund", choices=["tmi", "qmi", "bpi", "all"], default="all",
+    ap.add_argument("--fund", choices=["tmi", "qmi", "qmi_strict", "bpi", "all"], default="all",
                     help="Which fund to build (default: all)")
     ap.add_argument("--save", action="store_true", help="Write output parquet files")
     ap.add_argument("--expense-bps", type=float, default=DEFAULT_EXPENSE_BPS,
@@ -469,14 +515,18 @@ def main():
     # Load prices
     prices = load_prices(years=args.years)
 
-    funds_to_build = ["tmi", "qmi", "bpi"] if args.fund == "all" else [args.fund]
+    funds_to_build = ["tmi", "qmi", "qmi_strict", "bpi"] if args.fund == "all" else [args.fund]
 
     for fund in funds_to_build:
         print(f"\n{'='*60}")
         if fund == "tmi":
             levels, turnover = build_tmi(prices, args.expense_bps, args.turnover_bps)
         elif fund == "qmi":
-            levels, turnover = build_qmi(prices, args.expense_bps, args.turnover_bps)
+            levels, turnover = build_qmi(prices, args.expense_bps, args.turnover_bps,
+                                         gate=quality_gate, fund_name="QMI")
+        elif fund == "qmi_strict":
+            levels, turnover = build_qmi(prices, args.expense_bps, args.turnover_bps,
+                                         gate=quality_gate_strict, fund_name="QMI_STRICT")
         elif fund == "bpi":
             levels, turnover = build_bpi(prices, args.expense_bps, args.turnover_bps)
 

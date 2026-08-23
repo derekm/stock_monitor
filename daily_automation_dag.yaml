@@ -250,8 +250,13 @@ jobs:
 
   bogle_qmi:
     cmd: ["build_bogle_funds.py", "--fund", "qmi", "--save", "--years", "10"]
-    timeout: 300
-    desc: "Bogle Quality Market Index (quality-screened + Fisher chained)"
+    timeout: 600
+    desc: "Bogle QMI — NM quality top quintile + Fisher"
+
+  bogle_qmi_strict:
+    cmd: ["build_bogle_funds.py", "--fund", "qmi_strict", "--save", "--years", "10"]
+    timeout: 600
+    desc: "Bogle QMI strict — Buffett 15/15/1.0 + Fisher"
 
   bogle_bpi:
     cmd: ["build_bogle_funds.py", "--fund", "bpi", "--save", "--years", "10"]
@@ -314,10 +319,11 @@ dependencies:
   acq_backfill: []
   bogle_tmi: [polygon_prices]
   bogle_qmi: [polygon_prices]
+  bogle_qmi_strict: [polygon_prices]
   bogle_bpi: [polygon_prices]
   export: [aggregate, technical, econ_cal, est_rev, shadow,
             taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility,
             taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride,
             taleb_arista, taleb_subindustry_regime, taleb_barbell,
             taleb_optionality, lookthrough, damodaran, polygon_prices,
-            bogle_tmi, bogle_qmi, bogle_bpi]
+            bogle_tmi, bogle_qmi, bogle_qmi_strict, bogle_bpi]
