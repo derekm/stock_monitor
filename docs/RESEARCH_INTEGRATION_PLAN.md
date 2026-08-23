@@ -7,27 +7,26 @@
 ## Phase 1: Priority Deep Dives (Weeks 1–14)
 
 ### 1. Fama/French + Novy-Marx — Factor Construction Validation
-**Status:** **Closed (2026-08-23)** — re-run on dated `total_assets` (≥2 filings = 8,983 AG names). Overlap **49/82 = 60%** (bar 80%). Gate is Buffett ROE/ROIC/D/E, not QMJ.
-**Target files:** `peer_analytics.py`, `preferred_metrics.py`, `factor_rotation_defense.py`, `signal_aggregator.py`
-**Core papers:** FF 1993/2015 (5-factor), Novy-Marx 2013 (gross profitability), 2014 (quality)
+**Status:** **Closed (2026-08-23)** — final draft. Overlap **49/82 = 60%** (bar 80%). Gate ≠ QMJ. Do not loosen 15/15/1.0.
+**Target files:** `factor_library.py`, `preferred_metrics.py`, `signal_aggregator.py`
+**Core papers:** FF 1993/2015, Novy-Marx 2013/2014
 **Deliverables:**
-- [x] Replicate FF 5-factor + momentum on our `daily_prices` universe → `ff5_factors.parquet` (daily; **MKT/SMB/MOM only** — HML/RMW empty)
-- [x] Validate our quality gate against Novy-Marx quality → `docs/QUALITY_GATE_COMPARISON.md` + `quality_gate_comparison.parquet`
-- [x] Map signal families to FF factor loadings → `signal_factor_loadings.parquet`
-- [x] `signal_aggregator.py --use-residuals` (re-measure IC after HML/RMW exist)
-- [x] `factor_attribution.py` (named to actual factor columns)
+- [x] Dated `total_assets` (323,150 rows; 8,992 names ≥2 dates) + filing AG
+- [x] NM panels on filing calendar → `novymarx_*.parquet` (AG 8,983 names)
+- [x] Gate vs NM write-up → `docs/QUALITY_GATE_COMPARISON.md`
+- [x] `nm_quality` separate from `buffett_pass`; AG clipped ±100% for ranks
+- [x] Component D/E + `D/E ≥ 0` (code; persist on next `--save`)
+- [x] `ff5_factors.parquet` daily **MKT/SMB/MOM**; `--full` mapped, not written
+- [x] `factor_attribution.py` named to actual factor columns
+- [ ] Residual IC ≥ +0.02 after HML/RMW exist
 
-**Success metric (measured):** Gate ∩ NM-quality = **49/82 = 60%** (bar was ≥80% — **fail**). Signal IC ≥ +0.02 after residual: **not re-measured** (HML/RMW empty).
+**Success metric (measured):** Gate ∩ NM-quality = **60%** (62% after D/E recompute). Residual IC: **not measured**.
 
-**Follow-up (do not loosen 15/15/1.0 to chase 80%):**
-1. Separate `nm_quality` flag; do not reuse `buffett_pass` as QMJ
-2. Reconcile preferred D/E vs fund D/E (gate names sit at the 51st %ile of fund D/E)
-3. INCLUDE_CORE = 0 — dual-pass needs a real value leg (B/M or EY), not the current trifecta
-4. QMI 8 names = 1% hard thresholds; rank QMJ instead
-5. True GP/A needs COGS
-6. Winsorize asset growth before ranking
-7. Wire HML/RMW/CMA from `shareholders_equity` / Rev/A / filing AG
-8. Re-run residual IC only after (7)
+**Parked (Phase 1.2 / later — not gate-loosening):**
+1. Persist preferred `--save` (`nm_quality` + component D/E)
+2. QMI ranks `nm_quality`; dual-pass needs B/M or EY (INCLUDE_CORE = 0)
+3. Backfill `gross_profit` then GP/A
+4. `factor_library.py --full --save` then residual IC
 
 ---
 
@@ -232,7 +231,7 @@
 
 | Gate | Criteria | Decision |
 |------|----------|----------|
-| **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | **Closed.** Overlap **60%** on 8,983-name AG panel (bar 80%). `buffett_pass` ≠ QMJ. HML/RMW empty. Do not loosen 15/15/1.0. |
+| **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | **Closed (fail bar).** Overlap **60%** (bar 80%). `buffett_pass` ≠ QMJ. Residual IC open. Do not loosen 15/15/1.0. |
 | **Gate 2 (Week 8)** | Dynamic signal weighting beats static; expected return decomposition live | Continue Phase 1 |
 | **Gate 3 (Week 14)** | Taleb layer hardened; barbell portfolio backtested | Enter Phase 2 |
 | **Gate 4 (Week 26)** | ML regime upgraded; sequence risk metrics live | Enter Phase 3 |
