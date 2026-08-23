@@ -66,8 +66,8 @@ Lowest NM scores among the 85: SCHW, SAGT (AG +705%), MLM, GOOG/GOOGL, MSI, HUBB
 | `buffett_leverage` | requires `D/E ≥ 0` |
 | `gross_profit` in edgar v2 | AAPL TTM GP present; NM still Rev/A until panel backfilled |
 | FF5 `--full` column map | `shareholders_equity` / `revenue_ttm`\|`gross_profit` / filing AG |
-| `ff5_factors.parquet` | **MKT/SMB/MOM only**; HML/RMW not written |
-| Residual IC ≥ +0.02 | **not measured** |
+| `ff5_factors.parquet` | MKT/SMB/HML/CMA/MOM written. **MKT −6.4% / 16% vol**, corr TMI **0.78**. RMW empty (no GP). |
+| Residual IC ≥ +0.02 | **+0.0117** / 85m CAPM residual on **fixed MKT** (bar fail) |
 
 D/E recompute on the current preferred snapshot: drops APH, BLDR, EXP, JBL, MA, MSI, PAYX, TDG, TMUS; adds ADSK, ANET, BDX, CMG, FATN, GOLD, RJF, SLB, SNDK, SNPS, TJX, ULTA, VRT, WSM.
 
@@ -81,8 +81,7 @@ D/E recompute on the current preferred snapshot: drops APH, BLDR, EXP, JBL, MA, 
 - Dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median. Snapshot: trifecta 8, value_bm 261, value_ey 0. **INCLUDE_CORE = 18**: AEM, AGI, ALL, BEN, CAG, CPRT, CTAS, EOG, GL, HAL, HBM, PHM, SBUX, SCHW, SYF, TSM, UNH, WMT
 
 **Open**
-- Backfill `gross_profit` then GP/A
-- `factor_library.py --full --save` then residual IC
-- `build_bogle_funds.py --fund qmi --save` when prices are free
+- Backfill `gross_profit` then GP/A (RMW is 0 without it)
+- Residual IC still below +0.02 after MKT fix
 
 Rebuild NM: `python factor_library.py --quality-only --save`

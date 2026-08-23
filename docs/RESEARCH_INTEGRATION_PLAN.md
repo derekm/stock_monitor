@@ -19,9 +19,9 @@
 - [x] QMI = NM `nm_score` top quintile (≥2 legs); dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median
 - [x] `ff5_factors.parquet` MKT: drop |r|>20% from VW, winsorize mcap 99.5%. **MKT −6.44% ann / 16.1% vol** (was −75%/62%). RMW still 0 (no GP). TMI is the market benchmark (+22%/23%).
 - [x] `factor_attribution.py` named to actual factor columns
-- [x] Residual IC of PIT ER vs HML/RMW/CMA/MOM residual: **−0.0024** (121m, bar +0.02 — **fail**)
+- [x] CAPM residual IC (PIT ER_{t-1} vs r_t − β̂_{36m} MKT_t, **fixed MKT**): **+0.0117** / 85m (bar +0.02 — **fail**)
 
-**Success metric (measured):** Gate ∩ NM-quality = **60%**. Residual IC **−0.0024** (fail +0.02).
+**Success metric (measured):** Gate ∩ NM-quality = **60%** (bar 80% fail). CAPM residual IC on **fixed MKT** = **+0.0117** (bar +0.02 fail). Do not loosen 15/15/1.0.
 
 **Parked (later — not gate-loosening):**
 1. Backfill `gross_profit` then GP/A
