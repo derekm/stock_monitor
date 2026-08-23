@@ -531,8 +531,10 @@ def build_table() -> pd.DataFrame:
     # Apply quality_trend_demote
     demote_tickers = set(quality_trend_demote.keys())
     dual = dual & ~fund["ticker"].isin(demote_tickers)
-    # earnings_stability < 0.5 guard
-    dual = dual & fund["earnings_stability"].notna() & (fund["earnings_stability"] >= 0.5)
+    # Demote only when stability is observed and weak. Missing is not a fail
+    # (coverage is ~20 names; requiring it zeros INCLUDE_CORE).
+    stab = fund["earnings_stability"]
+    dual = dual & ~(stab.notna() & (stab < 0.5))
     # levered-assets guard
     levered_mask = (lev["leverage_flag"] == "levered-assets") & (
         fund["interest_coverage"].isna() | (fund["interest_coverage"] < 5.0)
