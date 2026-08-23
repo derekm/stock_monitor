@@ -164,9 +164,22 @@ def compute_ff5_with_fundamentals(
 
     # Pivot using the panel's actual column names
     fund_pivots = {}
+    # Profitability: GP, else revenue − cogs, else revenue (Rev/A). Empty
+    # `gross_profit` column must not hide the fallback — that zeroed RMW.
+    gp = pd.to_numeric(fundamentals["gross_profit"], errors="coerce") if "gross_profit" in fundamentals.columns else None
+    rev = pd.to_numeric(fundamentals["revenue_ttm"], errors="coerce") if "revenue_ttm" in fundamentals.columns else None
+    cogs = pd.to_numeric(fundamentals["cogs"], errors="coerce") if "cogs" in fundamentals.columns else None
+    prof = gp.copy() if gp is not None else pd.Series(np.nan, index=fundamentals.index)
+    if rev is not None and cogs is not None:
+        prof = prof.fillna(rev - cogs)
+    if rev is not None:
+        prof = prof.fillna(rev)
+    fundamentals = fundamentals.copy()
+    fundamentals["_profit"] = prof
+
     colmap = {
         "book_equity": "shareholders_equity",
-        "gross_profit": "gross_profit" if "gross_profit" in fundamentals.columns else "revenue_ttm",
+        "gross_profit": "_profit",
         "total_assets": "total_assets",
     }
     cal = pd.DatetimeIndex(pd.to_datetime(rets.index))

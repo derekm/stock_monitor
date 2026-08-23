@@ -675,101 +675,10 @@ def build_table() -> pd.DataFrame:
     out["distrust_p_bad"] = p_bad.clip(0.0, 0.60)
     out["distrust_discount"] = (1.0 - out["distrust_p_bad"] * excess.fillna(0)).round(4)
 
-    # Fit P(bad) = P(63d return < -10%) on excess cash, decline, ARISTA, quality.
-    try:
-        px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
-        px["date"] = pd.to_datetime(px["date"])
-        last = px.sort_values("date").groupby("ticker").tail(1).set_index("ticker")["close"]
-        prev = px.sort_values("date").groupby("ticker").nth(-64) if False else None
-        px = px.sort_values(["ticker", "date"])
-        g = px.groupby("ticker")["close"]
-        ret63 = (g.transform("last") / g.shift(63) - 1.0)
-        r63 = px.assign(ret63=ret63).sort_values("date").groupby("ticker").tail(1).set_index("ticker")["ret63"]
-        y = (r63.reindex(out["ticker"].values) < -0.10).astype(float)
-        y.index = out.index
-        X = pd.DataFrame({
-            "const": 1.0,
-            "excess": pd.to_numeric(out["excess_cash_share"], errors="coerce").fillna(0),
-            "decline": out["life_cycle_stage"].eq("Decline").astype(float),
-            "arista": (p_bad > 0.15).astype(float),
-            "lowq": (1.0 - pd.to_numeric(out.get("quality_score", 0.5), errors="coerce").fillna(0.5)).clip(0, 1),
-        }, index=out.index)
-        mask = y.notna() & X.notna().all(axis=1)
-        if mask.sum() > 80 and y.loc[mask].nunique() > 1:
-            xm = X.loc[mask].values
-            yy = y.loc[mask].values
-            b = np.zeros(xm.shape[1])
-            for _ in range(12):
-                z = xm @ b
-                p = 1.0 / (1.0 + np.exp(-np.clip(z, -20, 20)))
-                w = p * (1 - p) + 1e-6
-                grad = xm.T @ (p - yy)
-                hess = xm.T @ (xm * w[:, None])
-                try:
-                    b = b - np.linalg.solve(hess, grad)
-                except np.linalg.LinAlgError:
-                    break
-            p_hat = 1.0 / (1.0 + np.exp(-np.clip(X.values @ b, -20, 20)))
-            # DIAGNOSTIC ONLY — do not feed this into distrust_p_bad.
-            #
-            # The fitted logit was validated out-of-sample (distrust_oos_eval.py:
-            # 6 embargoed walk-forward folds, point-in-time features, labels at 71
-            # quarterly rebalances) and FAILED: pooled AUC 0.591 on a >=$5M/day
-            # liquid universe, below the 0.65 gate and beaten by a single trailing
-            # volatility column (vol63, AUC 0.651). The previously reported
-            # in-script AUC was not out-of-sample -- it split rows by alphabetical
-            # ticker while every label came from the same final 63-day window.
-            #
-            # Because buy_candidates.py multiplies the composite score by
-            # distrust_discount (clipped to [0.5, 1.0]), blending this in at 60%
-            # changed the action label of 1,018 names and cut BUY from 1,016 to
-            # 578. distrust_p_bad therefore stays on the heuristic until a
-            # replacement clears the gate on the same harness.
-            out["distrust_p_bad_fitted"] = np.clip(p_hat, 0.01, 0.80)
-            out["distrust_fit_n"] = int(mask.sum())
-
-            # In-sample-ish cross-sectional AUC, kept for continuity only.
-            #
-            # NOT out-of-sample: the split below is by ROW ORDER (alphabetical
-            # ticker) while every label comes from the SAME final 63-day window,
-            # so train and test share one identical market episode. It reads
-            # ~0.65 while the honest walk-forward number is 0.591.
-            # Use distrust_oos_eval.py for the real figure; do not gate on this.
-            n = len(yy)
-            split = int(n * 0.8)
-            if n - split >= 10:  # need at least 10 test samples
-                # Cross-sectional split by index order (see caveat above)
-                xm_train, xm_test = xm[:split], xm[split:]
-                yy_train, yy_test = yy[:split], yy[split:]
-                # Re-fit on train
-                b_train = np.zeros(xm_train.shape[1])
-                for _ in range(12):
-                    z = xm_train @ b_train
-                    p = 1.0 / (1.0 + np.exp(-np.clip(z, -20, 20)))
-                    w = p * (1 - p) + 1e-6
-                    grad = xm_train.T @ (p - yy_train)
-                    hess = xm_train.T @ (xm_train * w[:, None])
-                    try:
-                        b_train = b_train - np.linalg.solve(hess, grad)
-                    except np.linalg.LinAlgError:
-                        break
-                p_test = 1.0 / (1.0 + np.exp(-np.clip(xm_test @ b_train, -20, 20)))
-                # AUC
-                from sklearn.metrics import roc_auc_score
-                try:
-                    auc = roc_auc_score(yy_test, p_test)
-                    out["distrust_fit_auc_insample"] = round(float(auc), 3)
-                except Exception:
-                    out["distrust_fit_auc_insample"] = np.nan
-            else:
-                out["distrust_fit_auc_insample"] = np.nan
-            # Honest walk-forward result from distrust_oos_eval.py (liquid
-            # universe, embargoed folds). Static because it is a validation
-            # outcome, not a per-run quantity.
-            out["distrust_fit_auc_oos"] = 0.591
-            out["distrust_fit_gate_pass"] = False
-    except Exception:
-        pass
+    # Fitted distrust is diagnostic only (OOS AUC 0.591). Skip the 63d price
+    # fit here — it opened daily_prices and blocked Windows writers.
+    out["distrust_fit_auc_oos"] = 0.591
+    out["distrust_fit_gate_pass"] = False
 
     from factor_library import attach_nm_quality
     out = attach_nm_quality(out)

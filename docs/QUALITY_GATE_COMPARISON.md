@@ -1,7 +1,7 @@
 # Quality Gate vs Novy-Marx — Phase 1.1 final
 
 **Closed:** 2026-08-23  
-**Verdict:** Gate ∩ NM-quality = **49/82 = 60%** on the dated-asset panel (bar 80% — **fail**). After component D/E + `D/E ≥ 0` (not yet persisted): **54/87 = 62%**. `buffett_pass` is Buffett ROE/ROIC/D/E. It is **not** QMJ. **Do not loosen 15/15/1.0.**
+**Verdict:** Gate ∩ NM-quality = **60/95 = 63%** after persisted component D/E (bar 80% — **fail**). Pre-persist dated-asset panel was 49/82 = 60%. `buffett_pass` is Buffett ROE/ROIC/D/E. It is **not** QMJ. **Do not loosen 15/15/1.0.**
 
 **Inputs:** `preferred_metrics.parquet` (8,669), `fundamentals.parquet` (323,150 dated rows), `novymarx_*.parquet` (3,665 filing dates), `quality_gate_comparison.parquet`
 
@@ -17,11 +17,9 @@ NM-quality := mean rank ≥ 0.5 on **≥2** of {high Rev/A, low filing AG, low a
 |------|----------------|
 | ROE ≥ 15% | 306 (3.5%) |
 | ROIC ≥ 15% | 187 (2.2%) |
-| D/E ≤ 1.0 | 565 (6.5%) |
-| ≥2 of 3 legs | 246 (2.8%) |
-| **buffett_pass** | **85 (1.0%)** |
-| INCLUDE_QUALITY | 21 |
-| INCLUDE_CORE | **18** |
+| D/E ≤ 1.0 (recomputed) | 3,868 |
+| **buffett_pass** | **98** |
+| INCLUDE_CORE | **22** |
 | INCLUDE_VALUE | 8 |
 
 NM panels (`factor_library.py --quality-only`, filing calendar):
@@ -46,9 +44,7 @@ Universe NM-quality: **3,796 / 8,126** (46.7%).
 
 | Set | Eligible (≥2 NM legs) | NM-quality | Overlap |
 |-----|----------------------|------------|---------|
-| buffett_pass (85) | 82 | 49 | **60%** |
-| INCLUDE_QUALITY (21) | 21 | 10 | **48%** |
-| D/E-recomputed 90 (not persisted) | 87 | 54 | **62%** |
+| buffett_pass (98) | 95 | 60 | **63%** |
 
 Lowest NM scores among the 85: SCHW, SAGT (AG +705%), MLM, GOOG/GOOGL, MSI, HUBB, APH, GL, JBL, SMG, AEM.
 
@@ -69,7 +65,7 @@ Lowest NM scores among the 85: SCHW, SAGT (AG +705%), MLM, GOOG/GOOGL, MSI, HUBB
 | `ff5_factors.parquet` | MKT/SMB/HML/CMA/MOM written. **MKT −6.4% / 16% vol**, corr TMI **0.78**. RMW empty (no GP). |
 | Residual IC ≥ +0.02 | **+0.0117** / 85m CAPM residual on **fixed MKT** (bar fail) |
 
-D/E recompute on the current preferred snapshot: drops APH, BLDR, EXP, JBL, MA, MSI, PAYX, TDG, TMUS; adds ADSK, ANET, BDX, CMG, FATN, GOLD, RJF, SLB, SNDK, SNPS, TJX, ULTA, VRT, WSM.
+D/E recompute **persisted** 2026-08-23: D/E n=5,581 (was 805). Drops negative-D/E names. Adds BIIB, GOLD, JPM, RJF, SLB to CORE. Drops SBUX. **INCLUDE_CORE = 22.**
 
 ---
 
@@ -78,7 +74,7 @@ D/E recompute on the current preferred snapshot: drops APH, BLDR, EXP, JBL, MA, 
 **Done**
 - `nm_quality` persisted on `preferred_metrics.parquet`
 - QMI = top quintile of `nm_score` (≥2 legs): **1,531** names
-- Dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median. Snapshot: trifecta 8, value_bm 261, value_ey 0. **INCLUDE_CORE = 18**: AEM, AGI, ALL, BEN, CAG, CPRT, CTAS, EOG, GL, HAL, HBM, PHM, SBUX, SCHW, SYF, TSM, UNH, WMT
+- Dual-pass `value_pass`. **INCLUDE_CORE = 22**: AEM, AGI, ALL, BEN, BIIB, CAG, CPRT, CTAS, EOG, GL, GOLD, HAL, HBM, JPM, PHM, RJF, SCHW, SLB, SYF, TSM, UNH, WMT
 
 **Open**
 - Backfill `gross_profit` then GP/A (RMW is 0 without it)

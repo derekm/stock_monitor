@@ -15,13 +15,13 @@
 - [x] NM panels on filing calendar → `novymarx_*.parquet` (AG 8,983 names)
 - [x] Gate vs NM write-up → `docs/QUALITY_GATE_COMPARISON.md`
 - [x] `nm_quality` separate from `buffett_pass`; AG clipped ±100% for ranks
-- [x] Component D/E + `D/E ≥ 0` (code; persist on next `--save`)
+- [x] Component D/E + `D/E ≥ 0` **persisted**: D/E n=5,581, `buffett_pass` **98**, Gate ∩ NM **60/95 = 63%** (bar 80% fail)
 - [x] QMI = NM `nm_score` top quintile (≥2 legs); dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median
 - [x] `ff5_factors.parquet` MKT: drop |r|>20% from VW, winsorize mcap 99.5%. **MKT −6.44% ann / 16.1% vol** (was −75%/62%). RMW still 0 (no GP). TMI is the market benchmark (+22%/23%).
 - [x] `factor_attribution.py` named to actual factor columns
 - [x] CAPM residual IC (PIT ER_{t-1} vs r_t − β̂_{36m} MKT_t, **fixed MKT**): **+0.0117** / 85m (bar +0.02 — **fail**)
 
-**Success metric (measured):** Gate ∩ NM-quality = **60%** (bar 80% fail). CAPM residual IC on **fixed MKT** = **+0.0117** (bar +0.02 fail). Do not loosen 15/15/1.0.
+**Success metric (measured):** Gate ∩ NM-quality = **63%** after persisted D/E (bar 80% fail). CAPM residual IC on **fixed MKT** = **+0.0117** (bar +0.02 fail). Do not loosen 15/15/1.0.
 
 **Parked (later — not gate-loosening):**
 1. Backfill `gross_profit` then GP/A
