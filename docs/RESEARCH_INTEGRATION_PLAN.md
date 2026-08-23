@@ -14,9 +14,9 @@
 - [x] Validate our quality gate (ROE>12%, ROIC>10%, D/E<1.5, trifecta≥2) against Novy-Marx "quality" (gross profit/assets + low accruals + safe leverage) → `docs/QUALITY_GATE_COMPARISON.md`
 - [x] Map each signal family (preferred/peer/cross/pairs/earnings) to FF factor loadings → `signal_factor_loadings.parquet`
 - [x] Update `signal_aggregator.py` OOS-IC weights with factor-adjusted IC (residualize signals on FF5+MOM) — added `--use-residuals` flag
-- [ ] Add `factor_attribution.py` script: daily factor decomposition of portfolio/aggregate returns
+- [x] Add `factor_attribution.py` script: daily factor decomposition of portfolio/aggregate returns
 
-**Success metric:** Signal IC improves ≥0.02 after factor adjustment; quality gate overlap with Novy-Marx ≥80%
+**Success metric:** Signal IC improves ≥0.02 after factor adjustment; quality-gate ∩ Novy-Marx quality **48% on 21 eligible names (bar was ≥80% — fail)**. Gate matches GP and leverage; not investment, accruals, or value.
 
 ---
 
@@ -221,7 +221,7 @@
 
 | Gate | Criteria | Decision |
 |------|----------|----------|
-| **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | **✅ PASSED** — Continue Phase 1 |
+| **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | Comparison **done**. Overlap 48% (bar 80%). HML/RMW still empty. Continue Phase 1 with that caveat. |
 | **Gate 2 (Week 8)** | Dynamic signal weighting beats static; expected return decomposition live | Continue Phase 1 |
 | **Gate 3 (Week 14)** | Taleb layer hardened; barbell portfolio backtested | Enter Phase 2 |
 | **Gate 4 (Week 26)** | ML regime upgraded; sequence risk metrics live | Enter Phase 3 |

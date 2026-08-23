@@ -183,12 +183,9 @@ def compute_ff5_with_fundamentals(
     else:
         gp = pd.DataFrame(np.nan, index=rets.index, columns=rets.columns)
 
-    # Asset growth = % change in total_assets (quarterly, annualized)
-    if "total_assets" in fund_pivots:
-        ag = fund_pivots["total_assets"].pct_change(1)  # quarterly change
-        ag = ag.replace([np.inf, -np.inf], np.nan)
-    else:
-        ag = pd.DataFrame(np.nan, index=rets.index, columns=rets.columns)
+    # Asset growth from consecutive filings (not daily ffill of levels)
+    ag = _asset_growth_from_filings(fundamentals, pd.DatetimeIndex(rets.index))
+    ag = ag.reindex(index=rets.index, columns=rets.columns)
 
     # --- 2x3 sorts (size × value/profitability/investment) ---
     # Size breakpoint: median market cap
@@ -268,78 +265,79 @@ def compute_ff5_with_fundamentals(
     return factors
 
 
+def _pivot_fund(fund: pd.DataFrame, col: str, calendar: pd.DatetimeIndex) -> pd.DataFrame:
+    if col not in fund.columns:
+        return pd.DataFrame(index=calendar)
+    d = fund.dropna(subset=["date", "ticker", col]).drop_duplicates(subset=["date", "ticker"], keep="last")
+    d = d.copy()
+    d["ticker"] = d["ticker"].astype(str).str.upper()
+    piv = d.pivot(index="date", columns="ticker", values=col)
+    piv.index = pd.to_datetime(piv.index)
+    return piv.sort_index().ffill().reindex(calendar).ffill()
+
+
+def _asset_growth_from_filings(fund: pd.DataFrame, calendar: pd.DatetimeIndex) -> pd.DataFrame:
+    """% change in total_assets between consecutive filings, ffilled onto calendar.
+
+    Defined only when a ticker has a prior total_assets observation.
+    """
+    if "total_assets" not in fund.columns:
+        return pd.DataFrame(index=calendar)
+    d = fund.dropna(subset=["date", "ticker", "total_assets"]).drop_duplicates(
+        subset=["date", "ticker"], keep="last"
+    ).copy()
+    d["ticker"] = d["ticker"].astype(str).str.upper()
+    d["date"] = pd.to_datetime(d["date"])
+    d = d.sort_values(["ticker", "date"])
+    d["prev_assets"] = d.groupby("ticker")["total_assets"].shift(1)
+    d["asset_growth"] = (d["total_assets"] / d["prev_assets"].replace(0, np.nan)) - 1.0
+    d.loc[d["prev_assets"].isna(), "asset_growth"] = np.nan
+    d["asset_growth"] = d["asset_growth"].replace([np.inf, -np.inf], np.nan)
+    g = d.dropna(subset=["asset_growth"]).pivot(index="date", columns="ticker", values="asset_growth")
+    if g.empty:
+        return pd.DataFrame(index=calendar)
+    g.index = pd.to_datetime(g.index)
+    return g.sort_index().ffill().reindex(calendar).ffill()
+
+
 def compute_novymarx_quality(fundamentals: pd.DataFrame, mktcap: pd.DataFrame, close: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """
-    Compute Novy-Marx quality factors:
-    - Gross Profitability (GP/A): gross_profit / total_assets
-    - Investment (asset growth): % change in total_assets
-    - Accruals: (NI - CFO) / total_assets  (if cash flow available)
-    - Safe leverage: low debt/equity
-
-    Returns dict of DataFrames (metric name → date × ticker panel).
+    Novy-Marx quality panels (date × ticker):
+    - gross_profitability: revenue_ttm / total_assets (GP proxy; no COGS panel)
+    - asset_growth: consecutive-filing % change in total_assets
+    - accruals: (net_income_ttm - operating_cash_flow_ttm) / total_assets
+    - debt_to_equity: total_debt / shareholders_equity
+    - book_to_market: shareholders_equity / market_cap (fundamentals mcap, else price mcap)
     """
-    # Deduplicate fundamentals: keep latest per (date, ticker)
     fundamentals = fundamentals.drop_duplicates(subset=["date", "ticker"], keep="last")
-    
-    # Pivot fundamentals to daily
-    fund_pivots = {}
-    # Map our metric names to actual fundamentals columns
-    metric_map = {
-        "gross_profit": "revenue_ttm",  # proxy: revenue - we don't have COGS
-        "total_assets": "total_assets",
-        "net_income": "net_income_ttm",
-        "cash_from_operations": "operating_cash_flow_ttm",
-        "total_debt": "total_debt",
-        "total_equity": "shareholders_equity",
-        "book_equity": "shareholders_equity",
-    }
-    
-    for metric, col in metric_map.items():
-        if col in fundamentals.columns:
-            piv = fundamentals.pivot(index="date", columns="ticker", values=col)
-            piv.index = pd.to_datetime(piv.index)
-            piv = piv.sort_index().ffill().reindex(close.index).ffill()
-            fund_pivots[metric] = piv
+    calendar = pd.DatetimeIndex(pd.to_datetime(close.index))
+    quality: dict[str, pd.DataFrame] = {}
 
-    quality = {}
+    rev = _pivot_fund(fundamentals, "revenue_ttm", calendar)
+    assets = _pivot_fund(fundamentals, "total_assets", calendar)
+    ni = _pivot_fund(fundamentals, "net_income_ttm", calendar)
+    ocf = _pivot_fund(fundamentals, "operating_cash_flow_ttm", calendar)
+    debt = _pivot_fund(fundamentals, "total_debt", calendar)
+    equity = _pivot_fund(fundamentals, "shareholders_equity", calendar)
+    fund_mcap = _pivot_fund(fundamentals, "market_cap", calendar)
 
-    # Gross Profitability (using revenue as proxy since no COGS)
-    if "gross_profit" in fund_pivots and "total_assets" in fund_pivots:
-        gp_a = fund_pivots["gross_profit"].div(fund_pivots["total_assets"].replace(0, np.nan))
-        quality["gross_profitability"] = gp_a.replace([np.inf, -np.inf], np.nan)
+    if not rev.empty and not assets.empty:
+        quality["gross_profitability"] = rev.div(assets.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
 
-    # Asset Growth (Investment)
-    if "total_assets" in fund_pivots:
-        # total_assets is quarterly data forward-filled daily
-        # We need to detect actual quarterly changes, not daily changes
-        # Find rows where total_assets actually changed (new quarter)
-        ta = fund_pivots["total_assets"]
-        # Compute quarterly change: shift by ~63 trading days (1 quarter)
-        # But better: find the actual quarterly frequency by looking at changes
-        # Simple approach: resample to quarterly frequency first
-        ta_q = ta.resample("QE").last()  # quarterly frequency (QE = quarter end)
-        ag_q = ta_q.pct_change(1)
-        # Forward-fill back to daily
-        ag = ag_q.reindex(ta.index, method="ffill")
-        quality["asset_growth"] = ag.replace([np.inf, -np.inf], np.nan)
+    quality["asset_growth"] = _asset_growth_from_filings(fundamentals, calendar)
 
-    # Accruals
-    if "net_income" in fund_pivots and "cash_from_operations" in fund_pivots and "total_assets" in fund_pivots:
-        accruals = (fund_pivots["net_income"] - fund_pivots["cash_from_operations"]).div(
-            fund_pivots["total_assets"].replace(0, np.nan)
-        )
-        quality["accruals"] = accruals.replace([np.inf, -np.inf], np.nan)
+    if not ni.empty and not ocf.empty and not assets.empty:
+        quality["accruals"] = (ni - ocf).div(assets.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
 
-    # Leverage (Debt/Equity)
-    if "total_debt" in fund_pivots and "total_equity" in fund_pivots:
-        de = fund_pivots["total_debt"].div(fund_pivots["total_equity"].replace(0, np.nan))
-        quality["debt_to_equity"] = de.replace([np.inf, -np.inf], np.nan)
+    if not debt.empty and not equity.empty:
+        quality["debt_to_equity"] = debt.div(equity.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
 
-    # Book-to-Market
-    if "book_equity" in fund_pivots:
-        mktcap_aligned = mktcap.reindex(close.index).ffill().reindex(columns=close.columns).ffill()
-        bm = fund_pivots["book_equity"].div(mktcap_aligned.replace(0, np.nan))
-        quality["book_to_market"] = bm.replace([np.inf, -np.inf], np.nan)
+    if not equity.empty:
+        if not fund_mcap.empty and fund_mcap.notna().any().any():
+            m = fund_mcap.reindex(index=calendar, columns=equity.columns).ffill()
+        else:
+            m = mktcap.reindex(index=calendar).ffill().reindex(columns=equity.columns).ffill()
+        quality["book_to_market"] = equity.div(m.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
 
     return quality
 
@@ -348,7 +346,36 @@ def main():
     ap = argparse.ArgumentParser(description="Compute factor library")
     ap.add_argument("--save", action="store_true", help="Save outputs to parquet")
     ap.add_argument("--full", action="store_true", help="Compute full FF5 with fundamentals (slower)")
+    ap.add_argument("--quality-only", action="store_true",
+                    help="Novy-Marx panels only; no daily_prices read")
     args = ap.parse_args()
+
+    if args.quality_only:
+        print("Loading fundamentals...")
+        import shutil
+        import tempfile
+        snap = Path(tempfile.gettempdir()) / "fl_fundamentals.parquet"
+        shutil.copy2(DATA_DIR / "fundamentals.parquet", snap)
+        fund = pd.read_parquet(snap)
+        if "as_of_date" in fund.columns:
+            fund = fund.rename(columns={"as_of_date": "date"})
+        dates = pd.to_datetime(fund["date"], errors="coerce").dropna()
+        calendar = pd.bdate_range(dates.min(), dates.max())
+        close = pd.DataFrame(index=calendar)
+        mktcap = pd.DataFrame(index=calendar)
+        print("Computing Novy-Marx quality...")
+        quality_dict = compute_novymarx_quality(fund, mktcap, close)
+        if args.save:
+            for metric_name, metric_df in quality_dict.items():
+                quality_path = DATA_DIR / f"novymarx_{metric_name}.parquet"
+                metric_df.to_parquet(quality_path)
+                print(f"Saved {quality_path} ({len(metric_df)} rows × {metric_df.shape[1]} tickers)")
+        print(f"\nQuality metrics available: {list(quality_dict.keys())}")
+        for metric_name, metric_df in quality_dict.items():
+            last = metric_df.iloc[-1] if len(metric_df) else pd.Series(dtype=float)
+            print(f"  {metric_name}: latest non-null {int(last.notna().sum()):,} tickers; "
+                  f"panel {metric_df.notna().sum().sum():,} / {metric_df.size:,}")
+        return None, quality_dict
 
     print("Loading prices...")
     close = load_prices()
