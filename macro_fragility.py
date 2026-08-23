@@ -233,7 +233,10 @@ def main(save: bool = True):
         er = pd.read_parquet(er_path, columns=["date", "carry", "expected_return"])
         er = er[er["expected_return"].notna() & er["carry"].notna()]
         er["date"] = pd.to_datetime(er["date"])
-        q = er.groupby(er["date"].dt.to_period("Q"))["carry"].median()
+        g = er.groupby(er["date"].dt.to_period("Q"))["carry"]
+        q = g.median()
+        n = g.size()
+        q = q.where(n >= 100)
         q.index = q.index.to_timestamp()
         df["date"] = pd.to_datetime(df["date"])
         df["equity_carry"] = df["date"].map(q).astype(float)
