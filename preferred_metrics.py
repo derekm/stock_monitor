@@ -198,7 +198,7 @@ def score_quality_vectorized(fund: pd.DataFrame) -> pd.DataFrame:
     # Buffett pass flags
     out["buffett_roe"] = roe.notna() & (roe >= ROE_MIN)
     out["buffett_roic"] = roic.notna() & (roic >= ROIC_MIN)
-    out["buffett_leverage"] = de.notna() & (de <= DE_MAX)
+    out["buffett_leverage"] = de.notna() & (de >= 0) & (de <= DE_MAX)
     out["buffett_pass"] = out["buffett_roe"] & out["buffett_roic"] & out["buffett_leverage"]
 
     # weighted quality 0-1
@@ -353,6 +353,14 @@ def build_table() -> pd.DataFrame:
             fund = pd.concat([latest_real, extra], ignore_index=True)
         else:
             fund = fund.groupby("ticker", as_index=False).tail(1)
+
+    # D/E = total_debt / shareholders_equity when both exist and book equity > 0.
+    if {"total_debt", "shareholders_equity"}.issubset(fund.columns):
+        eq = pd.to_numeric(fund["shareholders_equity"], errors="coerce")
+        debt = pd.to_numeric(fund["total_debt"], errors="coerce")
+        comp = debt / eq.replace(0, np.nan)
+        use = eq.notna() & (eq > 0) & debt.notna() & np.isfinite(comp)
+        fund.loc[use, "debt_to_equity"] = comp[use]
 
     # Quality-TREND guard (generalized RF-demotion rule): a name whose quality
     # is deteriorating should not hold INCLUDE_CORE even if it still clears the
@@ -563,7 +571,6 @@ def build_table() -> pd.DataFrame:
     fair_sales_vals = fund["ticker"].map(fair_df["fair_ev_sales"]) if "fair_ev_sales" in fair_df.columns else None
     fair_pb_vals = fund["ticker"].map(fair_df["fair_pb"]) if "fair_pb" in fair_df.columns else None
 
-    # Assemble output
     out = pd.DataFrame({
         "ticker": fund["ticker"].values,
         "sector": flags_df["sector"].values,
@@ -726,6 +733,8 @@ def build_table() -> pd.DataFrame:
     except Exception:
         pass
 
+    from factor_library import attach_nm_quality
+    out = attach_nm_quality(out)
     df = out.sort_values("composite_score", ascending=False).reset_index(drop=True)
     return df
 

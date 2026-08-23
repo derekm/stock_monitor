@@ -709,6 +709,8 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
                  "Borrowings", "LongtermBorrowings"]
     CASH_TAGS = ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
                 "CashAndCashEquivalents", "CashCashEquivalentsAndShortTermInvestments"]
+    GP_TAGS = ["GrossProfit", "GrossProfitLoss"]
+    COGS_TAGS = ["CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold"]
     SHARES_TAGS = ["CommonStockSharesOutstanding", "OrdinarySharesNumber",
                    "EntityCommonStockSharesOutstanding",
                    "NumberOfSharesOutstanding",
@@ -728,6 +730,8 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
     equity = parse_balance(facts, EQUITY_TAGS)
     debt = parse_balance(facts, DEBT_TAGS)
     cash = parse_balance(facts, CASH_TAGS)
+    gp = parse_income_quarterly(facts, GP_TAGS)
+    cogs = parse_income_quarterly(facts, COGS_TAGS)
     # SHARES_TAGS entries are NOT interchangeable: CommonStockSharesOutstanding is
     # a point-in-time count, the WeightedAverage* tags are period averages for EPS.
     # Try them in priority order instead of ranking by fact count.
@@ -753,6 +757,8 @@ def extract_raw_financials(cik: str) -> Optional[dict]:
         "equity": equity,
         "debt": debt,
         "cash": cash,
+        "gross_profit": gp,
+        "cogs": cogs,
         "shares": shares,
         "fiscal_year_end": fy_end,
         # Annual (12-month) series, keyed by period end. Needed for filers with
@@ -813,6 +819,7 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
             ("interest_expense", "ttm_interest_expense"),
             ("operating_cash_flow", "operating_cash_flow_ttm"),
             ("capital_expenditure", "capital_expenditure_ttm"),
+            ("gross_profit", "gross_profit_ttm"),
         ]:
             series = financials.get(src_key)
             if series is None or series.empty:
@@ -869,6 +876,9 @@ def compute_quarterly_fundamentals(financials: dict, ticker: str,
                 continue
             s = series[series.index <= qend_date].dropna()
             row[out_name] = float(s.iloc[-1]) if len(s) > 0 else None
+
+        gp_ttm = row.get("gross_profit_ttm")
+        row["gross_profit"] = gp_ttm
 
         # Keep real mega-share counts (HCMC is ~3.8e11). Drop non-positive
         # or >= 1e14 values — those are scale errors, not share counts.

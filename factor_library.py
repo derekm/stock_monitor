@@ -160,14 +160,18 @@ def compute_ff5_with_fundamentals(
     # We need: book_to_market, gross_profitability, asset_growth
     # fundamentals has columns like: ticker, date, book_equity, gross_profit, total_assets, etc.
 
-    # Pivot fundamentals to wide (date × ticker) for each metric
+    # Pivot using the panel's actual column names
     fund_pivots = {}
-    for metric in ["book_equity", "gross_profit", "total_assets", "total_liabilities", "revenue", "cogs"]:
-        if metric in fundamentals.columns:
-            piv = fundamentals.pivot(index="date", columns="ticker", values=metric)
-            piv.index = pd.to_datetime(piv.index)
-            piv = piv.sort_index().ffill().reindex(rets.index).ffill()
-            fund_pivots[metric] = piv
+    colmap = {
+        "book_equity": "shareholders_equity",
+        "gross_profit": "gross_profit" if "gross_profit" in fundamentals.columns else "revenue_ttm",
+        "total_assets": "total_assets",
+    }
+    cal = pd.DatetimeIndex(pd.to_datetime(rets.index))
+    for metric, col in colmap.items():
+        piv = _pivot_fund(fundamentals, col, cal)
+        if not piv.empty:
+            fund_pivots[metric] = piv.reindex(index=rets.index, columns=rets.columns)
 
     # Book-to-market = book_equity / market_cap (lagged)
     if "book_equity" in fund_pivots:
@@ -321,8 +325,11 @@ def compute_novymarx_quality(fundamentals: pd.DataFrame, mktcap: pd.DataFrame, c
     equity = _pivot_fund(fundamentals, "shareholders_equity", calendar)
     fund_mcap = _pivot_fund(fundamentals, "market_cap", calendar)
 
-    if not rev.empty and not assets.empty:
-        quality["gross_profitability"] = rev.div(assets.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+    gp_num = _pivot_fund(fundamentals, "gross_profit", calendar)
+    if gp_num.empty or not gp_num.notna().any().any():
+        gp_num = rev
+    if not gp_num.empty and not assets.empty:
+        quality["gross_profitability"] = gp_num.div(assets.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
 
     quality["asset_growth"] = _asset_growth_from_filings(fundamentals, calendar)
 
@@ -340,6 +347,47 @@ def compute_novymarx_quality(fundamentals: pd.DataFrame, mktcap: pd.DataFrame, c
         quality["book_to_market"] = equity.div(m.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
 
     return quality
+
+
+AG_WINSOR = 1.0  # clip filing %Δ at ±100% for ranking only
+
+
+def attach_nm_quality(df: pd.DataFrame) -> pd.DataFrame:
+    """Add last-filing NM ranks and nm_quality. Does not change buffett_pass."""
+    out = df.copy()
+    if "ticker" not in out.columns:
+        return out
+    out["ticker"] = out["ticker"].astype(str).str.upper()
+
+    def last_nn(name: str) -> pd.Series:
+        path = DATA_DIR / f"novymarx_{name}.parquet"
+        if not path.exists():
+            return pd.Series(dtype=float)
+        panel = pd.read_parquet(path)
+        panel.columns = panel.columns.astype(str).str.upper()
+        return panel.ffill().iloc[-1]
+
+    nm = pd.DataFrame({
+        "nm_gross_profitability": last_nn("gross_profitability"),
+        "nm_asset_growth": last_nn("asset_growth"),
+        "nm_accruals": last_nn("accruals"),
+        "nm_debt_to_equity": last_nn("debt_to_equity"),
+        "nm_book_to_market": last_nn("book_to_market"),
+    })
+    ag = nm["nm_asset_growth"].clip(-AG_WINSOR, AG_WINSOR)
+    nm["gp_q"] = nm["nm_gross_profitability"].rank(pct=True)
+    nm["ag_q"] = (1 - ag.rank(pct=True))
+    nm["ac_q"] = 1 - nm["nm_accruals"].rank(pct=True)
+    nm["de_q"] = 1 - nm["nm_debt_to_equity"].rank(pct=True)
+    nm["nm_score"] = nm[["gp_q", "ag_q", "ac_q", "de_q"]].mean(axis=1)
+    nm["nm_legs"] = nm[["gp_q", "ag_q", "ac_q", "de_q"]].notna().sum(axis=1)
+    nm["nm_quality"] = (nm["nm_score"] >= 0.5) & (nm["nm_legs"] >= 2)
+    nm.index.name = "ticker"
+    nm = nm.reset_index()
+    keep = ["ticker", "nm_gross_profitability", "nm_asset_growth", "nm_accruals",
+            "nm_debt_to_equity", "nm_book_to_market", "nm_score", "nm_legs", "nm_quality"]
+    out = out.drop(columns=[c for c in keep if c != "ticker" and c in out.columns], errors="ignore")
+    return out.merge(nm[keep], on="ticker", how="left")
 
 
 def main():

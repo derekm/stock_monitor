@@ -85,16 +85,22 @@ A Buffett ROE/ROIC/D/E cut on `preferred_metrics`. It is **not** Novy-Marx QMJ. 
 
 ---
 
-## Follow-up (do not loosen 15/15/1.0)
+## Follow-up
 
-1. Separate `nm_quality` flag; do not reuse `buffett_pass` as QMJ.
-2. Reconcile preferred D/E vs fund D/E (gate names sit at the 53rd %ile of fund D/E).
-3. INCLUDE_CORE = 0 — dual-pass needs B/M or EY, not the current trifecta.
-4. QMI: rank QMJ instead of hard-threshold 15/15/1.0.
-5. True GP/A needs COGS.
-6. Winsorize AG before ranking (SAGT +705%).
-7. Wire HML/RMW/CMA from equity / Rev/A / filing AG.
-8. Re-run residual IC only after (7).
+**Shipped**
+- `debt_to_equity` = `total_debt / shareholders_equity` when book equity > 0
+- `buffett_leverage` requires `D/E ≥ 0` (negative book equity does not pass)
+- `nm_quality` / `nm_score` / `nm_legs` on preferred via `factor_library.attach_nm_quality` (AG clipped at ±100% for ranks only)
+- `gross_profit` extracted in edgar v2 (AAPL TTM GP present)
+- FF5 `--full` maps `shareholders_equity` / `revenue_ttm`|`gross_profit` / filing AG
+
+On the existing preferred snapshot, recomputed D/E + `D/E ≥ 0` moves `buffett_pass` **85 → 90** (drops APH, BLDR, EXP, JBL, MA, MSI, PAYX, TDG, TMUS; adds ADSK, ANET, BDX, CMG, FATN, GOLD, RJF, SLB, SNDK, SNPS, TJX, ULTA, VRT, WSM). Overlap on that 90: **54/87 = 62%**.
+
+**Not shipped**
+- Dual-pass / INCLUDE_CORE still uses EV/EBITDA + P/B + MCA
+- QMI still hard-thresholds; does not rank `nm_quality`
+- Residual IC after HML/RMW — run `factor_library.py --full --save` then `signal_aggregator.py --use-residuals` when prices are free
+- `preferred_metrics.py --save` to persist the new flags (not run here; DAG holds the box)
 
 ---
 
