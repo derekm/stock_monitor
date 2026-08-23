@@ -33,9 +33,18 @@ def rebuild_holdings() -> pd.DataFrame:
     ).reset_index()
     holdings["avg_cost"] = holdings["cost_basis"] / holdings["shares"]
 
-    prices = pd.read_parquet(PRICES_FILE)
+    import shutil, tempfile
+    snap = Path(tempfile.gettempdir()) / "ph_daily_prices.parquet"
+    if not snap.exists():
+        shutil.copy2(PRICES_FILE, snap)
+    tickers = holdings["ticker"].astype(str).str.upper().tolist()
+    prices = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
+    prices["ticker"] = prices["ticker"].astype(str).str.upper()
+    prices = prices[prices["ticker"].isin(tickers)]
     prices["date"] = pd.to_datetime(prices["date"])
-    latest = prices.sort_values("date").groupby("ticker").tail(1).set_index("ticker")["close"]
+    px = prices["adj_close"].where(prices["adj_close"].notna(), prices["close"])
+    latest = prices.assign(px=px).sort_values("date").groupby("ticker").tail(1).set_index("ticker")["px"]
+    holdings["ticker"] = holdings["ticker"].astype(str).str.upper()
     holdings["last_close"] = holdings["ticker"].map(latest)
     holdings["market_value"] = holdings["shares"] * holdings["last_close"]
     holdings["unrealized_pl"] = holdings["market_value"] - holdings["cost_basis"]
