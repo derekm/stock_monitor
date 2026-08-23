@@ -16,17 +16,16 @@
 - [x] Gate vs NM write-up → `docs/QUALITY_GATE_COMPARISON.md`
 - [x] `nm_quality` separate from `buffett_pass`; AG clipped ±100% for ranks
 - [x] Component D/E + `D/E ≥ 0` (code; persist on next `--save`)
+- [x] QMI = NM `nm_score` top quintile (≥2 legs); dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median
 - [x] `ff5_factors.parquet` daily **MKT/SMB/MOM**; `--full` mapped, not written
 - [x] `factor_attribution.py` named to actual factor columns
 - [ ] Residual IC ≥ +0.02 after HML/RMW exist
 
 **Success metric (measured):** Gate ∩ NM-quality = **60%** (62% after D/E recompute). Residual IC: **not measured**.
 
-**Parked (Phase 1.2 / later — not gate-loosening):**
-1. Persist preferred `--save` (`nm_quality` + component D/E)
-2. QMI ranks `nm_quality`; dual-pass needs B/M or EY (INCLUDE_CORE = 0)
-3. Backfill `gross_profit` then GP/A
-4. `factor_library.py --full --save` then residual IC
+**Parked (later — not gate-loosening):**
+1. Backfill `gross_profit` then GP/A
+2. `factor_library.py --full --save` then residual IC
 
 ---
 

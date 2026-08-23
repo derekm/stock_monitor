@@ -238,6 +238,26 @@ def score_value_vectorized(fund: pd.DataFrame) -> pd.DataFrame:
     out["trifecta_pb"] = pb.notna() & (pb <= PB_MAX)
     out["trifecta_mca"] = mca.notna() & (mca <= MCA_MAX)
     out["trifecta_pass"] = out["trifecta_ev"] & out["trifecta_pb"] & out["trifecta_mca"]
+    pb = pd.to_numeric(pb, errors="coerce")
+    bm = (1.0 / pb.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+    if "shareholders_equity" in fund.columns and "market_cap" in fund.columns:
+        eq = pd.to_numeric(fund["shareholders_equity"], errors="coerce")
+        mc = pd.to_numeric(fund["market_cap"], errors="coerce")
+        bm_comp = eq / mc.replace(0, np.nan)
+        bm = bm.where(bm.notna(), bm_comp)
+    ey = pd.Series(np.nan, index=fund.index)
+    if "net_income_ttm" in fund.columns and "market_cap" in fund.columns:
+        ni = pd.to_numeric(fund["net_income_ttm"], errors="coerce")
+        mc = pd.to_numeric(fund["market_cap"], errors="coerce")
+        ey = ni / mc.replace(0, np.nan)
+    elif "pe_ratio" in fund.columns:
+        pe = pd.to_numeric(fund["pe_ratio"], errors="coerce")
+        ey = (1.0 / pe.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+    out["bm_rank"] = bm.replace([np.inf, -np.inf], np.nan).rank(pct=True)
+    out["ey_rank"] = ey.replace([np.inf, -np.inf], np.nan).rank(pct=True)
+    out["value_bm"] = out["bm_rank"].ge(0.5)
+    out["value_ey"] = out["ey_rank"].ge(0.5)
+    out["value_pass"] = out["trifecta_pass"] | out["value_bm"].fillna(False) | out["value_ey"].fillna(False)
     out["value_score"] = 0.40 * out["ev_score"] + 0.30 * out["pb_score"] + 0.30 * out["mca_score"]
     return out
 
@@ -496,7 +516,7 @@ def build_table() -> pd.DataFrame:
     # composite: quality + value (Buffett wants both when possible)
     composite = 0.55 * q["quality_score"] + 0.45 * v["value_score"]
     # boost if both pass
-    both_pass = q["buffett_pass"] & v["trifecta_pass"]
+    both_pass = q["buffett_pass"] & v["value_pass"]
     composite = np.where(both_pass, np.minimum(1.0, composite + 0.08), composite)
 
     # Vectorized leverage adjustment
@@ -507,7 +527,7 @@ def build_table() -> pd.DataFrame:
     composite = np.clip(composite + adj, 0.0, 1.0)
 
     # dual flag
-    dual = q["buffett_pass"] & v["trifecta_pass"]
+    dual = q["buffett_pass"] & v["value_pass"]
     # Apply quality_trend_demote
     demote_tickers = set(quality_trend_demote.keys())
     dual = dual & ~fund["ticker"].isin(demote_tickers)
@@ -541,7 +561,7 @@ def build_table() -> pd.DataFrame:
     decision = np.where(composite >= 0.35, "WATCH", decision)
     decision = np.where(composite >= 0.50, "SATELLITE", decision)
     decision = np.where(q["buffett_pass"] & (composite >= 0.55), "INCLUDE_QUALITY", decision)
-    decision = np.where(v["trifecta_pass"] & (composite >= 0.45), "INCLUDE_VALUE", decision)
+    decision = np.where(v["value_pass"] & (composite >= 0.45), "INCLUDE_VALUE", decision)
     decision = np.where(dual, "INCLUDE_CORE", decision)
 
     # Build flags DataFrame

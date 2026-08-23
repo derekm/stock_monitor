@@ -21,7 +21,7 @@ NM-quality := mean rank ≥ 0.5 on **≥2** of {high Rev/A, low filing AG, low a
 | ≥2 of 3 legs | 246 (2.8%) |
 | **buffett_pass** | **85 (1.0%)** |
 | INCLUDE_QUALITY | 21 |
-| INCLUDE_CORE | **0** |
+| INCLUDE_CORE | **18** |
 | INCLUDE_VALUE | 8 |
 
 NM panels (`factor_library.py --quality-only`, filing calendar):
@@ -75,10 +75,14 @@ D/E recompute on the current preferred snapshot: drops APH, BLDR, EXP, JBL, MA, 
 
 ## Corrective work (do not loosen 15/15/1.0)
 
-1. Persist `preferred_metrics.py --save` when the DAG is not holding the box — so `nm_quality` and component D/E land on disk.
-2. Keep `buffett_pass` and `nm_quality` as **separate** flags. QMI should rank `nm_quality`, not hard-threshold 15/15/1.0.
-3. Dual-pass / INCLUDE_CORE = 0: add a real value leg (B/M or EY). Current trifecta (EV/EBITDA + P/B + MCA) never fires with this quality cut.
-4. Backfill `gross_profit` into `fundamentals.parquet` then recompute GP/A (Rev/A is the proxy).
-5. `factor_library.py --full --save` then `signal_aggregator.py --use-residuals` — residual IC is the open Gate 1 success metric.
+**Done**
+- `nm_quality` persisted on `preferred_metrics.parquet`
+- QMI = top quintile of `nm_score` (≥2 legs): **1,531** names
+- Dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median. Snapshot: trifecta 8, value_bm 261, value_ey 0. **INCLUDE_CORE = 18**: AEM, AGI, ALL, BEN, CAG, CPRT, CTAS, EOG, GL, HAL, HBM, PHM, SBUX, SCHW, SYF, TSM, UNH, WMT
+
+**Open**
+- Backfill `gross_profit` then GP/A
+- `factor_library.py --full --save` then residual IC
+- `build_bogle_funds.py --fund qmi --save` when prices are free
 
 Rebuild NM: `python factor_library.py --quality-only --save`

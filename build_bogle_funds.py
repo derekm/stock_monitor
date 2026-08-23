@@ -82,26 +82,19 @@ def load_fundamentals(tickers: list[str] | None = None) -> pd.DataFrame:
 
 
 def quality_gate(fund: pd.DataFrame) -> pd.Series:
-    """Apply Buffett-style quality gate: ROE>12%, ROIC>10%, D/E<1.5, Trifecta>=2."""
+    """QMI membership: top quintile of Novy-Marx quality (nm_score) with ≥2 legs."""
     if fund.empty:
         return pd.Series(dtype=bool)
-
-    # Trifecta components
-    fund = fund.copy()
-    fund["trifecta_ev"] = fund.get("ev_ebitda", np.inf) <= 9
-    fund["trifecta_pb"] = fund.get("pb_ratio", np.inf) <= 1.5
-    fund["trifecta_mcap"] = fund.get("mktcap_to_assets", np.inf) <= 0.5
-    fund["trifecta_count"] = fund[["trifecta_ev", "trifecta_pb", "trifecta_mcap"]].sum(axis=1)
-
-    # Quality criteria
-    roe_ok = fund.get("roe", 0) > 0.12
-    roic_ok = fund.get("roic", 0) > 0.10
-    de_ok = fund.get("debt_to_equity", np.inf) < 1.5
-    trifecta_ok = fund["trifecta_count"] >= 2
-
-    passed = roe_ok & roic_ok & de_ok & trifecta_ok
-    print(f"  Quality gate: {passed.sum()} / {len(fund)} passed")
-    print(f"    ROE>12%: {roe_ok.sum()}, ROIC>10%: {roic_ok.sum()}, D/E<1.5: {de_ok.sum()}, Trifecta>=2: {trifecta_ok.sum()}")
+    from factor_library import attach_nm_quality
+    scored = attach_nm_quality(fund.reset_index(drop=True) if "ticker" in fund.columns else fund)
+    legs = pd.to_numeric(scored.get("nm_legs"), errors="coerce").fillna(0)
+    score = pd.to_numeric(scored.get("nm_score"), errors="coerce")
+    eligible = legs >= 2
+    rank = score.where(eligible).rank(pct=True)
+    passed = eligible & rank.ge(0.80)
+    passed.index = scored["ticker"].astype(str).str.upper() if "ticker" in scored.columns else scored.index
+    print(f"  Quality gate (NM top quintile): {int(passed.sum())} / {len(scored)}")
+    print(f"    nm_legs>=2: {int(eligible.sum())}, nm_quality: {int(scored.get('nm_quality', pd.Series(False)).fillna(False).sum())}")
     return passed
 
 
@@ -317,7 +310,7 @@ def build_qmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
         q_tickers = prices.columns.tolist()
     else:
         passed = quality_gate(fund)
-        q_tickers = fund.loc[passed, "ticker"].tolist()
+        q_tickers = [t for t in passed.index[passed.fillna(False)] if t in prices.columns]
         if len(q_tickers) == 0:
             print("  WARNING: No tickers passed quality gate, using all")
             q_tickers = prices.columns.tolist()
