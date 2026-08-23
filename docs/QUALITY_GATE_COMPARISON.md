@@ -62,7 +62,7 @@ Lowest NM scores among the 85: SCHW, SAGT (AG +705%), MLM, GOOG/GOOGL, MSI, HUBB
 | `buffett_leverage` | requires `D/E ≥ 0` |
 | `gross_profit` in edgar v2 | AAPL TTM GP present; NM still Rev/A until panel backfilled |
 | FF5 `--full` column map | `shareholders_equity` / `revenue_ttm`\|`gross_profit` / filing AG |
-| `ff5_factors.parquet` | MKT/SMB/HML/CMA/MOM written. **MKT −6.4% / 16% vol**, corr TMI **0.78**. RMW empty (no GP). |
+| `ff5_factors.parquet` | MKT **−6.4%/16%**, corr TMI **0.78**. RMW **+7.4%/11%** (Rev/A fallback). |
 | Residual IC ≥ +0.02 | **+0.0117** / 85m CAPM residual on **fixed MKT** (bar fail) |
 
 D/E recompute **persisted** 2026-08-23: D/E n=5,581 (was 805). Drops negative-D/E names. Adds BIIB, GOLD, JPM, RJF, SLB to CORE. Drops SBUX. **INCLUDE_CORE = 22.**
@@ -77,7 +77,7 @@ D/E recompute **persisted** 2026-08-23: D/E n=5,581 (was 805). Drops negative-D/
 - Dual-pass `value_pass`. **INCLUDE_CORE = 22**: AEM, AGI, ALL, BEN, BIIB, CAG, CPRT, CTAS, EOG, GL, GOLD, HAL, HBM, JPM, PHM, RJF, SCHW, SLB, SYF, TSM, UNH, WMT
 
 **Open**
-- Backfill `gross_profit` then GP/A (RMW is 0 without it)
 - Residual IC still below +0.02 after MKT fix
+- GP/A panel still empty (`gross_profit` null); RMW uses Rev/A until backfilled
 
 Rebuild NM: `python factor_library.py --quality-only --save`

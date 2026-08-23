@@ -17,7 +17,7 @@
 - [x] `nm_quality` separate from `buffett_pass`; AG clipped ±100% for ranks
 - [x] Component D/E + `D/E ≥ 0` **persisted**: D/E n=5,581, `buffett_pass` **98**, Gate ∩ NM **60/95 = 63%** (bar 80% fail)
 - [x] QMI = NM `nm_score` top quintile (≥2 legs); dual-pass `value_pass` = trifecta **or** B/M ≥ median **or** EY ≥ median
-- [x] `ff5_factors.parquet` MKT: drop |r|>20% from VW, winsorize mcap 99.5%. **MKT −6.44% ann / 16.1% vol** (was −75%/62%). RMW still 0 (no GP). TMI is the market benchmark (+22%/23%).
+- [x] `ff5_factors.parquet` MKT **−6.44%/16% vol** (corr TMI 0.78). RMW **+7.4%/11% vol** via Rev/A fallback (`gross_profit` column is empty). TMI remains the market book.
 - [x] `factor_attribution.py` named to actual factor columns
 - [x] CAPM residual IC (PIT ER_{t-1} vs r_t − β̂_{36m} MKT_t, **fixed MKT**): **+0.0117** / 85m (bar +0.02 — **fail**)
 
