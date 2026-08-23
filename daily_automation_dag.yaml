@@ -9,9 +9,14 @@ jobs:
     desc: "HMM regime detection (3 states)"
 
   market_cap:
-    cmd: ["add_daily_marketcap.py"]
-    timeout: null
-    desc: "Add daily market cap from prices"
+    cmd: ["add_daily_marketcap.py", "--years", "10", "--save"]
+    timeout: 600
+    desc: "PIT daily_mcap.parquet (shares × adj_close); does not write daily_prices"
+
+  portfolio_report:
+    cmd: ["portfolio_report.py", "--refresh"]
+    timeout: 180
+    desc: "Mark personal holdings from trades + last adj_close"
 
   rebalance:
     cmd: ["rebalance_calendar.py", "--months", "18", "--save"]
@@ -271,7 +276,8 @@ jobs:
 # dependencies: job -> list of jobs that must finish first
 dependencies:
   rebalance: [hmm]
-  market_cap: []
+  market_cap: [polygon_prices]
+  portfolio_report: [polygon_prices]
   inclusion: [preferred]
   implied_r: [preferred]
   momentum: [preferred]
@@ -326,4 +332,4 @@ dependencies:
             taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride,
             taleb_arista, taleb_subindustry_regime, taleb_barbell,
             taleb_optionality, lookthrough, damodaran, polygon_prices,
-            bogle_tmi, bogle_qmi, bogle_qmi_strict, bogle_bpi]
+            bogle_tmi, bogle_qmi, bogle_qmi_strict, bogle_bpi, portfolio_report]

@@ -424,21 +424,34 @@ def main():
     args = ap.parse_args()
 
     if args.hml:
-        from datetime import timedelta
-        print("HML/RMW/CMA (stock, 10y)...")
+        print("HML/RMW/CMA (stock, 10y, PIT mcap)...")
         close = load_prices()
         stocks = DATA_DIR / "monitored_stocks.parquet"
         if stocks.exists():
             ms = pd.read_parquet(stocks, columns=["ticker", "instrument_type"])
-            keep = ms.loc[ms["instrument_type"].eq("stock"), "ticker"].astype(str).str.upper()
-            close = close.reindex(columns=[c for c in close.columns if c in set(keep)])
+            keep = set(ms.loc[ms["instrument_type"].eq("stock"), "ticker"].astype(str).str.upper())
+            close = close.reindex(columns=[c for c in close.columns if c in keep])
         cutoff = close.index.max() - pd.Timedelta(days=int(10 * 365.25))
         close = close.loc[close.index >= cutoff]
         print(f"  {close.shape[0]} dates × {close.shape[1]} tickers")
+        panel_path = DATA_DIR / "daily_mcap.parquet"
+        if panel_path.exists():
+            panel = pd.read_parquet(panel_path)
+            panel["ticker"] = panel["ticker"].astype(str).str.upper()
+            panel["date"] = pd.to_datetime(panel["date"]).dt.normalize()
+            mktcap = panel.pivot(index="date", columns="ticker", values="market_cap")
+            close = close.copy()
+            close.index = pd.to_datetime(close.index).normalize()
+            close = close.groupby(level=0).last()
+            mktcap = mktcap.reindex(index=close.index, columns=close.columns)
+            print(f"  PIT mcap last nn {int(mktcap.iloc[-1].notna().sum()):,}")
+        else:
+            fund = load_fundamentals()
+            shares = fund.dropna(subset=["ticker", "shares_outstanding"]).sort_values("date")
+            sh = shares.groupby("ticker")["shares_outstanding"].last()
+            mktcap = compute_market_cap(close, sh)
+            print("  WARNING: daily_mcap.parquet missing — last-shares fallback")
         fund = load_fundamentals()
-        shares = fund.dropna(subset=["ticker", "shares_outstanding"]).sort_values("date")
-        sh = shares.groupby("ticker")["shares_outstanding"].last()
-        mktcap = compute_market_cap(close, sh)
         factors = compute_ff5_with_fundamentals(close, mktcap, fund)
         if args.save:
             path = DATA_DIR / "ff5_factors.parquet"

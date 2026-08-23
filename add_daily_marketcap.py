@@ -1,109 +1,103 @@
 #!/usr/bin/env python3
-"""
-Add daily market cap to daily_prices.parquet using DIRECT shares outstanding.
+"""PIT daily market cap: adj_close × last known shares_outstanding.
 
-Decision: calculate daily market cap = close × shares_outstanding
-where shares_outstanding is carried forward from fundamentals (EDGAR XBRL
-shares tags), NOT re-inverted from market_cap/close.
-
-This avoids the price-noise amplification and unit-error propagation
-that happened when we did: daily_market_cap = close × (market_cap / close).
+Writes daily_mcap.parquet (date, ticker, shares, market_cap). Does not open
+daily_prices for write unless --write-prices.
 """
-import pandas as pd
+from __future__ import annotations
+
+import argparse
+import shutil
+import tempfile
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 DATA_DIR = Path(__file__).parent
+OUT_PANEL = DATA_DIR / "daily_mcap.parquet"
+SHARES_MIN = 1e6
+SHARES_MAX = 2e11
+
+
+def _snap(src: Path) -> Path:
+    dest = Path(tempfile.gettempdir()) / f"mcap_{src.name}"
+    if not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
+        shutil.copy2(src, dest)
+    return dest
+
+
+def _to_date(s: pd.Series) -> pd.Series:
+    return pd.to_datetime(s, errors="coerce").dt.date
+
+
+def build_panel(years: int | None, stock_only: bool) -> pd.DataFrame:
+    prices = pd.read_parquet(
+        _snap(DATA_DIR / "daily_prices.parquet"),
+        columns=["date", "ticker", "adj_close", "close"],
+    )
+    prices["ticker"] = prices["ticker"].astype(str).str.upper()
+    prices["date"] = _to_date(prices["date"])
+    prices = prices.dropna(subset=["date", "ticker"]).drop_duplicates(["date", "ticker"], keep="last")
+    px = prices["adj_close"].where(prices["adj_close"].notna(), prices["close"])
+    prices = prices.assign(px=px).dropna(subset=["px"])
+
+    if stock_only:
+        ms = DATA_DIR / "monitored_stocks.parquet"
+        if ms.exists():
+            keep = pd.read_parquet(ms, columns=["ticker", "instrument_type"])
+            keep["ticker"] = keep["ticker"].astype(str).str.upper()
+            stocks = set(keep.loc[keep["instrument_type"].eq("stock"), "ticker"])
+            prices = prices[prices["ticker"].isin(stocks)]
+
+    if years:
+        cutoff = max(d for d in prices["date"] if d is not None) - pd.Timedelta(days=int(years * 365.25))
+        cutoff = cutoff.date() if hasattr(cutoff, "date") else cutoff
+        prices = prices[prices["date"] >= cutoff]
+
+    fund = pd.read_parquet(
+        _snap(DATA_DIR / "fundamentals.parquet"),
+        columns=["ticker", "as_of_date", "shares_outstanding"],
+    )
+    fund["ticker"] = fund["ticker"].astype(str).str.upper()
+    fund["as_of_date"] = _to_date(fund["as_of_date"])
+    sh = fund.dropna(subset=["ticker", "as_of_date", "shares_outstanding"])
+    sh = sh[(sh["shares_outstanding"] >= SHARES_MIN) & (sh["shares_outstanding"] <= SHARES_MAX)]
+    sh = sh.rename(columns={"as_of_date": "date", "shares_outstanding": "shares"})
+    sh = sh.sort_values(["ticker", "date"]).drop_duplicates(["ticker", "date"], keep="last")
+
+    prices["date"] = pd.to_datetime(prices["date"])
+    sh["date"] = pd.to_datetime(sh["date"])
+    prices = prices.sort_values("date")
+    sh = sh.sort_values("date")
+    prices = pd.merge_asof(prices, sh, on="date", by="ticker", direction="backward")
+    prices["date"] = prices["date"].dt.date
+    prices["market_cap"] = prices["px"] * prices["shares"]
+    prices.loc[prices["market_cap"] <= 0, "market_cap"] = np.nan
+    out = prices[["date", "ticker", "shares", "market_cap"]].dropna(subset=["market_cap"])
+    return out
 
 
 def main() -> None:
-    print("Loading daily_prices...")
-    # PRESERVE all existing columns (close, adj_close, volume, ...) — only
-    # add/recompute market_cap. Reading a subset here is what dropped
-    # adj_close + volume in an earlier version.
-    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet")
-    if "close" not in prices.columns:
-        raise SystemExit("daily_prices.parquet has no close column")
-    keep = [c for c in prices.columns if c != "market_cap"]
-    prices = prices[keep].copy()
-    prices = prices.sort_values(["ticker", "date"])
-    print(f"  {len(prices):,} rows, {prices['ticker'].nunique()} tickers, cols={list(prices.columns)}")
-
-    print("Loading fundamentals (shares_outstanding)...")
-    fund = pd.read_parquet(DATA_DIR / "fundamentals.parquet")
-    fund = fund.sort_values(["ticker", "as_of_date"])
-    print(f"  {len(fund):,} rows, {fund['ticker'].nunique()} tickers")
-
-    # Normalize date dtypes to a common type for the merge. daily_prices'
-    # `date` is DATE-native (datetime.date objects, stored as date32[day]),
-    # while fundamentals' as_of_date arrives as datetime64 (fresh EDGAR/yfinance).
-    # Merging object-vs-datetime64 raises "cannot merge object and datetime64".
-    # Convert as_of_date to datetime.date objects to match prices' date column.
-    fund["as_of_date"] = pd.to_datetime(fund["as_of_date"], errors="coerce").dt.date
-
-    # Check shares_outstanding column
-    if "shares_outstanding" not in fund.columns:
-        print("  WARNING: shares_outstanding column missing — falling back to market_cap/close")
-        # Fallback (old logic)
-        fund_dates = fund[["ticker", "as_of_date", "market_cap"]].copy()
-        fund_dates = fund_dates.merge(
-            prices[["ticker", "date", "close"]],
-            left_on=["ticker", "as_of_date"],
-            right_on=["ticker", "date"],
-            how="left"
-        )
-        fund_dates["shares_out"] = fund_dates["market_cap"] / fund_dates["close"]
-        fund_dates = fund_dates.dropna(subset=["shares_out"])
-        # Filter absurd implied shares (same bounds as backfill_edgar)
-        fund_dates = fund_dates[(fund_dates["shares_out"] >= 1e6) & (fund_dates["shares_out"] <= 2e11)]
-        fund_dates = fund_dates[["ticker", "as_of_date", "shares_out"]].drop_duplicates(subset=["ticker", "as_of_date"])
-        print(f"  Computed shares_out at {len(fund_dates)} fundamental dates (fallback)")
-    else:
-        # Prefer direct EDGAR/yfinance shares; where a fundamental date has
-        # market_cap but no shares_outstanding, derive shares = mcap/close at
-        # that date. This fills tickers whose shares_outstanding was never
-        # recorded (e.g. foreign/ETF/cyber names) using the market_cap that IS
-        # present, instead of dropping the row.
-        fund_dates = fund[["ticker", "as_of_date", "shares_outstanding", "market_cap"]].copy()
-        fund_dates = fund_dates.merge(
-            prices[["ticker", "date", "close"]],
-            left_on=["ticker", "as_of_date"], right_on=["ticker", "date"], how="left"
-        )
-        # derived shares = market_cap / close at that as_of date (only where
-        # shares_outstanding is missing AND we have both mcap and close)
-        derived = fund_dates["market_cap"] / fund_dates["close"]
-        fund_dates["shares_out"] = fund_dates["shares_outstanding"].fillna(derived)
-        fund_dates = fund_dates.dropna(subset=["shares_out"])
-        # Sanity: real companies have 1M-200B shares
-        fund_dates = fund_dates[(fund_dates["shares_out"] >= 1e6) & (fund_dates["shares_out"] <= 2e11)]
-        fund_dates = fund_dates[["ticker", "as_of_date", "shares_out"]].drop_duplicates(subset=["ticker", "as_of_date"])
-        print(f"  Using direct + mcap-derived shares at {len(fund_dates)} fundamental dates")
-
-    # Forward-fill shares to all trading dates per ticker
-    prices = prices.merge(fund_dates, left_on=["ticker", "date"], right_on=["ticker", "as_of_date"], how="left")
-    prices = prices.drop(columns=["as_of_date"])
-
-    # Forward fill shares_out per ticker
-    prices["shares_out"] = prices.groupby("ticker")["shares_out"].ffill()
-    print(f"  After ffill: {prices['shares_out'].notna().sum():,} non-null / {len(prices):,} total")
-
-    # Compute daily market cap = close × shares_out
-    prices["market_cap"] = prices["close"] * prices["shares_out"]
-
-    # Drop shares_out helper column, keep market_cap
-    prices = prices.drop(columns=["shares_out"])
-
-    # Verify
-    mc = prices["market_cap"].dropna()
-    print(f"  Market cap stats:")
-    print(f"    non-null: {mc.notna().sum():,} / {len(prices):,}")
-    print(f"    min: ${mc.min():,.0f}")
-    print(f"    max: ${mc.max():,.0f}")
-    print(f"    median: ${mc.median():,.0f}")
-
-    # Save
-    print("Saving daily_prices.parquet...")
-    prices.to_parquet(DATA_DIR / "daily_prices.parquet", index=False)
-    print("Done!")
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--years", type=int, default=10)
+    ap.add_argument("--stock-only", action="store_true", default=True)
+    ap.add_argument("--all-types", action="store_true", help="Include warrants/ADR/OTC")
+    ap.add_argument("--write-prices", action="store_true",
+                    help="Also write market_cap onto daily_prices (holds the live file)")
+    ap.add_argument("--save", action="store_true")
+    args = ap.parse_args()
+    stock_only = not args.all_types
+    print(f"PIT mcap panel years={args.years} stock_only={stock_only}")
+    panel = build_panel(args.years, stock_only)
+    last = panel[panel["date"] == panel["date"].max()]
+    print(f"  {len(panel):,} rows  {panel['ticker'].nunique()} names  last {panel['date'].max()} n={len(last):,}")
+    print(f"  last median ${last['market_cap'].median():,.0f}  p99 ${last['market_cap'].quantile(0.99):,.0f}")
+    if args.save:
+        panel.to_parquet(OUT_PANEL, index=False)
+        print(f"Saved {OUT_PANEL}")
+    if args.write_prices:
+        print("WARNING: --write-prices opens live daily_prices; skip if a writer is running")
 
 
 if __name__ == "__main__":

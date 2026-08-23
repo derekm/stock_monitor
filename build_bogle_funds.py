@@ -137,11 +137,9 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
     return kept
 
 
-def compute_cap_weights(prices: pd.DataFrame, shares: pd.Series) -> pd.DataFrame:
-    """Compute cap weights for each date. prices: date x ticker, shares: ticker -> shares."""
-    mv = prices.mul(shares, axis=1)
-    weights = mv.div(mv.sum(axis=1), axis=0)
-    return weights
+def compute_cap_weights(mcap: pd.DataFrame) -> pd.DataFrame:
+    """Date × ticker mcap → cap weights."""
+    return mcap.div(mcap.sum(axis=1), axis=0)
 
 
 def compute_equal_weights(prices: pd.DataFrame) -> pd.DataFrame:
@@ -287,14 +285,29 @@ def build_fisher_chained(prices: pd.DataFrame, weights: pd.DataFrame,
 def build_tmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build Total Market Index: cap-weighted + Fisher chained."""
     print("Building TMI (Total Market Index)...")
-
-    # Get shares for cap-weighting (from latest market cap / price)
-    # For simplicity, use equal-weight as fallback if no shares
-    # In production, load from fundamentals
-    shares = pd.Series(1.0, index=prices.columns)  # placeholder
-
-    # Cap weights
-    weights = compute_cap_weights(prices, shares)
+    names = liquid_names(prices, list(prices.columns))
+    ms = DATA_DIR / "monitored_stocks.parquet"
+    if ms.exists():
+        itype = pd.read_parquet(ms, columns=["ticker", "instrument_type"])
+        itype["ticker"] = itype["ticker"].astype(str).str.upper()
+        stock = set(itype.loc[itype["instrument_type"].eq("stock"), "ticker"])
+        names = [t for t in names if t in stock]
+        print(f"  TMI stock+liquid: {len(names)}")
+    prices = prices[names]
+    panel_path = DATA_DIR / "daily_mcap.parquet"
+    if panel_path.exists():
+        panel = pd.read_parquet(panel_path)
+        panel["ticker"] = panel["ticker"].astype(str).str.upper()
+        panel["date"] = pd.to_datetime(panel["date"]).dt.normalize()
+        mcap = panel.pivot(index="date", columns="ticker", values="market_cap")
+        prices = prices.copy()
+        prices.index = pd.to_datetime(prices.index).normalize()
+        prices = prices.groupby(level=0).last()
+        mcap = mcap.reindex(index=prices.index, columns=prices.columns)
+    else:
+        mcap = prices.abs()
+        print("  WARNING: no daily_mcap.parquet — price-level weights")
+    weights = compute_cap_weights(mcap)
 
     # Rebalance dates
     rebal_dates = rebalance_dates(prices.index, TMI_REBAL_FREQ)

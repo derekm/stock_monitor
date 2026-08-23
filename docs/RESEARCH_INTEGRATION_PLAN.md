@@ -25,7 +25,15 @@
 
 **Parked (later — not gate-loosening):**
 1. Backfill `gross_profit` then GP/A
-2. `factor_library.py --full --save` then residual IC
+2. Residual IC ≥ +0.02 after MKT is sane (PIT `daily_mcap.parquet`, not last-shares)
+3. **Derived panels, not live `daily_prices` writes** (Windows lock):
+   - [x] `daily_mcap.parquet` — PIT shares × adj_close, stock-only, `--save` does not touch `daily_prices`
+   - [x] As-of share join (merge_asof backward) — TSM last mcap $2.16T
+   - [ ] Point ER/TMI/FF5 at the panel; do not write `market_cap` onto `daily_prices` while DAG/`pairs` holds the file
+   - [ ] HMC/BAYRY 20-F fundamentals (0 NI/FCF/equity rows) before ER can score them
+   - [ ] Implied-r HPQ/CAG ROE-P/B garbage
+   - [ ] Ride/crisis coverage for the personal book
+   - **Migrate derived attributes to panels? Yes.** `daily_prices` stays OHLCV (+ optional stale mcap). Shares, PIT mcap, AG, NM, ER, FF5 live in their own parquet. Writers never `os.replace` the price file for a derived column.
 
 ---
 
