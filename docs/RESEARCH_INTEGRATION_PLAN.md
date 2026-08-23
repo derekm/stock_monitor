@@ -46,20 +46,16 @@
 ---
 
 ### 3. Asness/Pedersen — Signal Aggregation + Cost-Aware Weighting
-**Target files:** `signal_aggregator.py`, `signal_model.py`, `cost_model.py`, `shadow_book.py`
-**Core papers:** Asness et al. "Value and Momentum Everywhere" (2013), Pedersen "Efficiently Inefficient" (2015), AQR "Factor Timing" (2020)
+**Status:** **Active (2026-08-23)** — dynamic weights landed on stored IC. Sharpe ≥+0.15 **not measured**.
+**Target files:** `signal_aggregator.py`, `cost_model.py`
 **Deliverables:**
-- [ ] Replace static OOS-IC weights in `signal_aggregator.py` with **Pedersen's dynamic weighting**:
-  - Weight ∝ IC / (turnover × cost) × regime-confidence
-  - Add horizon-aware decay (signals have different half-lives)
-  → `signal_weights_dynamic.parquet` (daily)
-- [ ] Implement **cost-aware optimization** (Pedersen Ch. 9): maximize ∑ wᵢ·ICᵢ - λ·wᵀΣw - τ·turnover(w)
-  - Use our `cost_model.py` (10bps + borrow) for τ
-  - Solve via quadratic programming → `optimal_signal_weights.parquet`
-- [ ] Add **signal decay curves** per family (preferred: slow; earnings: fast; technical: fastest) → `signal_decay_params.json`
-- [ ] Integrate with `shadow_book.py`: simulate paper portfolio using dynamic weights + cost model → `shadow_dynamic.parquet`
+- [x] Pedersen `w ∝ max(IC,0) / (turnover × cost) × decay × regime-conf` → `signal_weights_dynamic.parquet`
+- [x] Family half-lives → `signal_decay_params.json` (preferred 126 / peer 63 / cross 21 / pair 10 / earnings 5)
+- [ ] Cost-aware QP → `optimal_signal_weights.parquet`
+- [ ] `shadow_book.py` paper book on dynamic weights → `shadow_dynamic.parquet`
+- [ ] Dynamic Sharpe − static Sharpe ≥ 0.15 after costs
 
-**Success metric:** Dynamic-weighted portfolio Sharpe > static OOS-IC portfolio by ≥0.15 after costs
+**Measured (stored IC, regime=low_vol, conf=1.0):** static vs dyn: preferred 15%→**43%**, peer 36%→**45%**, cross 48%→**12%**, earnings 0. Pair absent from IC file. Rebuild live: `python signal_aggregator.py --dynamic --save` when prices are free.
 
 ---
 

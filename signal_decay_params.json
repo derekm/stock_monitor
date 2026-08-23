@@ -1,0 +1,7 @@
+{
+  "preferred": {"half_life_days": 126, "note": "slow quality/value"},
+  "peer": {"half_life_days": 63, "note": "relative value"},
+  "cross": {"half_life_days": 21, "note": "cross-section"},
+  "pair": {"half_life_days": 10, "note": "spread z"},
+  "earnings": {"half_life_days": 5, "note": "event"}
+}

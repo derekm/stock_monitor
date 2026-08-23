@@ -26,6 +26,7 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +41,8 @@ PAIR = DATA_DIR / "pair_engine_pairs.parquet"
 EARN = DATA_DIR / "earnings_catalyst_signals.parquet"
 OUT_SCORES = DATA_DIR / "signal_aggregator_scores.parquet"
 OUT_IC = DATA_DIR / "signal_aggregator_ic.parquet"
+OUT_W_DYN = DATA_DIR / "signal_weights_dynamic.parquet"
+DECAY_PATH = DATA_DIR / "signal_decay_params.json"
 
 FORWARD_HORIZON = 21
 
@@ -291,6 +294,60 @@ def estimate_ic_by_regime(scores: pd.DataFrame, fwd_series: pd.DataFrame,
     return ic_df
 
 
+def load_decay_params() -> dict:
+    if DECAY_PATH.exists():
+        return json.loads(DECAY_PATH.read_text(encoding="utf-8"))
+    return {
+        "preferred": {"half_life_days": 126},
+        "peer": {"half_life_days": 63},
+        "cross": {"half_life_days": 21},
+        "pair": {"half_life_days": 10},
+        "earnings": {"half_life_days": 5},
+    }
+
+
+def regime_confidence() -> float:
+    """Current HMM max posterior, else 1.0."""
+    hmm = DATA_DIR / "hmm_regime_states.parquet"
+    if not hmm.exists():
+        return 1.0
+    df = pd.read_parquet(hmm)
+    pcols = [c for c in df.columns if str(c).startswith("p_state")]
+    if not pcols:
+        return 1.0
+    last = df.sort_values("date").iloc[-1] if "date" in df.columns else df.iloc[-1]
+    return float(max(float(last[c]) for c in pcols))
+
+
+def apply_pedersen_weights(ic_df: pd.DataFrame) -> pd.DataFrame:
+    """Weight ∝ max(IC,0) / (turnover × cost) × regime-confidence × decay.
+
+    Turnover = 252 / half_life. Cost = cost_model.ROUND_TRIP_BPS.
+    Decay = 0.5 ** (FORWARD_HORIZON / half_life) — fast families fade at the 21d IC horizon.
+    """
+    from cost_model import ROUND_TRIP_BPS
+    decay = load_decay_params()
+    conf = regime_confidence()
+    cost = max(ROUND_TRIP_BPS, 1.0) / 1e4
+    out = ic_df.copy()
+    hl, to, dec = [], [], []
+    for fam in out["family"]:
+        h = float(decay.get(str(fam), {}).get("half_life_days", 21))
+        hl.append(h)
+        to.append(252.0 / h)
+        dec.append(0.5 ** (FORWARD_HORIZON / h))
+    out["half_life_days"] = hl
+    out["turnover_ann"] = to
+    out["decay"] = dec
+    out["regime_conf"] = conf
+    ic_pos = out["ic"].clip(lower=0).fillna(0.0)
+    raw = ic_pos * out["decay"] * conf / (out["turnover_ann"] * cost)
+    out["weight_dyn"] = raw
+    wsum = float(out["weight_dyn"].sum())
+    out["weight_dyn_norm"] = (out["weight_dyn"] / wsum).round(4) if wsum > 0 else 0.0
+    return out
+
+
 def build(cutoff: pd.Timestamp | None = None, lindy: bool = False, use_residuals: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
     scores = load_scores(use_residuals=use_residuals)
     # Load prices once, derive both cutoff and forward series
@@ -358,10 +415,27 @@ def main():
                          "history (older signals get more weight — Taleb)")
     ap.add_argument("--use-residuals", action="store_true",
                     help="Use factor-adjusted residual scores (factor-neutral)")
+    ap.add_argument("--dynamic", action="store_true",
+                    help="Pedersen weights: IC / (turnover×cost) × decay × regime-conf")
+    ap.add_argument("--from-ic", action="store_true",
+                    help="Apply --dynamic to existing signal_aggregator_ic.parquet (no prices)")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
+    if args.from_ic:
+        if not OUT_IC.exists():
+            raise SystemExit("missing signal_aggregator_ic.parquet")
+        ic_df = apply_pedersen_weights(pd.read_parquet(OUT_IC))
+        print("=== Pedersen dynamic weights (from stored IC) ===")
+        print(ic_df.to_string(index=False))
+        if args.save:
+            ic_df.to_parquet(OUT_W_DYN, index=False)
+            print(f"Wrote {OUT_W_DYN}")
+        return
+
     scores, ic_df = build(cutoff=args.cutoff, lindy=args.lindy, use_residuals=args.use_residuals)
+    if args.dynamic:
+        ic_df = apply_pedersen_weights(ic_df)
     print("=== Trailing-window IC (rank corr vs forward 21d return) ===")
     print(ic_df.to_string(index=False))
     print("\n=== Top 20 composite ===")
@@ -371,6 +445,9 @@ def main():
         scores.to_parquet(OUT_SCORES)
         ic_df.to_parquet(OUT_IC)
         print(f"\nWrote {OUT_SCORES}\nWrote {OUT_IC}")
+        if args.dynamic:
+            ic_df.to_parquet(OUT_W_DYN, index=False)
+            print(f"Wrote {OUT_W_DYN}")
         # Append point-in-time history. The snapshot above is overwritten every
         # run, which is why buy_candidates_oos could not backtest `composite`
         # (no date column -> no way to know what the score saw historically).
