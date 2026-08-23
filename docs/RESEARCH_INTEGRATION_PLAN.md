@@ -7,7 +7,7 @@
 ## Phase 1: Priority Deep Dives (Weeks 1–14)
 
 ### 1. Fama/French + Novy-Marx — Factor Construction Validation
-**Status:** **Closed (2026-08-23)** — final draft. Overlap **49/82 = 60%** (bar 80%). Gate ≠ QMJ. Do not loosen 15/15/1.0.
+**Status:** **Closed (2026-08-23)** — Gate ∩ NM **60/95 = 63%** (bar 80% fail). Residual IC **+0.0117** (bar +0.02 fail). Gate ≠ QMJ. Do not loosen 15/15/1.0.
 **Target files:** `factor_library.py`, `preferred_metrics.py`, `signal_aggregator.py`
 **Core papers:** FF 1993/2015, Novy-Marx 2013/2014
 **Deliverables:**
@@ -24,14 +24,14 @@
 **Success metric (measured):** Gate ∩ NM-quality = **63%** after persisted D/E (bar 80% fail). CAPM residual IC on **fixed MKT** = **+0.0117** (bar +0.02 fail). Do not loosen 15/15/1.0.
 
 **Parked (later — not gate-loosening):**
-1. Backfill `gross_profit` then GP/A
+1. Backfill `gross_profit` then GP/A — **10k fill running** (`gp_fill.py` / edgar v2). Rebuild NM GP/A + true MKT after it exits.
 2. Residual IC ≥ +0.02 after MKT is sane (PIT `daily_mcap.parquet`, not last-shares)
 3. **Derived panels, not live `daily_prices` writes** (Windows lock):
    - [x] `daily_mcap.parquet` — PIT shares × adj_close, stock-only, `--save` does not touch `daily_prices`
    - [x] As-of share join (merge_asof backward) — TSM last mcap $2.16T
-   - [ ] Point ER/TMI/FF5 at the panel; do not write `market_cap` onto `daily_prices` while DAG/`pairs` holds the file
+   - [x] ER/TMI/FF5 read `daily_mcap.parquet`. Do not write `market_cap` onto `daily_prices`.
    - [x] HMC FY26 from 6-K (JPY): NI −¥423.9B, equity ¥12.15T, ROE −3.5%. `html_20f` rank 110. v2 filled FY21–FY25. BAYRY AR25 already merged.
-   - [ ] Implied-r HPQ/CAG ROE-P/B garbage
+   - [x] Implied-r: NaN unless ROE>0 and P/B>0 (HPQ/CAG garbage gated)
    - [ ] Ride/crisis coverage for the personal book
    - **Migrate derived attributes to panels? Yes.** `daily_prices` stays OHLCV (+ optional stale mcap). Shares, PIT mcap, AG, NM, ER, FF5 live in their own parquet. Writers never `os.replace` the price file for a derived column.
 
@@ -49,7 +49,7 @@
 - [x] `expected_return_report` deferred; ER eligibility + panel mcap wired
 - [x] OOS direction: 224m, drop |ret|>50%; hit-edge **+6.3pp** (pass); top−EW **+1.4%** (fail +5% return)
 
-**Measured now:** HMM ∩ FF5 = 223 days (low_vol 128 / stress 48 / normal 47). MKT ann. +2.4% / −18.8% / −44.9%. SMB/MOM magnitudes are the un-winsorized FF5 series — do not trade them. CF>DR on 61 / 496 (median gap −1.8pp).
+**Measured now:** HMM ∩ FF5 = 223 days (low_vol 128 / stress 48 / normal 47). MKT sign-only until the VW fix. **Post-fix (usable vol):** MKT −6.4%/16%, SMB +24%/14%, MOM +5.8%/16%. Extra SMB/MOM winsor is **1.2 hygiene** for regime premia — not a 1.1 bar, not a sleeve to trade. Do not short SMB. CF>DR on 61 / 496.
 
 ---
 

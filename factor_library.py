@@ -453,7 +453,7 @@ def residual_ic() -> pd.DataFrame:
     last = px.sort_values("date").groupby(["ticker", px["date"].dt.to_period("M")]).tail(1)
     last["month"] = last["date"].dt.to_period("M")
     rets = last.pivot(index="month", columns="ticker", values="px").pct_change()
-    rets = rets.clip(-0.50, 0.50)
+    rets = winsor_abs(rets, 0.50)
     # trailing 36m beta vs MKT; apply to this month
     aligned = rets.reindex(mkt.index)
     ics = []

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from analytics_common import clip_returns
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT_STATS = DATA_DIR / "index_backtest_stats.parquet"
@@ -143,7 +144,7 @@ def run(args) -> dict:
     # Clip extreme daily moves (bad ticks / unadjusted splits) so Sharpe is usable
     clip = float(getattr(args, "clip_daily", 0.35) or 0.35)
     if clip > 0:
-        rets = rets.clip(lower=-clip, upper=clip)
+        rets = clip_returns(rets, clip)
 
     levels = {}
     stats = []

@@ -247,6 +247,17 @@ def winsor_abs(s, limit: float):
     return s.clip(lower=-limit, upper=limit)
 
 
+def winsor_z(s, z: float = 2.5):
+    """Column-wise mean ± z·std clip. Series or DataFrame."""
+    if isinstance(s, pd.DataFrame):
+        return s.apply(lambda c: winsor_z(c, z))
+    mu = s.mean()
+    sd = s.std()
+    if not np.isfinite(sd) or sd <= 0:
+        return s
+    return s.clip(lower=mu - z * sd, upper=mu + z * sd)
+
+
 def winsor_cs(df: pd.DataFrame, q: float = 0.995) -> pd.DataFrame:
     """Per-date cross-section: clip each row to its [1-q, q] quantiles."""
     lo = df.quantile(1.0 - q, axis=1)

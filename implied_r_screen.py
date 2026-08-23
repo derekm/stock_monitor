@@ -412,19 +412,13 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
     # Damodaran per-ticker WACC
     df["wacc_damodaran"] = wacc_series.reindex(df.index)
     df["cost_of_equity_damodaran"] = coe_series.reindex(df.index)
-    df["implied_r_damodaran"] = 2.0 * df["roe"] / (df["pb_ratio"] + 1.0)
-    df["excess_return_damodaran"] = df["roe"] - df["cost_of_equity_damodaran"]
-    df["excess_ret_damodaran_pct"] = (df["excess_return_damodaran"] * 100).round(1)
-
-    # RIV reduced form: r = 2*ROE/(P/B + 1)
-    df["implied_r"] = 2.0 * df["roe"] / (df["pb_ratio"] + 1.0)
-    df["fwd_pe_bench"] = 1.0 / df["implied_r"].replace(0, np.nan)
-    df["bvps"] = df["price"] / df["pb_ratio"]
-
-    # Cochrane/Ilmanen: CF yield = ROE/P/B (clean-surplus EY); DR = RIV implied r.
+    # RIV/CF-DR need ROE>0 and P/B>0. Neg ROE or junk P/B is not a yield.
     pb = pd.to_numeric(df["pb_ratio"], errors="coerce")
     roe = pd.to_numeric(df["roe"], errors="coerce")
-    df["cf_yield"] = roe / pb.replace(0, np.nan)
+    ok = roe.gt(0) & pb.gt(0) & np.isfinite(roe) & np.isfinite(pb)
+    df["implied_r"] = np.where(ok, 2.0 * roe / (pb + 1.0), np.nan)
+    df["implied_r_damodaran"] = df["implied_r"]
+    df["cf_yield"] = np.where(ok, roe / pb, np.nan)
     df["discount_rate"] = df["implied_r"]
     df["cf_minus_dr"] = df["cf_yield"] - df["discount_rate"]
     df["er_from_cf"] = df["cf_yield"]

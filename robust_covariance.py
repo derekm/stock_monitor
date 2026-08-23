@@ -108,13 +108,8 @@ def ewma_cov(rets: pd.DataFrame, lam: float = 0.94) -> np.ndarray:
 
 
 def winsorized_cov(rets: pd.DataFrame, z: float = 2.5) -> np.ndarray:
-    X = rets.copy()
-    for c in X.columns:
-        s = X[c].std()
-        mu = X[c].mean()
-        if s > 0:
-            X[c] = X[c].clip(mu - z * s, mu + z * s)
-    return X.cov().values * 252.0
+    from analytics_common import winsor_z
+    return winsor_z(rets, z).cov().values * 252.0
 
 
 def condition_number(S: np.ndarray) -> float:
