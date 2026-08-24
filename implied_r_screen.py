@@ -320,12 +320,12 @@ def _beta_map(wide: pd.DataFrame, tickers) -> pd.Series:
 
 
 def latest_market_cap_b() -> pd.Series:
-    p = pd.read_parquet(PRICES, columns=["date", "ticker", "market_cap"])
+    p = pd.read_parquet(DATA_DIR / "daily_mcap.parquet", columns=["date", "ticker", "market_cap"])
     p = p[p["market_cap"].notna()].sort_values("date").groupby("ticker").tail(1)
     mc = p.set_index("ticker")["market_cap"] / 1e9
     f = pd.read_parquet(FUND)
     f = f.sort_values("as_of_date").groupby("ticker").tail(1)
-    fb = f.set_index("ticker")["market_cap_b"]
+    fb = f.set_index("ticker")["market_cap_b"] if "market_cap_b" in f.columns else pd.Series(dtype=float)
     return mc.combine_first(fb)
 
 

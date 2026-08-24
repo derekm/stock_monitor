@@ -244,11 +244,11 @@ def fetch_yfinance_prices(ticker, start_date='1990-01-01'):
             'Stock Splits': 'stock_splits'
         })
         df['ticker'] = ticker
-        df['adj_close'] = df['close']  # yfinance auto_adjust=True makes close = adj_close
-        
-        # Select columns we need
-        cols = ['date', 'ticker', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
+        df['adj_close'] = df['close']
+        df['source'] = 'yfinance'
+        cols = ['date', 'ticker', 'open', 'high', 'low', 'close', 'adj_close', 'volume', 'source']
         df = df[cols]
+        df = df[pd.to_numeric(df['volume'], errors='coerce').fillna(0) > 0]
         return df
     except Exception as e:
         return None

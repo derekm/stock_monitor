@@ -119,8 +119,8 @@ jobs:
     desc: "Earnings catalyst"
 
   pairs:
-    cmd: ["pair_engine.py", "--save", "--max-per-group", "40", "--n-folds", "1"]
-    timeout: 1800
+    cmd: ["pair_engine.py", "--save", "--max-per-group", "0", "--n-folds", "3"]
+    timeout: 7200
     desc: "Pair engine"
 
   cross:

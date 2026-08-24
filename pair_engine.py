@@ -3,16 +3,17 @@
 pair_engine.py — Pair / relative-value engine: cointegration + residual
 mean-reversion inside industry groups, with stops and time exits.
 
-Vectorized implementation:
   1. Universe: pairs inside the same industry, cap --max-per-group (coverage-ranked).
   2. Return-correlation screen before Engle-Granger.
-  3. FDR across surviving pairs; walk-forward OOS trading.
+  3. Batched OLS + fixed-lag residual ADF (no statsmodels AIC).
+  4. FDR across surviving pairs; walk-forward OOS trading.
 
-Daily DAG: --max-per-group 40 --n-folds 1 (uncapped 16k names is ~1.2M pairs/fold).
+Daily DAG: --max-per-group 40 --n-folds 1.
 """
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +22,7 @@ import pandas as pd
 from analytics_common import DATA_DIR, load_adj_prices_pandas, wide_closes, clip_returns
 from cv_utils import bh_fdr
 from cost_model import apply_costs_to_trades
+from statsmodels.tsa.stattools import mackinnonp
 
 PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
@@ -57,88 +59,92 @@ def _groups(max_per_group: int = 40, rank: pd.Series | None = None) -> dict[str,
 
 
 def fast_adf_residual(x: np.ndarray) -> tuple[float, float]:
-    """Fast ADF test on a series using vectorized OLS (no statsmodels).
-    
-    Returns (t-stat, p-value) using the Mackinnon approximate p-value.
-    This is the pre-filter: fast and good enough to reject clearly non-stationary series.
-    """
+    """Fixed-lag ADF on a residual (constant, 1 lag of dy). MacKinnon p-value."""
     x = np.asarray(x, float)
+    x = x[np.isfinite(x)]
     n = len(x)
     if n < 50:
         return 0.0, 1.0
-    
     dy = np.diff(x)
-    y = dy
-    # ADF regression: dy_t = alpha + beta * x_{t-1} + gamma * dy_{t-1} + eps
     x_lag = x[:-1]
-    dy_lag = np.concatenate([[0], dy[:-1]])
-    
-    # Design matrix: [1, x_lag, dy_lag]
+    dy_lag = np.empty_like(dy)
+    dy_lag[0] = 0.0
+    dy_lag[1:] = dy[:-1]
     X = np.column_stack([np.ones(n - 1), x_lag, dy_lag])
-    
-    # OLS
     try:
-        beta = np.linalg.lstsq(X, y, rcond=None)[0]
-        resid = y - X @ beta
-    except np.linalg.LinAlgError:
-        return 0.0, 1.0
-    
-    # t-stat for beta[1] (the coefficient on x_{t-1})
-    dof = n - 3
-    sse = np.sum(resid ** 2)
-    sigma2 = sse / dof
-    try:
+        beta = np.linalg.lstsq(X, dy, rcond=None)[0]
+        resid = dy - X @ beta
+        dof = n - 3
+        sse = float(np.dot(resid, resid))
+        sigma2 = sse / dof
         cov = sigma2 * np.linalg.inv(X.T @ X)
-        se_beta1 = np.sqrt(cov[1, 1])
-        t_stat = beta[1] / se_beta1 if se_beta1 > 0 else 0.0
+        se = float(np.sqrt(cov[1, 1]))
+        t_stat = float(beta[1] / se) if se > 0 else 0.0
     except np.linalg.LinAlgError:
         return 0.0, 1.0
-    
-    # Approximate p-value using the ADF distribution (Mackinnon)
-    # For the "c" case (constant, no trend), the 5% critical value is ~-2.86
-    # Simple approximation: reject if t_stat < -2.86
-    # We use a rough mapping for the p-value
-    from scipy import stats as sp_stats
-    # ADF distribution is non-standard; use MacKinnon (1994) approximation
-    # p-value ≈ norm.cdf(t_stat) for a rough approximation
-    p_val = float(sp_stats.norm.cdf(t_stat))
-    
-    return float(t_stat), p_val
-
-
-def adf_pre_filter(x: np.ndarray, y: np.ndarray, pval_thresh: float = 0.10) -> bool:
-    """Pre-filter: both series should be stationary (ADF p-val < thresh).
-    
-    This is a FAST vectorized ADF that avoids statsmodels overhead.
-    Returns True if both pass.
-    """
-    _, px = fast_adf_residual(x)
-    _, py = fast_adf_residual(y)
-    return px < pval_thresh and py < pval_thresh
+    return t_stat, float(mackinnonp(t_stat, regression="c", N=1))
 
 
 def engle_granger(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float]:
-    """EG residual cointegration test on log-price series.
-    
-    Only called AFTER ADF pre-filter passes. Uses statsmodels.
-    """
-    from statsmodels.tsa.stattools import adfuller
-    import statsmodels.api as sm
-
+    """EG: OLS y~x then fixed-lag ADF on residual. No statsmodels."""
     x = np.asarray(x, float)
     y = np.asarray(y, float)
-    X = sm.add_constant(x)
-    res = sm.OLS(y, X).fit()
-    resid = res.resid
-    beta = float(res.params[1])
-    adf = adfuller(resid, autolag="AIC", regression="c")
-    return float(adf[0]), float(adf[1]), beta
+    ok = np.isfinite(x) & np.isfinite(y)
+    x, y = x[ok], y[ok]
+    if len(x) < 50:
+        return 0.0, 1.0, np.nan
+    xd, yd = x - x.mean(), y - y.mean()
+    varx = float(np.dot(xd, xd))
+    if varx <= 1e-18:
+        return 0.0, 1.0, np.nan
+    beta = float(np.dot(xd, yd) / varx)
+    resid = y - (y.mean() - beta * x.mean()) - beta * x
+    tstat, pval = fast_adf_residual(resid)
+    return tstat, pval, beta
+
+
+def _eg_batch(arr: np.ndarray, i_idx: np.ndarray, j_idx: np.ndarray,
+              chunk: int = 4000) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Pairwise-complete OLS + ADF. Chunks fat groups so resid stays in RAM."""
+    i_idx = np.asarray(i_idx)
+    j_idx = np.asarray(j_idx)
+    n = int(i_idx.size)
+    if n > chunk:
+        ts, pv, be = [], [], []
+        for s in range(0, n, chunk):
+            t, p, b = _eg_batch(arr, i_idx[s:s + chunk], j_idx[s:s + chunk], chunk=chunk)
+            ts.append(t); pv.append(p); be.append(b)
+        return np.concatenate(ts), np.concatenate(pv), np.concatenate(be)
+    xi = arr[:, i_idx]
+    xj = arr[:, j_idx]
+    ok = np.isfinite(xi) & np.isfinite(xj)
+    cnt = ok.sum(axis=0)
+    xi_m = np.where(ok, xi, np.nan)
+    xj_m = np.where(ok, xj, np.nan)
+    mx = np.nanmean(xi_m, axis=0)
+    my = np.nanmean(xj_m, axis=0)
+    xd = np.where(ok, xi - mx, 0.0)
+    yd = np.where(ok, xj - my, 0.0)
+    varx = np.sum(xd * xd, axis=0)
+    cov = np.sum(xd * yd, axis=0)
+    beta = np.where(varx > 1e-18, cov / varx, np.nan)
+    alpha = my - beta * mx
+    resid = np.where(ok, xj - alpha - beta * xi, np.nan)
+    n_p = resid.shape[1]
+    tstat = np.zeros(n_p)
+    pval = np.ones(n_p)
+    for p in range(n_p):
+        if cnt[p] < 200 or not np.isfinite(beta[p]):
+            tstat[p], pval[p] = 0.0, 1.0
+            continue
+        tstat[p], pval[p] = fast_adf_residual(resid[:, p])
+    return tstat, pval, beta
 
 
 def half_life(spread: np.ndarray) -> float:
     """OU half-life from AR(1) on the spread: hl = -ln(2)/ln(rho)."""
     s = np.asarray(spread, float)
-    s = s[~np.isnan(s)]
+    s = s[np.isfinite(s)]
     if len(s) < 30:
         return float("inf")
     y = s[1:]
@@ -152,6 +158,57 @@ def half_life(spread: np.ndarray) -> float:
     return -np.log(2) / np.log(rho)
 
 
+def _select_one_group(g, tks, arr, cols, lookback, corr_min, corr_max):
+    idx = [cols[t] for t in tks if t in cols]
+    names = [t for t in tks if t in cols]
+    if len(idx) < 2:
+        return [], 0, 0
+    sub = arr[-lookback:, idx]
+    d = np.diff(sub, axis=0)
+    # pairwise corr of diffs, nan-safe
+    d0 = d - np.nanmean(d, axis=0)
+    d0 = np.where(np.isfinite(d0), d0, 0.0)
+    valid = np.isfinite(d).astype(float)
+    nobs = valid.T @ valid
+    gram = d0.T @ d0
+    denom = np.sqrt(np.clip(np.diag(gram), 0, None))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        corr = gram / np.outer(denom, denom)
+    corr = np.where(nobs >= 50, corr, np.nan)
+    ii, jj = np.triu_indices(len(names), k=1)
+    rho = corr[ii, jj]
+    keep = np.isfinite(rho) & (np.abs(rho) >= corr_min) & (np.abs(rho) <= corr_max)
+    n_cand = int(len(ii))
+    n_corr = int(keep.sum())
+    if n_corr == 0:
+        return [], n_cand, 0
+    ii, jj, rho = ii[keep], jj[keep], rho[keep]
+    tstat, pval, beta = _eg_batch(sub, ii, jj)
+    rows = []
+    for k in range(len(ii)):
+        if not np.isfinite(beta[k]) or pval[k] >= 1.0:
+            continue
+        a, b = names[ii[k]], names[jj[k]]
+        xa, xb = sub[:, ii[k]], sub[:, jj[k]]
+        ok = np.isfinite(xa) & np.isfinite(xb)
+        if ok.sum() < 200:
+            continue
+        spread = xb[ok] - beta[k] * xa[ok]
+        hl = half_life(spread)
+        rows.append({
+            "pair_id": f"{a}|{b}",
+            "group": g,
+            "asset_a": a,
+            "asset_b": b,
+            "coint_t": float(tstat[k]),
+            "p_value": float(pval[k]),
+            "beta": float(beta[k]),
+            "half_life": hl,
+            "ret_corr": float(rho[k]),
+        })
+    return rows, n_cand, n_corr
+
+
 def select_pairs(
     wide: pd.DataFrame,
     groups: dict[str, list[str]],
@@ -161,46 +218,30 @@ def select_pairs(
     corr_max: float = 0.95,
 ) -> pd.DataFrame:
     """EG + FDR on trailing lookback. Return-corr screen before EG."""
+    lpx = np.log(wide.to_numpy(dtype=float))
+    cols = {c: i for i, c in enumerate(wide.columns)}
+    items = [(g, tks) for g, tks in groups.items() if len(tks) >= 2]
     rows: list[dict] = []
-    lpx = np.log(wide)
-    n_cand = 0
-    n_corr = 0
+    n_cand = n_corr = 0
+    n_g = len(items)
+    workers = min(10, max(1, n_g))
+    print(f"  select_pairs groups={n_g} workers={workers} lookback={lookback}")
 
-    for g, tks in groups.items():
-        tks = [t for t in tks if t in lpx.columns]
-        if len(tks) < 2:
-            continue
-        sub = lpx[tks].iloc[-lookback:]
-        corr = sub.diff().corr().to_numpy()
-        for i in range(len(tks)):
-            for j in range(i + 1, len(tks)):
-                n_cand += 1
-                rho = corr[i, j]
-                if not np.isfinite(rho) or abs(rho) < corr_min or abs(rho) > corr_max:
-                    continue
-                n_corr += 1
-                pair = sub[[tks[i], tks[j]]].dropna()
-                if len(pair) < 200:
-                    continue
-                x = pair.iloc[:, 0].to_numpy()
-                y = pair.iloc[:, 1].to_numpy()
-                try:
-                    tstat, pval, beta = engle_granger(x, y)
-                except Exception:
-                    continue
-                spread = y - beta * x
-                hl = half_life(spread)
-                rows.append({
-                    "pair_id": f"{tks[i]}|{tks[j]}",
-                    "group": g,
-                    "asset_a": tks[i],
-                    "asset_b": tks[j],
-                    "coint_t": tstat,
-                    "p_value": pval,
-                    "beta": beta,
-                    "half_life": hl,
-                    "ret_corr": float(rho),
-                })
+    def _job(item):
+        g, tks = item
+        return _select_one_group(g, tks, lpx, cols, lookback, corr_min, corr_max)
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = [ex.submit(_job, it) for it in items]
+        for fut in as_completed(futs):
+            r, c, cc = fut.result()
+            rows.extend(r)
+            n_cand += c
+            n_corr += cc
+            done += 1
+            if done % 20 == 0 or done == n_g:
+                print(f"  groups {done}/{n_g}  corr-pass {n_corr}  eg-ok {len(rows)}")
 
     print(f"  corr screen: {n_cand} candidates, {n_corr} in [{corr_min}, {corr_max}], {len(rows)} EG-ok")
 
@@ -216,7 +257,6 @@ def select_pairs(
         & (df["half_life"] <= 250.0)
     )
     return df.sort_values("coint_t")
-
 
 def simulate_pair(
     wide: pd.DataFrame,
@@ -321,6 +361,7 @@ def build(
     print(f"  groups={len(groups)} names={len(tickers)} max_per_group={max_per_group}")
     prices = load_adj_prices_pandas(tickers=tickers)
     wide = wide_closes(prices).sort_index().dropna(how="all")
+    print(f"  price panel {wide.shape[0]} dates x {wide.shape[1]} names")
     if len(wide) < lookback + test_days + 50:
         raise SystemExit("Not enough price history for the requested windows")
 

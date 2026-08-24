@@ -67,6 +67,12 @@ def load_prices(tickers: list[str] | None = None, years: float | None = None) ->
         cutoff = df["date"].max() - timedelta(days=int(years * 365.25))
         df = df[df["date"] >= cutoff]
     panel = df.pivot_table(index="date", columns="ticker", values="close").sort_index()
+    n = panel.notna().sum(axis=1)
+    keep = n >= max(50, float(n.median()) * 0.25)
+    dropped = int((~keep).sum())
+    if dropped:
+        panel = panel.loc[keep]
+        print(f"  dropped {dropped} thin/holiday dates (n < 25% of median)")
     print(f"  Price panel: {panel.shape[0]} dates x {panel.shape[1]} tickers")
     return panel
 

@@ -101,8 +101,8 @@ def main():
         fund = pd.read_parquet(fund_file)
         # latest per ticker
         fund = fund.sort_values("as_of_date").groupby("ticker").tail(1)
-        # Fresh market cap from daily prices (beats quarterly fundamentals snapshot)
-        px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker", "date", "market_cap"])
+        # Fresh market cap from PIT panel
+        px = pd.read_parquet(DATA_DIR / "daily_mcap.parquet", columns=["ticker", "date", "market_cap"])
         px = px[px["market_cap"].notna()].sort_values("date").groupby("ticker").tail(1)
         daily_mc = px.set_index("ticker")["market_cap"] / 1e9
         fund = fund.set_index("ticker")

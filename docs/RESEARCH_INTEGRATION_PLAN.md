@@ -33,7 +33,8 @@
    - [x] HMC FY26 from 6-K (JPY): NI −¥423.9B, equity ¥12.15T, ROE −3.5%. `html_20f` rank 110. v2 filled FY21–FY25. BAYRY AR25 already merged.
    - [x] Implied-r: NaN unless ROE>0 and P/B>0 (HPQ/CAG garbage gated)
    - [x] Ride on the book → `ride_book.parquet`. Scores 0.34–0.49 (none extend). SMCI 0.34 worst.
-   - **Migrate derived attributes to panels? Yes.** `daily_prices` stays OHLCV (+ optional stale mcap). Shares, PIT mcap, AG, NM, ER, FF5 live in their own parquet. Writers never `os.replace` the price file for a derived column.
+   - [x] DAG/ownership mcap readers: implied_r, portfolio_report, export panel, ownership network, Damodaran cross-holdings — all `daily_mcap`, not `daily_prices.market_cap`.
+   - **Migrate derived attributes to panels? Yes.** `daily_prices` stays OHLCV. Writers never `os.replace` the price file for a derived column.
 
 ---
 
@@ -49,7 +50,7 @@
 - [x] `expected_return_report` deferred; ER eligibility + panel mcap wired
 - [x] OOS direction: 224m, drop |ret|>50%; hit-edge **+6.3pp** (pass); top−EW **+1.4%** (fail +5% return)
 
-**Measured now:** HMM ∩ FF5 = 223 days (low_vol 128 / stress 48 / normal 47). MKT sign-only until the VW fix. **Post-fix (usable vol):** MKT −6.4%/16%, SMB +24%/14%, MOM +5.8%/16%. Extra SMB/MOM winsor is **1.2 hygiene** for regime premia — not a 1.1 bar, not a sleeve to trade. Do not short SMB. CF>DR on 61 / 496.
+**Measured now:** Regime premia **recomputed on fixed FF5** (223d): MKT low_vol −0.4% / stress **+68%** / normal **−51%** (n=128/48/47). SMB still wild in low_vol. Do not trade regime sleeves. Extra SMB/MOM winsor is 1.2 hygiene. CF>DR 61/496.
 
 ---
 
@@ -63,7 +64,7 @@
 - [x] Dynamic composite on stored scores → `shadow_dynamic.parquet` (not a full paper book)
 - [x] Dynamic Sharpe − static Sharpe: **−0.14** (1.41 vs 1.55, 225m, net 10bps — bar +0.15 **fail**). Family snapshots are not PIT; test used dated ER pillars + Pedersen HLs.
 
-**Measured (live IC, 2026-08-20, regime=low_vol):** IC pref 0.047 / peer 0.166 / cross 0.029 / earn 0.015 / pair NaN. Dyn w: peer 60% / pref 38% / cross 2%. **Sharpe dyn−static = −0.14** (fail +0.15).
+**Measured (live IC, 2026-08-20, regime=low_vol):** IC pref 0.047 / peer 0.166 / cross 0.029 / earn 0.015 / **pair was NaN** (pairs job unfinished). Uncapped 3-fold pairs now landed (1.015M candidates/fold; 1,200 usable; OOS win 0.416). Re-run `--dynamic` for pair IC. **Sharpe dyn−static = −0.14** (fail +0.15).
 
 ---
 
@@ -73,8 +74,8 @@
 - [x] Bias-corrected Hill + k-stability → `tail_index_robust.parquet` (`tail_index.py`)
 - [x] Fragility veto (Hill α<2) → `fragility_veto.parquet` (SMCI raw α=1.98)
 - [x] 90/10 TMI/BPI barbell: maxDD ratio **0.98** (bar <0.50 — fail; BPI is not long-vol)
-- [ ] Hidden optionality v2
-- [ ] Vince leverage space
+- [x] Hidden optionality v2: copy of live audit → `optionality_audit_v2.parquet` (max flip **0.57%** on momentum)
+- [x] Vince leverage space (TMI/BPI grid; max at f_tmi=1.50 / f_bpi=0)
 **Target files:** `tail_index.py`, `fragility_screen.py`, `barbell_check.py`, `ergodicity_ruin.py`, `hidden_optionality_audit.py`, `buy_candidates.py`
 **Core papers:** Taleb *Statistical Consequences of Fat Tails* (2020), Spitznagel *Safe Haven* (2020), Haghani & White *The Missing Billionaires* (2023)
 **Deliverables:**
@@ -95,7 +96,7 @@
 **Status:** **Started (2026-08-23)**
 **Deliverables:**
 - [x] Triple-barrier on book+CORE → `triple_barrier_labels.parquet` (`research_hygiene.py --book-barriers`)
-- [ ] Meta-labeling
+- [x] Meta-labeling on book barriers × ride: **meta_y mean 0** (no name has ride≥0.5) → `meta_labeled_signals.parquet`
 - [ ] CPCV
 - [ ] Regime clustering
 - [ ] SHAP stability
@@ -116,9 +117,9 @@
 **Status:** **Started (2026-08-23)**
 - [x] Rebalance luck: TMI 41q, median std **1.68%** → `rebalance_luck_distribution.parquet`
 - [x] Vince 2-asset grid TMI/BPI: max at **f_tmi=1.50, f_bpi=0** (no hedge) → `leverage_space_allocation.parquet`
-- [ ] Optimal glide
-- [ ] CDaR / sequence risk in perf_metrics
-- [ ] Multi-period Kelly
+- [x] Optimal glide: 5-day vs 1-day luck std **−37.6%** (bar 40% — fail) → `optimal_glide_schedule.parquet`
+- [x] CDaR / sequence risk on TMI: CDaR5 **−25.1%**, seq_risk **0.013**
+- [x] Multi-period Kelly TMI: f **2.96** vs single **3.46** → `multi_period_kelly.parquet`
 **Target files:** `rebalance_calendar.py`, `vol_target.py`, `kelly.py`, `portfolio_optimization.py`, `risk_parity_analytics.py`
 **Core papers:** Hoffstein "Rebalancing Luck" (2019), "Sequence Risk" (2020), Vince *Leverage Space Trading Model* (2009), *The Leverage Space Model* (2013)
 **Deliverables:**
@@ -133,6 +134,12 @@
 ---
 
 ### 7. Lo/Amodei — Adaptive Markets + LLM Forecasting
+**Status:** **Started (2026-08-23)**
+- [x] Regime population shares (11m HMM file) → `regime_population.parquet`
+- [ ] Adaptive HMM transitions
+- [ ] LLM forecasting
+- [ ] Conformal bands
+- [ ] Ensemble weights
 **Target files:** `hmm_regime_detection.py`, `statistical_profiler.py`, `forecast_granite.py`, `granite_daily.py`, `regime_calibrate.py`, `regime_serving.py`
 **Core papers:** Lo *Adaptive Markets Hypothesis* (2004/2017), Amodei et al. *Constitutional AI* (2022), Granite TTM papers (IBM 2023-2024)
 **Deliverables:**

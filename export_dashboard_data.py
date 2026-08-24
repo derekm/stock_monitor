@@ -508,9 +508,18 @@ def main():
                 tick_set.update(v)
             if tick_set:
                 px = px[px["ticker"].astype(str).str.upper().isin(tick_set)]
-            panel = px.rename(columns={"close": "close", "volume": "volume", "market_cap": "market_cap"})[
-                [c for c in ["date", "ticker", "close", "volume", "market_cap"] if c in px.columns]
+            panel = px.rename(columns={"close": "close", "volume": "volume"})[
+                [c for c in ["date", "ticker", "close", "volume"] if c in px.columns]
             ].copy()
+            mc = load("daily_mcap")
+            if mc is not None and not mc.empty:
+                mc = mc.copy()
+                mc["date"] = pd.to_datetime(mc["date"], errors="coerce")
+                mc = mc[mc["date"] >= cutoff]
+                if tick_set:
+                    mc = mc[mc["ticker"].astype(str).str.upper().isin(tick_set)]
+                panel["date"] = pd.to_datetime(panel["date"], errors="coerce")
+                panel = panel.merge(mc[["date", "ticker", "market_cap"]], on=["date", "ticker"], how="left")
             panel["date"] = panel["date"].astype(str).str.slice(0, 10)
             payload["price_qty_panel"] = df_records(panel)
         else:

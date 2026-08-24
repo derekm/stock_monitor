@@ -66,8 +66,13 @@ def build_ownership_network(holdings_path: str, prices_path: str, fundamentals_p
     else:
         latest_fund = fundamentals.groupby("ticker").last().reset_index()
     
-    # Get latest market cap from prices
-    latest_prices = prices.sort_values("date").groupby("ticker").last().reset_index()
+    # Get latest market cap from PIT panel
+    mcap_path = Path(prices_path).parent / "daily_mcap.parquet"
+    if mcap_path.exists():
+        latest_prices = pd.read_parquet(mcap_path, columns=["date", "ticker", "market_cap"])
+    else:
+        latest_prices = prices.sort_values("date").groupby("ticker").last().reset_index()
+    latest_prices = latest_prices.sort_values("date").groupby("ticker").last().reset_index()
     market_caps = latest_prices[["ticker", "market_cap"]].rename(columns={"market_cap": "latest_market_cap"})
     
     # Build nodes

@@ -80,10 +80,13 @@ def main():
         try:
             df = polygon_bulk_day(day, api_key)
             if len(df):
-                frames.append(df)
-                print(f"  {day}: {len(df)} tickers")
-            else:
-                print(f"  {day}: no data (market closed or not finalized)")
+                vol = pd.to_numeric(df.get("volume"), errors="coerce").fillna(0)
+                df = df.loc[vol > 0]
+            if len(df) < 100:
+                print(f"  {day}: skip closed/thin ({len(df)} live bars)")
+                continue
+            frames.append(df)
+            print(f"  {day}: {len(df)} tickers")
         except Exception as e:
             print(f"  {day}: ERR {e}")
         time.sleep(0.5)  # free tier: 5 req/min for grouped endpoint
