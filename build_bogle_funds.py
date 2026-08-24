@@ -128,8 +128,18 @@ def quality_gate_strict(fund: pd.DataFrame) -> pd.Series:
 
 
 def liquid_names(prices: pd.DataFrame, tickers: list[str],
-                 min_last: float = 5.0, min_cov: float = 0.80, max_day: float = 1.0) -> list[str]:
-    """Keep names with last price, coverage, and no +100% day (data-error guard)."""
+                 min_last: float = 5.0, min_cov: float = 0.80, max_day: float = 1.0,
+                 require_mcap: bool = True, require_filing: bool = False,
+                 min_adv20: float = 5_000_000.0, liquid_exchanges: set[str] | None = None) -> list[str]:
+    """
+    Keep names with last price, PIT mcap availability, quarterly filing seen, and exchange.
+    PIT gates (all as of last price date):
+      - exchange in {NMS,NYQ,NCM,NGM,ASE} and instrument_type=stock (uses monitored_stocks.parquet, now with backfilled exchange)
+      - mcap availability: daily_mcap.parquet has non-null on last date and coverage >= min_cov
+      - ADV20 >= min_adv20 (price*volume trailing 20)
+      - if require_filing: fundamentals.parquet has ≥1 as_of_date ≤ last date
+    Falls back gracefully if panels missing (keeps old price-cov behavior for that leg).
+    """
     cols = [t for t in tickers if t in prices.columns]
     if not cols:
         return []
@@ -138,8 +148,100 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
     cov = sub.notna().mean()
     mx = sub.pct_change().max()
     ok = last.ge(min_last) & cov.ge(min_cov) & mx.le(max_day)
+
+    # Exchange + instrument_type gate (backfilled)
+    if liquid_exchanges is None:
+        liquid_exchanges = {"NMS", "NYQ", "NCM", "NGM", "ASE"}
+    try:
+        ms = pd.read_parquet(STOCKS_FILE, columns=["ticker", "instrument_type", "exchange"])
+        ms["ticker"] = ms["ticker"].astype(str).str.upper()
+        # instrument must be stock
+        stock = set(ms.loc[ms["instrument_type"].eq("stock"), "ticker"])
+        # exchange must be liquid (NaN = not eligible)
+        exch_ok = ms.set_index("ticker")["exchange"].astype(str)
+        liquid_tix = {t for t in stock if t in exch_ok.index and str(exch_ok.loc[t]) in liquid_exchanges}
+        ok = ok & ok.index.to_series().apply(lambda t: t in liquid_tix)
+        print(f"  exchange filter {liquid_exchanges}: {sum(t in liquid_tix for t in ok.index)}/{len(ok)} eligible")
+    except Exception as e:
+        print(f"  WARNING exchange gate skipped: {e}")
+
+    # mcap availability gate (PIT)
+    if require_mcap:
+        try:
+            import tempfile, shutil
+            mcap_path = DATA_DIR / "daily_mcap.parquet"
+            if mcap_path.exists():
+                snap = Path(tempfile.gettempdir()) / "bogle_daily_mcap_gate.parquet"
+                shutil.copy2(mcap_path, snap)
+                mcap = pd.read_parquet(snap)
+                mcap["ticker"] = mcap["ticker"].astype(str).str.upper()
+                mcap["date"] = pd.to_datetime(mcap["date"]).dt.normalize()
+                # coverage per ticker and last-date existence
+                last_date = pd.to_datetime(sub.index.max()).normalize()
+                # pivot for coverage
+                mp = mcap.pivot(index="date", columns="ticker", values="market_cap")
+                # align to price index
+                mp = mp.reindex(index=pd.to_datetime(sub.index).normalize())
+                mcap_cov = mp.notna().mean()
+                has_last = mp.loc[last_date].notna() if last_date in mp.index else pd.Series(False, index=mp.columns)
+                # tickers without mcap history are not liquid for TMI
+                for t in ok.index:
+                    if t not in mcap_cov.index or t not in has_last.index:
+                        ok.loc[t] = False
+                    else:
+                        if mcap_cov.loc[t] < min_cov or not bool(has_last.loc[t]):
+                            ok.loc[t] = False
+                print(f"  mcap gate: {int(ok.sum())} pass (cov>={min_cov} + has mcap on {last_date.date()})")
+            else:
+                print("  WARNING no daily_mcap.parquet — mcap gate skipped (price weights)")
+        except Exception as e:
+            print(f"  WARNING mcap gate skipped: {e}")
+
+    # ADV20 gate
+    try:
+        import tempfile, shutil
+        snap2 = Path(tempfile.gettempdir()) / "bogle_adv_gate.parquet"
+        shutil.copy2(PRICES_FILE, snap2)
+        adv_df = pd.read_parquet(snap2, columns=["ticker", "date", "close", "volume"])
+        adv_df["ticker"] = adv_df["ticker"].astype(str).str.upper()
+        adv_df["date"] = pd.to_datetime(adv_df["date"])
+        # last 20 per ticker as of last price date
+        last_date = pd.to_datetime(sub.index.max())
+        # compute ADV20 per ticker
+        adv_ok = {}
+        for t in cols:
+            g = adv_df[adv_df["ticker"] == t].sort_values("date")
+            g = g[g["date"] <= last_date].tail(20)
+            if len(g) < 20:
+                adv_ok[t] = False
+            else:
+                adv = float((g["close"] * g["volume"]).mean())
+                adv_ok[t] = adv >= min_adv20
+        ok = ok & ok.index.to_series().apply(lambda t: adv_ok.get(t, False))
+        print(f"  ADV20>={min_adv20/1e6:.0f}M: {sum(adv_ok.values())}/{len(cols)} pass")
+    except Exception as e:
+        print(f"  WARNING ADV gate skipped: {e}")
+
+    # quarterly filing seen gate (for QMI)
+    if require_filing:
+        try:
+            if FUNDAMENTALS_FILE.exists():
+                import tempfile, shutil
+                snap3 = Path(tempfile.gettempdir()) / "bogle_fund_gate.parquet"
+                shutil.copy2(FUNDAMENTALS_FILE, snap3)
+                fund = pd.read_parquet(snap3, columns=["ticker", "as_of_date"])
+                fund["ticker"] = fund["ticker"].astype(str).str.upper()
+                last_date = pd.to_datetime(sub.index.max()).normalize()
+                seen = set(fund.loc[pd.to_datetime(fund["as_of_date"]).dt.normalize() <= last_date, "ticker"])
+                ok = ok & ok.index.to_series().apply(lambda t: t in seen)
+                print(f"  filing gate (≥1 Q seen): {len(seen & set(ok.index))}/{int(ok.sum())} of survivors have filing")
+            else:
+                print("  WARNING no fundamentals — filing gate skipped")
+        except Exception as e:
+            print(f"  WARNING filing gate skipped: {e}")
+
     kept = ok[ok].index.astype(str).tolist()
-    print(f"  liquidity: {len(kept)} / {len(cols)} (last>={min_last}, cov>={min_cov}, max_day<={max_day})")
+    print(f"  liquidity: {len(kept)} / {len(cols)} (last>={min_last}, cov>={min_cov}, max_day<={max_day}, mcap={require_mcap}, filing={require_filing})")
     return kept
 
 
@@ -179,8 +281,8 @@ def rebalance_dates(index: pd.DatetimeIndex, freq: str) -> list[pd.Timestamp]:
 
 
 def glide_rebalance(current_weights: pd.Series, target_weights: pd.Series,
-                    n_days: int = 5) -> list[pd.Series]:
-    """Multi-day glide path from current to target weights (S&P style)."""
+                    n_days: int = 7) -> list[pd.Series]:
+    """Linear glide from current to target weights. Default 7 days (Hoffstein luck)."""
     if n_days <= 1:
         return [target_weights]
     path = []
@@ -291,14 +393,7 @@ def build_fisher_chained(prices: pd.DataFrame, weights: pd.DataFrame,
 def build_tmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build Total Market Index: cap-weighted + Fisher chained."""
     print("Building TMI (Total Market Index)...")
-    names = liquid_names(prices, list(prices.columns))
-    ms = DATA_DIR / "monitored_stocks.parquet"
-    if ms.exists():
-        itype = pd.read_parquet(ms, columns=["ticker", "instrument_type"])
-        itype["ticker"] = itype["ticker"].astype(str).str.upper()
-        stock = set(itype.loc[itype["instrument_type"].eq("stock"), "ticker"])
-        names = [t for t in names if t in stock]
-        print(f"  TMI stock+liquid: {len(names)}")
+    names = liquid_names(prices, list(prices.columns), require_mcap=True, require_filing=False)
     prices = prices[names]
     panel_path = DATA_DIR / "daily_mcap.parquet"
     if panel_path.exists():
@@ -330,7 +425,7 @@ def build_tmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
         else:
             prev_w = weights.loc[rebal_dates[i - 1]]
             curr_w = weights.loc[d]
-            glide = glide_rebalance(prev_w, curr_w, n_days=5)
+            glide = glide_rebalance(prev_w, curr_w, n_days=7)
             for j, gw in enumerate(glide):
                 daily_weights.append(gw)
 
@@ -374,7 +469,7 @@ def build_qmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float,
             print("  WARNING: No tickers passed quality gate, using all")
             q_tickers = prices.columns.tolist()
 
-    q_tickers = liquid_names(prices, q_tickers)
+    q_tickers = liquid_names(prices, q_tickers, require_mcap=True, require_filing=True)
     print(f"  {fund_name} universe: {len(q_tickers)} tickers")
 
     # Subset prices
@@ -398,7 +493,7 @@ def build_qmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float,
         else:
             prev_w = weights.loc[rebal_dates[i - 1]]
             curr_w = weights.loc[d]
-            glide = glide_rebalance(prev_w, curr_w, n_days=5)
+            glide = glide_rebalance(prev_w, curr_w, n_days=7)
             for j, gw in enumerate(glide):
                 daily_weights.append(gw)
 
@@ -442,6 +537,9 @@ def build_bpi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
     if len(defensive_tickers) == 0:
         raise ValueError("No defensive tickers found")
 
+    defensive_tickers = liquid_names(prices, defensive_tickers, require_mcap=True, require_filing=False)
+    print(f"  BPI liquid: {len(defensive_tickers)} tickers")
+
     # Subset prices
     bpi_prices = prices[defensive_tickers].dropna(axis=1, how="all")
 
@@ -463,7 +561,7 @@ def build_bpi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
         else:
             prev_w = weights.loc[rebal_dates[i - 1]]
             curr_w = weights.loc[d]
-            glide = glide_rebalance(prev_w, curr_w, n_days=5)
+            glide = glide_rebalance(prev_w, curr_w, n_days=7)
             for j, gw in enumerate(glide):
                 daily_weights.append(gw)
 

@@ -10,9 +10,9 @@ Bogle's core principles mapped to our toolkit:
 
 | Bogle Principle | Implementation |
 |-----------------|----------------|
-| **Own the whole market** | TMI = all 16,057 tickers from `daily_prices`, cap-weighted (S&P divisor continuity) + Fisher chained |
+| **Own the whole market** | TMI = PIT liquid universe (`docs/bogle_inclusion.md`), cap-weighted (S&P divisor continuity) + Fisher chained |
 | **Minimize costs** | Explicit `expense_bps` (default 3) + `turnover_bps` (default 5) tracked per fund, per period |
-| **Broad diversification** | TMI: 16k names; QMI: 287 liquid NM-quality; QMI_STRICT: 183 Buffett 15/15/1.0; BPI: defensive-sector EW |
+| **Broad diversification** | TMI: ~4200 PIT avg (NMS/NYQ/NCM/NGM/ASE + mcap + $5M ADV); QMI: NM top-qtl + filing; QMI_STRICT: Buffett 15/15/1.0 + filing; BPI: defensive-sector EW |
 | **Stay the course** | Fixed rebalance calendar (Q/SA/Y) with multi-day glide path |
 | **Simplicity** | Four books, each with a parquet + turnover log |
 | **Low turnover** | QMI 3.5%/yr, QMI_STRICT 4.5%/yr (liquid EW) |
@@ -20,20 +20,20 @@ Bogle's core principles mapped to our toolkit:
 ## Three Funds
 
 ### TMI — Total Market Index (The "Own the Market" Fund)
-- **Universe:** All tickers in `daily_prices.parquet` (16,057 as of 2026-08-22)
+- **Universe:** PIT liquid per `docs/bogle_inclusion.md` — `instrument_type=stock` + `exchange ∈ {NMS,NYQ,NCM,NGM,ASE}` + `daily_mcap[D]` exists + `ADV20 ≥ $5M` (IPOs enter when mcap posts, ~5–20d; ~4200 names PIT avg)
 - **Weighting:** Cap-weighted (S&P-style divisor continuity) + Fisher chained variant
 - **Rebalance:** Quarterly (41 rebalances over 10 years)
 - **Cost layer:** 3 bps/yr expense + 5 bps per 100% turnover
 - **10y result (2016-2026):** CAGR 48.97%, Vol 47.45%, Sharpe 1.03
 
 ### QMI — Quality Market Index (NM rank)
-- **Universe:** NM `nm_score` top quintile (≥2 legs), then liquid: last ≥ $5, coverage ≥ 80%, no +100% day (287 names)
+- **Universe:** NM `nm_score` top quintile (≥2 legs) + PIT liquid (`mcap + ADV + filing`) — see `docs/bogle_inclusion.md`
 - **Weighting:** Equal-weight + Fisher chained
 - **Rebalance:** Semi-annual
 - **10y net (2016-08-22–2026-08-20):** CAGR 15.48%, vol 21.88%, Sharpe 0.71, max DD −42.7%; COVID −38.8%; 2022 −26.6%
 
 ### QMI_STRICT — Buffett cut
-- **Universe:** ROE ≥ 15%, ROIC ≥ 15%, 0 ≤ D/E ≤ 1.0, same liquidity screen (183 names)
+- **Universe:** ROE ≥ 15%, ROIC ≥ 15%, 0 ≤ D/E ≤ 1.0, same PIT liquid + filing (see `docs/bogle_inclusion.md`)
 - **Weighting / rebalance:** same as QMI
 - **10y net:** CAGR 23.50%, vol 19.94%, Sharpe 1.18, max DD −37.2%; COVID −37.2%; 2022 −17.3%
 - Kept beside QMI: higher CAGR/Sharpe and milder 2022 than the broad NM book. COVID still worse than BPI.
@@ -151,12 +151,11 @@ Both are tracked explicitly so you can see the drag:
 
 | Fund | Frequency | Glide Path |
 |------|-----------|------------|
-| TMI | Quarterly | 5-day linear glide (S&P style) |
-| QMI | Semi-annual | 5-day linear glide |
-| BPI | Annual | 5-day linear glide |
+| TMI | Quarterly | 7-day linear glide |
+| QMI | Semi-annual | 7-day linear glide |
+| BPI | Annual | 7-day linear glide |
 
-The glide path reduces market impact and timing luck — "don't just do
-something, sit there" becomes "do it gradually over 5 days."
+The glide path reduces market impact and timing luck — do it linearly over 7 days.
 
 ## Integration with Daily Automation
 
