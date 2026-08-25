@@ -46,7 +46,11 @@ LEVELS = DATA_DIR / "growth_tech_index_levels.parquet"
 def members(stocks: pd.DataFrame) -> pd.DataFrame:
     m = stocks[stocks.get("growth_tech_index", False) == True].copy()
     if m.empty:
-        raise SystemExit("No growth_tech_index members")
+        # Do not crash the DAG because a sleeve has not been populated yet —
+        # the corrected runner would then cascade-fail everything downstream.
+        # Warn once and let main() write an empty-but-valid parquet so dependents
+        # read a consistent schema instead of a missing file.
+        print("WARNING: growth_tech_index has no members — check sleeve population.")
     return m
 
 

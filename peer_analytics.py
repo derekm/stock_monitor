@@ -60,6 +60,44 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
         sp = sp.with_columns(pl.lit(None).alias("growth_sleeve"), pl.lit(None).alias("value_sleeve"),
                              pl.lit(False).alias("defensive_value_index"), pl.lit(False).alias("growth_tech_index"))
         stocks = pl.concat([stocks, sp], how="diagonal").unique(subset=["ticker"], keep="first")
+
+    # Liquid gate: the full 16k universe makes compute_rolling_returns allocate a
+    # (N, k) float64 array and OOM (16233 x 16060 = 2 GiB; even 7613 names =
+    # 945 MiB). Peer analytics only needs the investable, exchange-listed names,
+    # and the original code ran on ~1600. Keep the top 2000 by dollar volume.
+    liq = {"NMS", "NYQ", "NCM", "NGM", "ASE"}
+    if "exchange" in stocks.columns and "instrument_type" in stocks.columns:
+        stocks = stocks.filter(
+            pl.col("exchange").cast(pl.Utf8).is_in(liq)
+            & (pl.col("instrument_type") == "stock")
+        )
+    if "ticker" in stocks.columns:
+        keep = stocks["ticker"].to_list()
+        prices = prices.filter(pl.col("ticker").is_in(keep))
+        # Limit to the 2000 most-traded names by median dollar volume so the
+        # (N, k) rolling-return array stays well under 300 MiB.
+        try:
+            import pyarrow.parquet as pq
+            vt = pq.read_table(PRICES, columns=["ticker", "date", "close", "volume"])
+            vd = pl.DataFrame({
+                "ticker": vt.column("ticker").cast(pl.Utf8).str.to_uppercase(),
+                "date": vt.column("date"),
+                "dollar": vt.column("close").cast(pl.Float64) * vt.column("volume").cast(pl.Float64),
+            })
+            del vt
+            cutoff = prices["date"].min()
+            vd = vd.filter(pl.col("date") >= cutoff)
+            adv = vd.group_by("ticker").agg(pl.col("dollar").median().alias("adv"))
+            adv = adv.sort("adv", descending=True).head(2000)
+            top = adv["ticker"].to_list()
+            stocks = stocks.filter(pl.col("ticker").is_in(top))
+            prices = prices.filter(pl.col("ticker").is_in(top))
+        except Exception as e:
+            print(f"  WARNING dollar-volume ranking failed ({e}); using first 2000")
+            tickers = stocks["ticker"].to_list()[:2000]
+            stocks = stocks.filter(pl.col("ticker").is_in(tickers))
+            prices = prices.filter(pl.col("ticker").is_in(tickers))
+
     return prices, stocks, fund
 
 
@@ -350,7 +388,26 @@ def detect_recovery(trends: pl.DataFrame) -> pl.DataFrame:
                 "trend_direction": "improving" if overall_slope > 0 else "declining" if overall_slope < 0 else "flat",
             })
 
-    return pl.DataFrame(results)
+    # Explicit schema: polars infers dtypes from the first `infer_schema_length`
+    # dicts, and the numeric fields here are legitimately None for metrics with
+    # too little history. When every early row had None, the column was inferred
+    # as Null and the first real value raised
+    #   "could not append value: 11.55 of type: f64 to the builder".
+    # Stating the schema also stops a stray int row from pinning a column to i64.
+    schema = {
+        "ticker": pl.Utf8,
+        "metric": pl.Utf8,
+        "overall_slope": pl.Float64,
+        "recent_vs_early_pct": pl.Float64,
+        "latest_value": pl.Float64,
+        "is_recovery": pl.Boolean,
+        "is_deteriorating": pl.Boolean,
+        "strong_trend": pl.Boolean,
+        "trend_direction": pl.Utf8,
+    }
+    if not results:
+        return pl.DataFrame(schema=schema)
+    return pl.DataFrame(results, schema=schema)
 
 
 def compute_peer_rankings(

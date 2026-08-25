@@ -176,6 +176,19 @@ def main():
     import math
 
     tickers = get_tickers(args.tickers, args.max_tickers)
+    if len(tickers) > 500:
+        # Limit to liquid, listed names: fetching options chains from yfinance is
+        # slow (per-ticker HTTP), so the full 16k universe does not finish inside
+        # the DAG timeout. The fragility screen only needs the investable names.
+        try:
+            st = pd.read_parquet(STOCKS, columns=["ticker", "instrument_type", "exchange"])
+            st["ticker"] = st["ticker"].astype(str).str.upper()
+            liq = {"NMS", "NYQ", "NCM", "NGM", "ASE"}
+            keep = set(st.loc[st["instrument_type"].eq("stock")
+                              & st["exchange"].astype(str).isin(liq), "ticker"])
+            tickers = [t for t in tickers if t in keep]
+        except Exception as e:
+            print(f"  WARNING liquid gate skipped: {e}")
     spot = latest_spot()
     if not tickers:
         print("no tickers")
