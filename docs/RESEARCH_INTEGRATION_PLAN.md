@@ -100,6 +100,7 @@
 - [x] CPCV on TMI lag features → `cv_splits.parquet`: CPCV acc **53.7%** vs random KFold **53.6%** (**+0.1pp**, bar +3% **fail**)
 - [x] Feature-coef stability across 15 CPCV folds → `feature_stability.parquet` (lag1 0.37; ma21 sign-unstable)
 - [x] Regime clustering (HRP + distance corr) → `regime_clustering.py` → `regime_clusters.parquet`, `regime_cluster_dispersion.parquet`, `regime_cluster_sweep.parquet`
+- [x] **Clustered sectors** — named by dominant sector composition (e.g. `technology_77`, `energy_82`, `financial_services_100`, `mixed_healthcare`). `cluster_name` column persists the name. Use in place of `sector` in `peer_analytics`/`cross_section` for tighter peer groups.
 - [ ] SHAP (tree SHAP; coef stability is the stand-in)
 
 **Regime clustering — measured (2026-08-24), 398 liquid listed names, k = 11 = #GICS sectors:**

@@ -124,8 +124,11 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
 
 - `regime_clusters.parquet` — `ticker`, `cluster` (int), `hrp_order` (HRP
   quasi-diagonal seriation index), `sector` (GICS baseline), `metric`
-  (`corr`|`dcor`), `linkage`, `k`. Asset grouping by codependence, from
-  `regime_clustering.py`.
+  (`corr`|`dcor`), `linkage`, `k`, `cluster_name` (named by dominant sector,
+  e.g. `technology_77`, `energy_82`, `financial_services_100`).
+- **Clustered sectors as a better GICS.** `cluster_name` is a finer-grained,
+  economically-real sector label. Use it in place of `sector` in `peer_analytics`
+  / `cross_section` for tighter peer groups.
 - `regime_cluster_dispersion.parquet` — one row per grouping
   (`gics_sector`, `hrp_cluster`, `reduction_pct`) with `dispersion`
   (size-weighted std of within-group pairwise corr), `n_groups`, `n_pairs`,

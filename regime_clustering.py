@@ -240,6 +240,28 @@ def sector_labels(tickers: list[str]) -> pd.Series:
     return s.reindex([t for t in tickers if t in s.index])
 
 
+def _name_clusters(clusters: pd.DataFrame) -> dict[int, str]:
+    """Name each cluster by its dominant sector composition.
+
+    The name is "<dominant_sector>_<purity_pct>" so downstream consumers can
+    see at a glance what the cluster represents and how pure it is. Clusters
+    where no sector dominates (>50%) are named "mixed_<topsector>".
+    """
+    names = {}
+    for c, g in clusters.groupby("cluster"):
+        top = g["sector"].value_counts()
+        if len(top) == 0:
+            names[c] = f"cluster_{c}"
+            continue
+        sector = top.index[0]
+        purity = top.iloc[0] / len(g)
+        if purity >= 0.5:
+            names[c] = f"{sector.lower().replace(' ', '_')}_{int(purity*100):02d}"
+        else:
+            names[c] = f"mixed_{sector.lower().replace(' ', '_')}"
+    return names
+
+
 # ── main ────────────────────────────────────────────────────────────────────
 def run(metric: str = "corr", k: int | None = None, years: float = 5.0,
         min_cov: float = 0.95, linkage_method: str = "average",
@@ -304,6 +326,12 @@ def run(metric: str = "corr", k: int | None = None, years: float = 5.0,
     out["linkage"] = linkage_method
     out["k"] = k_eff
     out = out.reset_index()
+
+    # Name each cluster by its dominant sector composition. These are the
+    # "clustered sectors" that downstream consumers (peer_analytics, cross_section)
+    # can use as a finer-grained alternative to GICS.
+    names = _name_clusters(out)
+    out["cluster_name"] = out["cluster"].map(names)
 
     disp = pd.DataFrame([
         {"grouping": "gics_sector", "metric": metric, **base},
