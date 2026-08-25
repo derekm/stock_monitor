@@ -127,6 +127,8 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
   (`corr`|`dcor`), `linkage`, `k`, `cluster_name` (named by dominant sector,
   e.g. `technology_77`, `energy_82`, `financial_services_100`), `peer_group`
   (hybrid: cluster where tighter than GICS, else falls back to GICS sector).
+  Covers ~4,670 liquid listed stocks (61% of the 7,627-name universe; remaining
+  are ETFs/warrants/preferreds with no GICS sector).
 - **Clustered sectors as a better GICS.** `peer_group` is the drop-in
   replacement for `sector` in `peer_analytics` / `cross_section`: it uses the
   cluster name where the cluster is tighter than GICS (e.g.
