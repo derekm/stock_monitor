@@ -273,6 +273,11 @@ jobs:
     timeout: 1800
     desc: "Bogle Pink Market Index (TMI's OTC/gray complement, EW + 5% cap)"
 
+  regime_clusters:
+    cmd: ["regime_clustering.py", "--metric", "corr", "--linkage", "ward", "--years", "5", "--save"]
+    timeout: 900
+    desc: "HRP/codependence asset clusters vs GICS dispersion (Phase 1.5)"
+
   export:
     cmd: ["export_dashboard_data.py"]
     timeout: null
@@ -333,9 +338,10 @@ dependencies:
   bogle_qmi_strict: [polygon_prices]
   bogle_bpi: [polygon_prices]
   bogle_pmi: [polygon_prices]
+  regime_clusters: []
   export: [aggregate, technical, econ_cal, est_rev, shadow,
             taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility,
             taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride,
             taleb_arista, taleb_subindustry_regime, taleb_barbell,
             taleb_optionality, lookthrough, damodaran, polygon_prices,
-            bogle_tmi, bogle_qmi, bogle_qmi_strict, bogle_bpi, bogle_pmi, portfolio_report]
+            bogle_tmi, bogle_qmi, bogle_qmi_strict, bogle_bpi, bogle_pmi, regime_clusters, portfolio_report]

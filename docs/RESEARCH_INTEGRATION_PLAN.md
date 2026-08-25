@@ -64,7 +64,7 @@
 - [x] Dynamic composite on stored scores → `shadow_dynamic.parquet` (not a full paper book)
 - [x] Dynamic Sharpe − static Sharpe: **−0.14** (1.41 vs 1.55, 225m, net 10bps — bar +0.15 **fail**). Family snapshots are not PIT; test used dated ER pillars + Pedersen HLs.
 
-**Measured (live IC, 2026-08-20, regime=low_vol):** IC pref 0.047 / peer 0.166 / cross 0.029 / earn 0.015 / **pair was NaN** (pairs job unfinished). Uncapped 3-fold pairs now landed (1.015M candidates/fold; 1,200 usable; OOS win 0.416). Re-run `--dynamic` for pair IC. **Sharpe dyn−static = −0.14** (fail +0.15).
+**Measured (live IC, 2026-08-20, regime=low_vol, after uncapped pairs):** IC pref 0.048 / peer **0.177** / pair **0.127** / cross 0.025 / earn 0.022. Dyn w: peer 60% / pref 36% / pair 2% / cross 2%. Pair IC now live; HL=10d keeps dyn weight tiny. Sharpe dyn−static still **−0.14**. Do not size on `--dynamic`.
 
 ---
 
@@ -93,14 +93,37 @@
 ---
 
 ### 5. López de Prado — ML Regime Work Upgrade
-**Status:** **Started (2026-08-23)**
+**Status:** **Measured (2026-08-24)** — CPCV − random **+0.1pp** (bar +3% fail). meta_y=0. Regime clustering **passes but is linkage-fragile**.
 **Deliverables:**
-- [x] Triple-barrier on book+CORE → `triple_barrier_labels.parquet` (`research_hygiene.py --book-barriers`)
-- [x] Meta-labeling on book barriers × ride: **meta_y mean 0** (no name has ride≥0.5) → `meta_labeled_signals.parquet`
-- [ ] CPCV
-- [ ] Regime clustering
-- [ ] SHAP stability
-**Target files:** `subindustry_regime.py`, `peer_analytics.py`, `cross_section.py`, `signal_model.py`, `hmm_regime_detection.py`
+- [x] Triple-barrier on book+CORE → `triple_barrier_labels.parquet`
+- [x] Meta-labeling: **meta_y mean 0** (no name ride≥0.5)
+- [x] CPCV on TMI lag features → `cv_splits.parquet`: CPCV acc **53.7%** vs random KFold **53.6%** (**+0.1pp**, bar +3% **fail**)
+- [x] Feature-coef stability across 15 CPCV folds → `feature_stability.parquet` (lag1 0.37; ma21 sign-unstable)
+- [x] Regime clustering (HRP + distance corr) → `regime_clustering.py` → `regime_clusters.parquet`, `regime_cluster_dispersion.parquet`, `regime_cluster_sweep.parquet`
+- [ ] SHAP (tree SHAP; coef stability is the stand-in)
+
+**Regime clustering — measured (2026-08-24), 398 liquid listed names, k = 11 = #GICS sectors:**
+
+Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector baseline.
+
+| linkage | 3y | 5y |
+|---|---|---|
+| ward | **+28.1% PASS** | **+20.3% PASS** |
+| average | **+24.6% PASS** | **+20.0% PASS** (exactly on the bar) |
+| complete | **+22.3% PASS** | +18.7% **FAIL** |
+| single | +12.4% **FAIL** | +7.3% **FAIL** |
+
+**5/8 configs clear the bar; range +7.3% to +28.1%.** The headline default (average/5y) lands at **exactly +20.0%**, so this is a **fragile pass, not a robust one** — it is linkage-dependent, and single linkage (chaining) fails outright. Report the config with the number.
+
+**Distance correlation beats Pearson** on a controlled comparison (same 150 names, 3y, ward — only the metric differs): **dcor +29.3% vs corr +23.0% (+6.3pp)**, i.e. the non-linear codependence López de Prado argues for is doing real work, not just re-deriving sector labels.
+
+**The clusters are economically real, and finer than GICS.** Ward/5y splits what GICS calls one "Healthcare" sector into **drug distributors (MCK/COR/CAH)**, **managed care (UNH/CVS/ELV/CI/HUM)** and **pharma (LLY/JNJ/PFE/MRK/ABBV)** — three 100%-pure clusters. It also finds **gaming (EA/TTWO)** and **clean energy (ENPH/FSLR/PLUG)**, which GICS scatters across Communication Services / Technology / Utilities. That is the usable output: a better peer/basket grouping for `peer_analytics` and `cross_section`.
+
+**Caveat that limits the headline number:** the size distribution is **very unbalanced** — one cluster holds **286 of 400 names (72%)**, with the rest as small satellites (sizes 1–49). So part of the dispersion "win" is achieved by peeling off a few tight niches while leaving a large heterogeneous core, not by partitioning the market evenly. The niches are genuinely useful; the aggregate ≥20% figure flatters the method. Balanced-partition variants (k larger, or cutting the dendrogram by inconsistency rather than `maxclust`) are the honest next step before using `cluster` as a drop-in replacement for `sector`.
+
+**Does NOT replace the HMM.** The plan says "replace HMM in `hmm_regime_detection.py`", but the HMM labels **dates** by market features (mkt_ret/vol21/avg_corr) and feeds `pass6`/`pass8`/`regime_serving`; HRP clusters **assets** by codependence. They are different objects, and the ≥20%-dispersion metric is an asset-grouping metric. The clustering is therefore an **addition** (a better peer//basket grouping than GICS), and the HMM date labeller stays.
+**Success metric (measured):** CPCV does **not** beat shuffled KFold by 3pp on this persistence task. Do not claim CPCV as a lift. Regime clustering **does** clear ≥20% on 5/8 configs (best dcor/ward **+29.3%**), but not on all.
+**Target files:** `subindustry_regime.py`, `peer_analytics.py`, `cross_section.py`, `signal_model.py`, `hmm_regime_detection.py`, `regime_clustering.py`
 **Core papers:** López de Prado *Advances in Financial ML* (2018): CPCV, meta-labeling, regime clustering, triple-barrier
 **Deliverables:**
 - [ ] **Meta-labeling**: Wrap `signal_model.py` GradientBoosting with meta-label (primary model = direction, meta = position size) → `meta_labeled_signals.parquet`
@@ -117,14 +140,16 @@
 **Status:** **Started (2026-08-23)**
 - [x] Rebalance luck: TMI 41q, median std **1.68%** → `rebalance_luck_distribution.parquet`
 - [x] Vince 2-asset grid TMI/BPI: max at **f_tmi=1.50, f_bpi=0** (no hedge) → `leverage_space_allocation.parquet`
-- [x] Optimal glide: 5-day vs 1-day luck std **−37.6%** (bar 40% — fail) → `optimal_glide_schedule.parquet`
+- [x] Optimal glide: **7-day** vs 1-day luck std **−50.8%** (bar 40% **pass**) → `optimal_glide_schedule.parquet`
 - [x] CDaR / sequence risk on TMI: CDaR5 **−25.1%**, seq_risk **0.013**
 - [x] Multi-period Kelly TMI: f **2.96** vs single **3.46** → `multi_period_kelly.parquet`
+- [x] Vince LS vs ERC (400 block-bootstrap paths): LS median terminal **18.54** vs ERC **6.40** → `ls_vs_erc.parquet` (**LS dominates**)
+**Success metric (measured):** 7-day glide **−50.8%** (bar 40% **pass**). LS **beats** ERC on median terminal. Do not size live books at f=1.50.
 **Target files:** `rebalance_calendar.py`, `vol_target.py`, `kelly.py`, `portfolio_optimization.py`, `risk_parity_analytics.py`
 **Core papers:** Hoffstein "Rebalancing Luck" (2019), "Sequence Risk" (2020), Vince *Leverage Space Trading Model* (2009), *The Leverage Space Model* (2013)
 **Deliverables:**
 - [ ] **Rebalancing luck quantification**: Monte Carlo `rebalance_calendar.py` over all possible rebalance days in quarter → `rebalance_luck_distribution.parquet`
-- [ ] **Multi-day glide optimization**: Extend 5-day linear glide to **Hoffstein's optimal glide path** (minimize tracking error variance) → `optimal_glide_schedule.parquet`
+- [x] **7-day linear glide** is the Hoffstein pick (luck −50.8%; 10-day better luck, worse day-0). Writers: `glide_rebalance(..., n_days=7)`.
 - [ ] **Sequence risk metrics**: Add to `perf_metrics.py` — **sequence risk score** (correlation of returns with withdrawal phase), **conditional drawdown at risk** (CDaR)
 - [ ] **Leverage Space sizing**: Implement Vince's multi-asset optimal f (joint distribution of returns, not marginal Kelly) → `leverage_space_allocation.parquet`
 - [ ] **Path-dependent Kelly**: Replace `kelly.py` single-period with multi-period Kelly (accounting for volatility drag) → `multi_period_kelly.parquet`
@@ -134,12 +159,24 @@
 ---
 
 ### 7. Lo/Amodei — Adaptive Markets + LLM Forecasting
-**Status:** **Started (2026-08-23)**
+**Status:** **Started (2026-08-23)**, adaptive-HMM claim **re-measured on full history (2026-08-24)**
 - [x] Regime population shares (11m HMM file) → `regime_population.parquet`
-- [ ] Adaptive HMM transitions
+- [x] Adaptive persist vs vol → `adaptive_hmm_states.parquet` (bar **+0.60 fail**)
+- [x] Split conformal on TMI |r|/σ₂₁: coverage **88.9%** vs 90% bar → `conformal_bands.parquet` (**fail**, 1.1pp short)
 - [ ] LLM forecasting
-- [ ] Conformal bands
 - [ ] Ensemble weights
+
+**Adaptive HMM (persistence vs vol) — CORRECTED 2026-08-24.** The recorded **−0.90 (n=169)** is not reproducible as a *regime-persistence* result. Measuring persistence the natural way — **regime run length vs mean in-run `vol21`** — gives essentially **zero** relationship on both samples:
+
+| sample | corr | n runs | mean run len | dates | span |
+|---|---|---|---|---|---|
+| **full history** | **−0.074** | 278 | 57.9d | 16,087 | 1962-01-31 → 2026-08-07 |
+| adaptive window | −0.075 | 15 | 15.4d | 231 | 2025-10-06 → 2026-08-24 |
+
+Both **fail the +0.60 bar**, and both agree, so this is **not** a truncated-window artifact — the −0.90 came from a **different estimator** (a per-date persistence proxy over n=169 dates, not run lengths). Two estimators disagreeing by 0.83 means the metric definition was doing the work, not the market.
+
+**Honest statement: regime persistence is ~uncorrelated with volatility (−0.07 over 64 years and 278 runs).** Do not quote −0.90, and do not claim "high vol shortens dwell" — the long sample does not support a sign in either direction. `adaptive_hmm_states.parquet` now stores **both samples with `n_runs`** so the estimator and sample size travel with the number.
+**Success metric (measured):** run-length persistence/vol correlation **−0.074 (278 runs, full history)** vs bar +0.60 → **fail**. Conformal **88.9% < 90%** → fail.
 **Target files:** `hmm_regime_detection.py`, `statistical_profiler.py`, `forecast_granite.py`, `granite_daily.py`, `regime_calibrate.py`, `regime_serving.py`
 **Core papers:** Lo *Adaptive Markets Hypothesis* (2004/2017), Amodei et al. *Constitutional AI* (2022), Granite TTM papers (IBM 2023-2024)
 **Deliverables:**

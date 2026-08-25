@@ -186,6 +186,10 @@ TABLES = [
     "bogle_bpi_turnover",
     "bogle_pmi",
     "bogle_pmi_turnover",
+    # Phase 1.5 (Lopez de Prado): HRP / codependence asset clustering
+    "regime_clusters",
+    "regime_cluster_dispersion",
+    "regime_cluster_sweep",
 ]
 
 

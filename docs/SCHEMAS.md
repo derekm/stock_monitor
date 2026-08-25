@@ -120,6 +120,22 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
   **PMI gates the complement** (`exchange_mode="exclude"`), so `TMI ∪ PMI` is the
   complete market and `TMI ∩ PMI = ∅`. Gates documented in `docs/bogle_inclusion.md`.
 
+### Regime clustering  (`regime_clustering`)
+
+- `regime_clusters.parquet` — `ticker`, `cluster` (int), `hrp_order` (HRP
+  quasi-diagonal seriation index), `sector` (GICS baseline), `metric`
+  (`corr`|`dcor`), `linkage`, `k`. Asset grouping by codependence, from
+  `regime_clustering.py`.
+- `regime_cluster_dispersion.parquet` — one row per grouping
+  (`gics_sector`, `hrp_cluster`, `reduction_pct`) with `dispersion`
+  (size-weighted std of within-group pairwise corr), `n_groups`, `n_pairs`,
+  `mean_within_corr`, `singletons`, `bar_pct` (20), `passes`, `n_assets`, `years`.
+- `regime_cluster_sweep.parquet` — `metric`, `linkage`, `years`,
+  `reduction_pct`, `passes`. **Read the sweep, not one cell**: the ≥20% bar
+  outcome is linkage-dependent (5/8 configs pass; +7.3% to +28.1%).
+- **Not** a regime *date* table: `hmm_regime_states` (family `regime_state`) is
+  the date→regime series. This family groups ASSETS.
+
 ### Correlation matrix  (`correlation_matrix`)
 
 - `index` (row label, ticker or sector) × one column per entity, pairwise
