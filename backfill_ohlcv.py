@@ -209,20 +209,28 @@ def merge_additive(prices: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFrame:
         brand_new = new_df[[k not in existing_keys for k in new_keys]].copy()
         if len(brand_new):
             brand_new["source"] = "yfinance"
-            # carry forward market_cap from the nearest prior day of the same
-            # ticker if present (never invent data; only re-align existing caps)
-            for t in fetched:
-                if "market_cap" in prices.columns:
-                    mc = prices[prices["ticker"] == t][["date", "market_cap"]].dropna()
-                    if len(mc):
-                        mc = mc.set_index("date").sort_index()
-                        mc = mc[~mc.index.duplicated(keep="last")]
-                        bn = brand_new[brand_new["ticker"] == t]
-                        if len(bn):
-                            caps = pd.Series(index=pd.to_datetime(bn["date"]),
-                                             data=np.nan, dtype="float64")
-                            filled = mc.reindex(index=caps.index, method="ffill")
-                            brand_new.loc[brand_new["ticker"] == t, "market_cap"] = filled.values
+            # Carry forward market_cap from the nearest prior day of the same
+            # ticker (never invent data; only re-align existing caps).
+            # Vectorized: one sorted merge_asof over all fetched tickers at once.
+            # The old form ran `prices[prices.ticker == t]` per fetched ticker,
+            # i.e. 400 full scans of a 33M-row frame per checkpoint, which made a
+            # single checkpoint merge take longer than the fetches it protected.
+            if "market_cap" in prices.columns:
+                caps = prices.loc[prices["ticker"].isin(fetched), ["date", "ticker", "market_cap"]].dropna(subset=["market_cap"])
+                if len(caps):
+                    caps = caps.copy()
+                    caps["_d"] = pd.to_datetime(caps["date"]).astype("datetime64[ns]")
+                    caps = caps.sort_values("_d")
+                    bn = brand_new.copy()
+                    bn["_row"] = np.arange(len(bn))
+                    bn["_d"] = pd.to_datetime(bn["date"]).astype("datetime64[ns]")
+                    bn = bn.sort_values("_d")
+                    filled = pd.merge_asof(
+                        bn[["_row", "_d", "ticker"]], caps[["_d", "ticker", "market_cap"]],
+                        on="_d", by="ticker", direction="backward",
+                    )
+                    filled = filled.set_index("_row")["market_cap"].reindex(np.arange(len(brand_new)))
+                    brand_new["market_cap"] = filled.values
             combined = pd.concat([prices, brand_new], ignore_index=True)
         else:
             combined = prices

@@ -186,7 +186,10 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
         ok = ok & ok.index.to_series().apply(lambda t: t in liquid_tix)
         print(f"  exchange filter ({exchange_mode}) {liquid_exchanges}: {sum(t in liquid_tix for t in ok.index)}/{len(ok)} eligible")
     except Exception as e:
-        print(f"  WARNING exchange gate skipped: {e}")
+        # The exchange gate is what makes TMI and PMI disjoint. If it silently
+        # skipped, PMI would quietly include listed names (and TMI, OTC ones),
+        # so the completeness claim would be false with no warning in the output.
+        raise RuntimeError(f"exchange gate could not be evaluated: {e}") from e
 
     # mcap availability gate (PIT)
     if require_mcap:
@@ -218,31 +221,46 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
             else:
                 print("  WARNING no daily_mcap.parquet — mcap gate skipped (price weights)")
         except Exception as e:
-            print(f"  WARNING mcap gate skipped: {e}")
+            # Distinguish "panel absent" (documented fallback, handled above) from
+            # "panel present but unreadable", which must not pass silently.
+            raise RuntimeError(f"mcap gate could not be evaluated: {e}") from e
 
     # ADV20 gate (vectorized: one groupby over the panel, not a scan per ticker —
-    # PMI's ~8k-name OTC universe made the per-ticker loop the dominant cost)
+    # PMI's ~8k-name OTC universe made the per-ticker loop the dominant cost).
+    # Read via pyarrow with a ticker filter and drop straight to numpy-backed
+    # columns: materializing all 33M rows x 4 cols as pandas here failed with
+    # `malloc of size 264470976` on a loaded box, and that failure used to be
+    # swallowed, emitting an ungated fund.
     try:
-        import tempfile, shutil
-        snap2 = Path(tempfile.gettempdir()) / "bogle_adv_gate.parquet"
-        shutil.copy2(PRICES_FILE, snap2)
-        adv_df = pd.read_parquet(snap2, columns=["ticker", "date", "close", "volume"])
-        adv_df["ticker"] = adv_df["ticker"].astype(str).str.upper()
-        adv_df["date"] = pd.to_datetime(adv_df["date"])
-        last_date = pd.to_datetime(sub.index.max())
+        import pyarrow.parquet as pq
+        import pyarrow.compute as pc
         want = set(cols)
-        adv_df = adv_df[adv_df["ticker"].isin(want) & (adv_df["date"] <= last_date)]
-        adv_df = adv_df.sort_values(["ticker", "date"])
-        adv_df["dollar"] = adv_df["close"] * adv_df["volume"]
-        g = adv_df.groupby("ticker")["dollar"]
-        adv20 = g.tail(20).groupby(adv_df["ticker"]).agg(["mean", "count"])
+        last_date = pd.to_datetime(sub.index.max())
+        tbl = pq.read_table(
+            PRICES_FILE,
+            columns=["ticker", "date", "close", "volume"],
+            filters=[("ticker", "in", list(want))],
+        )
+        adv_df = pd.DataFrame({
+            "ticker": tbl.column("ticker").to_pandas().astype(str).str.upper(),
+            "date": pd.to_datetime(tbl.column("date").to_pandas()),
+            "dollar": tbl.column("close").to_pandas().astype("float64")
+                      * tbl.column("volume").to_pandas().astype("float64"),
+        })
+        del tbl
+        adv_df = adv_df[adv_df["date"] <= last_date].sort_values(["ticker", "date"])
+        tail20 = adv_df.groupby("ticker", sort=False)["dollar"].tail(20)
+        adv20 = tail20.groupby(adv_df.loc[tail20.index, "ticker"]).agg(["mean", "count"])
         # require a full 20-day window, same as the prior per-ticker rule
         adv_pass = (adv20["count"] >= 20) & (adv20["mean"] >= min_adv20)
         adv_ok = {t: bool(adv_pass.get(t, False)) for t in cols}
         ok = ok & ok.index.to_series().apply(lambda t: adv_ok.get(t, False))
         print(f"  ADV20>={min_adv20/1e6:.3f}M: {sum(adv_ok.values())}/{len(cols)} pass")
     except Exception as e:
-        print(f"  WARNING ADV gate skipped: {e}")
+        # A gate that cannot be evaluated must NOT silently disappear: a run that
+        # hit `malloc of size 264470976 failed` here still wrote a bogle_pmi.parquet,
+        # ungated on liquidity, that looked like a legitimate fund. Fail loudly.
+        raise RuntimeError(f"ADV20 gate could not be evaluated: {e}") from e
 
     # quarterly filing seen gate (for QMI)
     if require_filing:
@@ -260,7 +278,7 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
             else:
                 print("  WARNING no fundamentals — filing gate skipped")
         except Exception as e:
-            print(f"  WARNING filing gate skipped: {e}")
+            raise RuntimeError(f"filing gate could not be evaluated: {e}") from e
 
     kept = ok[ok].index.astype(str).tolist()
     print(f"  liquidity: {len(kept)} / {len(cols)} (last>={min_last}, cov>={min_cov}, max_day<={max_day}, mcap={require_mcap}, filing={require_filing})")
