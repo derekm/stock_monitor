@@ -74,6 +74,23 @@ def load_data() -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     if "ticker" in stocks.columns:
         keep = stocks["ticker"].to_list()
         prices = prices.filter(pl.col("ticker").is_in(keep))
+        # Use hybrid peer_group from regime clustering instead of raw sector.
+        # The peer_group column picks the cluster name where it's tighter than
+        # GICS, and falls back to GICS where it's not — giving tighter peer groups
+        # with zero logic changes to get_peer_groups().
+        try:
+            cl = pd.read_parquet(DATA_DIR / "regime_clusters.parquet",
+                                 columns=["ticker", "peer_group"])
+            cl["ticker"] = cl["ticker"].astype(str).str.upper()
+            peer_map = cl.drop_duplicates("ticker").set_index("ticker")["peer_group"]
+            stocks = stocks.with_columns(
+                pl.col("ticker").map_elements(lambda t: peer_map.get(t, None),
+                                               return_dtype=pl.Utf8).alias("sector")
+            )
+            n_mapped = stocks["sector"].notna().sum()
+            print(f"  peer_group mapped {n_mapped}/{len(stocks)} tickers from regime_clusters")
+        except Exception as e:
+            print(f"  WARNING peer_group mapping failed ({e}); using raw sector")
         # Limit to the 2000 most-traded names by median dollar volume so the
         # (N, k) rolling-return array stays well under 300 MiB.
         try:

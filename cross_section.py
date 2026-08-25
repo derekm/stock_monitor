@@ -70,6 +70,16 @@ def _sector_map() -> dict[str, str]:
     out = {}
     for _, r in stocks.iterrows():
         out[str(r["ticker"]).upper()] = str(r.get("sector") or "unknown")
+    # Overlay hybrid peer_group from regime clustering where available
+    cl_path = DATA_DIR / "regime_clusters.parquet"
+    if cl_path.exists():
+        cl = pd.read_parquet(cl_path, columns=["ticker", "peer_group"])
+        cl["ticker"] = cl["ticker"].astype(str).str.upper()
+        peer_map = cl.drop_duplicates("ticker").set_index("ticker")["peer_group"]
+        for t in list(out.keys()):
+            pg = peer_map.get(t)
+            if pg is not None:
+                out[t] = pg
     return out
 
 
