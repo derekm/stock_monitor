@@ -265,7 +265,7 @@ def _name_clusters(clusters: pd.DataFrame) -> dict[int, str]:
 # ── main ────────────────────────────────────────────────────────────────────
 def run(metric: str = "corr", k: int | None = None, years: float = 5.0,
         min_cov: float = 0.95, linkage_method: str = "average",
-        max_assets: int | None = 400, save: bool = False) -> dict:
+        max_assets: int | None = None, save: bool = False) -> dict:
     from scipy.cluster.hierarchy import linkage, fcluster
     from scipy.spatial.distance import squareform
 
@@ -356,7 +356,7 @@ def run(metric: str = "corr", k: int | None = None, years: float = 5.0,
 
 def sweep(metric: str = "corr", years_list=(3.0, 5.0),
           linkages=("average", "single", "complete", "ward"),
-          max_assets: int = 400, save: bool = False) -> pd.DataFrame:
+          max_assets: int | None = None, save: bool = False) -> pd.DataFrame:
     """Robustness sweep over linkage x lookback.
 
     Exists because the headline single-config number landed at exactly +20.0%,
@@ -404,7 +404,7 @@ def main():
     ap.add_argument("--min-cov", type=float, default=0.95)
     ap.add_argument("--linkage", dest="linkage_method", default="average",
                     choices=["single", "average", "complete", "ward"])
-    ap.add_argument("--max-assets", type=int, default=400)
+    ap.add_argument("--max-assets", type=int, default=None)
     ap.add_argument("--sweep", action="store_true",
                     help="run the linkage x lookback robustness sweep instead of one config")
     ap.add_argument("--save", action="store_true")

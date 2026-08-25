@@ -103,7 +103,7 @@
 - [x] **Clustered sectors** — named by dominant sector composition (e.g. `technology_77`, `energy_82`, `financial_services_100`, `mixed_healthcare`). `cluster_name` column persists the name. Use in place of `sector` in `peer_analytics`/`cross_section` for tighter peer groups.
 - [ ] SHAP (tree SHAP; coef stability is the stand-in)
 
-**Regime clustering — measured (2026-08-24), 398 liquid listed names, k = 11 = #GICS sectors:**
+**Regime clustering — measured (2026-08-25), 4,678 liquid listed names (61% coverage), k = 11 = #GICS sectors:**
 
 Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector baseline.
 
@@ -115,6 +115,8 @@ Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector
 | single | +12.4% **FAIL** | +7.3% **FAIL** |
 
 **5/8 configs clear the bar; range +7.3% to +28.1%.** The headline default (average/5y) lands at **exactly +20.0%**, so this is a **fragile pass, not a robust one** — it is linkage-dependent, and single linkage (chaining) fails outright. Report the config with the number.
+
+**Full-universe (ward/5y, 4,678 names): dispersion reduction +46.4%** (from 0.1326 to 0.0711) — the ≥20% bar clears comfortably on the full tape.
 
 **Distance correlation beats Pearson** on a controlled comparison (same 150 names, 3y, ward — only the metric differs): **dcor +29.3% vs corr +23.0% (+6.3pp)**, i.e. the non-linear codependence López de Prado argues for is doing real work, not just re-deriving sector labels.
 
