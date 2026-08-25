@@ -175,6 +175,17 @@ TABLES = [
     "sp_history_sim",
     "sp500_changes",
     "price_qty_panel",
+    # Bogle sleeves: TMI (exchange-listed) + PMI (OTC/gray complement) = complete market
+    "bogle_tmi",
+    "bogle_tmi_turnover",
+    "bogle_qmi",
+    "bogle_qmi_turnover",
+    "bogle_qmi_strict",
+    "bogle_qmi_strict_turnover",
+    "bogle_bpi",
+    "bogle_bpi_turnover",
+    "bogle_pmi",
+    "bogle_pmi_turnover",
 ]
 
 

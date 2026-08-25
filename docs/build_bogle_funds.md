@@ -17,7 +17,7 @@ Bogle's core principles mapped to our toolkit:
 | **Simplicity** | Four books, each with a parquet + turnover log |
 | **Low turnover** | QMI 3.5%/yr, QMI_STRICT 4.5%/yr (liquid EW) |
 
-## Three Funds
+## Four Funds
 
 ### TMI — Total Market Index (The "Own the Market" Fund)
 - **Universe:** PIT liquid per `docs/bogle_inclusion.md` — `instrument_type=stock` + `exchange ∈ {NMS,NYQ,NCM,NGM,ASE}` + `daily_mcap[D]` exists + `ADV20 ≥ $5M` (IPOs enter when mcap posts, ~5–20d; ~4200 names PIT avg)
@@ -45,16 +45,24 @@ Bogle's core principles mapped to our toolkit:
 - **Cost layer:** Same as TMI
 - **10y result:** CAGR 14.46%, Vol 27.93%, Sharpe 0.52
 
+### PMI — Pink Market Index (The "Complete the Market" Complement)
+- **Universe:** the inverse of TMI's exchange gate — `exchange ∉ {NMS,NYQ,NCM,NGM,ASE}` (OTC/gray: `PNK/OID/OQB/OQX/PCX/BTS/None`), `instrument_type=stock`, `last ≥ $1`, `ADV20 ≥ $100k`, PIT `daily_mcap[D]`. Filing-free, like TMI. See `docs/bogle_inclusion.md`
+- **Weighting:** Equal-weight + **5% single-name cap** (`cap_weights`) + Fisher chained
+- **Rebalance:** Quarterly + 7-day glide
+- **Cost layer:** 5 bps expense / 8 bps turnover (OTC costs more than TMI's 3/5); overridable via `--expense-bps` / `--turnover-bps`
+- **Why:** TMI owns the exchange-listed tape; PMI owns everything else. `TMI ∪ PMI` = complete market, `TMI ∩ PMI = ∅` by construction (one gate, `exchange_mode` flag). **Not** SMCI — SMCI would be a 13F-selected subset nested inside PMI's universe; PMI is the unselected complement.
+
 ## Usage
 
 ```bash
-# Build all three funds (10-year lookback, save to parquet)
+# Build all four funds (10-year lookback, save to parquet)
 python build_bogle_funds.py --fund all --save --years 10
 
 # Build single fund
 python build_bogle_funds.py --fund tmi --save --years 10
 python build_bogle_funds.py --fund qmi --save --years 10
 python build_bogle_funds.py --fund bpi --save --years 10
+python build_bogle_funds.py --fund pmi --save --years 10
 
 # Custom cost parameters
 python build_bogle_funds.py --fund tmi --save --years 10 \
@@ -65,7 +73,7 @@ python build_bogle_funds.py --fund tmi --years 5
 ```
 
 ### Options
-- `--fund {tmi,qmi,bpi,all}` — which fund(s) to build
+- `--fund {tmi,qmi,qmi_strict,bpi,pmi,all}` — which fund(s) to build
 - `--save` — write parquet outputs (required for persistence)
 - `--years N` — lookback window in years (default: 10)
 - `--expense-bps N` — annual expense ratio in basis points (default: 3)
@@ -81,13 +89,15 @@ python build_bogle_funds.py --fund tmi --years 5
 | `bogle_qmi_turnover.parquet` | 20 | Semi-annual rebalances |
 | `bogle_bpi.parquet` | 2,531 | Defensive sectors, equal-weight |
 | `bogle_bpi_turnover.parquet` | 50 | Annual rebalances |
+| `bogle_pmi.parquet` | ~2,531 | OTC/gray complement of TMI, equal-weight + 5% cap |
+| `bogle_pmi_turnover.parquet` | ~41 | Quarterly rebalances |
 
 ### Schema (fund parquet)
 | Column | Type | Description |
 |--------|------|-------------|
 | `date` | date | Trading date |
-| `fund` | string | `TMI`, `QMI`, or `BPI` |
-| `weight_method` | string | `cap_weighted` or `equal_weighted` |
+| `fund` | string | `TMI`, `QMI`, `QMI_STRICT`, `BPI`, or `PMI` |
+| `weight_method` | string | `cap_weighted`, `equal_weighted`, or `equal_weighted_capped` (PMI) |
 | `level` | float | Index level (base=1000) |
 | `ret_gross` | float | Gross daily return |
 | `ret_net` | float | Net daily return (after expense + turnover) |
@@ -211,6 +221,30 @@ python run_daily_automation.py --only bogle_tmi,bogle_qmi,bogle_bpi
 
 6. **YAML-driven DAG** — no hardcoded fallback in `run_daily_automation.py`.
    The YAML is the single source of truth.
+
+7. **One gate, two directions (`exchange_mode`)** — `liquid_names` takes
+   `exchange_mode="include"` (TMI/QMI/BPI) or `"exclude"` (PMI) against the same
+   `{NMS,NYQ,NCM,NGM,ASE}` set. TMI and PMI are therefore disjoint and jointly
+   complete *by construction*, not by convention — the two universes cannot drift
+   apart or double-count a name when the exchange set is edited.
+
+8. **Shared index machinery (libraryified)** — the glide expansion and Fisher
+   merge were copy-pasted in every fund; they now live once as importable
+   helpers, so a fix lands in all four funds at the same time:
+
+   | Helper | Purpose |
+   |--------|---------|
+   | `expand_glide_weights(weights, rebal_dates, index, n_days=7)` | rebalance-date weights → daily panel via 7-day linear glide (Hoffstein rebalance-luck fix) |
+   | `attach_fisher(levels, prices, daily_weights, expense_bps, turnover_bps)` | merges the Fisher-chained de-biased arm; warns and returns the nominal path if the arm cannot be built, so a fund never dies on the Fisher leg |
+   | `cap_weights(weights, max_weight)` | iterative single-name cap with redistribution; falls back to equal-weight when `n × cap < 1` (cap unreachable) |
+   | `liquid_names(..., exchange_mode=...)` | the one PIT gate for every fund |
+
+   Import them directly for research:
+   ```python
+   from build_bogle_funds import (load_prices, liquid_names, cap_weights,
+                                  expand_glide_weights, attach_fisher,
+                                  build_tmi, build_pmi)
+   ```
 
 ## Related Programs
 

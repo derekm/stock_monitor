@@ -22,10 +22,21 @@ For each ticker it:
 Rate-limit friendly: sleeps a short jitter between tickers. Run in the
 background for the full universe (586 tickers, a few minutes to ~20 min).
 
+OTC COMPLEMENT (fixed 2026-08-24): the old skip test was "open/high/low each
+have >=1 non-null", which permanently skipped 5,693 of 5,695 OTC stocks —
+`update_prices --fetch` hands them a handful of recent bars, so they looked
+"done" while holding a median of 9 price rows (listed names: 1,799). That is
+why the OTC tape had no history and Bogle PMI could only price 85 of 5,351 OTC
+names. `has_ohlc` now requires `--min-rows` (default 252) COMPLETE-OHLC rows,
+so thin tickers get refetched. Because the merge is strictly additive, re-runs
+are safe and idempotent.
+
 Usage:
-  python backfill_ohlcv.py                 # full universe
-  python backfill_ohlcv.py --limit 20      # first 20 tickers (test)
-  python backfill_ohlcv.py --force         # refetch even tickers with OHLC
+  python backfill_ohlcv.py                        # full universe
+  python backfill_ohlcv.py --only otc             # the PMI complement (5,695 names)
+  python backfill_ohlcv.py --only otc --limit 20  # test
+  python backfill_ohlcv.py --limit 20             # first 20 tickers (test)
+  python backfill_ohlcv.py --force                # refetch even tickers with OHLC
 """
 from __future__ import annotations
 
@@ -44,6 +55,8 @@ PRICES = DATA_DIR / "daily_prices.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 SCHEMA_COLS = ["date", "ticker", "adj_close", "close", "open", "high", "low",
                "volume", "source", "market_cap"]
+# The listed tape (TMI's gate). Everything else is the OTC/gray complement (PMI).
+LISTED_EXCHANGES = {"NMS", "NYQ", "NCM", "NGM", "ASE"}
 
 
 def load_prices():
@@ -51,12 +64,23 @@ def load_prices():
 
 
 def save_prices(df: pd.DataFrame):
+    """Write the price table without ever silently dropping existing rows.
+
+    DO NOT normalize Timestamp -> date here. `daily_prices.parquet` is
+    datetime64[ms] and carries 112,217 rows stamped 20:00 alongside the 00:00
+    session rows; mapping to calendar dates and then de-duplicating on
+    (date, ticker) collapsed 22,980 of them, so a run that touched 9 OTC
+    tickers silently deleted ~8 rows each from 6,465 LISTED tickers (MSFT,
+    MMM, COST...). The date key is preserved exactly as stored, and the
+    de-dup is a no-op guard rather than a lossy normalization.
+    """
     df = df.copy()
     if isinstance(df["ticker"].dtype, pd.CategoricalDtype):
         df["ticker"] = df["ticker"].astype(str)
-    # DATE-native: canonical date key is datetime.date; normalize timestamps.
-    df["date"] = df["date"].map(lambda d: d.date() if isinstance(d, pd.Timestamp) else d)
+    before = len(df)
     df = df.sort_values(["date", "ticker"]).drop_duplicates(subset=["date", "ticker"], keep="last")
+    if len(df) != before:
+        print(f"  WARNING save_prices de-dup removed {before - len(df)} exact (date,ticker) duplicates")
     table = pa.Table.from_pandas(df, preserve_index=False)
     pq.write_table(table, PRICES)
     print(f"  saved {len(df)} rows -> {PRICES}")
@@ -74,10 +98,24 @@ def universe() -> list[str]:
     return sorted(have)
 
 
-def has_ohlc(price_df: pd.DataFrame, ticker: str) -> bool:
+def has_ohlc(price_df: pd.DataFrame, ticker: str, min_rows: int = 252) -> bool:
+    """True only if the ticker already has ENOUGH OHLC history to skip.
+
+    The old test was `open/high/low each have >=1 non-null`, which silently
+    skipped every OTC name: `update_prices --fetch` gives them a handful of
+    recent OHLC bars, so 5,693 of 5,695 OTC tickers looked "done" while holding
+    a median of 9 rows. That is why the OTC tape was never backfilled and PMI
+    could only price 85 names.
+
+    Now a ticker is skipped only when it has at least `min_rows` rows carrying
+    complete OHLC (default 252 = ~1 trading year). Thin tickers get refetched,
+    and because the merge is strictly additive this is safe to re-run.
+    """
     sub = price_df[price_df["ticker"] == ticker]
-    return bool(sub["open"].notna().any() and sub["high"].notna().any()
-                and sub["low"].notna().any())
+    if sub.empty:
+        return False
+    complete = sub[["open", "high", "low"]].notna().all(axis=1)
+    return int(complete.sum()) >= min_rows
 
 
 def fetch_ohlcv(ticker: str) -> pd.DataFrame | None:
@@ -111,68 +149,48 @@ def fetch_ohlcv(ticker: str) -> pd.DataFrame | None:
     return out.dropna(subset=["open", "high", "low", "close"])
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=None, help="max tickers (test)")
-    ap.add_argument("--force", action="store_true", help="refetch even with OHLC")
-    ap.add_argument("--delay", type=float, default=0.5, help="sleep between tickers")
-    args = ap.parse_args()
+def merge_additive(prices: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFrame:
+    """STRICTLY ADDITIVE merge of fetched OHLCV into the price table.
 
-    prices = load_prices()
-    tickers = universe()
-    if args.limit:
-        tickers = tickers[: args.limit]
-    print(f"Universe: {len(tickers)} tickers (OHLC coverage "
-          f"{prices['open'].notna().mean() if 'open' in prices else 0:.1%})")
+    Never overwrite existing close/volume/market_cap/adj_close. We only:
+      1. FILL open/high/low where they are currently NaN in the existing rows,
+      2. ADD brand-new (date, ticker) rows for dates the existing table lacks.
+    Existing rows are preserved byte-for-byte in every other column.
 
-    new_frames = []
-    for i, t in enumerate(tickers, 1):
-        if not args.force and has_ohlc(prices, t):
-            print(f"  [{i}/{len(tickers)}] {t}: already has OHLC, skip")
-            continue
-        rows = fetch_ohlcv(t)
-        if rows is not None and len(rows):
-            new_frames.append(rows)
-            print(f"  [{i}/{len(tickers)}] {t}: {len(rows)} rows")
-        else:
-            print(f"  [{i}/{len(tickers)}] {t}: no rows")
-        time.sleep(args.delay + random.random() * 0.5)
+    Extracted from main() so a long run can checkpoint mid-flight and stay
+    resumable; the merge semantics are unchanged.
 
-    if not new_frames:
-        print("Nothing new to backfill.")
-        return
-
-    new_df = pd.concat(new_frames, ignore_index=True)
-    print(f"Fetched {len(new_df)} OHLCV rows for {new_df['ticker'].nunique()} tickers")
-
-    # ── STRICTLY ADDITIVE MERGE ────────────────────────────────────────────
-    # Never overwrite existing close/volume/market_cap/adj_close. We only:
-    #   1. FILL open/high/low where they are currently NaN in the existing rows,
-    #   2. ADD brand-new (date, ticker) rows for dates the existing table lacks.
-    # Existing rows are preserved byte-for-byte in every other column.
+    Date keys are matched in the EXISTING table's dtype (datetime64[ms], which
+    carries both 00:00 and 20:00 stamps). Coercing to datetime.date here would
+    fail to match those rows and then collide two stamps onto one key — the bug
+    that deleted 22,980 listed-ticker rows.
+    """
     new_df = new_df.copy()
-    new_df["date"] = new_df["date"].map(lambda d: d.date() if isinstance(d, pd.Timestamp) else d)
-
     if prices.empty:
         combined = new_df
         for c in SCHEMA_COLS:
             if c not in combined.columns:
                 combined[c] = np.nan
-    else:
-        prices = prices.copy()
-        # normalize existing date to datetime.date for the merge keys
-        prices["date"] = prices["date"].map(lambda d: d.date() if isinstance(d, pd.Timestamp) else d)
+        return combined[[c for c in SCHEMA_COLS if c in combined.columns]]
 
+    prices = prices.copy()
+    # Align the fetched date key to however the table already stores dates.
+    if pd.api.types.is_datetime64_any_dtype(prices["date"]):
+        new_df["date"] = pd.to_datetime(new_df["date"])
+    else:
+        new_df["date"] = new_df["date"].map(lambda d: d.date() if isinstance(d, pd.Timestamp) else d)
+
+    if True:
         fetched = set(new_df["ticker"])
         idx_key = ["date", "ticker"]
 
         # 1) Fill OHLC into EXISTING rows where those columns are NaN, and
         #    refresh nothing else. Match on (date, ticker).
         fill_cols = ["open", "high", "low"]
-        # only rows we may fill: fetched tickers, with a matching fetched row
         ex = prices[prices["ticker"].isin(fetched)].set_index(idx_key)
+        ex = ex[~ex.index.duplicated(keep="last")]
         nd = new_df.set_index(idx_key)
-        # align: keep only overlapping keys
+        nd = nd[~nd.index.duplicated(keep="last")]
         overlap = ex.index.intersection(nd.index)
         if len(overlap):
             to_fill = ex.loc[overlap].copy()
@@ -181,13 +199,14 @@ def main():
                 missing = to_fill[c].isna()
                 if missing.any():
                     to_fill.loc[missing, c] = src.loc[missing, c]
-            prices = prices[~prices["ticker"].isin(fetched) | ~prices.set_index(idx_key).index.isin(overlap)]
+            keys = pd.MultiIndex.from_frame(prices[idx_key])
+            prices = prices[~(prices["ticker"].isin(fetched) & keys.isin(overlap))]
             prices = pd.concat([prices, to_fill.reset_index()], ignore_index=True)
 
         # 2) Add brand-new (date, ticker) rows the table doesn't have.
-        existing_keys = set(prices.set_index(idx_key).index)
-        new_keys = new_df.set_index(idx_key).index
-        brand_new = new_df[~new_keys.isin(existing_keys)].copy()
+        existing_keys = set(map(tuple, prices[idx_key].itertuples(index=False, name=None)))
+        new_keys = list(map(tuple, new_df[idx_key].itertuples(index=False, name=None)))
+        brand_new = new_df[[k not in existing_keys for k in new_keys]].copy()
         if len(brand_new):
             brand_new["source"] = "yfinance"
             # carry forward market_cap from the nearest prior day of the same
@@ -197,6 +216,7 @@ def main():
                     mc = prices[prices["ticker"] == t][["date", "market_cap"]].dropna()
                     if len(mc):
                         mc = mc.set_index("date").sort_index()
+                        mc = mc[~mc.index.duplicated(keep="last")]
                         bn = brand_new[brand_new["ticker"] == t]
                         if len(bn):
                             caps = pd.Series(index=pd.to_datetime(bn["date"]),
@@ -207,8 +227,81 @@ def main():
         else:
             combined = prices
 
-    # reorder to schema
-    combined = combined[[c for c in SCHEMA_COLS if c in combined.columns]]
+    return combined[[c for c in SCHEMA_COLS if c in combined.columns]]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit", type=int, default=None, help="max tickers (test)")
+    ap.add_argument("--force", action="store_true", help="refetch even with OHLC")
+    ap.add_argument("--delay", type=float, default=0.5, help="sleep between tickers")
+    ap.add_argument("--min-rows", type=int, default=252,
+                    help="skip a ticker only if it already has this many complete-OHLC rows (default 252)")
+    ap.add_argument("--only", choices=["all", "otc", "listed"], default="all",
+                    help="restrict to the OTC complement (PMI universe) or the listed tape")
+    ap.add_argument("--checkpoint", type=int, default=250,
+                    help="merge+save every N fetched tickers so a long run is resumable (0=only at end)")
+    args = ap.parse_args()
+
+    prices = load_prices()
+    tickers = universe()
+
+    if args.only != "all" and STOCKS.exists():
+        m = pd.read_parquet(STOCKS, columns=["ticker", "instrument_type", "exchange"])
+        m["ticker"] = m["ticker"].astype(str).str.upper()
+        st = m[m["instrument_type"].eq("stock")]
+        on_ex = st["exchange"].astype(str).isin(LISTED_EXCHANGES)
+        want = set(st.loc[on_ex if args.only == "listed" else ~on_ex, "ticker"])
+        tickers = [t for t in tickers if str(t).upper() in want]
+        print(f"  --only {args.only}: {len(tickers)} tickers")
+
+    if args.limit:
+        tickers = tickers[: args.limit]
+
+    # Precompute complete-OHLC row counts once instead of rescanning the whole
+    # frame per ticker (that was O(tickers x rows) and dominated a 5.7k run).
+    if prices.empty:
+        ohlc_counts = {}
+    else:
+        complete = prices[["open", "high", "low"]].notna().all(axis=1)
+        ohlc_counts = prices.loc[complete, "ticker"].astype(str).str.upper().value_counts().to_dict()
+
+    print(f"Universe: {len(tickers)} tickers (OHLC coverage "
+          f"{prices['open'].notna().mean() if 'open' in prices else 0:.1%})")
+
+    new_frames = []
+    n_skipped = 0
+    for i, t in enumerate(tickers, 1):
+        if not args.force and ohlc_counts.get(str(t).upper(), 0) >= args.min_rows:
+            n_skipped += 1
+            continue
+        rows = fetch_ohlcv(t)
+        if rows is not None and len(rows):
+            new_frames.append(rows)
+            print(f"  [{i}/{len(tickers)}] {t}: {len(rows)} rows")
+        else:
+            print(f"  [{i}/{len(tickers)}] {t}: no rows")
+        time.sleep(args.delay + random.random() * 0.5)
+
+        # Checkpoint: merge+save mid-run so a multi-hour OTC backfill is
+        # resumable instead of losing everything on a timeout.
+        if args.checkpoint and len(new_frames) >= args.checkpoint:
+            print(f"  -- checkpoint at ticker {i}: merging {len(new_frames)} frames")
+            prices = merge_additive(prices, pd.concat(new_frames, ignore_index=True))
+            save_prices(prices)
+            new_frames = []
+
+    if n_skipped:
+        print(f"  skipped {n_skipped} tickers already holding >={args.min_rows} complete-OHLC rows")
+
+    if not new_frames:
+        print("Nothing new to backfill.")
+        return
+
+    new_df = pd.concat(new_frames, ignore_index=True)
+    print(f"Fetched {len(new_df)} OHLCV rows for {new_df['ticker'].nunique()} tickers")
+
+    combined = merge_additive(prices, new_df)
     save_prices(combined)
 
     # verify

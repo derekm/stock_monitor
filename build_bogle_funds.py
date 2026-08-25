@@ -2,16 +2,20 @@
 """
 build_bogle_funds.py — Construct Bogle-style index funds from StockMonitor data.
 
-Three funds implementing John C. Bogle's principles:
+Four funds implementing John C. Bogle's principles:
   1. TMI (Total Market Index)      — Own the whole market, cap-weighted + Fisher chained
   2. QMI (Quality Market Index)    — NM top quintile, liquid, EW + Fisher
      QMI_STRICT                     — Buffett 15/15/1.0, liquid, EW + Fisher
   3. BPI (Bond Proxy Index)        — Defensive anchor: equal-weight, low turnover
+  4. PMI (Pink Market Index)       — TMI's complement: the OTC/gray market TMI's
+                                     exchange gate excludes, EW + 5% cap + Fisher.
+                                     TMI ∪ PMI = complete market, TMI ∩ PMI = ∅.
 
 Usage:
   python build_bogle_funds.py --fund tmi --save
   python build_bogle_funds.py --fund qmi --save
   python build_bogle_funds.py --fund bpi --save
+  python build_bogle_funds.py --fund pmi --save
   python build_bogle_funds.py --all --save
   python build_bogle_funds.py --fund tmi --expense-bps 3 --turnover-bps 5 --save
 """
@@ -43,6 +47,18 @@ TMI_TURNOVER_FILE = DATA_DIR / "bogle_tmi_turnover.parquet"
 QMI_TURNOVER_FILE = DATA_DIR / "bogle_qmi_turnover.parquet"
 QMI_STRICT_TURNOVER_FILE = DATA_DIR / "bogle_qmi_strict_turnover.parquet"
 BPI_TURNOVER_FILE = DATA_DIR / "bogle_bpi_turnover.parquet"
+PMI_FILE = DATA_DIR / "bogle_pmi.parquet"
+PMI_TURNOVER_FILE = DATA_DIR / "bogle_pmi_turnover.parquet"
+
+# PMI (Pink Market Index) — the complement of TMI's exchange gate.
+# TMI owns the exchange-listed market; PMI owns everything else (OTC/pink/gray),
+# so TMI + PMI together are complete-market coverage with zero overlap.
+PMI_REBAL_FREQ = "Q"          # Quarterly, same calendar as TMI
+PMI_MIN_LAST = 1.0            # $1 floor: sub-penny quotes are not investable
+PMI_MIN_ADV20 = 100_000.0     # $100k ADV20 (TMI uses $5M)
+PMI_MAX_WEIGHT = 0.05         # 5% single-name cap
+PMI_EXPENSE_BPS = 5           # OTC costs more to run than TMI's 3
+PMI_TURNOVER_BPS = 8          # wider spreads than TMI's 5
 
 # Default cost parameters (Bogle: "costs are the only certain thing")
 DEFAULT_EXPENSE_BPS = 3      # 0.03% annual (Vanguard TSM level)
@@ -130,11 +146,15 @@ def quality_gate_strict(fund: pd.DataFrame) -> pd.Series:
 def liquid_names(prices: pd.DataFrame, tickers: list[str],
                  min_last: float = 5.0, min_cov: float = 0.80, max_day: float = 1.0,
                  require_mcap: bool = True, require_filing: bool = False,
-                 min_adv20: float = 5_000_000.0, liquid_exchanges: set[str] | None = None) -> list[str]:
+                 min_adv20: float = 5_000_000.0, liquid_exchanges: set[str] | None = None,
+                 exchange_mode: str = "include") -> list[str]:
     """
     Keep names with last price, PIT mcap availability, quarterly filing seen, and exchange.
     PIT gates (all as of last price date):
       - exchange in {NMS,NYQ,NCM,NGM,ASE} and instrument_type=stock (uses monitored_stocks.parquet, now with backfilled exchange)
+        exchange_mode="include" keeps names ON those exchanges (TMI/QMI/BPI).
+        exchange_mode="exclude" keeps names OFF them (PMI: the OTC/pink complement),
+        which makes TMI and PMI disjoint by construction.
       - mcap availability: daily_mcap.parquet has non-null on last date and coverage >= min_cov
       - ADV20 >= min_adv20 (price*volume trailing 20)
       - if require_filing: fundamentals.parquet has ≥1 as_of_date ≤ last date
@@ -159,9 +179,12 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
         stock = set(ms.loc[ms["instrument_type"].eq("stock"), "ticker"])
         # exchange must be liquid (NaN = not eligible)
         exch_ok = ms.set_index("ticker")["exchange"].astype(str)
-        liquid_tix = {t for t in stock if t in exch_ok.index and str(exch_ok.loc[t]) in liquid_exchanges}
+        if exchange_mode == "exclude":
+            liquid_tix = {t for t in stock if t in exch_ok.index and str(exch_ok.loc[t]) not in liquid_exchanges}
+        else:
+            liquid_tix = {t for t in stock if t in exch_ok.index and str(exch_ok.loc[t]) in liquid_exchanges}
         ok = ok & ok.index.to_series().apply(lambda t: t in liquid_tix)
-        print(f"  exchange filter {liquid_exchanges}: {sum(t in liquid_tix for t in ok.index)}/{len(ok)} eligible")
+        print(f"  exchange filter ({exchange_mode}) {liquid_exchanges}: {sum(t in liquid_tix for t in ok.index)}/{len(ok)} eligible")
     except Exception as e:
         print(f"  WARNING exchange gate skipped: {e}")
 
@@ -197,7 +220,8 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
         except Exception as e:
             print(f"  WARNING mcap gate skipped: {e}")
 
-    # ADV20 gate
+    # ADV20 gate (vectorized: one groupby over the panel, not a scan per ticker —
+    # PMI's ~8k-name OTC universe made the per-ticker loop the dominant cost)
     try:
         import tempfile, shutil
         snap2 = Path(tempfile.gettempdir()) / "bogle_adv_gate.parquet"
@@ -205,20 +229,18 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
         adv_df = pd.read_parquet(snap2, columns=["ticker", "date", "close", "volume"])
         adv_df["ticker"] = adv_df["ticker"].astype(str).str.upper()
         adv_df["date"] = pd.to_datetime(adv_df["date"])
-        # last 20 per ticker as of last price date
         last_date = pd.to_datetime(sub.index.max())
-        # compute ADV20 per ticker
-        adv_ok = {}
-        for t in cols:
-            g = adv_df[adv_df["ticker"] == t].sort_values("date")
-            g = g[g["date"] <= last_date].tail(20)
-            if len(g) < 20:
-                adv_ok[t] = False
-            else:
-                adv = float((g["close"] * g["volume"]).mean())
-                adv_ok[t] = adv >= min_adv20
+        want = set(cols)
+        adv_df = adv_df[adv_df["ticker"].isin(want) & (adv_df["date"] <= last_date)]
+        adv_df = adv_df.sort_values(["ticker", "date"])
+        adv_df["dollar"] = adv_df["close"] * adv_df["volume"]
+        g = adv_df.groupby("ticker")["dollar"]
+        adv20 = g.tail(20).groupby(adv_df["ticker"]).agg(["mean", "count"])
+        # require a full 20-day window, same as the prior per-ticker rule
+        adv_pass = (adv20["count"] >= 20) & (adv20["mean"] >= min_adv20)
+        adv_ok = {t: bool(adv_pass.get(t, False)) for t in cols}
         ok = ok & ok.index.to_series().apply(lambda t: adv_ok.get(t, False))
-        print(f"  ADV20>={min_adv20/1e6:.0f}M: {sum(adv_ok.values())}/{len(cols)} pass")
+        print(f"  ADV20>={min_adv20/1e6:.3f}M: {sum(adv_ok.values())}/{len(cols)} pass")
     except Exception as e:
         print(f"  WARNING ADV gate skipped: {e}")
 
@@ -390,6 +412,69 @@ def build_fisher_chained(prices: pd.DataFrame, weights: pd.DataFrame,
     return idx
 
 
+def cap_weights(weights: pd.Series, max_weight: float, iters: int = 25) -> pd.Series:
+    """Iteratively cap single-name weight at max_weight, redistributing to uncapped names.
+
+    Needed for PMI: an equal-weight OTC sleeve still concentrates when the universe
+    shrinks, and one pink-sheet story stock must not drive the index.
+    """
+    w = weights.astype(float).copy()
+    total = w.sum()
+    if total <= 0:
+        return w
+    w = w / total
+    if len(w) * max_weight < 1.0:  # cap is unreachable; equal-weight is the best we can do
+        return pd.Series(1.0 / len(w), index=w.index)
+    for _ in range(iters):
+        over = w > max_weight
+        if not over.any():
+            break
+        excess = float((w[over] - max_weight).sum())
+        w[over] = max_weight
+        room = ~over
+        base = float(w[room].sum())
+        if base <= 0:
+            break
+        w[room] = w[room] + excess * (w[room] / base)
+    return w / w.sum()
+
+
+def expand_glide_weights(weights: pd.DataFrame, rebal_dates: list[pd.Timestamp],
+                         index: pd.DatetimeIndex, n_days: int = 7) -> pd.DataFrame:
+    """Expand rebalance-date weights to a daily panel via 7-day linear glide.
+
+    Shared by TMI/QMI/BPI/PMI so the glide (Hoffstein rebalance-luck fix) is
+    defined once instead of copy-pasted per fund.
+    """
+    daily = []
+    for i, d in enumerate(rebal_dates):
+        if i == 0:
+            daily.append(weights.loc[d])
+        else:
+            prev_w = weights.loc[rebal_dates[i - 1]]
+            curr_w = weights.loc[d]
+            daily.extend(glide_rebalance(prev_w, curr_w, n_days=n_days))
+    out = pd.DataFrame(daily, index=index[:len(daily)])
+    return out.reindex(index).ffill()
+
+
+def attach_fisher(levels: pd.DataFrame, prices: pd.DataFrame, daily_weights: pd.DataFrame,
+                  expense_bps: float, turnover_bps: float) -> pd.DataFrame:
+    """Merge the Fisher-chained de-biased arm onto a nominal levels frame.
+
+    Shared by every fund. Returns levels unchanged (with a warning) if the Fisher
+    arm cannot be built, so a fund still produces its nominal path.
+    """
+    try:
+        fisher = build_fisher_chained(prices, daily_weights, expense_bps, turnover_bps)
+        cols = fisher[["date", "fisher_p", "fisher_q", "fisher_p_net", "nominal_sqrt_fisher"]].copy()
+        cols["date"] = pd.to_datetime(cols["date"])
+        return levels.merge(cols, on="date", how="left")
+    except Exception as e:
+        print(f"  WARNING Fisher arm skipped: {e}")
+        return levels
+
+
 def build_tmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build Total Market Index: cap-weighted + Fisher chained."""
     print("Building TMI (Total Market Index)...")
@@ -414,33 +499,13 @@ def build_tmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
     rebal_dates = rebalance_dates(prices.index, TMI_REBAL_FREQ)
     print(f"  Rebalance dates: {len(rebal_dates)}")
 
-    # Build weight series at rebalance dates
-    rebal_weights = weights.loc[rebal_dates]
-
-    # Expand to daily with glide
-    daily_weights = []
-    for i, d in enumerate(rebal_dates):
-        if i == 0:
-            daily_weights.append(weights.loc[d])
-        else:
-            prev_w = weights.loc[rebal_dates[i - 1]]
-            curr_w = weights.loc[d]
-            glide = glide_rebalance(prev_w, curr_w, n_days=7)
-            for j, gw in enumerate(glide):
-                daily_weights.append(gw)
-
-    daily_weights_df = pd.DataFrame(daily_weights, index=prices.index[:len(daily_weights)])
-    daily_weights_df = daily_weights_df.reindex(prices.index).ffill()
+    daily_weights_df = expand_glide_weights(weights, rebal_dates, prices.index)
 
     # Compute index
     levels, turnover = compute_index_level(prices, daily_weights_df, expense_bps, turnover_bps)
 
     # Add Fisher chained variant
-    fisher = build_fisher_chained(prices, daily_weights_df, expense_bps, turnover_bps)
-    # fisher has 'date' as a column (datetime.date), levels has 'date' as column (datetime64)
-    fisher_cols = fisher[["date", "fisher_p", "fisher_q", "fisher_p_net", "nominal_sqrt_fisher"]].copy()
-    fisher_cols["date"] = pd.to_datetime(fisher_cols["date"])
-    levels = levels.merge(fisher_cols, on="date", how="left")
+    levels = attach_fisher(levels, prices, daily_weights_df, expense_bps, turnover_bps)
 
     levels["fund"] = "TMI"
     levels["weight_method"] = "cap_weighted"
@@ -482,32 +547,13 @@ def build_qmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float,
     rebal_dates = rebalance_dates(q_prices.index, QMI_REBAL_FREQ)
     print(f"  Rebalance dates: {len(rebal_dates)}")
 
-    # Build weight series at rebalance dates
-    rebal_weights = weights.loc[rebal_dates]
-
-    # Expand to daily with glide
-    daily_weights = []
-    for i, d in enumerate(rebal_dates):
-        if i == 0:
-            daily_weights.append(weights.loc[d])
-        else:
-            prev_w = weights.loc[rebal_dates[i - 1]]
-            curr_w = weights.loc[d]
-            glide = glide_rebalance(prev_w, curr_w, n_days=7)
-            for j, gw in enumerate(glide):
-                daily_weights.append(gw)
-
-    daily_weights_df = pd.DataFrame(daily_weights, index=q_prices.index[:len(daily_weights)])
-    daily_weights_df = daily_weights_df.reindex(q_prices.index).ffill()
+    daily_weights_df = expand_glide_weights(weights, rebal_dates, q_prices.index)
 
     # Compute index
     levels, turnover = compute_index_level(q_prices, daily_weights_df, expense_bps, turnover_bps)
 
     # Add Fisher chained
-    fisher = build_fisher_chained(q_prices, daily_weights_df, expense_bps, turnover_bps)
-    fisher_cols = fisher[["date", "fisher_p", "fisher_q", "fisher_p_net", "nominal_sqrt_fisher"]].copy()
-    fisher_cols["date"] = pd.to_datetime(fisher_cols["date"])
-    levels = levels.merge(fisher_cols, on="date", how="left")
+    levels = attach_fisher(levels, q_prices, daily_weights_df, expense_bps, turnover_bps)
 
     levels["fund"] = fund_name
     levels["weight_method"] = "equal_weighted"
@@ -550,32 +596,13 @@ def build_bpi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
     rebal_dates = rebalance_dates(bpi_prices.index, BPI_REBAL_FREQ)
     print(f"  Rebalance dates: {len(rebal_dates)}")
 
-    # Build weight series at rebalance dates
-    rebal_weights = weights.loc[rebal_dates]
-
-    # Expand to daily with glide
-    daily_weights = []
-    for i, d in enumerate(rebal_dates):
-        if i == 0:
-            daily_weights.append(weights.loc[d])
-        else:
-            prev_w = weights.loc[rebal_dates[i - 1]]
-            curr_w = weights.loc[d]
-            glide = glide_rebalance(prev_w, curr_w, n_days=7)
-            for j, gw in enumerate(glide):
-                daily_weights.append(gw)
-
-    daily_weights_df = pd.DataFrame(daily_weights, index=bpi_prices.index[:len(daily_weights)])
-    daily_weights_df = daily_weights_df.reindex(bpi_prices.index).ffill()
+    daily_weights_df = expand_glide_weights(weights, rebal_dates, bpi_prices.index)
 
     # Compute index
     levels, turnover = compute_index_level(bpi_prices, daily_weights_df, expense_bps, turnover_bps)
 
     # Add Fisher chained
-    fisher = build_fisher_chained(bpi_prices, daily_weights_df, expense_bps, turnover_bps)
-    fisher_cols = fisher[["date", "fisher_p", "fisher_q", "fisher_p_net", "nominal_sqrt_fisher"]].copy()
-    fisher_cols["date"] = pd.to_datetime(fisher_cols["date"])
-    levels = levels.merge(fisher_cols, on="date", how="left")
+    levels = attach_fisher(levels, bpi_prices, daily_weights_df, expense_bps, turnover_bps)
 
     levels["fund"] = "BPI"
     levels["weight_method"] = "equal_weighted"
@@ -584,6 +611,65 @@ def build_bpi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> 
     levels["turnover_bps"] = turnover_bps
 
     turnover["fund"] = "BPI"
+    return levels, turnover
+
+
+def build_pmi(prices: pd.DataFrame, expense_bps: float, turnover_bps: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build Pink Market Index: the OTC/gray-market complement of TMI.
+
+    Complete-market completeness: TMI owns every name ON {NMS,NYQ,NCM,NGM,ASE};
+    PMI owns every name OFF them (PNK/OID/OQB/OQX/PCX/unquoted). The two universes
+    are disjoint by construction, so TMI + PMI is the whole tape with no double-count.
+
+    Gates are looser than TMI where OTC reality demands it ($1 last, $100k ADV20)
+    and NOT looser where it would let junk in: still stock-only, still coverage/max-day,
+    still a real 20-day dollar-volume floor. Equal-weight with a 5% single-name cap so
+    one pink story stock cannot become the index. Filing-free, like TMI.
+
+    require_mcap is deliberately False here. TMI needs PIT mcap because it is
+    cap-weighted — no mcap, no weight. PMI is equal-weighted, so mcap is not an
+    input to a single number it computes. And `daily_mcap.parquet` covers only
+    900 of 5,695 OTC stocks (34 with >=80% history), because shares-outstanding
+    collection follows the listed tape: requiring it yields a 31-name rump that
+    is the mcap file's coverage, not the market's complement. Liquidity is
+    enforced by the ADV20 floor, which is measured, not inferred.
+
+    MEASURED CEILING (2026-08-24, 10y panel): of 5,351 OTC stocks in the panel,
+    only 749 have cov>=0.80 — the OTC tape was never backfilled (median 9 price
+    rows per OTC ticker vs 1,799 listed). Of those, 90 clear $1 + max_day, and 85
+    clear ADV20>=$100k. So PMI currently prices 85 names, and the binding
+    constraint is PRICE COVERAGE, not the gates: relaxing ADV to $0 yields 90,
+    relaxing cov to 0.10 yields 153. PMI is therefore structurally correct and
+    data-limited; widening it means backfilling OTC prices, not loosening gates.
+    """
+    print("Building PMI (Pink Market Index)...")
+    names = liquid_names(prices, list(prices.columns),
+                         min_last=PMI_MIN_LAST, require_mcap=False, require_filing=False,
+                         min_adv20=PMI_MIN_ADV20, exchange_mode="exclude")
+    if not names:
+        raise ValueError("PMI universe empty after gates")
+    pmi_prices = prices[names].dropna(axis=1, how="all")
+    print(f"  PMI universe: {pmi_prices.shape[1]} tickers")
+
+    # Equal weight, then 5% single-name cap (row-wise; universe changes over time)
+    ew = compute_equal_weights(pmi_prices)
+    weights = ew.apply(lambda row: cap_weights(row, PMI_MAX_WEIGHT), axis=1)
+
+    rebal_dates = rebalance_dates(pmi_prices.index, PMI_REBAL_FREQ)
+    print(f"  Rebalance dates: {len(rebal_dates)}")
+
+    daily_weights_df = expand_glide_weights(weights, rebal_dates, pmi_prices.index)
+
+    levels, turnover = compute_index_level(pmi_prices, daily_weights_df, expense_bps, turnover_bps)
+    levels = attach_fisher(levels, pmi_prices, daily_weights_df, expense_bps, turnover_bps)
+
+    levels["fund"] = "PMI"
+    levels["weight_method"] = "equal_weighted_capped"
+    levels["rebalance_freq"] = PMI_REBAL_FREQ
+    levels["expense_bps"] = expense_bps
+    levels["turnover_bps"] = turnover_bps
+
+    turnover["fund"] = "PMI"
     return levels, turnover
 
 
@@ -609,11 +695,16 @@ def save_fund(fund: str, levels: pd.DataFrame, turnover: pd.DataFrame):
         turnover.to_parquet(BPI_TURNOVER_FILE, index=False)
         print(f"  Saved {BPI_FILE} ({len(levels)} rows)")
         print(f"  Saved {BPI_TURNOVER_FILE} ({len(turnover)} rebalances)")
+    elif fund == "PMI":
+        levels.to_parquet(PMI_FILE, index=False)
+        turnover.to_parquet(PMI_TURNOVER_FILE, index=False)
+        print(f"  Saved {PMI_FILE} ({len(levels)} rows)")
+        print(f"  Saved {PMI_TURNOVER_FILE} ({len(turnover)} rebalances)")
 
 
 def main():
     ap = argparse.ArgumentParser(description="Build Bogle-style index funds")
-    ap.add_argument("--fund", choices=["tmi", "qmi", "qmi_strict", "bpi", "all"], default="all",
+    ap.add_argument("--fund", choices=["tmi", "qmi", "qmi_strict", "bpi", "pmi", "all"], default="all",
                     help="Which fund to build (default: all)")
     ap.add_argument("--save", action="store_true", help="Write output parquet files")
     ap.add_argument("--expense-bps", type=float, default=DEFAULT_EXPENSE_BPS,
@@ -632,7 +723,7 @@ def main():
     # Load prices
     prices = load_prices(years=args.years)
 
-    funds_to_build = ["tmi", "qmi", "qmi_strict", "bpi"] if args.fund == "all" else [args.fund]
+    funds_to_build = ["tmi", "qmi", "qmi_strict", "bpi", "pmi"] if args.fund == "all" else [args.fund]
 
     for fund in funds_to_build:
         print(f"\n{'='*60}")
@@ -646,6 +737,12 @@ def main():
                                          gate=quality_gate_strict, fund_name="QMI_STRICT")
         elif fund == "bpi":
             levels, turnover = build_bpi(prices, args.expense_bps, args.turnover_bps)
+        elif fund == "pmi":
+            # PMI carries its own cost defaults (OTC is dearer to run) unless the
+            # user overrode them explicitly on the command line.
+            pmi_expense = args.expense_bps if args.expense_bps != DEFAULT_EXPENSE_BPS else PMI_EXPENSE_BPS
+            pmi_turnover = args.turnover_bps if args.turnover_bps != DEFAULT_TURNOVER_BPS else PMI_TURNOVER_BPS
+            levels, turnover = build_pmi(prices, pmi_expense, pmi_turnover)
 
         if args.save:
             save_fund(fund.upper(), levels, turnover)

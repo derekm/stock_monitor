@@ -106,6 +106,20 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
   `build_growth_tech_index` assemble the sleeves; `live_index_backtest` Sharpe-tests
   them.
 
+### Bogle fund series  (`bogle_fund`)
+
+- `bogle_{tmi,qmi,qmi_strict,bpi,pmi}.parquet` — `date`, `level` (base 1000),
+  `ret_gross`, `ret_net`, `expense_drag`, `turnover_cost`, `turnover`, `fund`,
+  `weight_method`, `rebalance_freq`, `expense_bps`, `turnover_bps`, plus the
+  Fisher arm (`fisher_p`, `fisher_q`, `fisher_p_net`, `nominal_sqrt_fisher`).
+  `weight_method` is `cap_weighted` (TMI), `equal_weighted` (QMI/QMI_STRICT/BPI)
+  or `equal_weighted_capped` (PMI, 5% single-name cap).
+- `bogle_*_turnover.parquet` — `date`, `turnover` (one-way), `turnover_cost`, `fund`;
+  rebalance rows only.
+- **Universe split:** TMI/QMI/BPI gate `exchange ∈ {NMS,NYQ,NCM,NGM,ASE}`;
+  **PMI gates the complement** (`exchange_mode="exclude"`), so `TMI ∪ PMI` is the
+  complete market and `TMI ∩ PMI = ∅`. Gates documented in `docs/bogle_inclusion.md`.
+
 ### Correlation matrix  (`correlation_matrix`)
 
 - `index` (row label, ticker or sector) × one column per entity, pairwise
