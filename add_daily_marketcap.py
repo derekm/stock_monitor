@@ -89,7 +89,29 @@ def main() -> None:
     args = ap.parse_args()
     stock_only = not args.all_types
     print(f"PIT mcap panel years={args.years} stock_only={stock_only}")
+
+    # Incremental: load existing panel, find last date, only compute new dates
+    existing = pd.DataFrame(columns=["date", "ticker", "shares", "market_cap"])
+    if OUT_PANEL.exists():
+        existing = pd.read_parquet(OUT_PANEL)
+        if not existing.empty and "date" in existing.columns:
+            last_date = existing["date"].max()
+            print(f"  existing: {len(existing)} rows, last date {last_date}")
+            # Only compute dates after the last existing date
+            args.years = None  # disable year filter; we'll filter by date below
+
     panel = build_panel(args.years, stock_only)
+
+    if not existing.empty and "date" in existing.columns:
+        last_date = existing["date"].max()
+        new_dates = panel[panel["date"] > last_date]
+        if not new_dates.empty:
+            panel = pd.concat([existing, new_dates], ignore_index=True)
+            print(f"  added {len(new_dates)} new rows")
+        else:
+            panel = existing
+            print(f"  no new dates to add")
+
     last = panel[panel["date"] == panel["date"].max()]
     print(f"  {len(panel):,} rows  {panel['ticker'].nunique()} names  last {panel['date'].max()} n={len(last):,}")
     print(f"  last median ${last['market_cap'].median():,.0f}  p99 ${last['market_cap'].quantile(0.99):,.0f}")

@@ -286,7 +286,7 @@ jobs:
 # dependencies: job -> list of jobs that must finish first
 dependencies:
   rebalance: [hmm]
-  market_cap: [polygon_prices]
+  market_cap: [polygon_prices, fund_snap]
   portfolio_report: [polygon_prices]
   inclusion: [preferred]
   implied_r: [preferred]
@@ -333,12 +333,12 @@ dependencies:
   taleb_ride_now: []
   polygon_prices: []
   acq_backfill: []
-  bogle_tmi: [polygon_prices]
-  bogle_qmi: [polygon_prices]
-  bogle_qmi_strict: [polygon_prices]
-  bogle_bpi: [polygon_prices]
-  bogle_pmi: [polygon_prices]
-  regime_clusters: []
+  bogle_tmi: [polygon_prices, market_cap]
+  bogle_qmi: [polygon_prices, market_cap]
+  bogle_qmi_strict: [polygon_prices, market_cap]
+  bogle_bpi: [polygon_prices, market_cap]
+  bogle_pmi: [polygon_prices, market_cap]
+  regime_clusters: [market_cap]
   export: [aggregate, technical, econ_cal, est_rev, shadow,
             taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility,
             taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride,
