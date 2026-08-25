@@ -54,7 +54,7 @@ PMI_TURNOVER_FILE = DATA_DIR / "bogle_pmi_turnover.parquet"
 # TMI owns the exchange-listed market; PMI owns everything else (OTC/pink/gray),
 # so TMI + PMI together are complete-market coverage with zero overlap.
 PMI_REBAL_FREQ = "Q"          # Quarterly, same calendar as TMI
-PMI_MIN_LAST = 1.0            # $1 floor: sub-penny quotes are not investable
+PMI_MIN_LAST = 5.0            # $5 floor: sub-penny/quotes are not investable (was $1)
 PMI_MIN_ADV20 = 100_000.0     # $100k ADV20 (TMI uses $5M)
 PMI_MAX_WEIGHT = 0.05         # 5% single-name cap
 PMI_EXPENSE_BPS = 5           # OTC costs more to run than TMI's 3
