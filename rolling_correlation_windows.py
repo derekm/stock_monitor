@@ -144,7 +144,12 @@ def run(windows=(21, 63, 126), step: int = 5, max_assets: int = 80, save: bool =
 
     # sector rolling - vectorized
     sec_rows = []
-    secs = sorted(set(sector_map.values()))
+    # Drop unmapped tickers before sorting: the universe expansion left 6,729
+    # names with sector=NaN, and sorted() on a mix of float('nan') and str
+    # raises "'<' not supported between instances of 'float' and 'str'", which
+    # crashed this job for 15 days. NaN is not a sector, so it is excluded
+    # rather than coerced to a string bucket.
+    secs = sorted({s for s in sector_map.values() if isinstance(s, str) and s.strip()})
     rets_np = rets.to_numpy()
     ticker_list = list(rets.columns)
     col_to_idx = {c: i for i, c in enumerate(ticker_list)}

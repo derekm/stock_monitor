@@ -84,9 +84,9 @@ def run(save: bool = True, max_assets: int = 60):
                 pairs[(a, b)] = float(c.loc[a, b])
         pair_store[regime] = pairs
 
-        # sector
+        # sector (skip unmapped: sorting NaN floats with strs raises TypeError)
         sret = {}
-        for sec in sorted(set(sector_map.values())):
+        for sec in sorted({s for s in sector_map.values() if isinstance(s, str) and s.strip()}):
             scols = [t for t in block.columns if sector_map.get(t) == sec]
             if len(scols) >= 2:
                 sret[sec] = block[scols].mean(axis=1)

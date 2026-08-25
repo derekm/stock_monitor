@@ -30,6 +30,11 @@ except ImportError:
 DATA_DIR = Path(__file__).parent
 DAG_FILE = DATA_DIR / "daily_automation_dag.yaml"
 
+# Ceiling for jobs whose YAML timeout is null. Generous enough for the heaviest
+# unset job (export / damodaran) but finite, so a wedged job fails its wave
+# instead of stalling the run forever. Override per job in the YAML.
+DEFAULT_JOB_TIMEOUT = 3600
+
 
 def load_dag() -> tuple[dict, dict]:
     """Load JOBS and DEPS from YAML file (single source of truth)."""
@@ -48,6 +53,13 @@ def load_dag() -> tuple[dict, dict]:
         timeout = spec.get("timeout")
         if timeout is not None:
             timeout = int(timeout)
+        else:
+            # 43 of 55 jobs shipped with `timeout: null`, i.e. wait forever. One
+            # wedged job then blocks its whole wave and everything downstream
+            # never runs — which is how rolling_corr / cross_asset_stability
+            # went 15 days stale with no failure surfaced. An unset timeout now
+            # gets a ceiling; explicit per-job values still win.
+            timeout = DEFAULT_JOB_TIMEOUT
         jobs[name] = (cmd, timeout)
     
     deps = {}
@@ -79,11 +91,16 @@ def _wave(name: str, cache: dict[str, int] | None = None) -> int:
 
 def run_job(name: str) -> bool:
     cmd, timeout = JOBS[name]
-    print(f"\n══ {name} ══")
+    print(f"\n══ {name} ══", flush=True)
     t0 = time.time()
     try:
+        # -u on the child and flush=True on every parent print: when this runner
+        # is redirected to a file (nohup / start /B / cron), block buffering made
+        # the log look empty for the whole run — dag_remainder.log sat at 42 bytes
+        # while jobs were executing, so a stalled run was indistinguishable from
+        # a dead one.
         res = subprocess.run(
-            [sys.executable] + cmd,
+            [sys.executable, "-u"] + cmd,
             cwd=DATA_DIR,
             timeout=timeout,
             capture_output=True,
@@ -97,14 +114,15 @@ def run_job(name: str) -> bool:
             if res.stderr:
                 for line in res.stderr.strip().splitlines()[-20:]:
                     print(f"  stderr: {line}")
+            print("", flush=True)
             return False
-        print(f"OK {name} ({time.time() - t0:.1f}s)")
+        print(f"OK {name} ({time.time() - t0:.1f}s)", flush=True)
         return True
     except subprocess.TimeoutExpired:
-        print(f"TIMEOUT: {name} > {timeout}s")
+        print(f"TIMEOUT: {name} > {timeout}s", flush=True)
         return False
     except Exception as e:
-        print(f"ERROR: {name}: {e}")
+        print(f"ERROR: {name}: {e}", flush=True)
         return False
 
 
@@ -125,11 +143,23 @@ def main():
     all_names = set(JOBS.keys())
     if args.only:
         requested = {n.strip() for n in args.only.split(",") if n.strip()}
-        # include deps of requested
+        unknown = requested - all_names
+        if unknown:
+            print(f"ERROR: unknown job(s): {sorted(unknown)}")
+            print("Run --list to see valid job names.")
+            return 2
+        # Include the TRANSITIVE closure of deps, not just direct ones.
+        # `--only cross` used to pull {earnings, pairs, peer} and silently omit
+        # {dupont, growth, preferred}, so cross ran at wave 5 against upstream
+        # outputs that were never built in this invocation.
         full = set()
-        for n in requested:
+        stack = list(requested)
+        while stack:
+            n = stack.pop()
+            if n in full:
+                continue
             full.add(n)
-            full.update(DEPS.get(n, set()))
+            stack.extend(DEPS.get(n, set()) - full)
         run_names = sorted(full, key=lambda n: _wave(n))
     else:
         run_names = sorted(all_names, key=lambda n: _wave(n))
@@ -147,20 +177,64 @@ def main():
         waves.setdefault(w, []).append(n)
 
     ok_all = True
+    failed: set[str] = set()
+    skipped: set[str] = set()
+    results: dict[str, str] = {}
+    scheduled = set(run_names)
+
     for w in sorted(waves.keys()):
         names = waves[w]
-        if len(names) == 1:
-            ok = run_job(names[0])
+        # Do not run a job whose upstream failed or was skipped: it would read a
+        # stale/missing parquet and "succeed", and `export` (27 deps) would then
+        # publish a dashboard built on last week's data with a green summary.
+        blocked = {}
+        runnable = []
+        for n in names:
+            bad = (DEPS.get(n, set()) & (failed | skipped)) & scheduled
+            if bad:
+                blocked[n] = sorted(bad)
+            else:
+                runnable.append(n)
+        for n, bad in blocked.items():
+            print(f"\n══ {n} ══\nSKIP: upstream not OK: {bad}")
+            skipped.add(n)
+            results[n] = f"SKIPPED (upstream {','.join(bad)})"
+            ok_all = False
+
+        if not runnable:
+            continue
+        if len(runnable) == 1:
+            ok = run_job(runnable[0])
+            results[runnable[0]] = "OK" if ok else "FAILED"
+            if not ok:
+                failed.add(runnable[0])
             ok_all = ok_all and ok
         else:
             # parallel within wave
-            with ThreadPoolExecutor(max_workers=min(args.max_workers, len(names))) as ex:
-                fut = {ex.submit(run_job, n): n for n in names}
+            with ThreadPoolExecutor(max_workers=min(args.max_workers, len(runnable))) as ex:
+                fut = {ex.submit(run_job, n): n for n in runnable}
                 for fu in as_completed(fut):
-                    ok_all = ok_all and fu.result()
+                    n = fut[fu]
+                    ok = fu.result()
+                    results[n] = "OK" if ok else "FAILED"
+                    if not ok:
+                        failed.add(n)
+                    ok_all = ok_all and ok
+
+    # Explicit run summary: a 55-job run scrolls its own failures off screen,
+    # and the old ending printed only a one-line "Some jobs failed (see above)".
+    print(f"\n{'='*60}\nRun summary: {len(results)} jobs")
+    for n in sorted(results, key=lambda x: _wave(x)):
+        if results[n] != "OK":
+            print(f"  {results[n]:<34} {n}")
+    n_ok = sum(1 for v in results.values() if v == "OK")
+    print(f"  OK: {n_ok}  FAILED: {len(failed)}  SKIPPED: {len(skipped)}")
 
     if not ok_all:
-        print("\n⚠ Some jobs failed (see above)")
+        if failed:
+            print(f"\n⚠ FAILED: {sorted(failed)}")
+        if skipped:
+            print(f"⚠ SKIPPED (upstream): {sorted(skipped)}")
         return 1
     print("\n✓ All jobs completed successfully")
     return 0

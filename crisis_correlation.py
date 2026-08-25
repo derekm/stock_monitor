@@ -76,7 +76,7 @@ def run(save: bool = True):
     tickers = [c for c in wide_ff.columns if c != "date"]
     
     # Convert to numpy for fast correlation computation
-    dates = wide_ff["date"].to_numpy()
+    dates = pd.to_datetime(wide_ff["date"].to_numpy()).to_numpy()
     price_matrix = wide_ff.select(pl.exclude("date")).to_numpy()
     
     # Compute log returns
@@ -101,7 +101,11 @@ def run(save: bool = True):
     var_w = np.maximum((sw2 - sw1 * sw1 / w) / (w - 1), 0.0)
     vol21 = np.sqrt(var_w) * np.sqrt(252)
     vol21[swc < w] = np.nan
-    vol21 = np.concatenate([np.full(w, np.nan), vol21])
+    # Align to mkt length. sw1=sw2=swc were sliced [w:] so they already have length
+    # n+1-w (one shorter than mkt due to the trailing window); pad with w-1 NaNs,
+    # not w, so crisis_vol matches crisis_ret/crisis_dd (both length n). A w-pad
+    # made vol21 length n+1 and broke `crisis_vol | crisis_ret | crisis_dd`.
+    vol21 = np.concatenate([np.full(w - 1, np.nan), vol21])
     
     # Regime masks
     vol_cut = np.nanquantile(vol21, 0.8)
@@ -156,8 +160,11 @@ def run(save: bool = True):
         c, valid_tickers, n = corr_in(mask)
         if c is None or n < 15:
             continue
-        # Group by sector using numpy
-        valid_tickers_sec = [t for t in ticker_list if t in sector_map]
+        # Group by sector using numpy. Exclude unmapped (sector=NaN) tickers:
+        # sorting a mix of float('nan') and str raises TypeError now that the
+        # universe includes 6,729 names with no sector.
+        valid_tickers_sec = [t for t in ticker_list
+                             if isinstance(sector_map.get(t), str) and sector_map[t].strip()]
         sectors = sorted(set(sector_map[t] for t in valid_tickers_sec))
         sector_rets = {}
         for sec in sectors:
@@ -247,7 +254,7 @@ def run(save: bool = True):
         crisis_list.append(bool(crisis[i]) if i < len(crisis) else False)
     
     ts = pl.DataFrame({
-        "date": dates_list,
+        "date": [str(d) for d in dates_list],
         "avg_pairwise_corr": avg_corr_list,
         "mkt_vol21": mkt_vol_list,
         "crisis": crisis_list,
