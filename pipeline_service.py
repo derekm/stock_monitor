@@ -2,7 +2,7 @@
 """
 pipeline_service.py — HTTP control plane to rerun data jobs for the dashboard.
 
-POST /run  {"job": "prices"|"backfill"|"analytics"|"export"|"forecast_bt"|"monte_carlo"|"all"|...}
+POST /run  {"job": "prices"|"backfill"|"analytics"|"forecast_bt"|"monte_carlo"|"all"|...}
 GET  /jobs
 GET  /status
 GET  /health
@@ -31,7 +31,6 @@ JOB_CATALOG = {
     "prices": ["update_prices.py"],
     "backfill": ["backfill_historical.py", "--period", "1y"],
     "analytics": ["run_daily_automation.py"],
-    "export": ["export_dashboard_data.py"],
     "catalog": ["build_data_catalog.py"],
     "manage_list": ["manage_stocks.py", "list"],
 
@@ -72,7 +71,7 @@ _lock = threading.Lock()
 def _run_job(name: str, extra_args: list[str] | None = None) -> dict:
     if name == "all":
         results = []
-        for key in ["prices", "analytics", "export"]:
+        for key in ["prices", "analytics"]:
             results.append(_run_job(key))
         return {"ok": all(r.get("ok") for r in results), "job": "all", "steps": results}
 

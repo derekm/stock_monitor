@@ -17,7 +17,7 @@ Endpoints:
   POST /run/growth-analytics
   POST /run/alerts
   POST /run/export-dashboard
-  POST /run/all-daily               — price path + metrics + export
+  POST /run/all-daily               — price path + metrics
 
   python analytics_service.py --port 8765
 """
@@ -174,7 +174,6 @@ class Handler(BaseHTTPRequestHandler):
             "/run/growth-analytics": ["growth_tech_analytics.py"],
             "/run/dupont": ["dupont_analysis.py", "--save"],
             "/run/alerts": ["check_alerts.py", "--dry-run"],
-            "/run/export-dashboard": ["export_dashboard_data.py"],
             "/run/data-integrity": ["data_integrity.py", "all", "--save"],
             "/run/rebalance-calendar": ["rebalance_calendar.py", "--save"],
             "/run/risk-ext": ["risk_metrics_ext.py", "--save"],
@@ -186,7 +185,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/run/all-daily":
                 results = {}
                 for key in ["/run/preferred-metrics", "/run/rolling", "/run/fundamentals-snapshot",
-                            "/run/screen-backtest", "/run/export-dashboard"]:
+                            "/run/screen-backtest"]:
                     args = jobs[key]
                     results[key] = run_cmd(args, timeout=180)
                 return self._json(200, {"job": "all-daily", "results": results})

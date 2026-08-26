@@ -151,8 +151,7 @@ def run_analytics() -> None:
     run([PY, str(DATA_DIR / "run_daily_automation.py")], timeout=3600 * 6)
 
 
-def export_dashboard() -> None:
-    run([PY, str(DATA_DIR / "export_dashboard_data.py")])
+
 
 
 # ── Main ───────────────────────────────────────────────────────────────
@@ -195,10 +194,9 @@ def main() -> None:
     # 5. Market cap
     marketcap()
 
-    # 5. Analytics + dashboard
+    # 5. Analytics
     if not args.no_analytics:
         run_analytics()
-        export_dashboard()
 
     print(f"\n== Done. {', '.join(tickers)} onboarded with max-history backfill ==")
 
