@@ -278,11 +278,6 @@ jobs:
     timeout: 900
     desc: "HRP/codependence asset clusters vs GICS dispersion (Phase 1.5)"
 
-  export:
-    cmd: ["export_dashboard_data.py"]
-    timeout: null
-    desc: "Export dashboard data"
-
 # dependencies: job -> list of jobs that must finish first
 dependencies:
   rebalance: [hmm]

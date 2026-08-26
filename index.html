@@ -803,7 +803,7 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
         <div>
           <label>Job</label>
           <select id="pipe-job">
-            <option value="export">export — dashboard data.json</option>
+
             <option value="prices">prices — update_prices</option>
             <option value="backfill">backfill — 1y history</option>
             <option value="analytics">analytics — daily suite</option>
@@ -1360,7 +1360,7 @@ ORDER BY ev_ebitda;</textarea>
     <p class="section-intro">Regime state is a portfolio risk dial, not a trade signal. HMM stress posterior feeds buy gates; Kalman/VIX are path context. Prefer current regime + transition risk over point forecasts.</p>
     <div class="sql-actions" style="margin-bottom:0.75rem">
       <button type="button" class="chip-btn" id="live-refresh-regime">Live: regime tables (DuckDB)</button>
-      <button type="button" class="chip-btn" id="live-refresh-regime-json">Reload from data.json</button>
+      <button type="button" class="chip-btn" id="live-refresh-regime-json">Reload</button>
       <span id="regime-status" style="color:var(--muted);font-size:0.78rem"></span>
     </div>
     <div class="grid2" style="margin-bottom:1rem">
@@ -1442,7 +1442,7 @@ ORDER BY ev_ebitda;</textarea>
     </p>
     <div class="sql-actions" style="margin-bottom:0.75rem">
       <button type="button" class="chip-btn" id="live-refresh-stress">Live: reload stress tables (DuckDB)</button>
-      <button type="button" class="chip-btn" id="live-refresh-stress-json">Reload from data.json</button>
+      <button type="button" class="chip-btn" id="live-refresh-stress-json">Reload</button>
       <span id="stress-status" style="color:var(--muted);font-size:0.78rem"></span>
     </div>
     <div class="card" style="margin-bottom:1rem">
@@ -1577,7 +1577,7 @@ ORDER BY ev_ebitda;</textarea>
     <p class="section-intro">Path-dependent risk: rolling vol/Sharpe/drawdown and how often each name clears quality/value gates. Use to see who only looks good on a lucky window.</p>
     <div class="sql-actions" style="margin-bottom:0.75rem">
       <button type="button" class="chip-btn" id="live-refresh-rolling">Live: rolling tables (DuckDB)</button>
-      <button type="button" class="chip-btn" id="live-refresh-rolling-json">Reload from data.json</button>
+      <button type="button" class="chip-btn" id="live-refresh-rolling-json">Reload</button>
       <span id="rolling-status" style="color:var(--muted);font-size:0.78rem"></span>
     </div>
     <div class="card" style="margin-bottom:1rem">
@@ -1807,7 +1807,7 @@ ORDER BY ev_ebitda;</textarea>
 
 <script type="module">
 import * as duckdb from "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm";
-const DATA_URL = "dashboard_data/data.json";
+const DATA_URL = null; // data.json removed; dashboard loads parquet directly via DuckDB
 const GRANITE_API = localStorage.getItem("GRANITE_API") || "http://127.0.0.1:5055";
 /** @type {Array<{id:string,label:string,ts:string,config:object,result:object}>} */
 const FC_RUNS = [];
@@ -3632,15 +3632,14 @@ async function initDuckDB() {
     await DB.instantiate(bundle.mainModule, bundle.pthreadWorker);
     CONN = await DB.connect();
 
-    // PRIMARY PATH: load local CSV/Parquet catalog immediately — NO data.json
+    // PRIMARY PATH: load local CSV/Parquet catalog immediately
     await refreshDataCatalog();
     setStatus(`DuckDB ready · ${window.SQL_CATALOG.length} local files`);
     renderSqlCatalog();
     if (typeof qbPopulateTables === "function") qbPopulateTables(window.SQL_TABLES);
 
-    // 3) Compute INITIAL dashboard state from LIVE parquet/CSV via DuckDB
-    //    Run the same queries the "Live: DuckDB" buttons run — this is the
-    //    authoritative initial paint. data.json is now ONLY a fallback.
+    // Compute INITIAL dashboard state from LIVE parquet/CSV via DuckDB
+    // (lazy-loads only what each visible tab needs)
     if (typeof LIVE_TAB_WIDGETS !== "undefined") {
       for (const [sectionId, spec] of Object.entries(LIVE_TAB_WIDGETS)) {
         try {
@@ -4807,167 +4806,9 @@ async function bindLiveDuckControls() {
 
 
 async function loadAllLateTabs() {
-  try {
-    const res = await fetch("dashboard_data/data.json?ts=" + Date.now());
-    const payload = await res.json();
-    const T = payload.tables || {};
-    // Buy candidates on decisions
-    const buys = (T.buy_candidates || DATA.buy_candidates || []).filter(r => ["BUY","ACCUMULATE"].includes(r.action));
-    fillSimple("#tbl-buys", buys.length ? buys : (T.buy_candidates || []),
-      ["ticker","action","buy_score","decision","momentum","factor","sector","reasons"],
-      ["ticker","roe","roic","debt_to_equity","debt_to_assets","equity_multiplier","pm_x_at","leverage_share_of_roe","roe_quality","leverage_flag"]);
-    const sbt = (T.screen_backtest || []).slice().sort((a,b)=>String(b.as_of_date||"").localeCompare(String(a.as_of_date||"")));
-    fillSimple("#tbl-screen-bt", sbt,
-      ["as_of_date","n","buffett","trifecta","dual","value","quality","median_composite"]);
-    // Rolling
-    // Rolling tab
-    const rw = (T.rolling_window_metrics || []).slice().sort((a,b) =>
-      String(a.universe||"").localeCompare(String(b.universe||"")) || String(a.ticker||"").localeCompare(String(b.ticker||"")) || ((a.window||0)-(b.window||0))
-    );
-    fillSimple("#tbl-rolling", rw.map(r => ({
-      universe: r.universe,
-      ticker: r.ticker,
-      window: r.window,
-      vol: r.vol != null ? +(+r.vol).toFixed(3) : r.vol,
-      ann_ret: r.ann_ret != null ? +(+r.ann_ret).toFixed(4) : r.ann_ret,
-      sharpe: r.sharpe != null ? +(+r.sharpe).toFixed(3) : r.sharpe,
-      max_dd: r.max_dd != null ? +(+r.max_dd).toFixed(3) : r.max_dd,
-      beta: r.beta != null ? +(+r.beta).toFixed(3) : r.beta,
-      vol_stability: r.vol_stability != null ? +(+r.vol_stability).toFixed(3) : r.vol_stability,
-    })), ["universe","ticker","window","vol","ann_ret","sharpe","max_dd","beta","vol_stability"], 80);
-    const stab = (T.rolling_screen_stability || []).slice().sort((a,b) =>
-      (b.dual_rate||0) - (a.dual_rate||0) || (b.buffett_rate||0) - (a.buffett_rate||0) || (b.median_composite||0) - (a.median_composite||0)
-    );
-    fillSimple("#tbl-roll-stab", stab.map(r => ({
-      ticker: r.ticker,
-      n_dates: r.n_dates,
-      buffett_rate: r.buffett_rate != null ? +(+r.buffett_rate).toFixed(3) : r.buffett_rate,
-      trifecta_rate: r.trifecta_rate != null ? +(+r.trifecta_rate).toFixed(3) : r.trifecta_rate,
-      dual_rate: r.dual_rate != null ? +(+r.dual_rate).toFixed(3) : r.dual_rate,
-      median_composite: r.median_composite != null ? +(+r.median_composite).toFixed(4) : r.median_composite,
-      composite_std: r.composite_std != null ? +(+r.composite_std).toFixed(4) : r.composite_std,
-    })), ["ticker","n_dates","buffett_rate","trifecta_rate","dual_rate","median_composite","composite_std"]);
-    const rcorr = (T.rolling_corr_avg_timeseries || []).slice().reverse();
-    fillSimple("#tbl-roll-corr-tab", rcorr.map(r => ({
-      date: (r.date||"").toString().slice(0,10),
-      window: r.window,
-      avg_pairwise_corr: r.avg_pairwise_corr != null ? +(+r.avg_pairwise_corr).toFixed(4) : r.avg_pairwise_corr,
-      median_pairwise_corr: r.median_pairwise_corr != null ? +(+r.median_pairwise_corr).toFixed(4) : r.median_pairwise_corr,
-      mkt_vol: r.mkt_vol != null ? +(+r.mkt_vol).toFixed(4) : r.mkt_vol,
-    })), ["date","window","avg_pairwise_corr","median_pairwise_corr","mkt_vol"], 60);
-    // Aerospace
-    let aero = T.aerospace_supply || [];
-    if (!aero.length) {
-      try {
-        const r = await fetch("aerospace_supply.csv");
-        if (r.ok) {
-          const text = await r.text();
-          const lines = text.trim().split(/\r?\n/);
-          const hdr = lines[0].split(",");
-          aero = lines.slice(1).map(line => {
-            const parts = line.split(",");
-            const o = {};
-            hdr.forEach((h,i) => o[h.trim()] = (parts[i]||"").trim());
-            return o;
-          });
-        }
-      } catch (e) {}
-    }
-    fillSimple("#tbl-aero", aero, ["ticker","name","sector","industry","growth_sleeve","notes"]);
-    // refresh sleeve explorer if present
-    if (typeof sleevesPopulateGroups === "function") {
-      try {
-        const fromAero = aero.map(r => ({...r, growth_sleeve: r.growth_sleeve || "starlink_supply"}));
-        if (fromAero.length) {
-          const base = getMonitoredRows();
-          const tickers = new Set(base.map(r => r.ticker));
-          fromAero.forEach(r => { if (!tickers.has(r.ticker)) base.push(r); });
-          window._monitoredStocks = base;
-        }
-        sleevesPopulateGroups();
-        sleevesApply();
-        manageRenderStocks();
-      } catch (e) {}
-    }
-    // Inclusion
-    try {
-      const rr = await fetch("inclusion_rules.json");
-      if (rr.ok) {
-        const rules = await rr.json();
-        const box = document.getElementById("rules-box");
-        if (box) box.textContent = JSON.stringify(rules, null, 2);
-      }
-    } catch (e) {}
-    fillSimple("#tbl-inc", T.inclusion_candidates || []);
-    fillSimple("#tbl-exc", T.exclusion_candidates || []);
-    fillSimple("#tbl-near", T.near_dual_candidates || []);
-    fillSimple("#tbl-defexp", T.defensive_value_exploration || []);
-    fillSimple("#tbl-scorr", T.sector_correlation_matrix_latest || []);
-    fillSimple("#tbl-acorr", T.asset_correlation_matrix || [], null);
-    // Stress
-    // Stress / ETFs tab
-    const stress = (T.dual_pass_stress || []).slice().sort((a,b) => (a.mode||"").localeCompare(b.mode||"") || (a.param||"").localeCompare(b.param||""));
-    fillSimple("#tbl-stress", stress,
-      ["mode","param","value","n_pass","delta_vs_base","tickers","port_vol","port_max_dd","avg_beta","avg_name_vol"], 100);
-    fillSimple("#tbl-sens", T.dual_pass_sensitivity || [],
-      ["dropped_leg","n_pass","delta","new_tickers"]);
-    fillSimple("#tbl-etf", T.defensive_value_etfs || [],
-      ["ticker","pb_ratio","ev_ebitda","roe","roic","mktcap_to_assets","market_cap_b","notes"]);
-    fillSimple("#tbl-crisis", T.crisis_correlation_summary || [],
-      ["regime","n_days","avg_pairwise_corr","median_pairwise"]);
-    // tail: put strategy first
-    const tail = (T.tail_risk_hedge_performance || []).map(r => ({
-      strategy: r.strategy, ann_ret: r.ann_ret, ann_vol: r.ann_vol, sharpe: r.sharpe,
-      max_dd: r.max_dd, cvar_5pct: r.cvar_5pct, crisis_ann_ret: r.crisis_ann_ret, crisis_vol: r.crisis_vol,
-    }));
-    fillSimple("#tbl-tail", tail);
-    // rolling corr: latest first
-    const rollc = (T.rolling_corr_avg_timeseries || []).slice().reverse();
-    fillSimple("#tbl-rollcorr", rollc, ["date","window","avg_pairwise_corr","median_pairwise_corr","mkt_vol"]);
-    const frot = (T.factor_rotation_performance || []).slice().sort((a,b)=>(b.sharpe||0)-(a.sharpe||0));
-    fillSimple("#tbl-frot", frot, ["strategy","ann_ret","ann_vol","sharpe","max_dd"]);
-    fillSimple("#tbl-apsum", T.allpairs_corr_summary || []);
-    // normalize sector matrix index column
-    const apsec = (T.allpairs_sector_corr_latest || []).map(r => {
-      const o = { ...r };
-      if (o["Unnamed: 0"] != null && o.sector == null) {
-        o.sector = o["Unnamed: 0"];
-        delete o["Unnamed: 0"];
-      }
-      return o;
-    });
-    fillSimple("#tbl-apsec", apsec);
-    // Regime
-    // Regime / KF tab
-    fillSimple("#tbl-regcorr", T.regime_corr_breakdown || [],
-      ["regime","n_days","n_assets","avg_pairwise_corr","median_pairwise_corr","diversification_proxy","mean_name_vol","mkt_vol"]);
-    fillSimple("#tbl-hmm-sum", T.hmm_posterior_summary || []);
-    fillSimple("#tbl-trig", T.hmm_transition_triggers || [],
-      ["date","from_regime","to_regime","mkt_ret","vol21","avg_corr","vol_chg_5d","corr_chg_5d","max_abs_ret_5d"]);
-    const kg = (T.kalman_gain_path || []).slice(-45).reverse();
-    fillSimple("#tbl-kgain", kg,
-      ["date","regime","mkt_ret","vol21","kf_level","kf_vol","gain_ret","gain_vol","innov_vol_z"], 45);
-    const vix = (T.vix_term_structure || []).slice(-30).reverse();
-    fillSimple("#tbl-vix", vix,
-      ["date","VIX9D_proxy","VIX_proxy","VIX3M_proxy","term_slope_21_63","contango"], 30);
-    // meta summaries as rows
-    const meta = [];
-    for (const row of (T.vix_term_structure_summary || [])) meta.push({source: "vix", ...row});
-    for (const row of (T.kalman_gain_summary || [])) meta.push({source: "kalman", ...row});
-    fillSimple("#tbl-regime-meta", meta);
-    const thrAll = T.threshold_logic_screen || [];
-    const thrPass = thrAll.filter(r => r.dual_pass === true || r.dual_pass === "true" || r.dual_pass === 1);
-    const thrShow = (thrPass.length ? thrPass : thrAll);
-    fillSimple("#tbl-thr", thrShow,
-      ["ticker","regime","label","dual_pass","n_failed","failed_legs","roe","roic","ev_ebitda","pb_ratio","mktcap_to_assets"]);
-  } catch (e) {
-    console.warn("loadAllLateTabs", e);
-  }
-}
-// Auto-run loadAllLateTabs
-// data.json is ONLY a fallback — auto-run only when DuckDB failed or user forced failover
-if (window.__FORCE_FALLBACK) {
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadAllLateTabs); else loadAllLateTabs();
+  // Lazy-load tab data from parquet via DuckDB (no data.json)
+  // Each tab renders itself on navigation; this is now a no-op placeholder.
+  return Promise.resolve();
 }
 
 
@@ -5962,42 +5803,7 @@ async function main() {
   if (typeof addManualFallbackButton === "function") addManualFallbackButton();
 }
 
-// ── Fallback UI (data.json ONLY on DuckDB failure or manual failover) ──
-window.__FORCE_FALLBACK = false;
-
-function showFallbackButton() {
-  window.__FORCE_FALLBACK = true;
-  setStatus("DuckDB init failed — using data.json fallback");
-  let btn = document.getElementById("fallback-btn");
-  if (!btn) {
-    btn = document.createElement("button");
-    btn.id = "fallback-btn";
-    btn.className = "chip-btn";
-    btn.style.cssText = "border-color:#ef4444;color:#ef4444;margin-left:0.5rem;";
-    btn.textContent = "⚠ data.json fallback active";
-    const nav = document.querySelector("nav") || document.body;
-    nav.appendChild(btn);
-  }
-  btn.style.display = "inline-block";
-  loadAllLateTabs();
-}
-
-function addManualFallbackButton() {
-  const nav = document.querySelector("nav");
-  if (!nav || document.getElementById("manual-fallback-btn")) return;
-  const btn = document.createElement("button");
-  btn.id = "manual-fallback-btn";
-  btn.className = "chip-btn";
-  btn.style.cssText = "border-color:#8b5cf6;color:#a78bfa;margin-left:0.5rem;font-size:0.72rem;";
-  btn.textContent = "⇩ data.json (fallback)";
-  btn.title = "Purposely fail over to dashboard_data/data.json (large) instead of DuckDB";
-  btn.addEventListener("click", async () => {
-    if (window.__FORCE_FALLBACK) return;
-    window.__FORCE_FALLBACK = true;
-    setStatus("Forced data.json fallback…");
-    try { await loadAllLateTabs(); setStatus("data.json fallback loaded"); }
-    catch (e) { setStatus("data.json fallback failed: " + e.message); }
-  });
+// ── Fallback UI removed — dashboard relies solely on DuckDB/parquet ──
   nav.appendChild(btn);
 }
 
