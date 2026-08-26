@@ -93,14 +93,15 @@
 ---
 
 ### 5. López de Prado — ML Regime Work Upgrade
-**Status:** **Measured (2026-08-24)** — CPCV − random **+0.1pp** (bar +3% fail). meta_y=0. Regime clustering **passes but is linkage-fragile**.
+**Status:** **Measured (2026-08-25)** — CPCV − random **+0.1pp** (bar +3% fail). meta_y=0. Regime clustering **passes (+46.4% full-universe)**. Hybrid `peer_group` wired into consumers.
 **Deliverables:**
 - [x] Triple-barrier on book+CORE → `triple_barrier_labels.parquet`
 - [x] Meta-labeling: **meta_y mean 0** (no name ride≥0.5)
 - [x] CPCV on TMI lag features → `cv_splits.parquet`: CPCV acc **53.7%** vs random KFold **53.6%** (**+0.1pp**, bar +3% **fail**)
 - [x] Feature-coef stability across 15 CPCV folds → `feature_stability.parquet` (lag1 0.37; ma21 sign-unstable)
 - [x] Regime clustering (HRP + distance corr) → `regime_clustering.py` → `regime_clusters.parquet`, `regime_cluster_dispersion.parquet`, `regime_cluster_sweep.parquet`
-- [x] **Clustered sectors** — named by dominant sector composition (e.g. `technology_77`, `energy_82`, `financial_services_100`, `mixed_healthcare`). `cluster_name` column persists the name. Use in place of `sector` in `peer_analytics`/`cross_section` for tighter peer groups.
+- [x] **Clustered sectors** — named by dominant sector composition. `cluster_name` + hybrid `peer_group` columns.
+- [x] **Hybrid peer_group wired into `peer_analytics.py` and `cross_section.py`** — tighter peer groups (financial_services_76, mixed_healthcare, energy_89) with GICS fallback for the 2% where clustering is looser.
 - [ ] SHAP (tree SHAP; coef stability is the stand-in)
 
 **Regime clustering — measured (2026-08-25), 4,678 liquid listed names (61% coverage), k = 11 = #GICS sectors:**
