@@ -9,6 +9,9 @@ production alternative. This script pulls daily bars for the monitored
 universe using the BULK grouped endpoint and appends them into
 daily_prices/ (source='polygon').
 
+INCREMENTAL: only fetches dates that don't already exist in daily_prices/.
+In daily automation mode, this means it only pulls the last 1-3 trading days.
+
 Key-gated by design: requires POLYGON_API_KEY env var. Without it, the
 script explains how to get a key and exits 0 (no crash in the automation).
 
@@ -57,9 +60,34 @@ def polygon_bulk_day(day: date, api_key: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def existing_dates() -> set[date]:
+    """Return the set of dates already present in the partitioned price folder."""
+    dates = set()
+    if not PRICES.exists():
+        return dates
+    for year_dir in PRICES.iterdir():
+        if not year_dir.is_dir() or not year_dir.name.startswith("year="):
+            continue
+        for month_dir in year_dir.iterdir():
+            if not month_dir.is_dir() or not month_dir.name.startswith("month="):
+                continue
+            for pq in month_dir.glob("*.parquet"):
+                try:
+                    # Read just the date column from the parquet file
+                    df = pd.read_parquet(pq, columns=["date"])
+                    for d in df["date"].unique():
+                        if isinstance(d, pd.Timestamp):
+                            dates.add(d.date())
+                        elif isinstance(d, date):
+                            dates.add(d)
+                except Exception:
+                    pass
+    return dates
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--days", type=int, default=252*5, help="Days of history to pull (default: 5 years)")
+    ap.add_argument("--days", type=int, default=5, help="Max days of history to pull (default: 5, incremental)")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
 
@@ -69,14 +97,30 @@ def main():
         print("Get a free key at https://polygon.io and export POLYGON_API_KEY, then re-run.")
         return
 
+    # Find which dates already exist
+    have = existing_dates()
+    print(f"Existing dates in daily_prices/: {len(have)}")
+
     to_d = date.today() - timedelta(days=1)  # yesterday at most (today's data not ready)
     from_d = to_d - timedelta(days=args.days)
-    frames = []
+
+    # Only fetch dates we don't already have
+    missing = []
     for i in range((to_d - from_d).days + 1):
         day = from_d + timedelta(days=i)
-        # skip weekends
         if day.weekday() >= 5:
             continue
+        if day not in have:
+            missing.append(day)
+
+    if not missing:
+        print(f"All dates through {to_d} already present — nothing to fetch.")
+        return
+
+    print(f"Fetching {len(missing)} missing dates: {missing[0]} → {missing[-1]}")
+
+    frames = []
+    for day in missing:
         try:
             df = polygon_bulk_day(day, api_key)
             if len(df):
@@ -112,7 +156,5 @@ def main():
             existing_data_behavior="overwrite_or_ignore"
         )
         print(f"\nAppended {len(new)} polygon bars -> {PRICES} (partitioned)")
-
-
-if __name__ == "__main__":
-    main()
+    else:
+        print(f"\nFetched {len(new)} polygon bars (dry run, --save to persist)")
