@@ -31,7 +31,7 @@ with open('cik_ticker_map.json') as f:
     cik_map = {k.upper(): str(v).zfill(10) for k, v in json.load(f).items()}
 
 # Load daily prices for market value conversion
-prices = pd.read_parquet('daily_prices.parquet')
+prices = pd.read_parquet('daily_prices/')
 prices['date'] = pd.to_datetime(prices['date']).dt.date
 
 # Load fundamentals for look-through

@@ -30,7 +30,7 @@ def compute_states_for_ticker(d: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     print('=== Clean Coiled Spring Backtest ===')
-    px = pd.read_parquet('daily_prices.parquet')
+    px = pd.read_parquet('daily_prices/')
     px['date'] = pd.to_datetime(px['date'])
     tickers = sorted(px['ticker'].unique())
     print(f'Tickers: {len(tickers)}')

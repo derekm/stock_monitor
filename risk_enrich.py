@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 DATA = Path(__file__).parent
-PRICES = DATA / "daily_prices.parquet"
+PRICES = DATA / "daily_prices/"
 PREF = DATA / "preferred_metrics.parquet"
 PREF_PQ = DATA / "preferred_metrics.parquet"
 FUND = DATA / "fundamentals.parquet"

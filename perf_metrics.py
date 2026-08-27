@@ -63,7 +63,44 @@ def perf_metrics(daily_rets: pd.Series | np.ndarray,
         "profit_factor": round(profit_factor, 3) if profit_factor is not None else None,
         "turnover": round(turnover, 3) if turnover is not None else None,
         "n_days": int(len(r)),
+        "cdar_5": round(cdar(r, 0.05), 4),
+        "seq_risk": round(sequence_risk(r), 4),
     }
+
+
+def cdar(daily_rets: pd.Series, alpha: float = 0.05) -> float:
+    """Conditional drawdown at risk: mean of worst alpha drawdowns."""
+    r = pd.Series(np.asarray(daily_rets, dtype=float)).dropna()
+    if len(r) < 20:
+        return float("nan")
+    wealth = (1 + r).cumprod()
+    dd = wealth / wealth.cummax() - 1.0
+    k = max(1, int(np.ceil(alpha * len(dd))))
+    return float(dd.nsmallest(k).mean())
+
+
+def sequence_risk(daily_rets: pd.Series) -> float:
+    """Corr(return, withdrawal-phase dummy). Last 20% of sample = withdraw."""
+    r = pd.Series(np.asarray(daily_rets, dtype=float)).dropna()
+    if len(r) < 50:
+        return float("nan")
+    w = np.zeros(len(r))
+    w[int(len(r) * 0.80):] = 1.0
+    return float(np.corrcoef(r.to_numpy(), w)[0, 1])
+
+
+if __name__ == "__main__":
+    import argparse
+    from pathlib import Path
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tmi", action="store_true")
+    args = ap.parse_args()
+    if not args.tmi:
+        raise SystemExit("use --tmi")
+    tmi = pd.read_parquet(Path(__file__).parent / "bogle_tmi.parquet")
+    r = pd.to_numeric(tmi["ret_net"], errors="coerce").dropna()
+    m = perf_metrics(r)
+    print(m)
 
 
 def capacity_estimate(adv_dollar: float, daily_turnover: float,
@@ -77,9 +114,3 @@ def capacity_estimate(adv_dollar: float, daily_turnover: float,
     cap = adv_dollar * max_turnover_frac / daily_turnover
     return {"capacity_notional": round(float(cap), 0),
             "note": f"daily turnover <= {max_turnover_frac:.0%} of ADV"}
-
-
-if __name__ == "__main__":
-    import sys
-    print(__doc__)
-    sys.exit(0)

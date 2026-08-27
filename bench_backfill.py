@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-PRICES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_prices.parquet")
+PRICES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_prices/")
 CONTEXT, HORIZON = 512, 96
 SAMPLE = ["AAPL","MSFT","NVDA","AMZN","GOOGL","TSLA","META","JPM","XOM","CVX",
           "JNJ","PG","HD","BAC","KO","PEP","WMT","DIS","V","MA"]

@@ -44,7 +44,7 @@ from cli_common import (
 from index_registry import parse_indexes, tickers_for_index, available_indexes, index_help_text
 
 DATA_DIR = Path(__file__).parent
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 OUT_FILE = DATA_DIR / "fisher_indexes.parquet"
 

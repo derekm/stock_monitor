@@ -27,7 +27,7 @@ DATA_DIR = Path(__file__).parent
 # Input paths
 CHANGES = DATA_DIR / "sp500_changes_merged.parquet"
 MEMBERSHIP = DATA_DIR / "sp500_membership.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 
 # Output
 OUT_ANALYSIS = DATA_DIR / "index_effect_analysis.parquet"

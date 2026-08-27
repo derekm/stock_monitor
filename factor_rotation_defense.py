@@ -72,7 +72,7 @@ except ImportError:
 
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
 SP500 = DATA_DIR / "sp500_constituents.parquet"

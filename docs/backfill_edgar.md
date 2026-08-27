@@ -18,7 +18,7 @@ Per ticker (via SEC ticker→CIK map):
   - EV/EBITDA = (mktcap + debt − cash) / TTM EBITDA (EBITDA = OI + D&A, fallback OI-only where D&A is unreported)
   - P/B = mktcap / equity; MktCap/Assets = mktcap / assets
   - interest_coverage = TTM OI / TTM interest expense
-- Market cap = adj_close price × shares at the quarter end (from `daily_prices.parquet`; shares from EDGAR, last value ≤ qend).
+- Market cap = adj_close price × shares at the quarter end (from `daily_prices/`; shares from EDGAR, last value ≤ qend).
 
 Rows are `source=edgar_v2` or `source=html_10q` and displace lower-priority sources (`yfinance_history`, `polygon_financials`, `fundamentals_history_backfill`) for the same (ticker, period) — EDGAR is deeper and point-in-time, so it wins.
 
@@ -59,7 +59,7 @@ python backfill_edgar.py --migrate-future-estimates  # fold legacy future rows i
 - NOPAT uses a 25% tax proxy; D&A is sparsely reported so EBITDA often falls back to OI-only.
 - Respects SEC rate limits (0.12s sleep between requests).
 - HTML 10-Q parsing preferred over incomplete XBRL for recent quarters.
-- Universe = `daily_prices.parquet` (not `monitored_stocks.parquet`).
+- Universe = `daily_prices/` (not `monitored_stocks.parquet`).
 
 ## Related programs
 

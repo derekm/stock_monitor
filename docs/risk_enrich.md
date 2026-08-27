@@ -17,7 +17,7 @@ python risk_enrich.py --save
 ```
 
 Flags: `--save` (writes the enriched `preferred_metrics.csv` + `risk_metrics.csv`).
-Reads `daily_prices.parquet`, `monitored_stocks.parquet`, `preferred_metrics.csv`.
+Reads `daily_prices/`, `monitored_stocks.parquet`, `preferred_metrics.csv`.
 
 ## Outputs
 

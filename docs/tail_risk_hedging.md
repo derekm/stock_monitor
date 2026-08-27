@@ -15,7 +15,7 @@ trade-off so a hedge can be chosen on evidence, not fear.
 python tail_risk_hedging.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices.parquet`, `monitored_stocks.parquet`,
+Flags: `--save`. Reads `daily_prices/`, `monitored_stocks.parquet`,
 `fundamentals.parquet`.
 
 ## Outputs

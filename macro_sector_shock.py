@@ -81,7 +81,7 @@ def _commodity_for(basket_id: str) -> str | None:
 
 
 def _price_universe() -> set[str]:
-    p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker"])
+    p = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["ticker"])
     return set(p["ticker"].astype(str).str.upper().unique())
 
 
@@ -198,7 +198,7 @@ def _load_price_matrix() -> pd.DataFrame:
     """Load + pivot daily_prices ONCE per process; reuse across baskets."""
     global _PRICE_CACHE
     if _PRICE_CACHE is None:
-        p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
+        p = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["date", "ticker", "close"])
         p["date"] = pd.to_datetime(p["date"])
         _PRICE_CACHE = p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
     return _PRICE_CACHE

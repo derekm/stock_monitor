@@ -347,7 +347,7 @@ def build_profiles(tickers_cap: int | None = None, window: int = 1500,
         tickers = tickers[:tickers_cap]
 
     # OHLCV matrices
-    vp = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+    vp = pd.read_parquet(DATA_DIR / "daily_prices/",
                          columns=["date", "ticker", "volume", "open", "high", "low"])
     vp["date"] = pd.to_datetime(vp["date"])
     # Reindex OHLCV to complete business-day calendar, then forward-fill

@@ -75,7 +75,7 @@ for date in brk_a_dates & brk_b_dates:
             fund.loc[idx, 'shares_outstanding'] = a_row['shares_outstanding'] * 1500
 
 # Now recompute derived metrics for BRK-B
-prices = pd.read_parquet('daily_prices.parquet')
+prices = pd.read_parquet('daily_prices/')
 prices['date'] = pd.to_datetime(prices['date']).dt.date
 
 price_lookup = {}

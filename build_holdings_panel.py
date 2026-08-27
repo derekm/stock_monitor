@@ -451,10 +451,10 @@ def main():
     panel = process_holdings(detailed_path, panel_path)
     
     # Step 2: Enrich with prices
-    if Path("daily_prices.parquet").exists():
-        enrich_with_prices(panel_path, "daily_prices.parquet", enriched_path)
+    if Path("daily_prices/").exists():
+        enrich_with_prices(panel_path, "daily_prices/", enriched_path)
     else:
-        print("daily_prices.parquet not found, skipping price enrichment")
+        print("daily_prices/ not found, skipping price enrichment")
 
 if __name__ == "__main__":
     main()

@@ -9,7 +9,7 @@ Honest historical answers to:
      ~56d, so a fixed 21/63d short loses; test entry-lag variants that wait
      for breakdown confirmation.
 
-Reads arista_metrics.parquet + daily_prices.parquet. Point-in-time only.
+Reads arista_metrics.parquet + daily_prices/. Point-in-time only.
 Outputs arista_reliability.parquet (per-signal forward stats).
 
 Usage:
@@ -35,7 +35,7 @@ PX = None
 def _load():
     global DF, PX
     DF = pd.read_parquet(DATA_DIR / "arista_metrics.parquet")
-    PX = pd.read_parquet(DATA_DIR / "daily_prices.parquet")
+    PX = pd.read_parquet(DATA_DIR / "daily_prices/")
     PX["date"] = pd.to_datetime(PX["date"])
 
 

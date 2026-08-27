@@ -229,13 +229,13 @@ def main():
 
     # TODO: Map held_cusip to ticker using crosswalk (future work)
     # For now, we'll compute daily market value only for those holdings where we have ticker
-    # We'll need to join with daily_prices.parquet on ticker and date.
+    # We'll need to join with daily_prices/ on ticker and date.
 
     # Load daily prices
-    if not (DATA_DIR / "daily_prices.parquet").exists():
-        print("daily_prices.parquet not found; skipping daily value calculation")
+    if not (DATA_DIR / "daily_prices/").exists():
+        print("daily_prices/ not found; skipping daily value calculation")
         return
-    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet")
+    prices = pd.read_parquet(DATA_DIR / "daily_prices/")
     prices = prices.rename(columns={"date": "as_of_date", "close": "price"})
     prices["as_of_date"] = pd.to_datetime(prices["as_of_date"])
     # We need to map held_cusip to ticker. Since we don't have a map, we'll skip for now.

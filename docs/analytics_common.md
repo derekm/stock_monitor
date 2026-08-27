@@ -8,7 +8,7 @@ script (no `argparse`, no `main()`).
 
 Avoids every analytics script re-implementing the same parquet reads and return
 math. It also centralizes the "prefer the clean prices copy" decision
-(`daily_prices_clean.parquet` when present, else `daily_prices.parquet`).
+(`daily_prices_clean.parquet` when present, else `daily_prices/`).
 
 ## Canonical constants (single source of truth — import, don't re-define)
 

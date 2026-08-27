@@ -17,7 +17,7 @@ def main():
     args = ap.parse_args()
 
     cols = ["date", "ticker", "open", "close"]
-    d = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=cols)
+    d = pd.read_parquet(DATA_DIR / "daily_prices/", columns=cols)
     d = d.sort_values(["ticker", "date"])
 
     # Vectorized gap calculation

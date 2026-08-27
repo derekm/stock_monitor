@@ -79,7 +79,7 @@ def _store() -> MarketDataStore:
         f"""
         CREATE OR REPLACE TABLE daily_prices AS
         SELECT ticker, date AS trade_date, NULL AS adj_close
-        FROM read_parquet('{(DATA_DIR / 'daily_prices.parquet').as_posix()}')
+        FROM read_parquet('{(DATA_DIR / 'daily_prices/').as_posix()}')
         """
     )
     con.execute(

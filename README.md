@@ -126,7 +126,7 @@ ev_ebitda, mktcap_to_assets, pb_ratio), and is resume-safe:
 python backfill_constituents.py run            # backfill all missing (long, rate-limited)
 python backfill_constituents.py run --limit 20  # smoke test
 python backfill_constituents.py status          # resume progress
-python backfill_constituents.py merge           # union staging -> fundamentals.parquet + daily_prices.parquet
+python backfill_constituents.py merge           # union staging -> fundamentals.parquet + daily_prices/
 ```
 
 Backfilled rows are stamped `source='yfinance'`. We do NOT synthesize history
@@ -279,7 +279,7 @@ Detailed usage for each module:
 | `trades.parquet` | Personal fills / DRIPs |
 | `portfolio_holdings.parquet` | Aggregated positions |
 | `monitored_stocks.parquet` | Universe, sectors, index/portfolio flags |
-| `daily_prices.parquet` | OHLCV (volume → Fisher q) |
+| `daily_prices/` | OHLCV (volume → Fisher q) |
 | `fundamentals.parquet` | Valuation metrics |
 | `sector_prices.parquet` | EW sector levels (`SECT_*`) |
 | `exogenous_panel.parquet` | mkt/sector exogenous series |

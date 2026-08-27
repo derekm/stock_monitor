@@ -4,7 +4,7 @@ This repo is a **personal portfolio intelligence stack** (Python + DuckDB + a st
 
 ## Mental model
 
-- **Inputs are few, outputs are many.** Nearly everything reads `daily_prices.parquet` (the universe), `fundamentals.parquet`, `portfolio_holdings.parquet`, `trades.parquet`, `sector_prices.parquet`, `sp500_constituents.parquet`, `alerts_config.parquet`, `earnings_calendar.parquet`. `monitored_stocks.parquet` is sleeve metadata only, not the universe. Everything else is a derived parquet.
+- **Inputs are few, outputs are many.** Nearly everything reads `daily_prices/` (the universe), `fundamentals.parquet`, `portfolio_holdings.parquet`, `trades.parquet`, `sector_prices.parquet`, `sp500_constituents.parquet`, `alerts_config.parquet`, `earnings_calendar.parquet`. `monitored_stocks.parquet` is sleeve metadata only, not the universe. Everything else is a derived parquet.
 - **One orchestrator to rule them:** prefer `run_daily_automation.py` (or the dashboard's `analytics_service` → `/run/all-daily`) over calling individual scripts. Individual scripts exist for targeted re-runs and research.
 - **Dashboard = 4 services + static site**, all launched by `./start_dashboard.sh` (granite_service :5055, pipeline_service :5056, analytics_service :8767, static :8765). Ctrl+C stops all.
 - **Forecasts are stateful:** they need pretrained checkpoints under `checkpoints/` (Git-ignored, large). `granite_backfill.py`/`ttm_backfill.py` pretrain; `granite_daily.py` runs daily; `forecast_granite.py` emits `forecasts_granite.csv/.parquet`. **Regime-selected serving** (`regime_serving.py` + `checkpoints/regime/`) ensembles the current HMM regime's model when available.
@@ -14,7 +14,7 @@ This repo is a **personal portfolio intelligence stack** (Python + DuckDB + a st
 
 ## If asked to "run the analytics"
 
-1. Check data freshness first: if `daily_prices.parquet` looks stale, `python update_prices.py --fetch --days 5`.
+1. Check data freshness first: if `daily_prices/` looks stale, `python update_prices.py --fetch --days 5`.
 2. Run `python run_daily_automation.py` (or `/run/all-daily` via the dashboard). Use `--only <jobs>` for a subset (40+ valid jobs: `hmm, market_cap, rebalance, preferred, implied_r, momentum, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility, taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride, taleb_subindustry_regime, taleb_barbell, taleb_optionality, export`).
 3. Refresh the dashboard: `python export_dashboard_data.py` (rewrites `dashboard_data/data.json`, 198+ resources).
 4. If the user wants forecasts and `forecasts_granite.parquet` is missing: `python granite_backfill.py` → `python granite_daily.py` → `python forecast_granite.py forecast --index portfolio --from-first-trade --horizon 10`.
@@ -36,7 +36,7 @@ This repo is a **personal portfolio intelligence stack** (Python + DuckDB + a st
 - `fisher_index.py` writes `fisher_indexes.csv`, `fisher_indexes.parquet`, **and** `fisher_rate_decomposition.csv`. `run_fisher_duckdb.py` is the DuckDB system-of-record variant (`fisher_indexes_duckdb.csv/.parquet`).
 - `stress_dual_pass.py` pass-counts are **data-dependent** (recomputed against current fundamentals) — never quote a fixed count as if it were a constant.
 - Checkpoints under `checkpoints/` are **LFS-tracked** (`checkpoints/** filter=lfs` in `.gitattributes`) — never delete them mid-run. `git add` stages them via LFS pointers; pushes upload the LFS objects.
-- `daily_prices.parquet` is stored in **Git LFS** (exceeds GitHub's 100 MB limit). Use `git lfs` for any push involving it.
+- `daily_prices/` is stored in **Git LFS** (exceeds GitHub's 100 MB limit). Use `git lfs` for any push involving it.
 - **HMM regime map is MARKET-level, not per-ticker.** `hmm_regime_detection.py` fits one Gaussian HMM on market features (EW return, 21d vol, avg pairwise corr) → `hmm_regime_states.csv` = `date → regime` series. pass6/pass8 `tag_windows` labels every ticker's windows by the market regime at the forecast point — "AEP normal" means AEP windows in market-normal periods. `regime_ab_test.py` A/B-tests this against per-ticker sector regimes (`subindustry_regime.csv` + `basket_members.csv`); do NOT assume per-ticker regimes without re-running it.
 - **HMM `--window-days` is `auto` by default**: anchors the fit window to the last regime transition from `hmm_transition_triggers.csv` (floor 252 / cap 756 trading days). Pass `0` for full history — REQUIRED before a pass6/pass8 sweep: with an adaptive/truncated states file, most windows fall outside the regime map and every cell gets skipped ("No results"). Full-history states take ~35 min on this GPU.
 - **pass8 RPT sweep saves checkpoints via `--ckpt-dir checkpoints/regime`** — filenames `rpt__<TICKER>__<steps>__<lr>.pt` (regime is NOT in the filename; the mapping lives in `regime_model_best_rpt.csv`). Sweep covers 140 monitored tickers × 3 regimes × 2 steps × 2 caps ≈ 1,680 cells, ~4 min/cell on MX550 → multi-day, resume-safe via `--resume`.

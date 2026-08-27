@@ -46,7 +46,7 @@ import pandas as pd
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 PREF = DATA_DIR / "preferred_metrics.parquet"
 

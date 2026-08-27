@@ -1,6 +1,6 @@
 # ttm_features.py
 
-Build TTM-ready multivariate panels from `daily_prices.parquet`.
+Build TTM-ready multivariate panels from `daily_prices/`.
 
 ## Why it exists (rationale)
 
@@ -18,7 +18,7 @@ python ttm_features.py --tickers AEP,NVR --mode close_only
 ```
 
 Flags (via `cli_common` + own): `--index/--universe`, `--ticker`, `--mode`
-(`close_only` default / `full`), `--save`. Reads `daily_prices.parquet`,
+(`close_only` default / `full`), `--save`. Reads `daily_prices/`,
 `monitored_stocks.parquet`.
 
 ## Outputs

@@ -15,7 +15,7 @@ vol tab and the regime logic still get a slope signal offline.
 python vix_term_structure.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices.parquet`.
+Flags: `--save`. Reads `daily_prices/`.
 
 ## Outputs
 

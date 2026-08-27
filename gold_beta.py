@@ -28,7 +28,7 @@ import numpy as np
 import polars as pl
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 
 
 def load_returns(tickers: list[str]) -> pl.DataFrame:

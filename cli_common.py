@@ -205,7 +205,7 @@ def resolve_tickers_from_args(
         import pandas as pd
 
         data = Path(__file__).parent
-        stocks_path = data / "daily_prices.parquet"
+        stocks_path = data / "daily_prices/"
         meta_path = data / "monitored_stocks.parquet"
         out: list[str] = []
         raw = [s.strip() for s in str(sector).split(",") if s.strip()]

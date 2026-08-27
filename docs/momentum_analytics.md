@@ -25,7 +25,7 @@ python momentum_analytics.py --universe portfolio
 ```
 
 Flags: `--universe` (index list or `all`, default `all`), `--save`. Reads
-`daily_prices.parquet`.
+`daily_prices/`.
 
 ## Outputs
 

@@ -3,8 +3,8 @@
 
 Why: the focused subsector baskets (macro_sector_shock.py SECTORS table)
 name non-S&P amplifiers (TSM, ASML, SCCO, AEM, BTI, ...) that are NOT in
-daily_prices.parquet. This fetches their full OHLCV history from yfinance
-and appends it to daily_prices.parquet (source='yfinance'), so the
+daily_prices/. This fetches their full OHLCV history from yfinance
+and appends it to daily_prices/ (source='yfinance'), so the
 subsector shock signals use the real amplifier names instead of silently
 dropping them.
 
@@ -27,7 +27,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 DATA_DIR = Path(__file__).resolve().parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 
 # non-S&P amplifier tickers used by the subsector baskets. Names absent
 # here are either already in daily_prices (S&P members) or delisted

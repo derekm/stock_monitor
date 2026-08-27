@@ -17,7 +17,7 @@ python portfolio_report.py --refresh    # rebuild holdings from trades + current
 ```
 
 Flags: `--refresh` (recompute `portfolio_holdings.parquet` from trades + prices).
-Reads `trades.parquet`, `daily_prices.parquet`, `monitored_stocks.parquet`,
+Reads `trades.parquet`, `daily_prices/`, `monitored_stocks.parquet`,
 `fundamentals.parquet`.
 
 ## Outputs

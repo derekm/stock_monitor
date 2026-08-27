@@ -24,7 +24,7 @@ import pyarrow.parquet as pq
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
 MONITORED = DATA_DIR / "monitored_stocks.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 
 # Source priority (higher = better). THE canonical ranking -- import it, never
 # redefine it. preferred_metrics.py and backfill_edgar.py both consume this.
@@ -239,7 +239,7 @@ def cmd_fetch_history(args):
     and computes as-of-period-end: ROE (TTM NI / equity), ROIC (TTM NOPAT /
     invested capital), D/E, EV/EBITDA (mktcap + debt - cash)/TTM EBITDA,
     P/B (mktcap / equity), MktCap/Assets. Market cap = price × shares at the
-    period end (from daily_prices.parquet adj_close, last price <= period end).
+    period end (from daily_prices/ adj_close, last price <= period end).
 
     Also extracts: TotalRevenue, FreeCashFlow, CapitalExpenditure for
     Damodaran life cycle / fair multiple calculations.

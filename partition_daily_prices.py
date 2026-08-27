@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Partition daily_prices.parquet by year/month for faster DuckDB-Wasm queries.
+"""Partition daily_prices/ by year/month for faster DuckDB-Wasm queries.
 
 Creates a partitioned layout:
 daily_prices_partitioned/
@@ -17,8 +17,8 @@ from pathlib import Path
 PARTITION_DIR = Path(__file__).parent / "daily_prices_partitioned"
 
 def partition_daily_prices():
-    print("Reading daily_prices.parquet...")
-    df = pd.read_parquet("daily_prices.parquet")
+    print("Reading daily_prices/...")
+    df = pd.read_parquet("daily_prices/")
     print(f"  Shape: {df.shape}")
     print(f"  Date range: {df['date'].min()} to {df['date'].max()}")
 

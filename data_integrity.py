@@ -25,7 +25,7 @@ import polars as pl
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 PRICES_CLEAN = DATA_DIR / "daily_prices_clean.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
 FUND_HIST = DATA_DIR / "fundamentals_history.parquet"

@@ -8,11 +8,11 @@ v5_integrated.V5Pipeline reads everything from a ParquetFeatureStore. No store e
 on disk, so the pipeline had only ever run against the synthetic data in its own
 self-test. This builds the store from real inputs:
 
-  panel         daily_prices.parquet  -> per (date, ticker) features
-  returns_wide  daily_prices.parquet  -> date x ticker adj_close returns
+  panel         daily_prices/  -> per (date, ticker) features
+  returns_wide  daily_prices/  -> date x ticker adj_close returns
   sectors       sp500_constituents.parquet gics_sector (real GICS), plus
                 monitored_stocks.parquet sp500_sector as a secondary source
-  adv           daily_prices.parquet  -> median dollar volume, trailing window
+  adv           daily_prices/  -> median dollar volume, trailing window
   borrow_bps    NOT AVAILABLE -> written as a constant and reported as such
 
 FEATURES
@@ -48,7 +48,7 @@ import pandas as pd
 import polars as pl
 
 DATA_DIR = Path(__file__).resolve().parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 SP500 = DATA_DIR / "sp500_constituents.parquet"
 MONITORED = DATA_DIR / "monitored_stocks.parquet"
 

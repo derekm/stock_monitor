@@ -19,7 +19,7 @@ everywhere**, the fixed `SECTORS` dict was replaced by run-time construction.
    `factor_group_members.csv`, open-ended membership only (valid_to
    null/NaN = current), id `fg_<group>`, kind `factor_group:<group_type>`.
 
-Any ticker already in `daily_prices.parquet` is picked up automatically
+Any ticker already in `daily_prices/` is picked up automatically
 when it appears in GICS or factor-group membership — including the former
 "amplifiers" (TSM, ASML, SCCO, AEM, BTI, ...). No per-basket ticker list
 exists in code.

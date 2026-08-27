@@ -3,7 +3,7 @@ Detect corporate actions and trigger existing backfill/ingest pipelines.
 
 ## Why it exists (rationale)
 
-When an acquisition happens, the target ticker may not exist in `daily_prices.parquet` or `fundamentals.parquet`, leaving the acquirer's history incomplete. This script detects M&A activity from SEC EDGAR (companyfacts M&A tags + filings index) and delegates retrieval to the existing canonical pipelines (`backfill_edgar.py`, `update_polygon.py`, yfinance) rather than reimplementing them. It also registers acquisitions in `corporate_actions.parquet` so `lookthrough_engine.py` can apply pro forma combination during the look-through window.
+When an acquisition happens, the target ticker may not exist in `daily_prices/` or `fundamentals.parquet`, leaving the acquirer's history incomplete. This script detects M&A activity from SEC EDGAR (companyfacts M&A tags + filings index) and delegates retrieval to the existing canonical pipelines (`backfill_edgar.py`, `update_polygon.py`, yfinance) rather than reimplementing them. It also registers acquisitions in `corporate_actions.parquet` so `lookthrough_engine.py` can apply pro forma combination during the look-through window.
 
 ## Usage
 
@@ -15,7 +15,7 @@ python acquisition_backfill.py                                  # scan full univ
 
 ## Outputs
 
-- `daily_prices.parquet` — backfilled price history for target tickers (schema family: base_table)
+- `daily_prices/` — backfilled price history for target tickers (schema family: base_table)
 - `fundamentals.parquet` — backfilled fundamentals for target tickers (schema family: base_table)
 - `corporate_actions.parquet` — acquisition records with look-through windows (schema family: other)
 

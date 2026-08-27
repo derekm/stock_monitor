@@ -18,7 +18,7 @@ python growth_tech_analytics.py --universe growth_tech
 ```
 
 Flags (via `cli_common`): `--universe/--index`, `--ticker`, `--save`. Reads
-`daily_prices.parquet`, `monitored_stocks.parquet`, `portfolio_holdings.parquet`,
+`daily_prices/`, `monitored_stocks.parquet`, `portfolio_holdings.parquet`,
 `growth_tech_index_levels.parquet`.
 
 ## Outputs

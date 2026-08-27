@@ -45,7 +45,7 @@ MODES = list(STRUCTURAL_MODES)
 
 
 def load_prices():
-    px = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+    px = pd.read_parquet(DATA_DIR / "daily_prices/",
                          columns=["date", "ticker", "close"])
     px["date"] = pd.to_datetime(px["date"])
     return px

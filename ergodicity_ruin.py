@@ -22,7 +22,7 @@ Outputs:
   portfolio_ergodic.csv     same for the equal-weight portfolio + path scatter
                             percentiles (p5/p50/p95 of 10y terminal wealth)
 
-Reads: daily_prices.parquet.
+Reads: daily_prices/.
 Usage: python ergodicity_ruin.py [--years 1 5 10] [--paths 400] [--tickers A,B]
 """
 import argparse
@@ -60,7 +60,7 @@ def main():
     args = ap.parse_args()
 
     cols = ["date", "ticker", "close"]
-    d = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=cols)
+    d = pd.read_parquet(DATA_DIR / "daily_prices/", columns=cols)
     if args.tickers:
         d = d[d["ticker"].isin([t.strip().upper() for t in args.tickers.split(",")])]
     d = d.sort_values(["ticker", "date"])

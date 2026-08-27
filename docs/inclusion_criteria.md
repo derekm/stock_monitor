@@ -27,7 +27,7 @@ python inclusion_criteria.py --save
 ```
 
 Flags: `--save`. Reads `fundamentals.parquet`, `monitored_stocks.parquet`,
-`daily_prices.parquet`, `portfolio_holdings.parquet`, `preferred_metrics.csv`.
+`daily_prices/`, `portfolio_holdings.parquet`, `preferred_metrics.csv`.
 
 ## Outputs
 

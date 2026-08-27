@@ -16,7 +16,7 @@ is to each leg and set thresholds with eyes open (pairs with
 python stress_dual_pass.py --save
 ```
 
-Flags: `--save`. Reads `fundamentals.parquet`, `daily_prices.parquet`,
+Flags: `--save`. Reads `fundamentals.parquet`, `daily_prices/`,
 `monitored_stocks.parquet`, `preferred_metrics.csv`.
 
 ## Outputs

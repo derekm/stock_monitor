@@ -51,6 +51,8 @@ def main() -> int:
     horizons = tuple(int(h) for h in args.horizons.split(","))
     cfg = V5Config(
         lgb_num_threads=10,
+        drift_band=0.002,
+        conformal_noise_sigma=0.02,
         store_root=args.store_root,
         horizons=horizons,
         min_train_dates=args.min_train_dates,

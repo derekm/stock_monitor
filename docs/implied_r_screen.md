@@ -16,7 +16,7 @@ With `X(1) = ROE·BV` (expected next-period earnings on current book) and `BV = 
 
     r_implied = 2·ROE/(P/B + 1)
 
-One observable per ticker: ROE and P/B from `fundamentals.parquet`, price from `daily_prices.parquet`.
+One observable per ticker: ROE and P/B from `fundamentals.parquet`, price from `daily_prices/`.
 
 ## Usage
 

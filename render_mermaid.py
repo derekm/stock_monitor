@@ -23,7 +23,7 @@ DIAGRAMS = {}
 DIAGRAMS["framework_architecture"] = """%%{init: {"theme": "dark", "themeVariables": {"background": "#020617", "primaryColor": "#0f172a", "primaryTextColor": "#e2e8f0", "primaryBorderColor": "#334155", "lineColor": "#475569", "secondaryColor": "#0c2a3a", "tertiaryColor": "#0f1f14", "fontFamily": "monospace", "fontSize": "14px"}}}%%
 flowchart TB
     subgraph DATA["DATA SPINE - parquet tables"]
-        P1["daily_prices.parquet<br/>adj_close, split-adjusted"]
+        P1["daily_prices/<br/>adj_close, split-adjusted"]
         P2["fundamentals.parquet<br/>EDGAR XBRL + yfinance"]
         P3["monitored_stocks.parquet<br/>GICS sectors"]
         P4["earnings_calendar.parquet"]

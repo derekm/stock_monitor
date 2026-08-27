@@ -44,7 +44,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 OUT_CLUSTERS = DATA_DIR / "regime_clusters.parquet"
 OUT_DISPERSION = DATA_DIR / "regime_cluster_dispersion.parquet"
@@ -271,7 +271,7 @@ def _hybrid_peer_group(clusters: pd.DataFrame) -> pd.Series:
     # Build correlation matrix from prices
     import pyarrow.parquet as pq
     DATA_DIR = Path(__file__).parent
-    PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+    PRICES_FILE = DATA_DIR / "daily_prices/"
 
     tickers = clusters["ticker"].tolist()
     tbl = pq.read_table(PRICES_FILE, columns=["ticker", "date", "close"])

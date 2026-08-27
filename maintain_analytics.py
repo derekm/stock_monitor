@@ -45,7 +45,7 @@ warnings.filterwarnings("ignore")
 
 DATA_DIR = Path(__file__).parent
 
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 HOLDINGS_FILE = DATA_DIR / "portfolio_holdings.parquet"
 INDEX_LEVELS_FILE = DATA_DIR / "index_levels_1y.parquet"

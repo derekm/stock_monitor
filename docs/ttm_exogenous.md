@@ -18,7 +18,7 @@ python ttm_exogenous.py --from-csv extra.csv --save
 ```
 
 Flags: `--from-csv` (optional external CSV with a date column), `--save`. Reads
-`daily_prices.parquet`, `monitored_stocks.parquet`.
+`daily_prices/`, `monitored_stocks.parquet`.
 
 ## Outputs
 

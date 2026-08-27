@@ -14,7 +14,7 @@ with a free tier.
 - Requires `POLYGON_API_KEY` env var. Without it, prints how to get a key
   and exits 0 (no crash in the automation).
 - Pulls daily bars (adjusted=true) for the monitored universe and appends
-  into `daily_prices.parquet` (dedup on date+ticker, keep last).
+  into `daily_prices/` (dedup on date+ticker, keep last).
 - Free-tier rate limit respected (0.21s sleep ≈ 5 req/s).
 - Output columns match the existing price spine: date, ticker, open, high,
   low, close, adj_close, volume, source='polygon', market_cap.
@@ -28,11 +28,11 @@ python update_polygon.py --days 5 --save
 
 ## Outputs
 
-- Appends to `daily_prices.parquet` (base table).
+- Appends to `daily_prices/` (base table).
 
 ## Related programs
 
 - `update_prices.py` — the yfinance ingestion path this complements
-- `daily_prices.parquet` — the shared price spine
+- `daily_prices/` — the shared price spine
 - `run_daily_automation.py` — registered as `polygon_prices` job (runs after
   market close, free-tier safe)

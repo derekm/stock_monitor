@@ -29,7 +29,7 @@ import pandas as pd
 
 from granite_config import CONTEXT, HORIZON  # canonical Granite config (leaf)
 
-PRICES = "daily_prices.parquet"
+PRICES = "daily_prices/"
 CONSTITS = "sp500_constituents.parquet"
 
 

@@ -16,7 +16,7 @@ from datetime import datetime
 
 DATA_DIR = Path(__file__).parent
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 INDEX_FILE = DATA_DIR / "fertilizer_index.parquet"
 
 def load_latest_prices(tickers):
@@ -102,7 +102,7 @@ def main():
         fund = pd.read_parquet(fund_file)
         fund = fund.sort_values("as_of_date").groupby("ticker").tail(1)
         # Fresh market cap from daily prices (beats quarterly fundamentals snapshot)
-        px = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker", "date", "market_cap"])
+        px = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["ticker", "date", "market_cap"])
         px = px[px["market_cap"].notna()].sort_values("date").groupby("ticker").tail(1)
         daily_mc = px.set_index("ticker")["market_cap"] / 1e9
         fund = fund.set_index("ticker")

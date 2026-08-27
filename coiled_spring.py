@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent
-DATA = ROOT / "daily_prices.parquet"
+DATA = ROOT / "daily_prices/"
 FUND = ROOT / "fundamentals.parquet"
 
 

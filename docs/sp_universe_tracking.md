@@ -18,7 +18,7 @@ python sp_universe_tracking.py --save
 ```
 
 Flags: `--save`. Reads `sp500_constituents.parquet`, `sp500_changes.parquet`,
-`monitored_stocks.parquet`, `fundamentals.parquet`, `daily_prices.parquet`.
+`monitored_stocks.parquet`, `fundamentals.parquet`, `daily_prices/`.
 
 ## Outputs
 

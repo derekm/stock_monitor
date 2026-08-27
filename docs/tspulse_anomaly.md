@@ -18,7 +18,7 @@ python tspulse_anomaly.py --universe portfolio
 ```
 
 Flags (via `cli_common` + own): `--universe/--index`, `--ticker`, `--save`. Reads
-`daily_prices.parquet`, `monitored_stocks.parquet`, `exogenous_panel.parquet`.
+`daily_prices/`, `monitored_stocks.parquet`, `exogenous_panel.parquet`.
 
 ## Outputs
 

@@ -1130,10 +1130,10 @@ if __name__ == "__main__":
     if explicit:
         tickers = [t.strip().upper() for t in explicit.split(",") if t.strip()]
     else:
-        # Universe is daily_prices.parquet. monitored_stocks.parquet is
+        # Universe is daily_prices/. monitored_stocks.parquet is
         # deprecated and must not drive a backfill: it is an optional sleeve
         # list, not the coverage universe.
-        DAILY = DATA_DIR / "daily_prices.parquet"
+        DAILY = DATA_DIR / "daily_prices/"
         if DAILY.exists():
             import pyarrow.parquet as _pq
             tickers = sorted(

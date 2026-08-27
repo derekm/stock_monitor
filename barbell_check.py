@@ -21,7 +21,7 @@ Outputs:
   barbell_check.csv      per-bucket weights, barbell score, vol beta,
                          vol-of-vol beta, hedge cost estimate, convexity
                          allocation recommendation
-Reads: daily_prices.parquet, gap_risk.csv, options_skew.csv, holdings.
+Reads: daily_prices/, gap_risk.csv, options_skew.csv, holdings.
 Usage: python barbell_check.py
 """
 import numpy as np
@@ -81,7 +81,7 @@ def main():
         return
     # portfolio: equal-weight daily returns (aligned on real dates)
     cols = ["date", "ticker", "close"]
-    d = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=cols)
+    d = pd.read_parquet(DATA_DIR / "daily_prices/", columns=cols)
     d = d.sort_values(["ticker", "date"])
     port = None
     n_tick = 0

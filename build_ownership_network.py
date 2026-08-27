@@ -293,7 +293,7 @@ def calculate_network_metrics(edges_path: str, nodes_path: str,
 
 def main():
     holdings_path = "holdings_panel_enriched.parquet"
-    prices_path = "daily_prices.parquet"
+    prices_path = "daily_prices/"
     fundamentals_path = "fundamentals.parquet"
     edges_output = "ownership_network_edges.parquet"
     nodes_output = "ownership_network_nodes.parquet"

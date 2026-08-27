@@ -7,7 +7,7 @@ Why it exists: the architecture TODO "integrate data sources: Polygon
 (production)". The repo ingests via yfinance (prototyping); Polygon is the
 production alternative. This script pulls daily bars for the monitored
 universe using the BULK grouped endpoint and appends them into
-daily_prices.parquet (source='polygon').
+daily_prices/ (source='polygon').
 
 Key-gated by design: requires POLYGON_API_KEY env var. Without it, the
 script explains how to get a key and exits 0 (no crash in the automation).
@@ -29,7 +29,7 @@ import requests
 
 from analytics_common import DATA_DIR
 
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 BASE = "https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{date}"
 
 
@@ -97,14 +97,21 @@ def main():
 
     new = pd.concat(frames, ignore_index=True)
     if args.save:
-        existing = pd.read_parquet(PRICES) if PRICES.exists() else pd.DataFrame()
-        # ensure date column is datetime64[ms] on both sides
-        existing["date"] = pd.to_datetime(existing["date"])
+        import pyarrow as pa
+        import pyarrow.parquet as pq
         new["date"] = pd.to_datetime(new["date"])
-        combined = pd.concat([existing, new], ignore_index=True)
-        combined = combined.drop_duplicates(["date", "ticker"], keep="last")
-        combined.to_parquet(PRICES, index=False)
-        print(f"\nAppended {len(new)} polygon bars -> {PRICES} ({len(combined)} total rows)")
+        new["year"] = new["date"].dt.year
+        new["month"] = new["date"].dt.month
+        table = pa.Table.from_pandas(new)
+        pq.write_to_dataset(
+            table,
+            root_path=str(PRICES),
+            partition_cols=["year", "month"],
+            compression="zstd",
+            compression_level=3,
+            existing_data_behavior="overwrite_or_ignore"
+        )
+        print(f"\nAppended {len(new)} polygon bars -> {PRICES} (partitioned)")
 
 
 if __name__ == "__main__":

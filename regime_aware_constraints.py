@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 FUND = DATA_DIR / "fundamentals.parquet"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"

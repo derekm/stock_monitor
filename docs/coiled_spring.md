@@ -16,7 +16,7 @@ This is an **entry-only timing/sizing overlay**, not a discovery screen.
 
 ## 2. Mathematical Definitions
 
-All formulas use **daily close/high/low/volume** from `daily_prices.parquet`.
+All formulas use **daily close/high/low/volume** from `daily_prices/`.
 
 ### 2.1 Bollinger Bands (20, 2)
 
@@ -349,7 +349,7 @@ python backtest_coiled_spring_clean.py
 
 ## 14. Data Integrity Notes
 
-- `daily_prices.parquet`: Additive yfinance OHLCV backfill (99.9% OHLC), LFS-tracked.
+- `daily_prices/`: Additive yfinance OHLCV backfill (99.9% OHLC), LFS-tracked.
 - `fundamentals.parquet`: 31,447 rows / 585 tickers / median 65 quarters / EDGAR priority > yfinance > Polygon.
 - `preferred_metrics.parquet`: 585 latest / 66 INCLUDE / additive history (never overwrites EDGAR).
 - All backtests **verify-by-running** on real parquet; no invented P&L.

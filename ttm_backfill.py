@@ -77,7 +77,7 @@ import window_padding as wp
 _device = gd._device
 
 HERE = Path(__file__).parent
-PRICES = HERE / "daily_prices.parquet"
+PRICES = HERE / "daily_prices/"
 CKPT_DIR = gd.CKPT_DIR
 GLOBAL_DIR = gd.GLOBAL_DIR
 PADDED_DIR = gd.PADDED_DIR

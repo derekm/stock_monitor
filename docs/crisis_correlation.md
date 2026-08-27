@@ -17,7 +17,7 @@ how pairwise correlation shifts from calm to crisis — the evidence behind the
 python crisis_correlation.py --save
 ```
 
-Flags: `--save` (write outputs). Reads `daily_prices.parquet`,
+Flags: `--save` (write outputs). Reads `daily_prices/`,
 `monitored_stocks.parquet`.
 
 ## Outputs

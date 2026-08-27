@@ -43,7 +43,7 @@ MIN_MONTHS = 36
 
 
 def load_prices() -> pd.DataFrame:
-    px = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+    px = pd.read_parquet(DATA_DIR / "daily_prices/",
                          columns=["date", "ticker", "close", "volume"])
     px["date"] = pd.to_datetime(px["date"])
     return px

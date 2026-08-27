@@ -11,7 +11,7 @@ import numpy as np
 from pathlib import Path
 
 FUND_PATH = Path('fundamentals.parquet')
-PRICES_PATH = Path('daily_prices.parquet')
+PRICES_PATH = Path('daily_prices/')
 
 print("Loading fundamentals...")
 fund = pd.read_parquet(FUND_PATH)

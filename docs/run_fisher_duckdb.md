@@ -19,7 +19,7 @@ python run_fisher_duckdb.py --universe all --years 5
 ```
 
 Flags (via `cli_common` + own): `--universe/--index`, `--ticker`, `--years`,
-`--save`. Reads `daily_prices.parquet`, `monitored_stocks.parquet`.
+`--save`. Reads `daily_prices/`, `monitored_stocks.parquet`.
 
 ## Outputs
 

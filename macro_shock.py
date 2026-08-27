@@ -49,7 +49,7 @@ Cached under macro_data/ (shared with macro_fragility.py).
 Outputs:
   macro_shock.csv — monthly: date, oil_mom_12m, inflation_surprise,
                     real_rate, energy_divergence, shock_score, shock_zone
-Reads: FRED CSV (network), daily_prices.parquet (energy basket).
+Reads: FRED CSV (network), daily_prices/ (energy basket).
 Usage: python macro_shock.py [--save]
 """
 from __future__ import annotations
@@ -86,8 +86,8 @@ def _splice_oil() -> pd.DataFrame:
 
 def load_energy_basket() -> pd.DataFrame:
     """Monthly energy-producer equal-weight index + market index from
-    daily_prices.parquet. Returns (month, energy_ret, market_ret)."""
-    p = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "close"])
+    daily_prices/. Returns (month, energy_ret, market_ret)."""
+    p = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["date", "ticker", "close"])
     p["date"] = pd.to_datetime(p["date"])
     w = p.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
     rets = np.log(w / w.shift(1))

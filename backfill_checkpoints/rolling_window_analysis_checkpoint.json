@@ -1,0 +1,12 @@
+{
+  "job_name": "rolling_window_analysis",
+  "schema_version": 2,
+  "universe_hash": "d8dcdfb08408c43e",
+  "data_hash": "e9fdcf9defc39dda",
+  "created_at": "2026-08-25T08:08:43.689102",
+  "last_run": "2026-08-25T08:08:43.691100",
+  "tickers": {},
+  "total_tickers": 16060,
+  "completed_tickers": 0,
+  "failed_tickers": []
+}

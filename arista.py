@@ -160,7 +160,7 @@ def build(tickers: list[str] | None = None) -> pd.DataFrame:
     # volume for distribution leg
     vol = {}
     try:
-        vp = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "volume"])
+        vp = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["date", "ticker", "volume"])
         vp["date"] = pd.to_datetime(vp["date"])
         for tk, g in vp.groupby("ticker"):
             vol[tk] = g.set_index("date")["volume"]

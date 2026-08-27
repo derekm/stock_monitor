@@ -15,7 +15,7 @@ universe with point-in-time data (no lookahead):
    21–63d short loses; ARISTA is a de-risk/exit trigger, not a short-entry
    timer.)
 
-Reads `arista_metrics.parquet` + `daily_prices.parquet`. Writes
+Reads `arista_metrics.parquet` + `daily_prices/`. Writes
 `arista_reliability.parquet` (per-signal forward stats).
 
 ## Honest measured results (full universe, 274k signals)

@@ -24,7 +24,7 @@ from cv_utils import bh_fdr
 from cost_model import apply_costs_to_trades
 from statsmodels.tsa.stattools import mackinnonp
 
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT_PAIRS = DATA_DIR / "pair_engine_pairs.parquet"
 OUT_TRADES = DATA_DIR / "pair_engine_trades.parquet"

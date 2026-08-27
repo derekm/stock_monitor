@@ -43,7 +43,7 @@ from scipy.optimize import minimize  # noqa: F401  (canonical availability flag 
 from analytics_common import HAS_SCIPY  # canonical scipy-availability flag
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 CALENDAR = DATA_DIR / "rebalance_calendar.parquet"

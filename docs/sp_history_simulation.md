@@ -19,7 +19,7 @@ python sp_history_simulation.py --save
 ```
 
 Flags: `--save`. Reads `sp500_changes.parquet`, `sp500_constituents.parquet`,
-`fundamentals.parquet`, `daily_prices.parquet`.
+`fundamentals.parquet`, `daily_prices/`.
 
 ## Outputs
 

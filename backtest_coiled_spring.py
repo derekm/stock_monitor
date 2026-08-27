@@ -53,7 +53,7 @@ from tensor_ops import (
 )
 
 ROOT = Path(__file__).resolve().parent
-DATA = ROOT / "daily_prices.parquet"
+DATA = ROOT / "daily_prices/"
 FUND = ROOT / "fundamentals.parquet"
 OUT_EVENTS = ROOT / "backtest_coiled_spring_events.parquet"
 OUT_SUMMARY = ROOT / "backtest_coiled_spring_summary.txt"

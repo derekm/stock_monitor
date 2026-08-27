@@ -72,7 +72,7 @@ def _mean_legs(legs: list[pd.DataFrame]) -> pd.DataFrame:
 
 
 def load_close_mcap() -> tuple[pd.DataFrame, pd.DataFrame]:
-    src = _snapshot(DATA_DIR / "daily_prices.parquet")
+    src = _snapshot(DATA_DIR / "daily_prices/")
     cols = ["date", "ticker", "adj_close", "close", "market_cap"]
     prices = pd.read_parquet(src, columns=cols)
     prices["ticker"] = prices["ticker"].astype(str).str.upper()
@@ -228,7 +228,7 @@ def oos_direction() -> pd.DataFrame:
     er = pd.read_parquet(DATA_DIR / "expected_returns_decomp.parquet")
     er = er.dropna(subset=["expected_return"])
     er["date"] = pd.to_datetime(er["date"])
-    snap = Path(tempfile.gettempdir()) / "ph_daily_prices.parquet"
+    snap = Path(tempfile.gettempdir()) / "ph_daily_prices/"
     px = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
     px["ticker"] = px["ticker"].astype(str).str.upper()
     keep = set(er["ticker"].unique())

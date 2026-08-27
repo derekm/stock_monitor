@@ -31,7 +31,7 @@ import pandas as pd
 
 from analytics_common import DATA_DIR
 
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 CRED_FILE = DATA_DIR / "massive_credentials.json"
 ENDPOINT = "https://files.massive.com"
 BUCKET = "flatfiles"

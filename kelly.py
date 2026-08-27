@@ -211,6 +211,71 @@ def cmd_leverage_space(args):
     print(f"max terminal {best[0]:.2f} at f_tmi={best[1]:.2f} f_bpi={best[2]:.2f}  n={len(out)}")
 
 
+def cmd_multi_period(args):
+    tmi = pd.read_parquet(DATA_DIR / "bogle_tmi.parquet")
+    r = pd.to_numeric(tmi["ret_net"], errors="coerce").dropna().to_numpy()
+    mu, sig = float(r.mean() * 252), float(r.std() * np.sqrt(252))
+    f_single = max(0.0, (mu - 0.04) / (sig ** 2)) if sig > 0 else 0.0
+    # multi-period: f* ≈ (μ − σ²/2 − r) / σ²  (vol-drag)
+    f_mp = max(0.0, (mu - 0.5 * sig ** 2 - 0.04) / (sig ** 2)) if sig > 0 else 0.0
+    out = pd.DataFrame([
+        {"kind": "single", "f": f_single, "mu": mu, "sig": sig},
+        {"kind": "multi_period", "f": f_mp, "mu": mu, "sig": sig},
+    ])
+    out.to_parquet(DATA_DIR / "multi_period_kelly.parquet", index=False)
+    print(out.to_string(index=False))
+
+
+def cmd_ls_vs_erc(args):
+    """Vince 2-asset grid vs equal-risk-contribution on TMI/BPI. Block-bootstrap."""
+    tmi = pd.read_parquet(DATA_DIR / "bogle_tmi.parquet")
+    bpi = pd.read_parquet(DATA_DIR / "bogle_bpi.parquet")
+    t = pd.to_datetime(tmi["date"])
+    b = pd.to_datetime(bpi["date"])
+    a = tmi.assign(date=t)[["date", "ret_net"]].rename(columns={"ret_net": "tmi"})
+    c = bpi.assign(date=b)[["date", "ret_net"]].rename(columns={"ret_net": "bpi"})
+    m = a.merge(c, on="date").dropna()
+    rt = pd.to_numeric(m["tmi"], errors="coerce").to_numpy()
+    rb = pd.to_numeric(m["bpi"], errors="coerce").to_numpy()
+    ok = np.isfinite(rt) & np.isfinite(rb)
+    rt, rb = rt[ok], rb[ok]
+    # ERC: w ∝ 1/σ
+    st, sb = float(rt.std()), float(rb.std())
+    w_t = (1 / st) / (1 / st + 1 / sb) if st > 0 and sb > 0 else 0.5
+    w_b = 1.0 - w_t
+    # Vince grid already on disk if present; else 1.50 / 0
+    ls_path = DATA_DIR / "leverage_space_allocation.parquet"
+    if ls_path.exists():
+        g = pd.read_parquet(ls_path)
+        best = g.loc[g["terminal"].idxmax()]
+        ft, fb = float(best["f_tmi"]), float(best["f_bpi"])
+    else:
+        ft, fb = 1.50, 0.0
+    rng = np.random.default_rng(0)
+    n, block, paths = len(rt), 21, 400
+    nblk = n // block
+    def path_term(w1, w2):
+        terms = []
+        for _ in range(paths):
+            idx = rng.integers(0, nblk, size=nblk)
+            r1 = np.concatenate([rt[i * block:(i + 1) * block] for i in idx])
+            r2 = np.concatenate([rb[i * block:(i + 1) * block] for i in idx])
+            wealth = np.prod(1 + w1 * r1 + w2 * r2)
+            terms.append(wealth if np.isfinite(wealth) and wealth > 0 else np.nan)
+        return np.asarray(terms)
+
+    ls = path_term(ft, fb)
+    erc = path_term(w_t, w_b)
+    def stats(x, name):
+        x = x[np.isfinite(x)]
+        return {"book": name, "median": float(np.median(x)), "p05": float(np.quantile(x, 0.05)),
+                "mean": float(np.mean(x)), "n_paths": int(len(x))}
+    out = pd.DataFrame([stats(ls, f"ls_{ft:.2f}_{fb:.2f}"), stats(erc, f"erc_{w_t:.2f}_{w_b:.2f}")])
+    out.to_parquet(DATA_DIR / "ls_vs_erc.parquet", index=False)
+    print(out.to_string(index=False))
+    print(f"LS median {out.iloc[0]['median']:.3f} vs ERC {out.iloc[1]['median']:.3f}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Kelly criterion position-sizing estimators",
@@ -241,6 +306,12 @@ def main():
 
     p = sub.add_parser("leverage-space")
     p.set_defaults(func=cmd_leverage_space)
+
+    p = sub.add_parser("multi-period")
+    p.set_defaults(func=cmd_multi_period)
+
+    p = sub.add_parser("ls-vs-erc")
+    p.set_defaults(func=cmd_ls_vs_erc)
 
     args = parser.parse_args()
     if not args.cmd:

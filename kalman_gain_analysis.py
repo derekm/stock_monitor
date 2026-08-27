@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
 OUT = DATA_DIR / "kalman_gain_path.parquet"
 OUT_SUM = DATA_DIR / "kalman_gain_summary.parquet"

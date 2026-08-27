@@ -54,7 +54,7 @@ CONFIGS = [(5, 3), (10, 3), (15, 3), (30, 3)]
 
 def _volume_series(ticker: str) -> pd.Series | None:
     try:
-        v = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+        v = pd.read_parquet(DATA_DIR / "daily_prices/",
                             columns=["date", "ticker", "volume"])
         v["date"] = pd.to_datetime(v["date"])
         vm = v.pivot_table(index="date", columns="ticker", values="volume").sort_index().ffill()
@@ -67,7 +67,7 @@ def _volume_series(ticker: str) -> pd.Series | None:
 
 def _load_close(ticker: str) -> pd.Series | None:
     try:
-        p = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+        p = pd.read_parquet(DATA_DIR / "daily_prices/",
                             columns=["date", "ticker", "close"])
         p["date"] = pd.to_datetime(p["date"])
         s = p[p["ticker"] == ticker].set_index("date")["close"].sort_index().dropna()
@@ -78,7 +78,7 @@ def _load_close(ticker: str) -> pd.Series | None:
 
 def ride_history_for(ticker: str) -> pd.DataFrame:
     """Point-in-time ride signal history for one ticker (no lookahead)."""
-    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+    prices = pd.read_parquet(DATA_DIR / "daily_prices/",
                              columns=["date", "ticker", "close"])
     prices["date"] = pd.to_datetime(prices["date"])
     s = (prices[prices["ticker"] == ticker].set_index("date")["close"]

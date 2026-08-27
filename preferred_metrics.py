@@ -704,14 +704,14 @@ def main():
         df = df[df["decision"] == args.decision.upper()]
 
     show = [
-        "ticker", "decision", "composite_score", "roe", "roic", "debt_to_equity",
-        "ev_ebitda", "pb_ratio", "mktcap_to_assets", "earnings_stability",
-        "quality_score", "value_score", "wacc", "life_cycle_stage",
-        "fair_pe", "fair_ev_ebitda", "discount_to_fair", "mos_pass",
-        "w_current", "suggested_w_max", "sizing_action",
-        "distrust_p_bad", "distrust_discount", "distrust_fit_auc_insample",
-        "distrust_fit_auc_oos", "distrust_fit_n",
-    ]
+            "ticker", "decision", "composite_score", "roe", "roic", "debt_to_equity",
+            "ev_ebitda", "pb_ratio", "mktcap_to_assets", "earnings_stability",
+            "quality_score", "value_score", "wacc", "life_cycle_stage",
+            "fair_pe", "fair_ev_ebitda", "discount_to_fair", "mos_pass",
+            "w_current", "suggested_w_max", "sizing_action",
+            "distrust_p_bad", "distrust_discount", "distrust_fit_auc_oos",
+            "distrust_fit_gate_pass",
+        ]
     print(df[show].to_string(index=False, max_rows=30))
 
     if args.save:

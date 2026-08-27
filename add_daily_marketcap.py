@@ -33,7 +33,7 @@ def _to_date(s: pd.Series) -> pd.Series:
 
 def build_panel(years: int | None, stock_only: bool) -> pd.DataFrame:
     prices = pd.read_parquet(
-        _snap(DATA_DIR / "daily_prices.parquet"),
+        _snap(DATA_DIR / "daily_prices/"),
         columns=["date", "ticker", "adj_close", "close"],
     )
     prices["ticker"] = prices["ticker"].astype(str).str.upper()

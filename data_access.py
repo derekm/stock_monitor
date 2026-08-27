@@ -11,7 +11,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 HOLDINGS_FILE = DATA_DIR / "portfolio_holdings.parquet"
 TRADES_FILE = DATA_DIR / "trades.parquet"
 TRADES_FILE_ALT = DATA_DIR.parent / "trades.parquet"

@@ -21,7 +21,7 @@ python maintain_analytics.py screens
 
 Sub-commands (from its `main`): `all`, `correlations`, `regimes`, `risk`,
 `screens`, `indexes`, `optimize`, `forecasts`, and more. Reads
-`daily_prices.parquet`, `monitored_stocks.parquet`, `portfolio_holdings.parquet`,
+`daily_prices/`, `monitored_stocks.parquet`, `portfolio_holdings.parquet`,
 `index_levels_1y.parquet`.
 
 ## Outputs (selected)

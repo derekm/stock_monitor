@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 LIVE = DATA_DIR / "vix_term_structure_live.parquet"
 OUT = DATA_DIR / "vix_term_structure.parquet"
 OUT_SUM = DATA_DIR / "vix_term_structure_summary.parquet"

@@ -17,7 +17,7 @@ also checked in the parent dir).
 | Function | Returns | Notes |
 |----------|---------|-------|
 | `load_stocks()` | `monitored_stocks.parquet` | empty frame if missing |
-| `load_prices(tickers=None, columns=None)` | `daily_prices.parquet` | dates parsed; optional ticker/column filter |
+| `load_prices(tickers=None, columns=None)` | `daily_prices/` | dates parsed; optional ticker/column filter |
 | `load_holdings()` | `portfolio_holdings.parquet` | |
 | `load_trades()` | `trades.parquet` | also checks parent dir; parses `filled_datetime` |
 | `load_fundamentals(latest=True)` | `fundamentals.parquet` | `latest=True` → one row per ticker (latest `as_of_date`) |
@@ -32,4 +32,4 @@ None (library).
 - [cli_common.md](cli_common.md) — flag parsing / ticker resolution
 - [data_integrity.md](data_integrity.md) / [data_integrity_deep.md](data_integrity_deep.md)
   — validation that uses these loaders
-- Any program doc that lists `daily_prices.parquet` / `fundamentals.parquet` as input
+- Any program doc that lists `daily_prices/` / `fundamentals.parquet` as input

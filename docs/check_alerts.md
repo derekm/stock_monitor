@@ -6,7 +6,7 @@ Evaluate configured alert rules against current price history.
 
 Screens and weights are static; prices move. This script runs the rule set in
 `alerts_config.parquet` (managed by `manage_alerts.py`) against live
-`daily_prices.parquet` and logs hits — the active monitoring layer that tells you
+`daily_prices/` and logs hits — the active monitoring layer that tells you
 when a threshold (price, fundamentals, or screen change) actually trips.
 
 ## Usage
@@ -24,7 +24,7 @@ Flags: `--dry-run`, `--priority` (high/medium/low), `--ticker`, `--list-rules`.
 ## Outputs
 
 - `alerts_log.parquet` — appended alert events (unless `--dry-run`)
-- Reads `alerts_config.parquet` (rule set) and `daily_prices.parquet`
+- Reads `alerts_config.parquet` (rule set) and `daily_prices/`
 
 (Schema family: base_table — see [SCHEMAS.md](SCHEMAS.md).)
 

@@ -15,7 +15,7 @@ complements `allpairs_correlations` (which gives full-history + latest matrices)
 python rolling_correlation_windows.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices.parquet`, `monitored_stocks.parquet`.
+Flags: `--save`. Reads `daily_prices/`, `monitored_stocks.parquet`.
 
 ## Outputs
 

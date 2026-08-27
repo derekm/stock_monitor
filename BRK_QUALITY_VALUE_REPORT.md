@@ -232,4 +232,4 @@
 
 ---
 
-*Report generated from live data pipeline: `historical_13f_holdings.parquet` (1.74M rows), `fundamentals.parquet`, `daily_prices.parquet`, `damodaran_crossholdings_valuation.parquet`*
+*Report generated from live data pipeline: `historical_13f_holdings.parquet` (1.74M rows), `fundamentals.parquet`, `daily_prices/`, `damodaran_crossholdings_valuation.parquet`*

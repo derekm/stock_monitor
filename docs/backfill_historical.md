@@ -1,6 +1,6 @@
 # backfill_historical.py
 
-Populate `daily_prices.parquet` with historical OHLCV data.
+Populate `daily_prices/` with historical OHLCV data.
 
 ## Why it exists (rationale)
 
@@ -33,7 +33,7 @@ Flags (own argparse):
 
 ## Outputs
 
-- `daily_prices.parquet` — merged on `(date, ticker)`; newest source wins;
+- `daily_prices/` — merged on `(date, ticker)`; newest source wins;
   existing rows are never deleted unless `--overwrite`.
 
 (Schema family: base_table — see [SCHEMAS.md](SCHEMAS.md).)

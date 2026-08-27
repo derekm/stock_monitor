@@ -19,7 +19,7 @@ Outputs:
   portfolio_tail.csv      same metrics for the equal-weight portfolio
   tail_dependence.csv     pairwise upper/lower tail dependence (top-N pairs)
 
-Reads: daily_prices.parquet (date, ticker, close).
+Reads: daily_prices/ (date, ticker, close).
 Usage: python tail_index.py [--tickers A,B,C] [--top-pairs 30]
 """
 import argparse
@@ -34,8 +34,8 @@ DATA_DIR = Path(__file__).resolve().parent
 
 def load_close(tickers=None):
     import shutil, tempfile
-    snap = Path(tempfile.gettempdir()) / "ti_daily_prices.parquet"
-    src = DATA_DIR / "daily_prices.parquet"
+    snap = Path(tempfile.gettempdir()) / "ti_daily_prices/"
+    src = DATA_DIR / "daily_prices/"
     if not snap.exists():
         shutil.copy2(src, snap)
     cols = ["date", "ticker", "adj_close", "close"]

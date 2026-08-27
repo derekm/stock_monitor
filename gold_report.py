@@ -3,7 +3,7 @@
 gold_report.py — how a gold miner interacts with the gold price.
 
 Builds a report from three real sources:
-  daily_prices.parquet          equity closes
+  daily_prices/          equity closes
   macro_data/gold_daily.parquet COMEX front-month gold, USD/oz
   macro_data/gold.parquet       monthly gold for the YoY regime split
 
@@ -32,7 +32,7 @@ import pandas as pd
 import polars as pl
 
 DATA_DIR = Path(__file__).resolve().parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 GOLD_D = DATA_DIR / "macro_data" / "gold_daily.parquet"
 GOLD_M = DATA_DIR / "macro_data" / "gold.parquet"
 

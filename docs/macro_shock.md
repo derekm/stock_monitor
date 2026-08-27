@@ -97,7 +97,7 @@ python macro_shock.py --save
 ```
 
 Reads: FRED CSV (network, cached under `macro_data/` shared with
-`macro_fragility.py`), `daily_prices.parquet` (energy basket).
+`macro_fragility.py`), `daily_prices/` (energy basket).
 
 Wired into `run_daily_automation.py` as the `taleb_shock` job (depends on
 `hmm`; feeds `export`).

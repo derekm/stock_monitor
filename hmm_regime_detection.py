@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 OUT_STATES = DATA_DIR / "hmm_regime_states.parquet"
 OUT_SUM = DATA_DIR / "hmm_regime_summary.parquet"
 OUT_TRANS = DATA_DIR / "hmm_transition_matrix.parquet"
@@ -563,16 +563,37 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-states", type=int, default=3)
     ap.add_argument("--save", action="store_true")
-    ap.add_argument("--window-days", default="auto",
-                    help="Fit window in trading days. 'auto' (default) anchors to "
-                         "the last regime transition (floor 252 / cap 756). "
-                         "Pass a number for a fixed window, 0 for full history.")
+    ap.add_argument("--population", action="store_true")
+    ap.add_argument("--adaptive-trans", action="store_true")
+    ap.add_argument("--window-days", default="auto")
     args = ap.parse_args()
-    wd: int | str | None
-    if args.window_days == "auto":
-        wd = "auto"
-    else:
-        wd = int(args.window_days)
+    if args.population:
+        st = pd.read_parquet(OUT_STATES)
+        st["date"] = pd.to_datetime(st["date"])
+        g = st.groupby([st["date"].dt.to_period("M"), "regime"]).size().unstack(fill_value=0)
+        share = g.div(g.sum(axis=1), axis=0)
+        out = share.reset_index().rename(columns={"date": "month"})
+        out.to_parquet(DATA_DIR / "regime_population.parquet", index=False)
+        print(share.tail(6).round(3).to_string())
+        print(f"months {len(share)}")
+        return
+    if getattr(args, "adaptive_trans", False):
+        st = pd.read_parquet(OUT_STATES)
+        st["date"] = pd.to_datetime(st["date"])
+        st = st.sort_values("date")
+        stay = (st["regime"] == st["regime"].shift(1)).astype(float)
+        vol = pd.to_numeric(st["vol21"], errors="coerce")
+        roll_p = stay.rolling(63).mean()
+        roll_v = vol.rolling(63).mean()
+        both = pd.concat([roll_p, roll_v], axis=1).dropna()
+        corr = float(both.iloc[:, 0].corr(both.iloc[:, 1]))
+        out = pd.DataFrame([{"corr_persist_vol": corr, "n": int(len(both)),
+                             "mean_persist": float(roll_p.dropna().mean())}])
+        out.to_parquet(DATA_DIR / "adaptive_hmm_states.parquet", index=False)
+        print(out.to_string(index=False))
+        print(f"persist vs vol corr {corr:+.3f}  bar +0.60")
+        return
+    wd = "auto" if args.window_days == "auto" else int(args.window_days)
     run(n_states=args.n_states, save=True, window_days=wd)
 
 

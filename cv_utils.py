@@ -62,6 +62,35 @@ def purged_folds(
     return folds
 
 
+def cpcv_folds(
+    n: int,
+    n_groups: int = 6,
+    n_test_groups: int = 2,
+    embargo: int = 21,
+    min_train: int = 126,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Combinatorial purged CV (López de Prado): every combo of n_test_groups
+    contiguous-date groups is a test set; train is the rest minus embargo."""
+    from itertools import combinations
+
+    if n_groups < 3 or n_test_groups < 1 or n_test_groups >= n_groups:
+        raise ValueError("need 1 <= n_test_groups < n_groups")
+    edges = np.linspace(0, n, n_groups + 1).astype(int)
+    groups = [np.arange(edges[i], edges[i + 1]) for i in range(n_groups)]
+    folds: list[tuple[np.ndarray, np.ndarray]] = []
+    for combo in combinations(range(n_groups), n_test_groups):
+        test = np.concatenate([groups[i] for i in combo])
+        excl = np.zeros(n, dtype=bool)
+        for i in combo:
+            ts, te = int(groups[i][0]), int(groups[i][-1]) + 1
+            excl |= embargo_mask(n, ts, te, embargo)
+        train = np.where(~excl)[0]
+        if len(train) < min_train or len(test) < 20:
+            continue
+        folds.append((train, test))
+    return folds
+
+
 def bh_fdr(pvals: np.ndarray, alpha: float = 0.10) -> np.ndarray:
     """Benjamini-Hochberg FDR control. Returns boolean array, True = survives.
 

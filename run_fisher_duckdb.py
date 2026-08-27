@@ -28,7 +28,7 @@ from cli_common import (
 from index_registry import parse_indexes, tickers_for_index, available_indexes, index_help_text
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT_CSV = DATA_DIR / "fisher_indexes_duckdb.parquet"
 OUT_PQ = DATA_DIR / "fisher_indexes_duckdb.parquet"

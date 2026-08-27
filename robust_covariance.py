@@ -30,7 +30,7 @@ from cli_common import (
 from index_registry import parse_indexes, tickers_for_index, available_indexes, index_help_text
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT = DATA_DIR / "robust_covariance_summary.parquet"

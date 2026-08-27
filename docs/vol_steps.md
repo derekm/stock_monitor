@@ -16,7 +16,7 @@ backfill config — not a production pipeline step.
 python vol_steps.py        # prints per-ticker step allocation
 ```
 
-Flags: minimal (reads `daily_prices.parquet`; see source for any sub-commands).
+Flags: minimal (reads `daily_prices/`; see source for any sub-commands).
 Prints to stdout.
 
 ## Outputs

@@ -1,0 +1,12 @@
+{
+  "tickers_processed": 156,
+  "stats": {
+    "ok": 133,
+    "error": 0,
+    "no_cik": 18,
+    "no_data": 5
+  },
+  "total_rows": 311469,
+  "elapsed_seconds": 267.2449507713318,
+  "timestamp": "2026-08-16T01:22:20.102494"
+}

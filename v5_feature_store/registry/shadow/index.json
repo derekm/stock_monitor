@@ -1,0 +1,31 @@
+{
+  "shadows": {
+    "v5_pipeline_20260820_174937_2a37d4e740": {
+      "model_id": "v5_pipeline_20260820_174937_2a37d4e740",
+      "status": "running",
+      "clean_days": 0,
+      "breach_days": 0,
+      "target_clean_days": 20,
+      "history": [],
+      "started_at": "2026-08-20T17:49:37.773627+00:00"
+    },
+    "v5_pipeline_20260820_211353_4d5a2d7cba": {
+      "model_id": "v5_pipeline_20260820_211353_4d5a2d7cba",
+      "status": "running",
+      "clean_days": 0,
+      "breach_days": 0,
+      "target_clean_days": 20,
+      "history": [],
+      "started_at": "2026-08-20T21:13:53.104320+00:00"
+    },
+    "v5_pipeline_20260821_022003_519d79c65c": {
+      "model_id": "v5_pipeline_20260821_022003_519d79c65c",
+      "status": "running",
+      "clean_days": 0,
+      "breach_days": 0,
+      "target_clean_days": 20,
+      "history": [],
+      "started_at": "2026-08-21T02:20:03.342240+00:00"
+    }
+  }
+}

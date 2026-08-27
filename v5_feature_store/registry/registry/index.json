@@ -1,0 +1,61 @@
+{
+  "models": {
+    "v5_pipeline_20260820_174937_2a37d4e740": {
+      "tag": "v5_pipeline",
+      "status": "challenger",
+      "path": "v5_feature_store\\registry\\registry\\challengers\\v5_pipeline_20260820_174937_2a37d4e740",
+      "metrics": {
+        "ic_mean": 0.016354305588570907,
+        "ic_ir": 0.10088145848495826,
+        "book_sharpe": NaN,
+        "gross_sharpe": NaN,
+        "avg_cost": NaN,
+        "avg_borrow": NaN,
+        "avg_turnover": NaN,
+        "max_drawdown": NaN,
+        "avg_book_beta": 0.0,
+        "cum_net": NaN,
+        "n_oos_rows": 958419,
+        "n_test_days": 2139
+      }
+    },
+    "v5_pipeline_20260820_211353_4d5a2d7cba": {
+      "tag": "v5_pipeline",
+      "status": "challenger",
+      "path": "v5_feature_store\\registry\\registry\\challengers\\v5_pipeline_20260820_211353_4d5a2d7cba",
+      "metrics": {
+        "ic_mean": 0.016354305588570907,
+        "ic_ir": 0.10088145848495826,
+        "book_sharpe": -2.169360395945584,
+        "gross_sharpe": 0.21842036140739637,
+        "avg_cost": 0.0006076546629418183,
+        "avg_borrow": 2.976190476190477e-05,
+        "avg_turnover": 1.050713459965741,
+        "max_drawdown": 0.6835737070788637,
+        "avg_book_beta": 0.03671954877937418,
+        "cum_net": -0.6428486725785121,
+        "n_oos_rows": 958419,
+        "n_test_days": 2139
+      }
+    },
+    "v5_pipeline_20260821_022003_519d79c65c": {
+      "tag": "v5_pipeline",
+      "status": "challenger",
+      "path": "v5_feature_store\\registry\\registry\\challengers\\v5_pipeline_20260821_022003_519d79c65c",
+      "metrics": {
+        "ic_mean": 0.016354305588570907,
+        "ic_ir": 0.10088145848495826,
+        "book_sharpe": -1.9382930728803454,
+        "gross_sharpe": -0.30227580955245603,
+        "avg_cost": 0.00046357660653098147,
+        "avg_borrow": 3.103549780262654e-05,
+        "avg_turnover": 0.7864378102623363,
+        "max_drawdown": 0.6517810997156421,
+        "avg_book_beta": -0.008770218155054466,
+        "cum_net": -0.6517989567625674,
+        "n_oos_rows": 958419,
+        "n_test_days": 2139
+      }
+    }
+  }
+}

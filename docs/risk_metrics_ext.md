@@ -16,7 +16,7 @@ sizing.
 python risk_metrics_ext.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices.parquet`, `portfolio_holdings.parquet`.
+Flags: `--save`. Reads `daily_prices/`, `portfolio_holdings.parquet`.
 
 ## Outputs
 

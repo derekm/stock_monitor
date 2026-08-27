@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 HMM_STATES = DATA_DIR / "hmm_regime_states.parquet"
 HMM_TRANS = DATA_DIR / "hmm_transition_matrix.parquet"
 OUT_SUMMARY = DATA_DIR / "monte_carlo_summary.parquet"

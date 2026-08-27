@@ -54,7 +54,7 @@ MIN_DAYS = 60
 
 
 def load_matrix(cols=("close", "volume", "open")):
-    px = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+    px = pd.read_parquet(DATA_DIR / "daily_prices/",
                          columns=["date", "ticker", *cols])
     px["date"] = pd.to_datetime(px["date"])
     out = {}

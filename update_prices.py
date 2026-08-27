@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-update_prices.py - Append daily open/close (and OHLC) to daily_prices.parquet.
+update_prices.py - Append daily open/close (and OHLC) to daily_prices/.
 
 In environments with internet + yfinance:
   python update_prices.py --fetch
@@ -30,7 +30,7 @@ from datetime import datetime, date
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 
 def load_prices():

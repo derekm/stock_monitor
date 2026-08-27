@@ -28,7 +28,7 @@ import polars as pl
 from tensor_ops import rolling_slope, get_device
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
 OUT_SIGNALS = DATA_DIR / "peer_analytics_signals.parquet"

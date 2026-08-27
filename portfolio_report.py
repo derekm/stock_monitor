@@ -16,7 +16,7 @@ import pyarrow.parquet as pq
 DATA_DIR = Path(__file__).parent
 TRADES_FILE = DATA_DIR / "trades.parquet"
 HOLDINGS_FILE = DATA_DIR / "portfolio_holdings.parquet"
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 
 
@@ -34,7 +34,7 @@ def rebuild_holdings() -> pd.DataFrame:
     holdings["avg_cost"] = holdings["cost_basis"] / holdings["shares"]
 
     import shutil, tempfile
-    snap = Path(tempfile.gettempdir()) / "ph_daily_prices.parquet"
+    snap = Path(tempfile.gettempdir()) / "ph_daily_prices/"
     if not snap.exists():
         shutil.copy2(PRICES_FILE, snap)
     tickers = holdings["ticker"].astype(str).str.upper().tolist()

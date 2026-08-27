@@ -7,7 +7,7 @@ monitored universe.
 
 Closes the "economic calendars" TODO. Regime-aware scheduling and
 earnings-adjacent analytics need to know when events land. Zero new
-dependencies: trading days come from `daily_prices.parquet` (the actual
+dependencies: trading days come from `daily_prices/` (the actual
 market calendar the repo trades on), quarterly expiries are computed (3rd
 Friday of Mar/Jun/Sep/Dec), FOMC meetings come from a curated schedule (the
 Fed publishes meetings years ahead — update `macro_events.csv` or the

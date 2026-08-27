@@ -47,7 +47,7 @@ MIN_DAYS = 252
 
 def _wide():
     px = pd.read_parquet(
-        ROOT / "daily_prices.parquet",
+        ROOT / "daily_prices/",
         columns=["date", "ticker", "close", "open", "volume"],
     )
     px["date"] = pd.to_datetime(px["date"])

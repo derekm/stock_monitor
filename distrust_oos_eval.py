@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 FUND = DATA_DIR / "fundamentals.parquet"
 ARISTA = DATA_DIR / "arista_metrics.parquet"
 
@@ -40,7 +40,7 @@ def _price_col(cols) -> str:
     for c in ("adj_close", "close_adj", "close"):
         if c in cols:
             return c
-    raise SystemExit("no usable price column in daily_prices.parquet")
+    raise SystemExit("no usable price column in daily_prices/")
 
 
 def load_price_panel() -> pd.DataFrame:

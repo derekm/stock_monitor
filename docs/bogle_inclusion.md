@@ -23,7 +23,7 @@
 - `daily_mcap` is the PIT shares file (`shares_outstanding` snapshot × `adj_close`). Missing mcap ⇒ not investable ⇒ excluded even if price exists.
 - `fundamentals.as_of_date` is stamped on `filing_date` (`fundamentals_history.snapshot` + `snapshot_history.append_history`). QMI requires a **seen filing**; TMI does not.
 - `monitored_stocks.parquet:exchange` is the yfinance `quoteSummary.exchange` backfill (values: `NMS` Nasdaq GS, `NCM` CM, `NGM` GM, `NYQ` NYSE, `ASE` AMEX, `PCX` Arca, `BTS` BZX, `PNK/OID/OQB/OQX` OTC, `None` dead). Static — not PIT, but OTC vs listed rarely flips without delisting.
-- `daily_prices.parquet` holiday rows are already stripped (`n ≥ 0.25×median` kept; 432 rows dropped), so `cov` is trading-day coverage.
+- `daily_prices/` holiday rows are already stripped (`n ≥ 0.25×median` kept; 432 rows dropped), so `cov` is trading-day coverage.
 
 ## What changed (2026-08-24)
 

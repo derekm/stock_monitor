@@ -73,7 +73,7 @@ def _load_prices(tickers: list[str]):
     except Exception:
         pass
     import pandas as pd
-    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet")
+    prices = pd.read_parquet(DATA_DIR / "daily_prices/")
     prices["date"] = pd.to_datetime(prices["date"])
     if tickers:
         prices = prices[prices["ticker"].isin(tickers)]

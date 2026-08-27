@@ -313,7 +313,7 @@ Both **fail the +0.60 bar**, and both agree, so this is **not** a truncated-wind
 # 1. FF5 replication on our universe
 python -c "
 from src.analytics.factor_library import compute_ff5
-ff5 = compute_ff5('daily_prices.parquet')
+ff5 = compute_ff5('daily_prices/')
 ff5.to_parquet('ff5_factors.parquet')
 print(ff5.tail())
 "

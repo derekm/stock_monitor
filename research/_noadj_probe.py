@@ -1,5 +1,5 @@
 import pandas as pd
-PRICES = "C:/Users/derek/src/stockmagic/stock_monitor/daily_prices.parquet"
+PRICES = "C:/Users/derek/src/stockmagic/stock_monitor/daily_prices/"
 raw = pd.read_parquet(PRICES)
 print("rows", len(raw), "cols", list(raw.columns))
 no_adj = set()

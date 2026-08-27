@@ -23,7 +23,7 @@ import numpy as np
 
 DATA_DIR = Path(__file__).resolve().parent
 OUT = DATA_DIR / "rebalance_calendar.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 HMM = DATA_DIR / "hmm_regime_states.parquet"
 PREF = DATA_DIR / "preferred_metrics.parquet"
 
@@ -170,14 +170,45 @@ def rebalance_luck() -> pd.DataFrame:
     return out
 
 
+def optimal_glide() -> pd.DataFrame:
+    """Hoffstein: 1-day vs 7-day linear average of start offsets. Luck std."""
+    tmi = pd.read_parquet(DATA_DIR / "bogle_tmi.parquet")
+    tmi["date"] = pd.to_datetime(tmi["date"]).dt.normalize()
+    tmi["q"] = tmi["date"].dt.to_period("Q")
+    tmi["ret"] = tmi["ret_net"].fillna(0)
+    W = 7
+    rows = []
+    for q, g in tmi.groupby("q"):
+        g = g.sort_values("date")
+        if len(g) < 20:
+            continue
+        day = np.array([(1 + g["ret"].iloc[i:]).prod() - 1 for i in range(15)])
+        glide = [float(np.mean(day[i:i + W])) for i in range(0, 15 - W + 1)]
+        rows.append({
+            "quarter": str(q),
+            "std_1d": float(np.std(day)),
+            "std_glide7": float(np.std(glide)),
+        })
+    out = pd.DataFrame(rows)
+    red = 1 - out["std_glide7"].median() / out["std_1d"].median()
+    print(f"quarters {len(out)}  median std 1d {out.std_1d.median():.3%}  "
+          f"glide7 {out.std_glide7.median():.3%}  reduction {red:.1%}  (bar 40%)")
+    out.to_parquet(DATA_DIR / "optimal_glide_schedule.parquet", index=False)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--months", type=int, default=18)
     ap.add_argument("--save", action="store_true")
     ap.add_argument("--luck", action="store_true")
+    ap.add_argument("--glide", action="store_true")
     args = ap.parse_args()
     if args.luck:
         rebalance_luck()
+        return
+    if args.glide:
+        optimal_glide()
         return
     df = build(args.months)
     print(df.tail(12).to_string(index=False))

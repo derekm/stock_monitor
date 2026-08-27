@@ -101,11 +101,11 @@ class JobCheckpoint:
 
         files_to_hash = []
         if self.universe_source == "daily_prices":
-            files_to_hash = ["daily_prices.parquet"]
+            files_to_hash = ["daily_prices/"]
         elif self.universe_source == "fundamentals":
             files_to_hash = ["fundamentals.parquet"]
         elif self.universe_source == "both":
-            files_to_hash = ["daily_prices.parquet", "fundamentals.parquet"]
+            files_to_hash = ["daily_prices/", "fundamentals.parquet"]
 
         combined_hash = hashlib.sha256()
         for f in files_to_hash:
@@ -350,11 +350,11 @@ def get_universe_tickers(source: str = "daily_prices") -> list[str]:
     DATA_DIR = Path(__file__).parent
 
     if source == "daily_prices":
-        df = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker"])
+        df = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["ticker"])
     elif source == "fundamentals":
         df = pd.read_parquet(DATA_DIR / "fundamentals.parquet", columns=["ticker"])
     elif source == "both":
-        prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["ticker"])
+        prices = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["ticker"])
         fund = pd.read_parquet(DATA_DIR / "fundamentals.parquet", columns=["ticker"])
         return sorted(set(prices["ticker"]) | set(fund["ticker"]))
     else:

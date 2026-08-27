@@ -19,7 +19,7 @@ Flags:
 - `--save`: Write output parquet
 - `--gpu`: Force GPU device (`cuda`, `directml`, `cpu`)
 
-Reads `daily_prices.parquet`, `monitored_stocks.parquet`, `portfolio_holdings.parquet`, `preferred_metrics.parquet`.
+Reads `daily_prices/`, `monitored_stocks.parquet`, `portfolio_holdings.parquet`, `preferred_metrics.parquet`.
 
 ## Key Features (2026-08)
 

@@ -47,7 +47,7 @@ def atomic_write_parquet(df, path, shrink_floor: float = 0.8,
     panels are additive.
 
     Use this for every write to a shared table (fundamentals.parquet,
-    daily_prices.parquet, and any other file a second process may read).
+    daily_prices/, and any other file a second process may read).
     """
     import os
     import time
@@ -160,7 +160,7 @@ def quality_value_parts(roe=None, roic=None, de=None, earnings_stability=None,
 
 def prices_path(prefer_clean: bool = True) -> Path:
     clean = DATA_DIR / "daily_prices_clean.parquet"
-    raw = DATA_DIR / "daily_prices.parquet"
+    raw = DATA_DIR / "daily_prices/"
     if prefer_clean and clean.exists():
         return clean
     return raw
@@ -186,13 +186,13 @@ def load_prices_pandas(prefer_clean: bool = True, tickers: Optional[list[str]] =
 
 
 def load_adj_prices_pandas(tickers: Optional[list[str]] = None) -> pd.DataFrame:
-    """Split/dividend-adjusted closes from daily_prices.parquet (adj_close).
+    """Split/dividend-adjusted closes from daily_prices/ (adj_close).
 
     Return math for long-horizon backtests must use adj_close — raw ``close``
     carries split artifacts (a 4:1 split looks like a -75% day). Prefer this
     over load_prices_pandas for any engine that computes returns.
     """
-    path = DATA_DIR / "daily_prices.parquet"
+    path = DATA_DIR / "daily_prices/"
     if HAS_POLARS:
         lf = pl.scan_parquet(str(path)).select(
             pl.col("date").cast(pl.Date, strict=False),
@@ -267,7 +267,7 @@ def winsor_cs(df: pd.DataFrame, q: float = 0.995) -> pd.DataFrame:
 
 def load_membership() -> pd.DataFrame:
     """Universe membership. Prefer daily_prices tickers; sleeve flags optional."""
-    prices = DATA_DIR / "daily_prices.parquet"
+    prices = DATA_DIR / "daily_prices/"
     stocks = DATA_DIR / "monitored_stocks.parquet"
     if prices.exists():
         px = pd.read_parquet(prices, columns=["ticker"])

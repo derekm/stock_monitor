@@ -5,7 +5,7 @@ calendar for the monitored universe.
 
 Why it exists: the architecture TODO "economic calendars" — regime-aware
 scheduling and earnings-adjacent analytics need to know when events land.
-Zero new dependencies: trading days come from daily_prices.parquet (the
+Zero new dependencies: trading days come from daily_prices/ (the
 actual market calendar the repo already trades on), quarterly expiries are
 computed (3rd Friday of Mar/Jun/Sep/Dec), FOMC meetings are curated (the Fed
 publishes the schedule years ahead — update macro_events.csv annually), and
@@ -27,7 +27,7 @@ from datetime import date, timedelta
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 EARNINGS = DATA_DIR / "earnings_calendar.parquet"
 MACRO = DATA_DIR / "macro_events.parquet"
 OUT = DATA_DIR / "economic_calendar.parquet"

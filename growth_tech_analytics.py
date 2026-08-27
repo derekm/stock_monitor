@@ -37,7 +37,7 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 HOLDINGS = DATA_DIR / "portfolio_holdings.parquet"
 LEVELS = DATA_DIR / "growth_tech_index_levels.parquet"

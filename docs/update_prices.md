@@ -1,10 +1,10 @@
 # update_prices.py
 
-Append daily open/close (and OHLC) to `daily_prices.parquet`.
+Append daily open/close (and OHLC) to `daily_prices/`.
 
 ## Why it exists (rationale)
 
-`daily_prices.parquet` is the spine every analytic reads. This is the primary
+`daily_prices/` is the spine every analytic reads. This is the primary
 way to extend it: fetch the last few days via yfinance (when network is
 available), or enter/import manually (CSV / `manual`). It merges on
 (date, ticker), keeping the newest source on conflict — the incremental
@@ -19,11 +19,11 @@ python update_prices.py import --csv new_prices.csv
 ```
 
 Sub-commands: `fetch`, `manual`, `import`. `fetch` flags: `--days` (default 5),
-`--tickers`. Reads/writes `daily_prices.parquet`, `monitored_stocks.parquet`.
+`--tickers`. Reads/writes `daily_prices/`, `monitored_stocks.parquet`.
 
 ## Outputs
 
-- `daily_prices.parquet` — appended/updated rows
+- `daily_prices/` — appended/updated rows
 
 (Schema family: base_table — see [SCHEMAS.md](SCHEMAS.md).)
 

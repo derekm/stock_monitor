@@ -20,7 +20,7 @@ import pyarrow.parquet as pq
 
 DATA_DIR = Path(__file__).parent
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 FUND = DATA_DIR / "fundamentals.parquet"
 OUT = DATA_DIR / "growth_tech_index.parquet"
 LEVELS = DATA_DIR / "growth_tech_index_levels.parquet"

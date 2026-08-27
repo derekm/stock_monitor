@@ -19,7 +19,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 OUT = DATA_DIR / "binding_constraints_impact.parquet"
 OUT_NEAR = DATA_DIR / "binding_near_miss_detail.parquet"
 OUT_RISK = DATA_DIR / "binding_basket_risk.parquet"

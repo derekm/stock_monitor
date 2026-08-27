@@ -6,7 +6,7 @@ for S&P 500 constituents that are missing from our store, using yfinance.
 This is the "fill in real actuals" step. It is intentionally integrated with
 stock_monitor's existing generator conventions (update_fundamentals.py /
 update_prices.py): it writes the SAME schema as fundamentals.parquet and
-daily_prices.parquet, stamps source='yfinance', and is resume-safe so a
+daily_prices/, stamps source='yfinance', and is resume-safe so a
 long run can be interrupted and resumed.
 
 What it fetches per missing ticker (real, point-in-time aligned to quarter-ends):
@@ -44,7 +44,7 @@ import yfinance as yf
 
 DATA_DIR = Path(__file__).parent
 FUND = DATA_DIR / "fundamentals.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 CONST = DATA_DIR / "sp500_constituents.parquet"
 FUND_STAGE = DATA_DIR / "fundamentals_yfinance.parquet"
 PRICE_STAGE = DATA_DIR / "daily_prices_yfinance.parquet"

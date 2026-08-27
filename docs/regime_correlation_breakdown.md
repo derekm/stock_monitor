@@ -16,7 +16,7 @@ Companion to `crisis_correlation` (which uses vol/return windows) and
 python regime_correlation_breakdown.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices.parquet`, `monitored_stocks.parquet`,
+Flags: `--save`. Reads `daily_prices/`, `monitored_stocks.parquet`,
 `hmm_regime_states.csv`.
 
 ## Outputs

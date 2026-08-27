@@ -25,7 +25,7 @@ from pathlib import Path
 import polars as pl
 
 DATA_DIR = Path(__file__).resolve().parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 
 
 def newest_end(block: dict) -> str:

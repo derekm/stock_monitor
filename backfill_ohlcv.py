@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """backfill_ohlcv.py — backfill full OHLCV history for the entire universe.
 
-The stored `daily_prices.parquet` is close+volume only for almost all tickers
+The stored `daily_prices/` is close+volume only for almost all tickers
 (OHLC coverage ~0.5%): the daily history came from a close-only source, and the
 Polygon flat-files that carry true OHLC are blocked on this plan. This script
 fills the gap with yfinance's full OHLCV history (open/high/low/close/volume),
@@ -11,7 +11,7 @@ For each ticker it:
   - fetches period='max' daily OHLCV via yfinance (auto_adjust=False so the raw
     Close/Open/High/Low/Volume are the as-traded values; Adj Close is stored as
     adj_close)
-  - merges STRICTLY ADDITIVELY into daily_prices.parquet: it only FILLS
+  - merges STRICTLY ADDITIVELY into daily_prices/: it only FILLS
     open/high/low where they are currently NaN in existing rows and ADDS
     brand-new (date, ticker) rows the table lacks. It never overwrites existing
     close/volume/market_cap/adj_close — existing rows are preserved, so no
@@ -51,7 +51,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 DATA_DIR = Path(__file__).resolve().parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 SCHEMA_COLS = ["date", "ticker", "adj_close", "close", "open", "high", "low",
                "volume", "source", "market_cap"]
@@ -66,7 +66,7 @@ def load_prices():
 def save_prices(df: pd.DataFrame):
     """Write the price table without ever silently dropping existing rows.
 
-    DO NOT normalize Timestamp -> date here. `daily_prices.parquet` is
+    DO NOT normalize Timestamp -> date here. `daily_prices/` is
     datetime64[ms] and carries 112,217 rows stamped 20:00 alongside the 00:00
     session rows; mapping to calendar dates and then de-duplicating on
     (date, ticker) collapsed 22,980 of them, so a run that touched 9 OTC

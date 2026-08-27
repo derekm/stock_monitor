@@ -22,7 +22,7 @@ import yfinance as yf
 
 DATA_DIR = Path(__file__).parent
 MONITORED = DATA_DIR / "monitored_stocks.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 
 # Defaults for new rows
 DEFAULT_STATUS = "active"
@@ -84,7 +84,7 @@ def classify_instrument_type(ticker: str) -> str:
 
 
 def fetch_yfinance_info(ticker: str, max_retries: int = 3) -> dict | None:
-    """Fetch sector/industry from yfinance with retries."""
+    """Fetch sector/industry/exchange from yfinance with retries."""
     for attempt in range(max_retries):
         try:
             tk = yf.Ticker(ticker)
@@ -93,8 +93,9 @@ def fetch_yfinance_info(ticker: str, max_retries: int = 3) -> dict | None:
             industry = info.get("industry")
             name = info.get("longName") or info.get("shortName") or ticker
             quote_type = info.get("quoteType")
-            if sector or industry or name != ticker:
-                return {"name": name, "sector": sector, "industry": industry, "quoteType": quote_type}
+            exchange = info.get("exchange") or info.get("fullExchangeName")
+            if sector or industry or exchange or name != ticker:
+                return {"name": name, "sector": sector, "industry": industry, "quoteType": quote_type, "exchange": exchange}
             return None
         except Exception as e:
             if attempt == max_retries - 1:
@@ -120,13 +121,18 @@ def main():
         monitored = pd.read_parquet(MONITORED)
         existing_tickers = set(monitored["ticker"].astype(str).str.upper().unique())
         print(f"Existing monitored tickers: {len(existing_tickers)}")
+        # Ensure exchange column exists for migration
+        if "exchange" not in monitored.columns:
+            monitored["exchange"] = pd.NA
+            print("  Added missing 'exchange' column (migration)")
     else:
         monitored = pd.DataFrame(columns=[
             "ticker", "name", "sector", "industry", "subsector",
             "status", "index_member", "notes", "added_date", "last_updated",
             "in_portfolio", "defensive_value_index", "growth_tech_index",
             "growth_sleeve", "value_sleeve", "dual_pass_member",
-            "instrument_type", "sp500_member", "sp500_sector", "sp500_date_added"
+            "instrument_type", "sp500_member", "sp500_sector", "sp500_date_added",
+            "exchange"
         ])
         existing_tickers = set()
         print("No existing monitored_stocks.parquet - starting fresh")
@@ -186,10 +192,12 @@ def main():
             industry = info.get("industry")
             # Use yfinance sector/industry directly (no custom mapping)
             name = info.get("name", ticker)
+            exchange = info.get("exchange")
         else:
             sector = None
             industry = None
             name = ticker
+            exchange = None
 
         row = {
             "ticker": ticker,
@@ -212,6 +220,7 @@ def main():
             "sp500_member": DEFAULT_SPY500_MEMBER,
             "sp500_sector": DEFAULT_SPY500_SECTOR,
             "sp500_date_added": DEFAULT_SPY500_DATE_ADDED,
+            "exchange": exchange,
         }
 
         if is_existing:

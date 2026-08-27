@@ -32,7 +32,7 @@ def _z(s: pd.Series) -> pd.Series:
 
 
 def _load_prices_and_rets() -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
-    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date", "ticker", "adj_close"])
+    prices = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["date", "ticker", "adj_close"])
     prices = prices.rename(columns={"adj_close": "close"})
     prices["date"] = pd.to_datetime(prices["date"])
     wide = prices.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()

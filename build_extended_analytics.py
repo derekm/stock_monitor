@@ -24,7 +24,7 @@ quarterly_edges['as_of_date'] = pd.to_datetime(quarterly_edges['as_of_date']).dt
 fund = pd.read_parquet('fundamentals.parquet')
 fund['as_of_date'] = pd.to_datetime(fund['as_of_date']).dt.date
 
-prices = pd.read_parquet('daily_prices.parquet')
+prices = pd.read_parquet('daily_prices/')
 prices['date'] = pd.to_datetime(prices['date']).dt.date
 
 # All fundamental metrics available

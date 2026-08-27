@@ -11,7 +11,7 @@ history for all 503 constituents, but our `fundamentals.parquet` only has the
 personal book. This script fetches real quarterly financials + 5y daily prices
 per missing constituent, derives the canonical quality metrics per quarter-end,
 and writes them in the **same schema** as `fundamentals.parquet` /
-`daily_prices.parquet` (so the rest of the stack can use them unchanged).
+`daily_prices/` (so the rest of the stack can use them unchanged).
 
 ## Usage
 
@@ -32,7 +32,7 @@ Flags: `--limit N` (smoke test), `--sleep F` (rate-limit pause, default 0.4s).
 - `daily_prices_yfinance.parquet` — staging 5y daily price/volume
 - `backfill_progress.json` — resume marker (run is resume-safe)
 - `sp500_constituents.parquet` — the authoritative constituent list it reads from
-- After `merge`: appends into `fundamentals.parquet` and `daily_prices.parquet`
+- After `merge`: appends into `fundamentals.parquet` and `daily_prices/`
 
 (Schema families: base_table / summary_metrics — see [SCHEMAS.md](SCHEMAS.md).)
 

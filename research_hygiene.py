@@ -544,13 +544,107 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--book-barriers", action="store_true")
+    ap.add_argument("--meta", action="store_true")
+    ap.add_argument("--cpcv", action="store_true")
+    ap.add_argument("--conformal", action="store_true")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
+    if args.conformal:
+        from pathlib import Path
+        src = Path(__file__).parent
+        tmi = pd.read_parquet(src / "bogle_tmi.parquet")
+        r = pd.to_numeric(tmi["ret_net"], errors="coerce").dropna().to_numpy()
+        vol = pd.Series(r).rolling(21).std().shift(1).to_numpy()
+        ok = np.isfinite(r) & np.isfinite(vol) & (vol > 0)
+        r, vol = r[ok], vol[ok]
+        n = len(r)
+        cut = n // 2
+        score = np.abs(r[:cut]) / vol[:cut]
+        q = float(np.quantile(score, 0.90))
+        half = q * vol[cut:]
+        cover = float(np.mean(np.abs(r[cut:]) <= half))
+        width = float(np.median(2 * half))
+        out = pd.DataFrame([{"target": 0.90, "coverage": cover, "median_width": width, "q90": q, "n_test": n - cut}])
+        print(out.to_string(index=False))
+        print(f"conformal 90% coverage {cover:.1%}  bar 90%")
+        if args.save:
+            out.to_parquet(src / "conformal_bands.parquet", index=False)
+        raise SystemExit(0)
+    if args.cpcv:
+        from pathlib import Path
+        from sklearn.linear_model import LinearRegression
+        from sklearn.model_selection import KFold
+        from cv_utils import cpcv_folds, purged_folds
+
+        src = Path(__file__).parent
+        tmi = pd.read_parquet(src / "bogle_tmi.parquet")
+        tmi["date"] = pd.to_datetime(tmi["date"])
+        r = pd.to_numeric(tmi["ret_net"], errors="coerce")
+        df = pd.DataFrame({"y": r.to_numpy()}, index=np.arange(len(r)))
+        df["x1"] = r.shift(1).to_numpy()
+        df["x2"] = r.rolling(21).mean().shift(1).to_numpy()
+        df["x3"] = r.rolling(63).std().shift(1).to_numpy()
+        df = df.dropna()
+        X = df[["x1", "x2", "x3"]].to_numpy()
+        y = df["y"].to_numpy()
+        n = len(y)
+
+        def acc(folds):
+            hits = []
+            for tr, te in folds:
+                m = LinearRegression().fit(X[tr], y[tr])
+                pred = m.predict(X[te])
+                hits.append(float(np.mean(np.sign(pred) == np.sign(y[te]))))
+            return float(np.mean(hits)) if hits else float("nan")
+
+        cpcv = cpcv_folds(n, n_groups=6, n_test_groups=2, embargo=21, min_train=126)
+        rnd = list(KFold(n_splits=6, shuffle=True, random_state=0).split(X))
+        purged = purged_folds(n, n_folds=6, embargo=21, min_train=126)
+        a_c, a_r, a_p = acc(cpcv), acc(rnd), acc(purged)
+        delta = a_c - a_r
+        out = pd.DataFrame([
+            {"split": "cpcv", "acc": a_c, "n_folds": len(cpcv)},
+            {"split": "random_kfold", "acc": a_r, "n_folds": len(rnd)},
+            {"split": "purged", "acc": a_p, "n_folds": len(purged)},
+            {"split": "cpcv_minus_random", "acc": delta, "n_folds": len(cpcv)},
+        ])
+        print(out.to_string(index=False))
+        print(f"CPCV − random {delta:+.1%}  bar +3%")
+        coefs = []
+        for tr, te in cpcv:
+            m = LinearRegression().fit(X[tr], y[tr])
+            coefs.append(m.coef_)
+        C = np.vstack(coefs)
+        stab = pd.DataFrame({
+            "feature": ["lag1", "ma21", "vol63"],
+            "mean_coef": C.mean(axis=0),
+            "std_coef": C.std(axis=0),
+            "stability": 1.0 - np.abs(C.std(axis=0) / (np.abs(C.mean(axis=0)) + 1e-12)),
+        })
+        print(stab.to_string(index=False))
+        if args.save:
+            out.to_parquet(src / "cv_splits.parquet", index=False)
+            stab.to_parquet(src / "feature_stability.parquet", index=False)
+        raise SystemExit(0)
+    if args.meta:
+        from pathlib import Path
+        src = Path(__file__).parent
+        lab = pd.read_parquet(src / "triple_barrier_labels.parquet")
+        ride = pd.read_parquet(src / "ride_book.parquet") if (src / "ride_book.parquet").exists() else pd.DataFrame()
+        if not ride.empty and "ticker" in lab.columns:
+            lab = lab.merge(ride[["ticker", "long_ride_score"]], on="ticker", how="left")
+        lab["side"] = (lab["long_ride_score"].fillna(0) >= 0.5).astype(int) if "long_ride_score" in lab.columns else 1
+        lab["meta_y"] = ((lab["pt"] > lab["sl"]) & (lab["side"] == 1)).astype(int) if "pt" in lab.columns else 0
+        print(lab[["ticker", "pt", "sl", "side", "meta_y"]].round(3).to_string(index=False) if "ticker" in lab.columns else lab.head())
+        print("meta_y mean", float(lab["meta_y"].mean()))
+        if args.save:
+            lab.to_parquet(src / "meta_labeled_signals.parquet", index=False)
+        raise SystemExit(0)
     if args.book_barriers:
         import shutil, tempfile
         from pathlib import Path
         src = Path(__file__).parent
-        snap = Path(tempfile.gettempdir()) / "ph_daily_prices.parquet"
+        snap = Path(tempfile.gettempdir()) / "ph_daily_prices/"
         BOOK = ["BAYRY", "CAG", "HMC", "HPQ", "KHC", "MOS", "PFE", "SMCI", "T",
                 "ALL", "EOG", "GL", "BEN"]
         px = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])

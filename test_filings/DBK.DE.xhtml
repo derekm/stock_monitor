@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:xbrli="http://www.xbrl.org/2003/instance"
+      xmlns:ix="http://www.xbrl.org/2013/inlineXBRL"
+      xmlns:ifrs-full="http://xbrl.ifrs.org/taxonomy/2021-03-24/ifrs-full"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<head>
+    <title>Test ESEF Filing - BAYN.DE</title>
+    <meta name="generator" content="Test"/>
+    <link rel="schema.ifrs-full" href="http://xbrl.ifrs.org/taxonomy/2021-03-24/ifrs-full.xsd" type="application/xml"/>
+</head>
+<body>
+    <ix:hidden>
+        <xbrli:context id="D2023">
+            <xbrli:entity>
+                <xbrli:identifier scheme="http://standards.iso.org/iso/17442">529900M1JCDK4B8M7E37</xbrli:identifier>
+            </xbrli:entity>
+            <xbrli:period>
+                <xbrli:startDate>2023-01-01</xbrli:startDate>
+                <xbrli:endDate>2023-12-31</xbrli:endDate>
+            </xbrli:period>
+        </xbrli:context>
+        <xbrli:context id="I2023">
+            <xbrli:entity>
+                <xbrli:identifier scheme="http://standards.iso.org/iso/17442">529900M1JCDK4B8M7E37</xbrli:identifier>
+            </xbrli:entity>
+            <xbrli:period>
+                <xbrli:instant>2023-12-31</xbrli:instant>
+            </xbrli:period>
+        </xbrli:context>
+        <xbrli:unit id="EUR">
+            <xbrli:measure>iso4217:EUR</xbrli:measure>
+        </xbrli:unit>
+        <xbrli:unit id="EURperShare">
+            <xbrli:measure>iso4217:EUR/xbrli:shares</xbrli:measure>
+        </xbrli:unit>
+    </ix:hidden>
+
+    <table>
+        <tr>
+            <td>Revenue</td>
+            <td><ix:nonFraction name="ifrs-full:Revenue" contextRef="D2023" unitRef="EUR" decimals="-6" scale="6" format="num:########.##">47663000000</ix:nonFraction></td>
+        </tr>
+        <tr>
+            <td>Profit/Loss</td>
+            <td><ix:nonFraction name="ifrs-full:ProfitLoss" contextRef="D2023" unitRef="EUR" decimals="-6" scale="6">-3187000000</ix:nonFraction></td>
+        </tr>
+        <tr>
+            <td>Cash flows from operating activities</td>
+            <td><ix:nonFraction name="ifrs-full:CashFlowsFromUsedInOperatingActivities" contextRef="D2023" unitRef="EUR" decimals="-6" scale="6">4321000000</ix:nonFraction></td>
+        </tr>
+        <tr>
+            <td>Payments to acquire property, plant and equipment</td>
+            <td><ix:nonFraction name="ifrs-full:PaymentsToAcquirePropertyPlantAndEquipment" contextRef="D2023" unitRef="EUR" decimals="-6" scale="6">1587000000</ix:nonFraction></td>
+        </tr>
+        <tr>
+            <td>Assets</td>
+            <td><ix:nonFraction name="ifrs-full:Assets" contextRef="I2023" unitRef="EUR" decimals="-6" scale="6">117325000000</ix:nonFraction></td>
+        </tr>
+        <tr>
+            <td>Equity</td>
+            <td><ix:nonFraction name="ifrs-full:Equity" contextRef="I2023" unitRef="EUR" decimals="-6" scale="6">41234000000</ix:nonFraction></td>
+        </tr>
+        <tr>
+            <td>Non-current borrowings</td>
+            <td><ix:nonFraction name="ifrs-full:NoncurrentBorrowings" contextRef="I2023" unitRef="EUR" decimals="-6" scale="6">32156000000</ix:nonFraction></td>
+        </tr>
+        <tr>
+            <td>Cash and cash equivalents</td>
+            <td><ix:nonFraction name="ifrs-full:CashAndCashEquivalents" contextRef="I2023" unitRef="EUR" decimals="-6" scale="6">8912000000</ix:nonFraction></td>
+        </tr>
+    </table>
+</body>
+</html>

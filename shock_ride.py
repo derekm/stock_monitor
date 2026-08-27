@@ -109,7 +109,7 @@ def run(entry_thresh: float = 0.40, save: bool = True) -> int:
     # volume matrix for fresh-breakout confirmation (OBV / volume expansion)
     volmat = None
     try:
-        vp = pd.read_parquet(DATA_DIR / "daily_prices.parquet",
+        vp = pd.read_parquet(DATA_DIR / "daily_prices/",
                              columns=["date", "ticker", "volume"])
         volmat = vp.pivot(index="date", columns="ticker", values="volume")
     except Exception:

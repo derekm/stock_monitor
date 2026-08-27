@@ -20,7 +20,7 @@ Outputs feed directly into the daily pipeline, dashboard, and regime-aware rebal
 python peer_analytics.py --save
 ```
 
-Flags: `--save` (default true). Reads `daily_prices.parquet`, `fundamentals.parquet`, `monitored_stocks.parquet`.
+Flags: `--save` (default true). Reads `daily_prices/`, `fundamentals.parquet`, `monitored_stocks.parquet`.
 
 ## Peer group construction
 
@@ -128,7 +128,7 @@ Plus counts: `recovery_count`, `deterioration_count`, `strong_trend_count`.
 
 ## Related programs
 
-- **Inputs**: `daily_prices.parquet`, `fundamentals.parquet`, `monitored_stocks.parquet`
+- **Inputs**: `daily_prices/`, `fundamentals.parquet`, `monitored_stocks.parquet`
 - **Consumers**: `export_dashboard_data.py`, `run_daily_automation.py` (add to JOBS)
 - **Complements**: `preferred_metrics.py` (dual-pass screen), `threshold_logic.py` (regime thresholds), `rolling_window_analysis.py` (portfolio-level metrics)
 - **Documentation**: [SCHEMAS.md](SCHEMAS.md), [SYSTEM_ORCHESTRATION.md](SYSTEM_ORCHESTRATION.md)

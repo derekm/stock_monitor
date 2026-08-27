@@ -31,7 +31,7 @@ import requests
 from scipy.interpolate import interp1d
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 FUND = DATA_DIR / "fundamentals.parquet"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT_PQ = DATA_DIR / "implied_r_screen.parquet"

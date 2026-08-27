@@ -23,7 +23,7 @@ python forecast_granite.py forecast --index portfolio --horizon 20 --save
 python forecast_granite.py backtest --index portfolio --horizons 5,10,20 --windows 40,60
 ```
 
-Reads `daily_prices.parquet`, `sector_prices.parquet`, `monitored_stocks.parquet`,
+Reads `daily_prices/`, `sector_prices.parquet`, `monitored_stocks.parquet`,
 `trades.parquet`, `portfolio_holdings.parquet`. Loads the latest checkpoint from
 `checkpoints/`.
 

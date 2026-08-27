@@ -30,7 +30,7 @@ warnings.filterwarnings('ignore')
 
 # Configuration
 CIK_MAP_FILE = 'cik_ticker_map.json'
-PRICES_FILE = 'daily_prices.parquet'
+PRICES_FILE = 'daily_prices/'
 FUNDAMENTALS_FILE = 'fundamentals.parquet'
 CHECKPOINT_DIR = Path('backfill_checkpoints')
 CHECKPOINT_DIR.mkdir(exist_ok=True)

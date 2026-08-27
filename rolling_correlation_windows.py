@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from hmm_regime_detection import _pairwise_avg_corr_numba, _pairwise_avg_corr_np
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT_TS = DATA_DIR / "rolling_corr_avg_timeseries.parquet"
 OUT_SEC = DATA_DIR / "rolling_sector_corr_windows.parquet"

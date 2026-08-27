@@ -23,7 +23,7 @@ OUT_SHARPE = DATA_DIR / "sharpe_comparison.parquet"
 
 
 def load_prices() -> pd.DataFrame:
-    p = DATA_DIR / "daily_prices.parquet"
+    p = DATA_DIR / "daily_prices/"
     df = pd.read_parquet(p)
     # `date` is DATE on disk -> read as datetime.date; keep it a date.
     return df

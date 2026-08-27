@@ -16,7 +16,7 @@ regime signal the rest of the stack consumes.
 python hmm_regime_detection.py --n-states 3 --save
 ```
 
-Flags: `--n-states` (default 3), `--save`. Reads `daily_prices.parquet`.
+Flags: `--n-states` (default 3), `--save`. Reads `daily_prices/`.
 
 **Outputs:** `hmm_regime_states.csv` (per-date regime label + state probabilities),
 `hmm_regime_summary.csv`, `hmm_transition_matrix.csv`.

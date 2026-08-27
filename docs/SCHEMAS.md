@@ -183,7 +183,7 @@ Produced by `edgar_companyfacts_v2.py` and `acquisition_backfill.py`.
 ### Expired price history  (`expired_prices`)
 
 Preserved daily price history for delisted/acquired tickers. Kept out of the
-main `daily_prices.parquet` to keep the active universe clean, but retained
+main `daily_prices/` to keep the active universe clean, but retained
 for backtesting and analytics. Produced by `data_validation.py` cleanup.
 
 - Supporting tables: `sector_tickers` (ticker,sector,SECT_* slug), `vix_term_structure`
@@ -432,7 +432,7 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `monitored_stocks.parquet` | `update_fundamentals.py` | Base parquet table |
 | `monitored_stocks.parquet` | `update_prices.py` | Base parquet table |
 | `monitored_stocks.parquet` | `vol_target.py` | Base parquet table |
-| `daily_prices.parquet` (OHLCV backfill) | `backfill_ohlcv.py` | Data maintenance. Backfills full open/high/low/close/volume history for the whole universe via yfinance; fills the OHLC gap in the close+volume-only history; preserves market_cap; resume-safe |
+| `daily_prices/` (OHLCV backfill) | `backfill_ohlcv.py` | Data maintenance. Backfills full open/high/low/close/volume history for the whole universe via yfinance; fills the OHLC gap in the close+volume-only history; preserves market_cap; resume-safe |
 | `portfolio_holdings.parquet` | `data_access.py` | Base parquet table |
 | `portfolio_holdings.parquet` | `growth_tech_analytics.py` | Base parquet table |
 | `portfolio_holdings.parquet` | `inclusion_criteria.py` | Base parquet table |

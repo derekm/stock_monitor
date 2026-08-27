@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ttm_features.py — Build TTM-ready multivariate panels from daily_prices.parquet.
+ttm_features.py — Build TTM-ready multivariate panels from daily_prices/.
 
 Granite TTM works best with:
   - Consistent business-day frequency
@@ -31,7 +31,7 @@ from cli_common import (
 from index_registry import parse_indexes, tickers_for_index, available_indexes, index_help_text
 
 DATA_DIR = Path(__file__).parent
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 PANEL_DIR = DATA_DIR / "ttm_panels"
 

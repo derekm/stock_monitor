@@ -12,10 +12,10 @@ proportional to how certain the regime model is, not a hard cliff.
 
 ## Formulas
 
-**Trading calendar (month-end dates from `daily_prices.parquet`):**
+**Trading calendar (month-end dates from `daily_prices/`):**
 
 Let $D = {d_1, d_2, ..., d_N}$ be the sorted unique trading dates from
-`daily_prices.parquet`. Month-end dates are:
+`daily_prices/`. Month-end dates are:
 
 $$
 \mathcal{E} = \left{ \max{d \in D : d \in month  m} : m \in last  M  months \right}
@@ -137,7 +137,7 @@ flowchart LR
 python rebalance_calendar.py --months 18 --save
 ```
 
-Flags: `--months` (default 18), `--save`. Reads `daily_prices.parquet`,
+Flags: `--months` (default 18), `--save`. Reads `daily_prices/`,
 `hmm_regime_states.csv`, `preferred_metrics.csv`.
 
 ## Outputs

@@ -15,7 +15,7 @@ For names with insufficient liquidity (fewer than 5 liquid puts across
 nearest 2 expiries), we leave NaN — the fragility screen handles NaN as
 neutral (pctile 0.5).
 
-Reads: daily_prices.parquet (spot), monitored_stocks.parquet (universe)
+Reads: daily_prices/ (spot), monitored_stocks.parquet (universe)
 Writes: options_skew.csv  (ticker, date, skew, iv_atm, iv_otm, n_options)
 Usage:  python iv_skew.py [--tickers A,B,C] [--max-tickers N]
 """
@@ -31,7 +31,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 OUT = DATA_DIR / "options_skew.parquet"
 
 # ── Black-Scholes delta (put) ────────────────────────────────────────────

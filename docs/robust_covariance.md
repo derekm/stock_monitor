@@ -17,7 +17,7 @@ python robust_covariance.py --universe portfolio
 ```
 
 Flags (via `cli_common`): `--universe/--index`, `--ticker`, `--save`. Reads
-`daily_prices.parquet`, `portfolio_holdings.parquet`, `monitored_stocks.parquet`.
+`daily_prices/`, `portfolio_holdings.parquet`, `monitored_stocks.parquet`.
 
 ## Outputs
 

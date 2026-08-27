@@ -70,7 +70,7 @@ The **"index effect"** — abnormal returns around S&P 500 additions/deletions b
 ### 3. **Liquidity matters more than passive AUM growth**
 - Passive growth alone would predict **stronger** index effect
 - The offset is **liquidity growth in adjacent indexes** (MidCap 400, SmallCap 600)
-- Our `daily_prices.parquet` has volume data → can compute liquidity metrics
+- Our `daily_prices/` has volume data → can compute liquidity metrics
 
 ### 4. **Tesla-type events are the exception**
 - Large outsider additions (BRK.B, TSLA, potentially future mega-caps)
@@ -85,7 +85,7 @@ The **"index effect"** — abnormal returns around S&P 500 additions/deletions b
 # 1. Index effect by era (using our PIT membership + daily_prices)
 def index_effect_analysis():
     changes = pd.read_parquet('sp500_changes_merged.parquet')
-    prices = pd.read_parquet('daily_prices.parquet')
+    prices = pd.read_parquet('daily_prices/')
     
     for era in [(1995,1999), (2000,2010), (2011,2021)]:
         era_changes = changes[(changes['event_date'].dt.year >= era[0]) & 
@@ -172,7 +172,7 @@ The original 500 list was published in the **Standard & Poor's Security Price In
 2. **Coverage**: MarketWatch (Hulbert, 2021), Morningstar (2022), Investopedia (2022), Harvard/Greenwood & Sammon (2024 SSRN-4294297)
 3. **Historical Composition**: Siegel, J. (2014). "The Long-term Return on the Original S&P 500 Firms." Wharton/Rodney White Center.
 4. **Original 1957 List**: Standard & Poor's Security Price Index Record, 1957 edition (91 industry subgroups, 500 companies).
-5. **Our Data**: `sp500_changes_merged.parquet` (1,534 events), `sp500_membership.parquet` (9.36M PIT rows), `daily_prices.parquet` (OHLCV)
+5. **Our Data**: `sp500_changes_merged.parquet` (1,534 events), `sp500_membership.parquet` (9.36M PIT rows), `daily_prices/` (OHLCV)
 
 ---
 

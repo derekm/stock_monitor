@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from stock_monitor.index_registry import available_indexes, parse_indexes, tickers_for_index
 
 DATA_DIR = Path(__file__).parent
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 FUNDAMENTALS_FILE = DATA_DIR / "fundamentals.parquet"
 
@@ -74,7 +74,7 @@ def load_prices(tickers: list[str] | None = None, years: float | None = None) ->
     """Load price panel: date x ticker -> close price. Snapshot first (Windows lock)."""
     import shutil, tempfile
     print(f"Loading prices from {PRICES_FILE}...")
-    snap = Path(tempfile.gettempdir()) / "bogle_daily_prices.parquet"
+    snap = Path(tempfile.gettempdir()) / "bogle_daily_prices/"
     shutil.copy2(PRICES_FILE, snap)
     df = pd.read_parquet(snap, columns=["ticker", "date", "close"])
     if tickers:

@@ -26,7 +26,7 @@ Outputs:
   fragility_screen.csv   per-ticker component percentiles, composite
                          fragility score, percentile, fragile flag
 Reads: fundamentals.parquet, options_skew.csv, gap_risk.csv, tail_index.csv,
-       daily_prices.parquet (volume).
+       daily_prices/ (volume).
 Usage: python fragility_screen.py
 """
 import numpy as np
@@ -58,7 +58,7 @@ def _price_asof():
     values dated before they actually existed.
     """
     try:
-        d = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=["date"])
+        d = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["date"])
         return pd.to_datetime(d["date"]).max().date()
     except Exception:
         return None
@@ -109,7 +109,7 @@ def main():
 
     # 5) illiquidity: avg daily dollar volume (last 2y of volume x close)
     cols = ["date", "ticker", "close", "volume"]
-    d = pd.read_parquet(DATA_DIR / "daily_prices.parquet", columns=cols)
+    d = pd.read_parquet(DATA_DIR / "daily_prices/", columns=cols)
     cutoff = pd.Timestamp.now().date().replace(year=pd.Timestamp.now().year - 2)
     d = d[d["date"].astype("datetime64[ns]").dt.date >= cutoff]
     d["dollar_vol"] = pd.to_numeric(d["close"], errors="coerce") * pd.to_numeric(d["volume"], errors="coerce")

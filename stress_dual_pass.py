@@ -123,7 +123,7 @@ def count_cheap_by_wacc(fund: pd.DataFrame, wacc_df: pd.DataFrame, min_excess: f
     return int(mask.sum()), merged.loc[mask, "ticker"].tolist()
 
 
-def risk_of_names(df, tickers, prices_path=DATA_DIR / "daily_prices.parquet"):
+def risk_of_names(df, tickers, prices_path=DATA_DIR / "daily_prices/"):
     """Portfolio EW risk metrics for a ticker list."""
     if not tickers:
         return dict(port_vol=float("nan"), port_max_dd=float("nan"), avg_beta=float("nan"), avg_name_vol=float("nan"))

@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT_ASSET = DATA_DIR / "allpairs_asset_corr_history.parquet"
 OUT_SECTOR = DATA_DIR / "allpairs_sector_corr_history.parquet"

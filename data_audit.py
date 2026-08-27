@@ -21,7 +21,7 @@ print("=" * 80)
 print("1. DAILY PRICES AUDIT")
 print("=" * 80)
 
-prices = pd.read_parquet('daily_prices.parquet')
+prices = pd.read_parquet('daily_prices/')
 prices['date'] = pd.to_datetime(prices['date']).dt.date
 
 print(f"\nTotal rows: {len(prices):,}")

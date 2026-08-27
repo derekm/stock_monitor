@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-backfill_historical.py - Populate daily_prices.parquet with historical OHLCV data.
+backfill_historical.py - Populate daily_prices/ with historical OHLCV data.
 
 Primary method (requires network + yfinance):
   python backfill_historical.py --period 1y
@@ -37,7 +37,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 DATA_DIR = Path(__file__).parent
-PRICES_FILE = DATA_DIR / "daily_prices.parquet"
+PRICES_FILE = DATA_DIR / "daily_prices/"
 STOCKS_FILE = DATA_DIR / "monitored_stocks.parquet"
 
 
@@ -363,7 +363,7 @@ def merge_and_save(new_df: pd.DataFrame, overwrite: bool = False,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Historical price backfill for daily_prices.parquet",
+        description="Historical price backfill for daily_prices/",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

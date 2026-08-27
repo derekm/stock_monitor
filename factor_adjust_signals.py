@@ -31,7 +31,7 @@ def load_factors() -> pd.DataFrame:
 
 def load_returns() -> pd.DataFrame:
     """Load daily returns (date × ticker)."""
-    prices = pd.read_parquet(DATA_DIR / "daily_prices.parquet")
+    prices = pd.read_parquet(DATA_DIR / "daily_prices/")
     if prices["date"].dtype != "datetime64[ns]":
         prices["date"] = pd.to_datetime(prices["date"])
     close = prices.pivot(index="date", columns="ticker", values="close")

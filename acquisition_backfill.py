@@ -3,10 +3,10 @@
 acquisition_backfill.py — Detect corporate actions and trigger existing
 backfill/ingest pipelines. Does NOT reimplement retrieval — uses:
   - backfill_edgar.py : SEC companyfacts → fundamentals.parquet
-  - update_polygon.py : Polygon bulk API → daily_prices.parquet (or yfinance fallback)
+  - update_polygon.py : Polygon bulk API → daily_prices/ (or yfinance fallback)
   - lookthrough_engine.py : pro forma combination during acquisition window
 
-Universe = daily_prices.parquet (NOT monitored_stocks).
+Universe = daily_prices/ (NOT monitored_stocks).
 """
 
 import argparse
@@ -20,7 +20,7 @@ import numpy as np
 import requests
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 FUND = DATA_DIR / "fundamentals.parquet"
 CORPORATE_ACTIONS = DATA_DIR / "corporate_actions.parquet"
 CIK_MAP = DATA_DIR / "cik_ticker_map.json"
@@ -198,7 +198,7 @@ def detect_acquisitions_for_ticker(ticker: str) -> list[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_universe_tickers() -> set[str]:
-    """Get current universe from daily_prices.parquet."""
+    """Get current universe from daily_prices/."""
     if PRICES.exists():
         df = pd.read_parquet(PRICES, columns=['ticker'])
         return set(df['ticker'].unique())

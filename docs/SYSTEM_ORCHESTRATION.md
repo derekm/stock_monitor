@@ -7,7 +7,7 @@ How the stock_monitor programs chain together: data in → analytics → dashboa
 ```mermaid
 flowchart TB
   subgraph SPINE["Data spine (DATA_DIR — single source of truth)"]
-    DP[daily_prices.parquet]
+    DP[daily_prices/]
     FUND[fundamentals.parquet]
     MS[monitored_stocks.parquet]
     HOLD[portfolio_holdings / trades]
@@ -66,7 +66,7 @@ Almost every program reads from a small set of canonical parquet/CSV tables in `
 
 | Table | Written by | Read by |
 |---|---|---|
-| `daily_prices.parquet` | `update_prices.py`, `backfill_historical.py` (yfinance), `update_polygon.py` (key-gated) | Fisher indexes, TTM/forecasts, correlations, risk, backtests |
+| `daily_prices/` | `update_prices.py`, `backfill_historical.py` (yfinance), `update_polygon.py` (key-gated) | Fisher indexes, TTM/forecasts, correlations, risk, backtests |
 | `fundamentals.parquet` | `update_fundamentals.py` (`fetch-history`), `backfill_edgar.py` (SEC XBRL), `fundamentals_history.py` | screens, preferred_metrics, inclusion, dupont |
 | `monitored_stocks.parquet` | `manage_stocks.py` | index builds, ticker resolution, screens |
 | `portfolio_holdings.parquet` | external/Robinhood export | portfolio_report, risk, optimization |
@@ -86,7 +86,7 @@ Almost every program reads from a small set of canonical parquet/CSV tables in `
 
 ```
                          ┌─────────────── ingest ───────────────┐
-   yfinance ──► update_prices.py  /  backfill_historical.py ──► daily_prices.parquet
+   yfinance ──► update_prices.py  /  backfill_historical.py ──► daily_prices/
    manual   ──► update_fundamentals.py / fundamentals_history.py ──► fundamentals.parquet
    roster   ──► manage_stocks.py ──► monitored_stocks.parquet
                          └─────────────────────────────────────┘
@@ -153,7 +153,7 @@ Independent reimplementation of S&P 500 inclusion/exclusion, scored against actu
 ## 6. What an agent should know before "running analytics"
 
 - Always start from `run_daily_automation.py` (or the dashboard's `analytics_service` → `/run/all-daily`), not individual scripts. Valid job names (37): `hmm, rebalance, preferred, inclusion, stress, crisis, factor_rot, risk_enrich, rolling, rolling_corr, tail_hedge, allpairs, fund_snap, screen_bt, dupont, growth, peer, earnings, pairs, cross, aggregate, technical, econ_cal, est_rev, shadow, taleb_tail, taleb_gap, taleb_ergodic, taleb_fragility, taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride, taleb_subindustry_regime, taleb_barbell, taleb_optionality, export`.
-- Data must be fresh: if `daily_prices.parquet` is stale, run `update_prices.py --fetch --days N` first.
+- Data must be fresh: if `daily_prices/` is stale, run `update_prices.py --fetch --days N` first.
 - The dashboard reads `dashboard_data/data.json`; if tables look empty, re-run `export_dashboard_data.py`. The dashboard exposes 198 resources (catalog in `data_catalog.json`).
 - Don't hand-edit the base parquet tables; use the dedicated writer scripts (`manage_stocks`, `update_fundamentals`, `update_prices`).
 - Forecasts need pretrained checkpoints; if `forecasts_granite.parquet` is missing, run `granite_backfill.py`/`ttm_backfill.py` then `granite_daily.py`.

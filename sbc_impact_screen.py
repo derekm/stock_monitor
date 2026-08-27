@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 
 fund = pd.read_parquet('fundamentals.parquet')
-prices = pd.read_parquet('daily_prices.parquet')
+prices = pd.read_parquet('daily_prices/')
 mon = pd.read_parquet('monitored_stocks.parquet')
 
 # Get latest fundamentals per ticker

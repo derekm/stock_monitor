@@ -37,7 +37,7 @@ python add_ticker.py QSR --no-analytics      # skip analytics + dashboard export
 
 ## Outputs
 
-- Adds rows to `monitored_stocks.parquet`, `daily_prices.parquet`,
+- Adds rows to `monitored_stocks.parquet`, `daily_prices/`,
   `fundamentals.parquet`; then all analytics outputs (see SCHEMAS families:
   prices, fundamentals, signals, fragility, etc.).
 

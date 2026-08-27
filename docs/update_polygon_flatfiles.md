@@ -22,7 +22,7 @@ file per trading day, available ~11am ET the next day, history back to 2003).
 - For each of the last `--days` trading days, downloads the gzipped day CSV,
   normalizes columns to the price spine (`date, ticker, open, high, low, close,
   volume, source='polygon_flat', market_cap`), and appends to
-  `daily_prices.parquet` (dedup on date+ticker, keep last).
+  `daily_prices/` (dedup on date+ticker, keep last).
 
 ## Access note (verified 2026-08-12)
 
@@ -44,13 +44,13 @@ python update_polygon_flatfiles.py --days 5 --save
 
 ## Outputs
 
-- Appends to `daily_prices.parquet` (base table, `source='polygon_flat'`).
+- Appends to `daily_prices/` (base table, `source='polygon_flat'`).
 
 ## Related programs
 
 - `update_polygon.py` — the per-ticker REST bulk path (grouped endpoint), and the
   only Polygon/Massive price feed in the daily run
-- `daily_prices.parquet` — the shared price spine
+- `daily_prices/` — the shared price spine
 
 ## Not in the daily automation
 

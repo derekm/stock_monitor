@@ -16,7 +16,7 @@ constraints in high_vol_stress. Pairs with `regime_correlation_breakdown`.
 python regime_aware_constraints.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices.parquet`, `fundamentals.parquet`,
+Flags: `--save`. Reads `daily_prices/`, `fundamentals.parquet`,
 `monitored_stocks.parquet`, `hmm_regime_states.csv`, `preferred_metrics.csv`.
 
 ## Outputs

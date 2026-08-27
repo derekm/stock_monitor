@@ -18,7 +18,7 @@ python sp_index_methodology.py --save
 ```
 
 Flags: `--save`. Reads `sp500_changes.parquet`, `sp500_constituents.parquet`,
-`fundamentals.parquet`, `daily_prices.parquet`, `monitored_stocks.parquet`.
+`fundamentals.parquet`, `daily_prices/`, `monitored_stocks.parquet`.
 
 ## Outputs
 

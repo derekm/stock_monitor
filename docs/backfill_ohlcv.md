@@ -2,7 +2,7 @@
 
 ## Why it exists (rationale)
 
-The stored `daily_prices.parquet` is close+volume only for almost all tickers
+The stored `daily_prices/` is close+volume only for almost all tickers
 (OHLC coverage ~0.5%): the daily history came from a close-only source, and the
 Polygon flat-files that carry true open/high/low are blocked on this plan.
 Full OHLCV matters for:
@@ -21,7 +21,7 @@ For each ticker:
 1. fetches `period='max'` daily OHLCV via yfinance (`auto_adjust=False`, so the
    raw Open/High/Low/Close/Volume are as-traded; Adj Close is stored as
    `adj_close`)
-2. merges **strictly additively** into `daily_prices.parquet` — it only **fills**
+2. merges **strictly additively** into `daily_prices/` — it only **fills**
    `open/high/low` where they are currently NaN in existing rows and **adds**
    brand-new (date, ticker) rows the table lacks. It **never overwrites**
    existing `close`, `volume`, `market_cap`, or `adj_close`. Existing rows are

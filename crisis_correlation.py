@@ -19,7 +19,7 @@ import polars as pl
 import pandas as pd
 
 DATA_DIR = Path(__file__).parent
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT = DATA_DIR / "crisis_correlation_summary.parquet"
 OUT_PAIR = DATA_DIR / "crisis_correlation_pairs.parquet"

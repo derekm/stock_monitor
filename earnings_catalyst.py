@@ -5,7 +5,7 @@ post-earnings drift stats, and IV-vs-realized flag (realized-vol proxy).
 
 Inputs:
   earnings_calendar.parquet  (update_earnings.py)
-  daily_prices.parquet       (adj_close)
+  daily_prices/       (adj_close)
   monitored_stocks.parquet   (sector, ticker)
 
 Outputs:
@@ -31,7 +31,7 @@ from analytics_common import (
 )
 
 EARN = DATA_DIR / "earnings_calendar.parquet"
-PRICES = DATA_DIR / "daily_prices.parquet"
+PRICES = DATA_DIR / "daily_prices/"
 STOCKS = DATA_DIR / "monitored_stocks.parquet"
 OUT_SIG = DATA_DIR / "earnings_catalyst_signals.parquet"
 OUT_DRIFT = DATA_DIR / "earnings_drift_stats.parquet"
