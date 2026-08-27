@@ -11,12 +11,46 @@ OUT.parent.mkdir(exist_ok=True)
 SKIP_DIRS = {".git", "node_modules", "logs", "__pycache__", "dashboard_data"}
 
 
+def is_hive_partitioned(path: Path) -> bool:
+    """Check if a directory is a hive-partitioned dataset (contains year= subdirs)."""
+    if not path.is_dir():
+        return False
+    for child in path.iterdir():
+        if child.is_dir() and child.name.startswith("year="):
+            return True
+    return False
+
+
 def main():
     files = []
     for p in sorted(DATA_DIR.rglob("*")):
-        if not p.is_file():
-            continue
         if any(part in SKIP_DIRS for part in p.parts):
+            continue
+
+        # Handle hive-partitioned directories (e.g., daily_prices/)
+        if is_hive_partitioned(p):
+            # Register the whole partitioned dataset as one logical table
+            # DuckDB reads it with: read_parquet('daily_prices/**/*.parquet', hive_partitioning=true)
+            rel = p.relative_to(DATA_DIR).as_posix()
+            # Count total size of all parquet files in the partition
+            total_size = sum(
+                f.stat().st_size
+                for f in p.rglob("*.parquet")
+                if f.is_file() and f.stat().st_size > 0
+            )
+            files.append({
+                "name": p.name,
+                "filename": f"{p.name}/",
+                "path": f"{rel}/",
+                "url": f"{rel}/**/*.parquet",
+                "kind": "parquet_partitioned",
+                "size": total_size,
+                "sql_name": p.name.replace("-", "_").replace(".", "_"),
+                "hive_partitioning": True,
+            })
+            continue
+
+        if not p.is_file():
             continue
         if p.suffix.lower() not in {".csv", ".parquet", ".json"}:
             continue
@@ -42,7 +76,7 @@ def main():
             "sql_name": p.stem.replace("-", "_").replace(".", "_"),
         })
     # de-dupe by sql_name preferring parquet over csv over json
-    rank = {"parquet": 0, "csv": 1, "json": 2}
+    rank = {"parquet": 0, "parquet_partitioned": 0, "csv": 1, "json": 2}
     best = {}
     for f in files:
         k = f["sql_name"]
