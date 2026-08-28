@@ -243,10 +243,11 @@ jobs:
     timeout: null
     desc: "Taleb optionality"
 
-  polygon_prices:
-    cmd: ["update_polygon.py", "--days", "5", "--save"]
-    timeout: 300
-    desc: "Polygon prices"
+
+  update_prices:
+    cmd: ["update_prices.py", "fetch", "--days", "5", "--save"]
+    timeout: 600
+    desc: "Daily prices (Polygon primary, yfinance fallback)"
 
   bogle_tmi:
     cmd: ["build_bogle_funds.py", "--fund", "tmi", "--save", "--years", "10"]
@@ -281,8 +282,8 @@ jobs:
 # dependencies: job -> list of jobs that must finish first
 dependencies:
   rebalance: [hmm]
-  market_cap: [polygon_prices, fund_snap]
-  portfolio_report: [polygon_prices]
+  market_cap: [update_prices, fund_snap]
+  portfolio_report: [update_prices]
   inclusion: [preferred]
   implied_r: [preferred]
   momentum: [preferred]
@@ -326,17 +327,17 @@ dependencies:
   crisis: []
   factor_rot: []
   taleb_ride_now: []
-  polygon_prices: []
+  update_prices: []
   acq_backfill: []
-  bogle_tmi: [polygon_prices, market_cap]
-  bogle_qmi: [polygon_prices, market_cap]
-  bogle_qmi_strict: [polygon_prices, market_cap]
-  bogle_bpi: [polygon_prices, market_cap]
-  bogle_pmi: [polygon_prices, market_cap]
+  bogle_tmi: [update_prices, market_cap]
+  bogle_qmi: [update_prices, market_cap]
+  bogle_qmi_strict: [update_prices, market_cap]
+  bogle_bpi: [update_prices, market_cap]
+  bogle_pmi: [update_prices, market_cap]
   regime_clusters: [market_cap]
   export: [aggregate, technical, econ_cal, est_rev, shadow,
             taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility,
             taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride,
             taleb_arista, taleb_subindustry_regime, taleb_barbell,
-            taleb_optionality, lookthrough, damodaran, polygon_prices,
+            taleb_optionality, lookthrough, damodaran, update_prices,
             bogle_tmi, bogle_qmi, bogle_qmi_strict, bogle_bpi, bogle_pmi, regime_clusters, portfolio_report]

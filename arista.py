@@ -93,6 +93,10 @@ def _down_volume_share(close: pd.Series, volume: pd.Series | None, window: int =
 def compute_metrics(close: pd.Series, volume: pd.Series | None = None) -> pd.DataFrame:
     """Full point-in-time ARISTA metrics series for one ticker."""
     c = close.dropna()
+    # Deduplicate by date (keep last) — prevents "cannot reindex on an axis with
+    # duplicate labels" when a ticker has duplicate dates across partitions.
+    if c.index.duplicated().any():
+        c = c[~c.index.duplicated(keep="last")]
     if len(c) < 40:
         return pd.DataFrame()
     ret = c.pct_change()
@@ -170,6 +174,9 @@ def build(tickers: list[str] | None = None) -> pd.DataFrame:
     frames = []
     for tk, g in prices.groupby("ticker"):
         g = g.sort_values("date").set_index("date")
+        # Deduplicate by date (keep last) — prevents reindex errors
+        if g.index.duplicated().any():
+            g = g[~g.index.duplicated(keep="last")]
         v = vol.get(tk)
         m = compute_metrics(g["close"], v)
         if m.empty:

@@ -276,6 +276,81 @@ def cmd_ls_vs_erc(args):
     print(f"LS median {out.iloc[0]['median']:.3f} vs ERC {out.iloc[1]['median']:.3f}")
 
 
+def cmd_leverage_space_multi(args):
+    """Vince multi-asset Leverage Space: joint optimal f across TMI/BPI/QMI.
+    
+    Unlike the 2-asset grid (marginal Kelly per asset), this implements Vince's
+    full Leverage Space: grid search over the joint leverage space with a total
+    leverage cap, maximizing median terminal wealth across block-bootstrap paths.
+    The joint distribution preserves cross-asset codependence.
+    """
+    funds = {
+        "tmi": pd.read_parquet(DATA_DIR / "bogle_tmi.parquet"),
+        "bpi": pd.read_parquet(DATA_DIR / "bogle_bpi.parquet"),
+        "qmi": pd.read_parquet(DATA_DIR / "bogle_qmi.parquet"),
+    }
+    for k in funds:
+        funds[k]["date"] = pd.to_datetime(funds[k]["date"])
+    
+    # Align on common dates
+    merged = None
+    for k, df in funds.items():
+        d = df[["date", "ret_net"]].rename(columns={"ret_net": k})
+        merged = d if merged is None else merged.merge(d, on="date")
+    merged = merged.dropna().sort_values("date")
+    print(f"Common history: {merged['date'].min()} → {merged['date'].max()} ({len(merged)} days)")
+    
+    rets = {k: merged[k].to_numpy(dtype=float) for k in funds}
+    n = len(merged)
+    
+    # Grid: each f in [0, 1.5], total <= 2.0
+    grid = np.linspace(0.0, 1.5, 7)
+    cap = 2.0
+    paths = 500
+    block = 21
+    rng = np.random.default_rng(42)
+    nblk = n // block
+    
+    best_median = -np.inf
+    best_fs = None
+    all_rows = []
+    
+    # 3D grid search — 7^3 = 343 combinations
+    for ft in grid:
+        for fb in grid:
+            for fq in grid:
+                if ft + fb + fq > cap:
+                    continue
+                fs = {"tmi": ft, "bpi": fb, "qmi": fq}
+                
+                # Vectorized block-bootstrap: all paths at once
+                idx = rng.integers(0, nblk, size=(paths, nblk))
+                path_rets = np.zeros((paths, nblk * block))
+                for k in funds:
+                    fund_blocks = rets[k][:nblk * block].reshape(nblk, block)
+                    sampled = fund_blocks[idx.ravel()].reshape(paths, nblk * block)
+                    path_rets += fs[k] * sampled
+                
+                wealth = np.prod(1 + path_rets, axis=1)
+                valid = wealth[np.isfinite(wealth) & (wealth > 0)]
+                if len(valid) < paths * 0.5:
+                    continue
+                med = float(np.median(valid))
+                all_rows.append({**fs, "median_terminal": med, "mean_terminal": float(np.mean(valid)),
+                                 "n_paths": int(len(valid))})
+                if med > best_median:
+                    best_median = med
+                    best_fs = fs
+    
+    out = pd.DataFrame(all_rows).sort_values("median_terminal", ascending=False)
+    out.to_parquet(DATA_DIR / "leverage_space_sizing.parquet", index=False)
+    print(f"\nBest: f_tmi={best_fs['tmi']:.2f}, f_bpi={best_fs['bpi']:.2f}, f_qmi={best_fs['qmi']:.2f}")
+    print(f"Median terminal: {best_median:.2f}")
+    print(f"Wrote leverage_space_sizing.parquet ({len(out)} combos)")
+    print(f"\nTop 10:")
+    print(out.head(10).to_string(index=False))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Kelly criterion position-sizing estimators",
@@ -312,6 +387,9 @@ def main():
 
     p = sub.add_parser("ls-vs-erc")
     p.set_defaults(func=cmd_ls_vs_erc)
+
+    p = sub.add_parser("leverage-space-multi", help="Multi-asset Leverage Space (3-asset Vince grid)")
+    p.set_defaults(func=cmd_leverage_space_multi)
 
     args = parser.parse_args()
     if not args.cmd:

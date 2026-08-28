@@ -33,7 +33,7 @@ DAG_FILE = DATA_DIR / "daily_automation_dag.yaml"
 # Ceiling for jobs whose YAML timeout is null. Generous enough for the heaviest
 # unset job (export / damodaran) but finite, so a wedged job fails its wave
 # instead of stalling the run forever. Override per job in the YAML.
-DEFAULT_JOB_TIMEOUT = 3600
+DEFAULT_JOB_TIMEOUT = None
 
 
 def load_dag() -> tuple[dict, dict]:
