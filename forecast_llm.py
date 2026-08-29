@@ -104,16 +104,26 @@ def build_damodaran_narrative(row):
         parts.append(f"fair EV/EBITDA {fair_ev:.1f}")
     return "; ".join(parts)
 
-def _llm_predict(row: pd.Series) -> tuple[str, float, str]:
+def _llm_predict(row: pd.Series, damo_narr: str = "", wacc=None, roic=None, fair_ev=None, quality=None, life_cycle=None) -> tuple[str, float, str]:
     # Real LLM call with Qwen2.5-Math 1.5B GGUF via llama-cpp-python
     llm = _get_llm()
     regime = row["regime"]
     vol = row["vol21"]
     
-    # Build clinical prompt
-    prompt = f"""You are a clinical quant analyst. Given regime and volatility, output JSON only.
+    # Build clinical prompt with Damodaran context
+    wacc_str = f"{wacc:.1%}" if pd.notna(wacc) else "NA"
+    roic_str = f"{roic:.1%}" if pd.notna(roic) else "NA"
+    fair_str = f"{fair_ev:.1f}" if pd.notna(fair_ev) else "NA"
+    qual_str = f"{quality:.0f}" if pd.notna(quality) else "NA"
+    life_str = life_cycle if life_cycle else "Unclassified"
+    
+    prompt = f"""You are a clinical quant analyst. Output JSON only.
 Regime: {regime}
 Vol21: {vol:.4f}
+Life cycle: {life_str}
+WACC: {wacc_str} | ROIC: {roic_str} | Fair EV/EBITDA: {fair_str} | Quality: {qual_str}
+Damodaran narrative: {damo_narr}
+Task: Forecast 21d directional bias.
 Return JSON with keys direction, prob, rationale."""
     
     try:
@@ -191,9 +201,15 @@ def main():
             t_ctx = t_ctx.sort_values("as_of_date").iloc[[-1]]
             # Build Damodaran narrative
             damo_narr = build_damodaran_narrative(t_ctx.iloc[0])
+            # Extract Damodaran fields
+            wacc = t_ctx.iloc[0].get("wacc")
+            roic = t_ctx.iloc[0].get("roic")
+            fair_ev = t_ctx.iloc[0].get("fair_ev_ebitda")
+            quality = t_ctx.iloc[0].get("quality_score")
+            life_cycle = t_ctx.iloc[0].get("life_cycle_stage")
             # Forecast
             row_series = pd.Series({"regime": regime, "vol21": vol21})
-            direction, prob, narrative = _llm_predict(row_series)
+            direction, prob, narrative = _llm_predict(row_series, damo_narr, wacc, roic, fair_ev, quality, life_cycle)
             uncertainty = "high" if (vol21 > recent["vol21"].quantile(0.75) or regime == "high_vol_stress") else "normal"
             rows.append({
                 "date": date,
