@@ -578,17 +578,28 @@ def main():
         print(f"months {len(share)}")
         return
     if getattr(args, "adaptive_trans", False):
+        import numpy as np
         st = pd.read_parquet(OUT_STATES)
         st["date"] = pd.to_datetime(st["date"])
         st = st.sort_values("date")
-        stay = (st["regime"] == st["regime"].shift(1)).astype(float)
-        vol = pd.to_numeric(st["vol21"], errors="coerce")
-        roll_p = stay.rolling(63).mean()
-        roll_v = vol.rolling(63).mean()
-        both = pd.concat([roll_p, roll_v], axis=1).dropna()
-        corr = float(both.iloc[:, 0].corr(both.iloc[:, 1]))
-        out = pd.DataFrame([{"corr_persist_vol": corr, "n": int(len(both)),
-                             "mean_persist": float(roll_p.dropna().mean())}])
+        # Run-length persistence vs mean vol per run (Lo adaptive markets metric)
+        regime = st["regime"].values
+        changes = np.where(regime[:-1] != regime[1:])[0] + 1
+        runs = []
+        start_idx = 0
+        for end_idx in list(changes) + [len(regime)]:
+            run_len = end_idx - start_idx
+            vol_mean = float(st.iloc[start_idx:end_idx]["vol21"].mean())
+            runs.append((run_len, vol_mean))
+            start_idx = end_idx
+        runs_df = pd.DataFrame(runs, columns=["run_len", "vol_mean"])
+        corr = float(runs_df["run_len"].corr(runs_df["vol_mean"]))
+        out = pd.DataFrame([{
+            "corr_persist_vol": corr,
+            "n_runs": int(len(runs_df)),
+            "mean_run_len": float(runs_df["run_len"].mean()),
+            "mean_vol": float(runs_df["vol_mean"].mean())
+        }])
         out.to_parquet(DATA_DIR / "adaptive_hmm_states.parquet", index=False)
         print(out.to_string(index=False))
         print(f"persist vs vol corr {corr:+.3f}  bar +0.60")
