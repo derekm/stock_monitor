@@ -9,9 +9,9 @@ Also measures whether p_stress > 0.8 LEADS the shock_ride momentum exit
 (honest result historically: mostly coincident, not leading).
 
 Outputs:
-  subindustry_regime.csv — basket, basket_kind, label, date, vol21, avg_corr,
+  subindustry_regime.parquet — basket, basket_kind, label, date, vol21, avg_corr,
                            p_stress, regime, ride_pos
-  subindustry_regime_lead.csv — basket, n_exits, lead_10d/20d/30d
+  subindustry_regime_lead.parquet — basket, n_exits, lead_10d/20d/30d
 Usage: python subindustry_regime.py [--save] [--max-baskets N]
 """
 from __future__ import annotations

@@ -27,7 +27,7 @@ $$
 p_t = P(state = high_vol_stress \mid \mathcal{F}_t)
 $$
 
-recovered from `hmm_regime_states.csv` columns `p_state_*` — the state
+recovered from `hmm_regime_states.parquet` columns `p_state_*` — the state
 whose label contains "stress".
 
 **Turnover band (soft, continuous in posterior):**
@@ -72,7 +72,7 @@ proportional to how certain the regime model is, not a hard cliff.
 ```mermaid
 flowchart TB
   CAL[Month-end tick<br/>from daily_prices calendar] --> READ[Read inputs as of date]
-  READ --> REG[Regime: hmm_regime_states.csv<br/>latest state <= date]
+  READ --> REG[Regime: hmm_regime_states.parquet<br/>latest state <= date]
   READ --> PST[Stress posterior p(stress)<br/>from p_state_* columns]
   READ --> CORE[Dual-core count:<br/>preferred_metrics.csv INCLUDE_CORE]
   PST --> DEC{p vs thresholds}
@@ -104,7 +104,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-  HMM[hmm_regime_detection.py] -->|hmm_regime_states.csv| CAL
+  HMM[hmm_regime_detection.py] -->|hmm_regime_states.parquet| CAL
   PREF[preferred_metrics.py] -->|preferred_metrics.csv<br/>INCLUDE_CORE| CAL
   CAL[rebalance_calendar.py] -->|rebalance_calendar.csv| PO[portfolio_optimization.py] & VT[vol_target.py]
   HMM -. regime label .-> RAC[regime_aware_constraints.py]
@@ -114,7 +114,7 @@ flowchart LR
 
 **Notes (verified against source):**
 
-1. **Regime input file.** Reads `hmm_regime_states.csv` (written by
+1. **Regime input file.** Reads `hmm_regime_states.parquet` (written by
    `hmm_regime_detection.py`); the same file is read by
    `regime_aware_constraints.py`, `monte_carlo.py`, `kalman_state_estimates.py`,
    etc. The stress probability is recovered from the `p_state_*` columns —
@@ -138,7 +138,7 @@ python rebalance_calendar.py --months 18 --save
 ```
 
 Flags: `--months` (default 18), `--save`. Reads `daily_prices/`,
-`hmm_regime_states.csv`, `preferred_metrics.csv`.
+`hmm_regime_states.parquet`, `preferred_metrics.csv`.
 
 ## Outputs
 

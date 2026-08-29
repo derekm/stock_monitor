@@ -20,11 +20,11 @@ driver's noise, not a drifted copy of the logic. The flip rate IS the hidden
 optionality: the probability our decision is riding on noise.
 
 Outputs:
-  hidden_optionality.csv — per driver: perturb scale (est. error), decision
+  hidden_optionality.parquet — per driver: perturb scale (est. error), decision
   flip rate, mean |score change|, convexity bias π. Sorted by flip rate.
 
 Reads: the same CSVs as buy_candidates (preferred/momentum/factor/risk/
-aggregate) + hmm_regime_states.csv.
+aggregate) + hmm_regime_states.parquet.
 Usage: python hidden_optionality_audit.py [--n-perturb 200] [--seed 7]
 """
 import argparse
@@ -172,7 +172,7 @@ def main():
 
         out = pd.DataFrame(rows).sort_values("flip_rate", ascending=False) if rows else pd.DataFrame()
         out.to_parquet(DATA_DIR / "hidden_optionality.parquet")
-        print(f"\nWrote hidden_optionality.csv ({len(out)} drivers)")
+        print(f"\nWrote hidden_optionality.parquet ({len(out)} drivers)")
         if len(out):
             print("\nDrivers ranked by hidden optionality (decision flip rate):")
             print(out.to_string(index=False))

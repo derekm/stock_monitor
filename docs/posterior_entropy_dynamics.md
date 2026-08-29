@@ -17,7 +17,7 @@ python posterior_entropy_dynamics.py --save
 ```
 
 Flags: `--save`. Reads `hmm_posterior_analysis.csv` (falls back to
-`hmm_regime_states.csv`).
+`hmm_regime_states.parquet`).
 
 ## Outputs
 

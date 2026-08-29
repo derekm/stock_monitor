@@ -273,15 +273,15 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `hmm_posterior_analysis.csv` | `hmm_posterior_analysis.py` | Regime / state table |
 | `hmm_posterior_analysis.csv` | `posterior_entropy_dynamics.py` | Regime / state table |
 | `hmm_posterior_summary.csv` | `hmm_posterior_analysis.py` | Regime / state table |
-| `hmm_regime_states.csv` | `hmm_posterior_analysis.py` | Regime / state table |
-| `hmm_regime_states.csv` | `hmm_regime_detection.py` | Regime / state table |
-| `hmm_regime_states.csv` | `kalman_gain_analysis.py` | Regime / state table |
-| `hmm_regime_states.csv` | `kalman_state_estimates.py` | Regime / state table |
-| `hmm_regime_states.csv` | `monte_carlo.py` | Regime / state table |
-| `hmm_regime_states.csv` | `posterior_entropy_dynamics.py` | Regime / state table |
-| `hmm_regime_states.csv` | `regime_aware_constraints.py` | Regime / state table |
-| `hmm_regime_states.csv` | `regime_correlation_breakdown.py` | Regime / state table |
-| `hmm_regime_states.csv` | `threshold_logic.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `hmm_posterior_analysis.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `hmm_regime_detection.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `kalman_gain_analysis.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `kalman_state_estimates.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `monte_carlo.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `posterior_entropy_dynamics.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `regime_aware_constraints.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `regime_correlation_breakdown.py` | Regime / state table |
+|| `hmm_regime_states.parquet` | `threshold_logic.py` | Regime / state table |
 | `hmm_regime_summary.csv` | `hmm_regime_detection.py` | Regime / state table |
 | `hmm_regimes.csv` | `black_litterman_views.py` | Regime / state table |
 | `hmm_regimes.csv` | `buy_candidates.py` | Regime / state table |
@@ -537,11 +537,11 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `checkpoints/regime/*.pt` | `pass6.py --ckpt-dir` | Forecast / anomaly |
 | `technical_signals.csv` | `technical_signals.py` | Technical |
 | `economic_calendar.csv` | `economic_calendar.py` | Calendar / events |
-| `estimate_revisions.parquet` | `estimate_revisions.py` | Fundamental |
-| `filings_sentiment.csv` | `filings_sentiment.py` | Sentiment / alternative |
-| `options_skew.csv` | `options_skew.py` | Options |
-| `signal_model_oos.csv` | `signal_model.py` | Aggregate |
-| `signal_model_weights.csv` | `signal_model.py` | Aggregate |
+|| `estimate_revisions.parquet` | `estimate_revisions.py` | Fundamental |
+|| `filings_sentiment.csv` | `filings_sentiment.py` | Sentiment / alternative |
+|| `options_skew.parquet` | `options_skew.py` | Options |
+|| `signal_model_oos.csv` | `signal_model.py` | Aggregate |
+|| `signal_model_weights.csv` | `signal_model.py` | Aggregate |
 | `shadow_book.csv` | `shadow_book.py` | Portfolio / risk |
 | `shadow_lots.csv` | `shadow_book.py` | Portfolio / risk |
 | `tail_index.csv` | `tail_index.py` | Taleb / fat tails |
@@ -555,9 +555,9 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 || `fragility_screen_history.parquet` | `fragility_screen.py` | Taleb / fat tails (append-only PIT) ||
 || `options_skew_history.parquet` | `options_skew.py` | Options (append-only PIT; not back-fillable) ||
 || `macro_fragility.csv` | `macro_fragility.py` | Taleb / fat tails ||
-|| `macro_shock.csv` | `macro_shock.py` | Taleb / fat tails ||
-|| `macro_sector_shock.csv` | `macro_sector_shock.py` | Taleb / fat tails (DYNAMIC baskets) ||
-|| `basket_members.csv` | `macro_sector_shock.py` | Taleb / fat tails ||
+||| `macro_shock.parquet` | `macro_shock.py` | Taleb / fat tails ||
+||| `macro_sector_shock.parquet` | `macro_sector_shock.py` | Taleb / fat tails (DYNAMIC baskets) ||
+||| `basket_members.parquet` | `macro_sector_shock.py` | Taleb / fat tails ||
 || `shock_ride.parquet` | `shock_ride.py` | Taleb / fat tails ||
 || `shock_ride_tickers.parquet` | `shock_ride.py` | Taleb / fat tails. Per-ticker ride: research momentum (tsmom_*, stmom_1m_ret, gw_high_prox, young_gate_*), fresh breakout (fresh_verdict, fresh_score), fractal (fractal_{90,30}_consensus, fractal_{90,30,15,45}_best_confirmed, fractal_posture, fractal_stack_depth/full/mom), durability (long_ride_score), quality gate (ride_gate_open/horizon/mom), dual exit (ride_exit_flag/kind), structural gate (structural_mode/signal/gate_open/in_market, structural_{turtle,volscale,regime,recouple,consensus}), recommendation/interpretation ||
 || `arista_metrics.parquet` | `arista.py` | Taleb / fat tails. FULL daily ARISTA top-detector metrics time series per ticker (backtesting surface): date,ticker,close,mom3,mom6,decel,downshare,from20,at_year_high,leg_divergence,leg_distribution,leg_rollover,arista_score,arista_signal ||
@@ -572,12 +572,12 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 || `long_hold_entry_screen.parquet` | `backtest_long_hold_entry.py` | Taleb / fat tails. Recent gap+volume ignitions joined to shock_ride posture/stack/gate/rec ||
 || `rare_ignition_info.parquet` | `rare_ignition_info.py` | Taleb / fat tails. Event-study: raw/fresh/rare/exuberant gap+vol forward excess vs EW ||
 || `rare_ignition_live.parquet` | `rare_ignition_info.py` | Taleb / fat tails. Live rare/exuberant ignitions joined to preferred_metrics + shock_ride ||
-|| `fractal_windows_backtest.parquet` | `fractal_windows_backtest.py` | Taleb / fat tails ||
-|| `fractal_windows_backtest.parquet` | `fractal_windows_backtest_gpu.py` | Taleb / fat tails ||
-|| `subindustry_regime.csv` | `subindustry_regime.py` | Taleb / fat tails ||
-|| `subindustry_regime_lead.csv` | `subindustry_regime.py` | Taleb / fat tails ||
-|| `barbell_check.csv` | `barbell_check.py` | Taleb / fat tails ||
-||| `hidden_optionality.csv` | `hidden_optionality_audit.py` | Taleb / fat tails ||
+||| `fractal_windows_backtest.parquet` | `fractal_windows_backtest.py` | Taleb / fat tails ||
+||| `fractal_windows_backtest.parquet` | `fractal_windows_backtest_gpu.py` | Taleb / fat tails ||
+||| `subindustry_regime.parquet` | `subindustry_regime.py` | Taleb / fat tails ||
+||| `subindustry_regime_lead.parquet` | `subindustry_regime.py` | Taleb / fat tails ||
+||| `barbell_check.parquet` | `barbell_check.py` | Taleb / fat tails ||
+||| `hidden_optionality.parquet` | `hidden_optionality_audit.py` | Taleb / fat tails ||
 || `corporate_actions.parquet` | `acquisition_backfill.py` | Corporate actions |
 || `fiscal_year_end_map.parquet` | `acquisition_backfill.py` | Fiscal year map |
 || `daily_prices_expired.parquet` | `data_validation.py` | Expired price history |

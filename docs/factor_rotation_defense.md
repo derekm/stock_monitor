@@ -30,7 +30,7 @@ score_g(t) = mom_{12,g}(t) \cdot \mathbb{1}[regime \neq high-vol-stress]
 $$
 
 Only rotate into a sleeve if it has positive 12m momentum AND the current
-regime is NOT `high_vol_stress` (regime from `hmm_regime_states.csv`).
+regime is NOT `high_vol_stress` (regime from `hmm_regime_states.parquet`).
 
 **Defensive allocation weight:**
 
@@ -38,7 +38,7 @@ $$
 w_g(t) = \frac{score_g(t)_+}{\sum_h score_h(t)_+} \times (1 - \alpha \cdot p_stress)
 $$
 
-where $p_stress$ = HMM stress posterior (from `hmm_regime_states.csv`);
+where $p_stress$ = HMM stress posterior (from `hmm_regime_states.parquet`);
 $\alpha = 0.5$ scales the allocation down as stress rises.
 
 ## Outputs

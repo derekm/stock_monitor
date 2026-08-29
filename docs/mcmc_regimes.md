@@ -19,7 +19,7 @@ python mcmc_regimes.py --ticker AEP,NVR --n-draw 2000 --burn 500 --seed 0
 
 Flags: `--index` (repeatable), `--ticker`, `--n-draw` (default 2000),
 `--burn` (default 500), `--seed` (default 0), `--save`. Reads
-`hmm_regime_states.csv`.
+`hmm_regime_states.parquet`.
 
 ## Outputs
 

@@ -15,7 +15,7 @@ preceding — disjoint).
 ## Method
 
 - Test windows are tagged with the HMM regime in force during the ~20 trading
-  days before the forecast point (majority of `hmm_regime_states.csv` labels
+  days before the forecast point (majority of `hmm_regime_states.parquet` labels
   at-or-before each window's context end) — the regime the forecaster was "in".
 - Reports overall direction accuracy (model vs persistence) plus the test-set
   regime mix and the per-regime persistence baseline (fraction of windows

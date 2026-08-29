@@ -19,7 +19,7 @@ python monte_carlo.py --ticker AEP --antithetic --control --stratified
 
 Flags: `--index`, `--ticker`, `--n` (paths), `--horizon`, `--antithetic`,
 `--control`, `--stratified`, `--quasi`, `--save`. Reads `daily_prices/`,
-`hmm_regime_states.csv`, `hmm_transition_matrix.csv`.
+`hmm_regime_states.parquet`, `hmm_transition_matrix.csv`.
 
 ## Outputs
 

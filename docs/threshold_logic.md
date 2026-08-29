@@ -19,7 +19,7 @@ python threshold_logic.py --regime high_vol_stress --from-hmm
 ```
 
 Flags: `--regime` (override regime), `--from-hmm` (read regime from
-`hmm_regime_states.csv`), `--save`. Reads `fundamentals.parquet`.
+`hmm_regime_states.parquet`), `--save`. Reads `fundamentals.parquet`.
 
 ## Outputs
 

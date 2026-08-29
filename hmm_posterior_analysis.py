@@ -2,7 +2,7 @@
 """
 hmm_posterior_analysis.py — Explore HMM hidden-state posterior probabilities.
 
-Reads hmm_regime_states.csv (from hmm_regime_detection.py) and reports:
+Reads hmm_regime_states.parquet (from hmm_regime_detection.py) and reports:
   - Posterior mass by regime over time
   - Entropy / uncertainty (days with mixed beliefs)
   - Soft vs hard labels (argmax vs probability threshold)

@@ -15,7 +15,7 @@ path so you can see when the filter is anchored vs reactive.
 python kalman_gain_analysis.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices/`, `hmm_regime_states.csv`.
+Flags: `--save`. Reads `daily_prices/`, `hmm_regime_states.parquet`.
 
 ## Outputs
 

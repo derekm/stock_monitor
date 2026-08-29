@@ -178,7 +178,7 @@ flowchart LR
 
     subgraph SEL["SELECTION"]
         S1["regime_model_best.csv<br/>best config per ticker x regime"]
-        S2["hmm_regime_states.csv<br/>current regime"]
+        S2["hmm_regime_states.parquet<br/>current regime"]
     end
 
     subgraph SERVE["SERVING"]

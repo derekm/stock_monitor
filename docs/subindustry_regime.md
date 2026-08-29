@@ -63,9 +63,9 @@ time exits.
 
 ## Outputs
 
-- `subindustry_regime.csv` — `basket, basket_kind, label, n_members, date,
+- `subindustry_regime.parquet` — `basket, basket_kind, label, n_members, date,
   vol21, avg_corr, p_stress, regime, ride_pos`
-- `subindustry_regime_lead.csv` — `basket, basket_kind, label, n_members,
+- `subindustry_regime_lead.parquet` — `basket, basket_kind, label, n_members,
   n_exits, lead_10d, lead_20d, lead_30d`
 
 ## Usage

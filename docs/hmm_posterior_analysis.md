@@ -5,7 +5,7 @@ Explores the HMM hidden-state posterior probabilities produced by
 
 ## Why it exists (rationale)
 
-Hard regime labels hide uncertainty. This script reads `hmm_regime_states.csv`
+Hard regime labels hide uncertainty. This script reads `hmm_regime_states.parquet`
 and reports posterior mass over time, entropy (mixed-belief days), soft vs hard
 labels, and transition risk when the max posterior is weak — so the dashboard
 and risk logic can treat regime as a probability, not a boolean.
@@ -16,7 +16,7 @@ and risk logic can treat regime as a probability, not a boolean.
 python hmm_posterior_analysis.py --save
 ```
 
-Flags: `--save`. If `hmm_regime_states.csv` is missing it runs
+Flags: `--save`. If `hmm_regime_states.parquet` is missing it runs
 `hmm_regime_detection.py --save` first.
 
 ## Outputs

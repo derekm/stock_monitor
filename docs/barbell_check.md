@@ -34,7 +34,7 @@ where $\bar{F}$ = average fragility score of current holdings; $\alpha = 0.5$.
 
 - Safe: `fragility_screen` low-fragility names + cash (zero cost)
 - Middle: excluded
-- Convex: gap risk (gap_risk.py), tail options (options_skew.csv), long volatility (vol_target) — put ladder cost from `options_skew.csv`
+- Convex: gap risk (gap_risk.py), tail options (options_skew.parquet), long volatility (vol_target) — put ladder cost from `options_skew.parquet`
 
 **Put ladder annual cost:**
 
@@ -42,7 +42,7 @@ $$
 put_ladder_cost_ann = \sum_{k} put_cost_k \times \frac{252}{days_to_expiry_k}
 $$
 
-from `options_skew.csv` (ATM IV, skew, put/call ratios).
+from `options_skew.parquet` (ATM IV, skew, put/call ratios).
 
 **Vol-of-vol beta:**
 
@@ -54,7 +54,7 @@ measures convexity payoff in vol-of-vol space.
 
 ## Outputs
 
-`barbell_check.csv` — columns: n_names, weight_safe, weight_middle, weight_convex,
+`barbell_check.parquet` — columns: n_names, weight_safe, weight_middle, weight_convex,
 barbell_score, vol_beta, vol_of_vol_beta, avg_atm_iv, put_ladder_cost_ann,
 recommended_convexity_alloc
 

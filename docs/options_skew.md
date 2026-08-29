@@ -25,7 +25,7 @@ python options_skew.py --save --max-tickers 60
 
 ## Outputs
 
-- `options_skew.csv` — per-ticker snapshot (date, spot, atm_iv, skew,
+- `options_skew.parquet` — per-ticker snapshot (date, spot, atm_iv, skew,
   put_call_vol, expiry).
 
 ## Related programs

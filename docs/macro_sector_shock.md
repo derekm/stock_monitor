@@ -94,7 +94,7 @@ where $z(x) = \frac{x - \mu_x}{\sigma_x}$ over the full history of the basket.
 - `macro_sector_shock.csv` — monthly long: `basket, basket_kind, label,
   date, n_members, basket_mom_12m, commodity_mom_12m, shock_score,
   shock_zone`
-- `basket_members.csv` — point-in-time membership: `basket, basket_kind,
+- `basket_members.parquet` — point-in-time membership: `basket, basket_kind,
   label, ticker, commodity`
 
 ## Usage

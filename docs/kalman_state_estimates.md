@@ -16,7 +16,7 @@ daily prints and feeds the dashboard's regime tab.
 python kalman_state_estimates.py --save
 ```
 
-Flags: `--save`. Reads `daily_prices/`, `hmm_regime_states.csv`.
+Flags: `--save`. Reads `daily_prices/`, `hmm_regime_states.parquet`.
 
 ## Outputs
 

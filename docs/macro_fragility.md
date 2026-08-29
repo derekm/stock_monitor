@@ -132,7 +132,7 @@ velocity, p_stress, minsky_signal, minsky_pctile, danger_zone, regime_ctx
 python macro_fragility.py --save
 ```
 
-Reads: FRED (network, cached), `hmm_regime_states.csv` (via buy_candidates).
+Reads: FRED (network, cached), `hmm_regime_states.parquet` (via buy_candidates).
 Wired into `run_daily_automation.py` as the `taleb_minsky` job (depends on
 `hmm` + `taleb_fragility`; feeds `export`).
 
