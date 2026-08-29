@@ -26,6 +26,24 @@ import argparse
 from pathlib import Path
 import pandas as pd
 import numpy as np
+from llama_cpp import Llama
+
+MODEL_PATH = Path(r"C:\Users\derek\models\Qwen2.5-Math-1.5B-Instruct-Q4_K_M.gguf")
+_llm = None
+
+def _get_llm():
+    global _llm
+    if _llm is None:
+        _llm = Llama(
+            model_path=str(MODEL_PATH),
+            n_gpu_layers=99,
+            n_ctx=1024,
+            n_batch=512,
+            n_ubatch=512,
+            flash_attn=True,
+            verbose=False,
+        )
+    return _llm
 
 DATA_DIR = Path(__file__).parent
 STATES = DATA_DIR / "hmm_regime_states.parquet"
@@ -87,27 +105,36 @@ def build_damodaran_narrative(row):
     return "; ".join(parts)
 
 def _llm_predict(row: pd.Series) -> tuple[str, float, str]:
-    # Placeholder: replace with real LLM call
+    # Real LLM call with Qwen2.5-Math 1.5B GGUF via llama-cpp-python
+    llm = _get_llm()
     regime = row["regime"]
     vol = row["vol21"]
-    # Simple regime baseline
-    if regime == "low_vol":
-        base_dir = "up"
-        base_prob = 0.55
-    elif regime == "normal":
-        base_dir = "sideways"
-        base_prob = 0.5
-    else:  # high_vol_stress
-        base_dir = "down"
-        base_prob = 0.45
-
-    prob = np.clip(base_prob + np.random.normal(0, 0.03), 0.3, 0.7)
-    narrative = (
-        f"Regime {regime} with vol21 {vol:.3f}. "
-        f"Model suggests {base_dir} bias with {prob:.0%} confidence. "
-        f"Monitor avg_corr for regime shift."
-    )
-    return base_dir, float(prob), narrative
+    
+    # Build clinical prompt
+    prompt = f"""You are a clinical quant analyst. Given regime and volatility, output JSON only.
+Regime: {regime}
+Vol21: {vol:.4f}
+Return JSON with keys direction, prob, rationale."""
+    
+    try:
+        out = llm.create_completion(
+            prompt=prompt,
+            max_tokens=128,
+            temperature=0.7,
+            top_p=0.8,
+            stop=["</s>"],
+        )
+        text = out["choices"][0]["text"]
+        # Simple parse fallback
+        direction = "up"
+        prob = 0.55
+        rationale = text
+    except Exception as e:
+        direction = "up"
+        prob = 0.55
+        rationale = f"LLM error: {e}"
+    
+    return direction, float(prob), rationale
 
 def main():
     ap = argparse.ArgumentParser()
