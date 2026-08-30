@@ -145,6 +145,8 @@ def classify_life_cycle(fundamentals_latest):
 
 ```python
 # VECTORIZED numpy implementation (no iterrows)
+# NaN unless WACC > g, ROIC/ROE > 0, reinvestment in [0, 1), result > 0.
+# Negative "fair" EV/EBITDA is g > ROIC, not a multiple — MOS 2026-07-31 was −14.4x.
 fair_pe       = (1 - g/roe) / (cost_of_equity - g)
 fair_ev_ebitda = (1 - g/roic) * (1 - t) / (wacc - g)
 fair_ev_sales  = margin * (1 - g/roic) * (1 - t) / (wacc - g)
@@ -173,8 +175,8 @@ fair_pb       = (roe - g) / (cost_of_equity - g)
 | Quality score as proxy | **Separate quality assessment from valuation margin** |
 
 Implemented in `preferred_metrics.py`:
-- `discount_to_fair = (fair_ev_ebitda - ev_ebitda) / fair_ev_ebitda`
-- `mos_pass = discount_to_fair >= 0.15`
+- `discount_to_fair = (fair_ev_ebitda - ev_ebitda) / fair_ev_ebitda` only when `fair_ev_ebitda > 0`
+- `mos_pass = discount_to_fair >= 0.15` — a negative fair multiple cannot pass
 
 ---
 
@@ -237,6 +239,7 @@ fair_ev_ebitda = (1 - g/roic) * (1 - t) / (wacc - g)
 fair_ev_sales  = margin * (1 - g/roic) * (1 - t) / (wacc - g)
 fair_pb       = (roe - g) / (cost_of_equity - g)
 ```
+Emit NaN when g ≥ ROIC (reinvestment ∉ [0, 1)), ROE ≤ g, WACC ≤ g, or the result is ≤ 0. A negative multiple is not a cheapness signal.
 
 ### 8.5 Life Cycle Classification
 ```

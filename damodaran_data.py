@@ -379,80 +379,184 @@ def compute_wacc_per_ticker(
 
 
 def classify_life_cycle(row: pd.Series) -> str:
-    """Classify corporate life cycle stage per Damodaran"""
-    rev_growth_3y = row.get("revenue_growth_3y")
-    fcf_margin = row.get("fcf_margin")  # fcf / revenue
-    roic = row.get("roic")
-    reinvestment_rate = row.get("reinvestment_rate")  # 1 - fcf/ebit approx
-    
-    # Handle missing
-    if pd.isna(rev_growth_3y):
-        rev_growth_3y = 0
-    if pd.isna(fcf_margin):
-        fcf_margin = 0
-    if pd.isna(roic):
-        roic = 0
-    if pd.isna(reinvestment_rate):
-        reinvestment_rate = 0
-    
-    if rev_growth_3y > 0.30 and fcf_margin < 0:
-        return "Young Growth"
-    elif rev_growth_3y > 0.15 and fcf_margin < 0.05:
-        return "High Growth"
-    elif rev_growth_3y > 0.05 and roic > 0.15:
-        return "Mature Growth"
-    elif rev_growth_3y > 0.02 and fcf_margin > 0.10:
-        return "Mature Stable"
-    elif rev_growth_3y < 0:
-        return "Decline"
-    else:
-        return "Unclassified"
+    """Classify corporate life cycle stage per Damodaran."""
+    return classify_life_cycle_arrays(
+        pd.Series([row.get("revenue_growth_3y")]),
+        pd.Series([row.get("fcf_margin")]),
+        pd.Series([row.get("roic")]),
+    )[0]
+
+
+def classify_life_cycle_arrays(rev_growth_3y, fcf_margin, roic) -> np.ndarray:
+    """Vectorized Damodaran life-cycle. Missing growth stays Unclassified (do not fill 0)."""
+    g = pd.to_numeric(rev_growth_3y, errors="coerce")
+    fcf = pd.to_numeric(fcf_margin, errors="coerce")
+    r = pd.to_numeric(roic, errors="coerce")
+    young = (g > 0.30) & (fcf < 0)
+    high = (g > 0.15) & (fcf < 0.05)
+    mature_g = (g > 0.05) & (r > 0.15)
+    mature_s = (g > 0.02) & (fcf > 0.10)
+    decline = g < 0
+    return np.select(
+        [young, high, mature_g, mature_s, decline],
+        ["Young Growth", "High Growth", "Mature Growth", "Mature Stable", "Decline"],
+        default="Unclassified",
+    )
+
+
+def _as_python_date(s: pd.Series) -> pd.Series:
+    """Keep date-keys as datetime.date. Temp datetime only for year diffs."""
+    sample = s.dropna()
+    if len(sample) and isinstance(sample.iloc[0], date) and not isinstance(sample.iloc[0], datetime):
+        return s
+    return pd.to_datetime(s, errors="coerce").dt.date
+
+
+def _year_span(d0: pd.Series, d1: pd.Series) -> pd.Series:
+    a = pd.to_datetime(d1)
+    b = pd.to_datetime(d0)
+    return (a - b).dt.days / 365.25
+
+
+def _compute_growth_and_classify(fund: pd.DataFrame) -> pd.DataFrame:
+    """One vectorized pass: PIT ffill, date-based 3y CAGR, overall CAGR, classify."""
+    df = fund.copy()
+    df = df.sort_values(["ticker", "as_of_date"]).reset_index(drop=True)
+    df["as_of_date"] = _as_python_date(df["as_of_date"])
+    df["revenue_ttm"] = pd.to_numeric(df["revenue_ttm"], errors="coerce")
+    for col in ("free_cash_flow", "fcf_margin", "roic"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    g = df.groupby("ticker", sort=False)
+    df["revenue_ttm"] = g["revenue_ttm"].ffill()
+    if "free_cash_flow" in df.columns:
+        df["free_cash_flow"] = g["free_cash_flow"].ffill()
+    if "fcf_margin" in df.columns:
+        df["fcf_margin"] = g["fcf_margin"].ffill()
+    if "roic" in df.columns:
+        df["roic"] = g["roic"].ffill()
+
+    ts = pd.to_datetime(df["as_of_date"]).astype("datetime64[ns]")
+    df["_as_of_ns"] = ts
+    lag_rev = np.full(len(df), np.nan)
+    lag_ts = np.empty(len(df), dtype="datetime64[ns]")
+    lag_ts[:] = np.datetime64("NaT")
+    for _, idx in df.groupby("ticker", sort=False).groups.items():
+        ii = np.asarray(idx)
+        t = ts.iloc[ii].to_numpy()
+        r = df["revenue_ttm"].iloc[ii].to_numpy()
+        order = np.argsort(t, kind="mergesort")
+        t_s, r_s = t[order], r[order]
+        has = ~np.isnan(r_s)
+        t_ok, r_ok = t_s[has], r_s[has]
+        if len(t_ok) == 0:
+            continue
+        target = t - np.timedelta64(1096, "D")
+        j = np.searchsorted(t_ok, target, side="right") - 1
+        good = j >= 0
+        if not good.any():
+            continue
+        jg = j[good]
+        lag_rev[ii[good]] = r_ok[jg]
+        lag_ts[ii[good]] = t_ok[jg]
+    years_3y = (ts.to_numpy() - lag_ts).astype("timedelta64[D]").astype(np.float64) / 365.25
+    valid_3y = (
+        (years_3y >= 2.5)
+        & (lag_rev > 0)
+        & df["revenue_ttm"].notna().to_numpy()
+        & (lag_ts < ts.to_numpy())
+    )
+    df["revenue_growth_3y"] = np.nan
+    df.loc[valid_3y, "revenue_growth_3y"] = (
+        df.loc[valid_3y, "revenue_ttm"].to_numpy() / lag_rev[valid_3y]
+    ) ** (1.0 / years_3y[valid_3y]) - 1.0
+    df.drop(columns=["_as_of_ns"], inplace=True)
+
+    first_rows = (
+        df.loc[df["revenue_ttm"].notna(), ["ticker", "as_of_date", "revenue_ttm"]]
+        .groupby("ticker", as_index=False)
+        .first()
+        .rename(columns={"as_of_date": "as_of_date_first", "revenue_ttm": "revenue_ttm_first"})
+    )
+    df = df.merge(first_rows, on="ticker", how="left")
+    years_all = _year_span(df["as_of_date_first"], df["as_of_date"])
+    valid_all = (years_all > 0) & (df["revenue_ttm_first"] > 0) & df["revenue_ttm"].notna()
+    df["revenue_growth_overall"] = np.nan
+    df.loc[valid_all, "revenue_growth_overall"] = (
+        df.loc[valid_all, "revenue_ttm"] / df.loc[valid_all, "revenue_ttm_first"]
+    ) ** (1.0 / years_all.loc[valid_all]) - 1.0
+    df.drop(columns=["as_of_date_first", "revenue_ttm_first"], inplace=True)
+
+    if "fcf_margin" not in df.columns:
+        df["fcf_margin"] = np.nan
+    need = df["fcf_margin"].isna() & df["free_cash_flow"].notna() & df["revenue_ttm"].notna() & (df["revenue_ttm"] != 0)
+    df.loc[need, "fcf_margin"] = df.loc[need, "free_cash_flow"] / df.loc[need, "revenue_ttm"]
+
+    if "roic" not in df.columns:
+        df["roic"] = np.nan
+
+    df["life_cycle_stage"] = classify_life_cycle_arrays(
+        df["revenue_growth_3y"], df["fcf_margin"], df["roic"]
+    )
+    keep = [
+        "ticker", "as_of_date", "life_cycle_stage",
+        "revenue_growth_3y", "revenue_growth_overall", "fcf_margin", "roic",
+    ]
+    if "reinvestment_rate" in df.columns:
+        keep.append("reinvestment_rate")
+    return df[keep].copy()
 
 
 def fair_pe(growth: float, roe: float, cost_of_equity: float, payout: float | None = None) -> float:
-    """Implied P/E from fundamentals (Gordon growth)"""
+    """Implied P/E from fundamentals (Gordon growth). NaN if not a positive multiple."""
     if pd.isna(growth) or pd.isna(roe) or pd.isna(cost_of_equity):
         return np.nan
-    if cost_of_equity <= growth:
+    if cost_of_equity <= growth or roe <= 0:
         return np.nan
     if payout is None:
-        payout = max(0, 1 - growth / roe) if roe > 0 else 0
-    return payout / (cost_of_equity - growth)
+        payout = 1 - growth / roe
+    if payout <= 0 or payout > 1:
+        return np.nan
+    val = payout / (cost_of_equity - growth)
+    return val if np.isfinite(val) and val > 0 else np.nan
 
 
 def fair_ev_ebitda(growth: float, roic: float, wacc: float, tax_rate: float = 0.21) -> float:
-    """Implied EV/EBITDA from fundamentals"""
+    """Implied EV/EBITDA from fundamentals. NaN unless reinvestment in [0, 1)."""
     if pd.isna(growth) or pd.isna(roic) or pd.isna(wacc):
         return np.nan
-    if wacc <= growth:
-        return np.nan
-    if roic <= 0:
+    if wacc <= growth or roic <= 0:
         return np.nan
     reinvestment = growth / roic
+    if reinvestment < 0 or reinvestment >= 1:
+        return np.nan
     fcf_conversion = (1 - reinvestment) * (1 - tax_rate)
-    return fcf_conversion / (wacc - growth)
+    val = fcf_conversion / (wacc - growth)
+    return val if np.isfinite(val) and val > 0 else np.nan
 
 
 def fair_ev_sales(growth: float, margin: float, roic: float, wacc: float, tax_rate: float = 0.21) -> float:
-    """Implied EV/Sales from fundamentals"""
+    """Implied EV/Sales from fundamentals. NaN unless reinvestment in [0, 1)."""
     if pd.isna(growth) or pd.isna(margin) or pd.isna(roic) or pd.isna(wacc):
         return np.nan
-    if wacc <= growth:
-        return np.nan
-    if roic <= 0:
+    if wacc <= growth or roic <= 0 or margin <= 0:
         return np.nan
     reinvestment = growth / roic
+    if reinvestment < 0 or reinvestment >= 1:
+        return np.nan
     fcf_conversion = margin * (1 - reinvestment) * (1 - tax_rate)
-    return fcf_conversion / (wacc - growth)
+    val = fcf_conversion / (wacc - growth)
+    return val if np.isfinite(val) and val > 0 else np.nan
 
 
 def fair_pb(growth: float, roe: float, cost_of_equity: float) -> float:
-    """Implied P/B from fundamentals"""
+    """Implied P/B from fundamentals. NaN if ROE ≤ g (negative book multiple)."""
     if pd.isna(growth) or pd.isna(roe) or pd.isna(cost_of_equity):
         return np.nan
-    if cost_of_equity <= growth:
+    if cost_of_equity <= growth or roe <= growth:
         return np.nan
-    return (roe - growth) / (cost_of_equity - growth)
+    val = (roe - growth) / (cost_of_equity - growth)
+    return val if np.isfinite(val) and val > 0 else np.nan
 
 
 def compute_fair_multiples(
@@ -497,31 +601,38 @@ def compute_fair_multiples(
         coe = cost_of_equity[valid]
         w = wacc[valid]
 
+        def _pos(arr):
+            return np.where(np.isfinite(arr) & (arr > 0), arr, np.nan)
+
         # Fair P/E = (1 - g/ROE) / (r - g)
-        pe_num = 1.0 - np.divide(g, r_e, out=np.full_like(g, np.nan), where=(r_e != 0))
+        pe_ok = (r_e > 0) & (coe > g)
+        pe_num = 1.0 - np.divide(g, r_e, out=np.full_like(g, np.nan), where=pe_ok)
+        pe_ok = pe_ok & (pe_num > 0) & (pe_num <= 1)
         pe_den = coe - g
-        fair_pe_v = np.divide(pe_num, pe_den, out=np.full_like(g, np.nan), where=(pe_den != 0))
+        fair_pe_v = np.divide(pe_num, pe_den, out=np.full_like(g, np.nan), where=pe_ok)
 
         # Fair EV/EBITDA = (1 - g/ROIC) * (1 - t) / (WACC - g)
-        ev_num = (1.0 - np.divide(g, r_ic, out=np.full_like(g, np.nan), where=(r_ic != 0))) * (1 - 0.21)
+        # g/ROIC must sit in [0, 1) or (1 - reinvest) is ≤ 0 and the multiple goes negative.
+        ev_reinv = np.divide(g, r_ic, out=np.full_like(g, np.nan), where=(r_ic > 0))
+        ev_ok = (r_ic > 0) & (w > g) & (ev_reinv >= 0) & (ev_reinv < 1)
+        ev_num = (1.0 - ev_reinv) * (1 - 0.21)
         ev_den = w - g
-        fair_ev_v = np.divide(ev_num, ev_den, out=np.full_like(g, np.nan), where=(ev_den != 0))
+        fair_ev_v = np.divide(ev_num, ev_den, out=np.full_like(g, np.nan), where=ev_ok)
 
         # Fair EV/Sales = (1 - g/ROIC) * margin * (1 - t) / (WACC - g)
-        fair_sales_v = np.full_like(g, np.nan)
-        has_margin = ~np.isnan(m)
-        if has_margin.any():
-            fair_sales_v[has_margin] = ev_num[has_margin] * m[has_margin] / np.divide(ev_den[has_margin], 1, out=np.full_like(ev_den[has_margin], np.nan), where=(ev_den[has_margin] != 0))
+        sales_ok = ev_ok & ~np.isnan(m) & (m > 0)
+        fair_sales_v = np.divide(ev_num * m, ev_den, out=np.full_like(g, np.nan), where=sales_ok)
 
         # Fair P/B = (ROE - g) / (r - g)
+        pb_ok = (r_e > g) & (coe > g)
         pb_num = r_e - g
         pb_den = coe - g
-        fair_pb_v = np.divide(pb_num, pb_den, out=np.full_like(g, np.nan), where=(pb_den != 0))
+        fair_pb_v = np.divide(pb_num, pb_den, out=np.full_like(g, np.nan), where=pb_ok)
 
-        fair_pe[valid] = np.round(fair_pe_v, 2)
-        fair_ev_ebitda[valid] = np.round(fair_ev_v, 2)
-        fair_ev_sales[valid] = np.round(fair_sales_v, 2)
-        fair_pb[valid] = np.round(fair_pb_v, 2)
+        fair_pe[valid] = np.round(_pos(fair_pe_v), 2)
+        fair_ev_ebitda[valid] = np.round(_pos(fair_ev_v), 2)
+        fair_ev_sales[valid] = np.round(_pos(fair_sales_v), 2)
+        fair_pb[valid] = np.round(_pos(fair_pb_v), 2)
 
     return pd.DataFrame({
         "ticker": ticker,
@@ -556,6 +667,7 @@ def main():
     ap.add_argument("--build-life-cycle", action="store_true", help="Build life cycle classification")
     ap.add_argument("--build-fair-multiples", action="store_true", help="Build fair multiples")
     ap.add_argument("--all", action="store_true", help="Run all steps")
+    ap.add_argument("--incremental", action="store_true", help="Incremental update for life cycle")
     args = ap.parse_args()
     
     if args.all or args.fetch_erp:
@@ -582,43 +694,56 @@ def main():
     if args.all or args.build_life_cycle:
         print("Building life cycle classification...")
         fund = pd.read_parquet(DATA_DIR / "fundamentals.parquet")
-        if "as_of_date" in fund.columns:
-            fund = fund.sort_values("as_of_date").groupby("ticker", as_index=False).tail(1)
-        
-        # Compute revenue growth 3y if not present
-        if "revenue_growth_3y" not in fund.columns:
-            # Try to compute from revenue history
-            fund_hist = pd.read_parquet(DATA_DIR / "fundamentals.parquet")
-            fund_hist = fund_hist.sort_values("as_of_date")
-            growth_map = {}
-            for t, g in fund_hist.groupby("ticker"):
-                if "revenue_quarterly" in g.columns and len(g) >= 2:
-                    rev = g["revenue_quarterly"].dropna()
-                    if len(rev) >= 2:
-                        # Approx 3y growth from first to last
-                        first_rev = rev.iloc[0]
-                        last_rev = rev.iloc[-1]
-                        if first_rev > 0:
-                            years = (g["as_of_date"].iloc[-1] - g["as_of_date"].iloc[0]).days / 365.25
-                            if years > 0:
-                                growth_map[t] = (last_rev / first_rev) ** (1/years) - 1
-            fund["revenue_growth_3y"] = fund["ticker"].map(growth_map)
-        
-        # Compute FCF margin
-        if "fcf_margin" not in fund.columns:
-            if "free_cash_flow" in fund.columns and "revenue_quarterly" in fund.columns:
-                fund["fcf_margin"] = fund["free_cash_flow"] / fund["revenue_ttm"]
-            elif "fcf" in fund.columns and "revenue_quarterly" in fund.columns:
-                fund["fcf_margin"] = fund["fcf"] / fund["revenue_quarterly"]
+        if "as_of_date" not in fund.columns:
+            raise ValueError("fundamentals.parquet must have as_of_date")
+        fund["as_of_date"] = _as_python_date(fund["as_of_date"])
+
+        existing_lc = None
+        schema_ok = False
+        if LIFE_CYCLE.exists():
+            existing_lc = pd.read_parquet(LIFE_CYCLE)
+            schema_ok = "revenue_growth_3y" in existing_lc.columns
+
+        incremental = bool(args.incremental and existing_lc is not None and schema_ok)
+        if args.incremental and existing_lc is not None and not schema_ok:
+            print("Checkpoint missing revenue_growth_3y — full rebuild")
+
+        if incremental:
+            existing_lc["as_of_date"] = _as_python_date(existing_lc["as_of_date"])
+            last_date = existing_lc["as_of_date"].max()
+            new_mask = fund["as_of_date"] > last_date
+            new_n = int(new_mask.sum())
+            print(f"Incremental: last checkpoint {last_date}; new fund rows {new_n}")
+            if new_n == 0:
+                print("No new fundamentals rows; leaving life_cycle_stage.parquet unchanged")
+                print(existing_lc["life_cycle_stage"].value_counts().to_string())
             else:
-                fund["fcf_margin"] = np.nan
-        
-        fund["life_cycle_stage"] = fund.apply(classify_life_cycle, axis=1)
-        
-        lc_df = fund[["ticker", "life_cycle_stage", "revenue_growth_3y", "fcf_margin", "roic", "as_of_date"]].copy()
-        pq.write_table(pa.Table.from_pandas(lc_df, preserve_index=False), LIFE_CYCLE)
-        print(f"Saved life cycle → {LIFE_CYCLE} ({len(lc_df)} rows)")
-        print(lc_df["life_cycle_stage"].value_counts().to_string())
+                touched = fund.loc[new_mask, "ticker"].unique()
+                hist = fund[fund["ticker"].isin(touched)]
+                lc_new = _compute_growth_and_classify(hist)
+                keep = existing_lc[~existing_lc["ticker"].isin(touched)]
+                # Align columns
+                for c in lc_new.columns:
+                    if c not in keep.columns:
+                        keep[c] = np.nan
+                lc_df = pd.concat([keep[lc_new.columns], lc_new], ignore_index=True)
+                lc_df = lc_df.sort_values(["ticker", "as_of_date"]).drop_duplicates(
+                    subset=["ticker", "as_of_date"], keep="last"
+                )
+                pq.write_table(pa.Table.from_pandas(lc_df, preserve_index=False), LIFE_CYCLE)
+                print(f"Saved life cycle → {LIFE_CYCLE} ({len(lc_df)} rows)")
+                print(lc_df["life_cycle_stage"].value_counts().to_string())
+        else:
+            lc_df = _compute_growth_and_classify(fund)
+            pq.write_table(pa.Table.from_pandas(lc_df, preserve_index=False), LIFE_CYCLE)
+            print(f"Saved life cycle → {LIFE_CYCLE} ({len(lc_df)} rows)")
+            print(lc_df["life_cycle_stage"].value_counts().to_string())
+            print(
+                "revenue_growth_3y NA",
+                f"{lc_df['revenue_growth_3y'].isna().mean():.1%}",
+                "| overall NA",
+                f"{lc_df['revenue_growth_overall'].isna().mean():.1%}",
+            )
     
     if args.all or args.build_fair_multiples:
         print("Building fair multiples...")

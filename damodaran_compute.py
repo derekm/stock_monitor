@@ -37,8 +37,6 @@ def load_fundamentals() -> pd.DataFrame:
     if not FUND.exists():
         raise FileNotFoundError(f"{FUND} not found")
     df = pd.read_parquet(FUND)
-    if "as_of_date" in df.columns:
-        df["as_of_date"] = pd.to_datetime(df["as_of_date"])
     df = df.sort_values(["ticker", "as_of_date"])
     return df
 
@@ -165,25 +163,35 @@ def compute_life_cycle(fund: pd.DataFrame) -> pd.DataFrame:
 
 def compute_fair_multiples(fund: pd.DataFrame, erp: float = 0.0423, rf: float = 0.04) -> pd.DataFrame:
     """Compute Damodaran fundamental-implied fair multiples per ticker/date.
-    
+
     Vectorized implementation using numpy broadcasting.
-    
-    Fair P/E = (1 - reinvestment_rate) * (1 + g) / (cost_of_equity - g)
-    Fair EV/EBITDA = (1 - tax_rate) * (1 - reinvestment_rate) * (1 + g) / (wacc - g)
+
+    Fair P/E = (1 - reinvestment_rate) / (cost_of_equity - g)
+    Fair EV/EBITDA = (1 - tax_rate) * (1 - reinvestment_rate) / (wacc - g)
     Fair EV/Sales = Fair EV/EBITDA * (EBITDA/Sales)
-    Fair P/B = ROE * (1 - reinvestment_rate) * (1 + g) / (cost_of_equity - g)
-    
-    Where g = revenue_growth (capped at long-term GDP growth ~2-3%)
+    Fair P/B = (ROE - g) / (cost_of_equity - g)
+
+    Where g = revenue_growth (capped at long-term GDP growth ~2-3%).
+    A multiple is NaN unless the Gordon inputs are defined: WACC (or cost of
+    equity) > g, ROIC/ROE > 0, reinvestment in [0, 1), and the result is > 0.
+    Negative "fair" EV/EBITDA is not a multiple — it is g > ROIC or a stored
+    reinvestment_rate outside [0, 1).
     """
     # Check if revenue_growth already exists in fund
     if "revenue_growth" not in fund.columns:
-        # First compute revenue growth
-        rev_growth = compute_revenue_growth(fund)
-        # Merge with original fund data
-        fund = fund.merge(
-            rev_growth[["ticker", "as_of_date", "revenue_growth"]],
-            on=["ticker", "as_of_date"], how="left"
-        )
+        if OUT_REV_GROWTH.exists():
+            rg = pd.read_parquet(OUT_REV_GROWTH, columns=["ticker", "as_of_date", "revenue_growth"])
+            # TIMESTAMP file → date keys at ingest so the join stays DATE-native.
+            rg["as_of_date"] = [
+                x.date() if hasattr(x, "date") else x for x in rg["as_of_date"]
+            ]
+            fund = fund.merge(rg, on=["ticker", "as_of_date"], how="left")
+        else:
+            rev_growth = compute_revenue_growth(fund)
+            fund = fund.merge(
+                rev_growth[["ticker", "as_of_date", "revenue_growth"]],
+                on=["ticker", "as_of_date"], how="left"
+            )
     
     # Load WACC data if available
     from damodaran_data import WACC_PER_TICKER
@@ -218,47 +226,54 @@ def compute_fair_multiples(fund: pd.DataFrame, erp: float = 0.0423, rf: float = 
     wacc_val = fund["_wacc"]
     cost_of_equity = fund["_coe"]
     
-    # Use reinvestment_rate if available, otherwise compute from g/ROIC or g/ROE
-    reinvest_calc = reinvest.copy()
-    mask_no_reinvest = reinvest_calc.isna() & roic.notna() & (roic > 0)
-    reinvest_calc[mask_no_reinvest] = (g_long / roic)[mask_no_reinvest]
-    mask_still_missing = reinvest_calc.isna() & roe.notna() & (roe > 0)
-    reinvest_calc[mask_still_missing] = (g_long / roe)[mask_still_missing]
-    reinvest_calc = reinvest_calc.fillna(0.5)
-    
+    # EV/EBITDA reinvestment is g/ROIC (or a stored rate in [0, 1)). Do not
+    # fall back to g/ROE — that is an equity residual and invents a firm
+    # multiple when ROIC cannot fund g (MOS 2026-07-31: 2% / 0.81% ROIC).
+    reinvest_calc = pd.Series(np.nan, index=fund.index, dtype="float64")
+    stored = reinvest
+    stored_ok = stored.notna() & (stored >= 0.0) & (stored < 1.0)
+    reinvest_calc[stored_ok] = stored[stored_ok]
+    need = reinvest_calc.isna() & roic.notna() & (roic > 0)
+    from_roic = g_long / roic
+    from_roic_ok = need & from_roic.notna() & (from_roic >= 0.0) & (from_roic < 1.0)
+    reinvest_calc[from_roic_ok] = from_roic[from_roic_ok]
+    reinvest_ok = reinvest_calc.notna() & (reinvest_calc >= 0.0) & (reinvest_calc < 1.0)
+
+    def _positive(arr):
+        return np.where(np.isfinite(arr) & (arr > 0), arr, np.nan)
+
     # Fair P/E: payout / (cost_of_equity - g)
-    fair_pe = pd.Series(np.nan, index=fund.index)
     pe_mask = cost_of_equity.notna() & (cost_of_equity > g_long) & roe.notna() & (roe > 0)
     payout = np.clip(1 - g_long / roe, 0, 1)
-    fair_pe = np.where(pe_mask, payout / (cost_of_equity - g_long), fair_pe)
-    
-    # Fair P/B: (ROE - g) / (cost_of_equity - g)
-    fair_pb = pd.Series(np.nan, index=fund.index)
-    pb_mask = pe_mask
-    fair_pb = np.where(pb_mask, (roe - g_long) / (cost_of_equity - g_long), fair_pb)
-    
+    fair_pe = np.where(pe_mask & (payout > 0), payout / (cost_of_equity - g_long), np.nan)
+
+    # Fair P/B: (ROE - g) / (cost_of_equity - g) — ROE must exceed g or PB ≤ 0
+    pb_mask = pe_mask & (roe > g_long)
+    fair_pb = np.where(pb_mask, (roe - g_long) / (cost_of_equity - g_long), np.nan)
+
     # Fair EV/EBITDA: (1 - reinvest) * (1 - t) / (wacc - g)
-    fair_ev_ebitda = pd.Series(np.nan, index=fund.index)
-    ev_mask = wacc_val.notna() & (wacc_val > g_long)
+    ev_mask = wacc_val.notna() & (wacc_val > g_long) & reinvest_ok
     fcf_conversion = (1 - reinvest_calc) * (1 - tax_rate)
-    fair_ev_ebitda = np.where(ev_mask, fcf_conversion / (wacc_val - g_long), fair_ev_ebitda)
-    
+    fair_ev_ebitda = np.where(ev_mask, fcf_conversion / (wacc_val - g_long), np.nan)
+
     # Fair EV/Sales: Fair EV/EBITDA * EBITDA margin
-    fair_ev_sales = pd.Series(np.nan, index=fund.index)
     sales_mask = ev_mask & ev_ebitda.notna() & (ev_ebitda > 0)
-    ebitda_margin = pd.Series(np.nan, index=fund.index)
-    ebitda_margin = np.where(sales_mask, 1 / ev_ebitda, ebitda_margin)
-    fair_ev_sales = np.where(sales_mask, fair_ev_ebitda * ebitda_margin, fair_ev_sales)
-    
+    ebitda_margin = np.where(sales_mask, 1 / ev_ebitda, np.nan)
+    fair_ev_sales = np.where(sales_mask, fair_ev_ebitda * ebitda_margin, np.nan)
+
     results = fund[["ticker", "as_of_date"]].copy()
-    results["fair_pe"] = np.where(np.isfinite(fair_pe), fair_pe, np.nan)
-    results["fair_ev_ebitda"] = np.where(np.isfinite(fair_ev_ebitda), fair_ev_ebitda, np.nan)
-    results["fair_ev_sales"] = np.where(np.isfinite(fair_ev_sales), fair_ev_sales, np.nan)
-    results["fair_pb"] = np.where(np.isfinite(fair_pb), fair_pb, np.nan)
+    results["fair_pe"] = _positive(fair_pe)
+    results["fair_ev_ebitda"] = _positive(fair_ev_ebitda)
+    results["fair_ev_sales"] = _positive(fair_ev_sales)
+    results["fair_pb"] = _positive(fair_pb)
     results["implied_growth"] = g_long
     results["wacc_used"] = wacc
     results["cost_of_equity_used"] = cost_of_equity
-    
+    asof = results["as_of_date"]
+    results["as_of_date"] = [
+        x.date() if hasattr(x, "date") else x for x in asof
+    ]
+
     return results
 
 
