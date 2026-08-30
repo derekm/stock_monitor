@@ -9,9 +9,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 import pandas as pd
-import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
 from llama_cpp import Llama, LlamaGrammar
 
 MODEL_1B = Path(r"C:\Users\derek\models\Llama-3.2-1B-Instruct-Q4_K_M.gguf")
@@ -24,8 +26,8 @@ FORECAST_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "direction": {"type": "string", "enum": ["up", "sideways", "down"]},
-        "prob": {"type": "number"},
-        "horizon_days": {"type": "integer"},
+        "prob": {"type": "number", "minimum": 0.10, "maximum": 0.90},
+        "horizon_days": {"type": "integer", "minimum": 1, "maximum": 252},
         "rationale": {"type": "string"},
     },
     "required": ["direction", "prob", "horizon_days", "rationale"],
@@ -105,23 +107,30 @@ def _ticker_snap(path: Path, cols: list[str]) -> pd.DataFrame | None:
 
 def load_states():
     df = pd.read_parquet(STATES)
-    df["date"] = pd.to_datetime(df["date"])
+    if len(df):
+        x = df["date"].iloc[0]
+        if isinstance(x, datetime):
+            df["date"] = [v.date() if isinstance(v, datetime) else v for v in df["date"]]
     return df.sort_values("date")
 
 def load_damodaran_context():
     lc = pd.read_parquet(LIFE_CYCLE)
-    lc["as_of_date"] = pd.to_datetime(lc["as_of_date"])
     w = pd.read_parquet(WACC_FILE)
-    w["as_of_date"] = pd.to_datetime(w["as_of_date"])
     fm = pd.read_parquet(FAIR_MULTIPLES)
-    fm["as_of_date"] = pd.to_datetime(fm["as_of_date"])
     q = pd.read_parquet(QUALITY)
-    q["as_of_date"] = pd.to_datetime(q["as_of_date"])
+    for tbl in (lc, w, fm, q):
+        if len(tbl):
+            x = tbl["as_of_date"].iloc[0]
+            if isinstance(x, datetime):
+                tbl["as_of_date"] = [v.date() if isinstance(v, datetime) else v for v in tbl["as_of_date"]]
     ctx = lc.merge(w, on=["ticker","as_of_date"], how="left")
     ctx = ctx.merge(fm, on=["ticker","as_of_date"], how="left")
     ctx = ctx.merge(q[["ticker","as_of_date","quality_score","roic_wacc_spread"]], on=["ticker","as_of_date"], how="left")
     fund = pd.read_parquet(FUND)
-    fund["as_of_date"] = pd.to_datetime(fund["as_of_date"])
+    if len(fund):
+        x = fund["as_of_date"].iloc[0]
+        if isinstance(x, datetime):
+            fund["as_of_date"] = [v.date() if isinstance(v, datetime) else v for v in fund["as_of_date"]]
     mix = [c for c in (
         "net_income_quarterly", "operating_income_quarterly", "gains_strategic_investments",
     ) if c in fund.columns]
@@ -196,22 +205,7 @@ def _fmt_px(name, x):
     return f"{name} {verb} {_fmt_pct(abs(x))}"
 
 
-def _pick_cite(g3_s, fcf_s, spread_s, px_s, fcf, spread, tr, g3):
-    """Business fact only. 21-day price stays in the brief for the path sentence, never as the cite when a fundamental exists."""
-    if fcf_s and pd.notna(fcf) and fcf < 0:
-        return fcf_s
-    if spread_s and pd.notna(spread) and abs(spread) >= 0.10:
-        return spread_s
-    if g3_s:
-        return g3_s
-    if fcf_s:
-        return fcf_s
-    if spread_s:
-        return spread_s
-    return px_s
-
-
-def build_brief(ticker, regime, vol21, vol_med, mkt_ret_21d, row, ticker_ret_21d=None, asof_date=None, forecast_date=None) -> str:
+def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None) -> str:
     """Prose dossier. Binding facts first; no labels the model can echo as a buy."""
     bits = []
     dec = row.get("decision")
@@ -311,9 +305,9 @@ def build_brief(ticker, regime, vol21, vol_med, mkt_ret_21d, row, ticker_ret_21d
     q = row.get("quality_score")
     if pd.notna(q) and float(q) >= 50:
         bits.append(f"Business quality is {float(q):.0f} of 100.")
-    if row.get("trifecta_pass") is True:
+    if _flag(row.get("trifecta_pass")):
         bits.append("It clears the three cheapness tests.")
-    if row.get("mos_pass") is True:
+    if _flag(row.get("mos_pass")) and pd.notna(ev) and float(ev) > 0 and pd.notna(fair) and float(fair) > 0:
         bits.append("Price is at least 15% below a fair ratio of firm value (equity plus net debt) to operating profit.")
     ir = row.get("implied_r_clean_pct")
     # Skip the yearly hurdle when expensive is already in the brief (PFE mixed 6.7% with 16.5x).
@@ -362,7 +356,7 @@ def _parse_forecast(text, brief=""):
     if not (0.10 <= prob <= 0.90):
         raise ValueError(f"bad prob {prob}")
     horizon = int(data["horizon_days"])
-    if horizon <= 0:
+    if not (1 <= horizon <= 252):
         raise ValueError(f"bad horizon {horizon}")
     rationale = str(data["rationale"]).strip()
     if not rationale:
@@ -370,7 +364,7 @@ def _parse_forecast(text, brief=""):
     return direction, prob, horizon, rationale
 
 
-def _clamp_horizon(horizon, regime):
+def _clamp_horizon(horizon):
     return min(max(int(horizon), 1), 252)
 
 
@@ -388,8 +382,10 @@ def _coverage_tickers(ctx: pd.DataFrame) -> list[str]:
     return last.loc[mask, "ticker"].astype(str).tolist()
 
 
-def _llm_predict(ticker, brief, regime):
+def _llm_predict(ticker, brief):
     llm, grammar = _get_llm()
+    if hasattr(llm, "reset"):
+        llm.reset()
     user_msg = brief
     last_err = None
     last_text = ""
@@ -410,7 +406,7 @@ def _llm_predict(ticker, brief, regime):
         last_text = out["choices"][0]["message"]["content"]
         try:
             direction, prob, horizon, rationale = _parse_forecast(last_text, brief)
-            return direction, prob, _clamp_horizon(horizon, regime), rationale
+            return direction, prob, _clamp_horizon(horizon), rationale
         except Exception as e:
             last_err = e
             continue
@@ -427,18 +423,19 @@ def main():
 
     st = load_states()
     recent = st.tail(max(int(args.lookback), 21)).copy()
-    recent["mkt_ret_21d"] = recent["mkt_ret"].rolling(21).mean()
+    recent["mkt_ret_21d"] = (1.0 + recent["mkt_ret"]).rolling(21).apply(lambda x: float(x.prod() - 1.0), raw=True)
     last_rows = recent.dropna(subset=["mkt_ret_21d"])
     if last_rows.empty:
         print("No HMM row with 21-day market return")
         return
     r = last_rows.iloc[-1]
-    date = r["date"]
+    fc_date = r["date"]
+    if isinstance(fc_date, datetime):
+        fc_date = fc_date.date()
     regime = r["regime"]
     vol21 = r["vol21"]
     avg_corr = r["avg_corr"]
     mkt_21 = float(r["mkt_ret_21d"])
-    vol_med = float(recent["vol21"].median()) if len(recent) else float("nan")
 
     ctx = load_damodaran_context()
     if args.tickers:
@@ -457,12 +454,15 @@ def main():
     try:
         from analytics_common import load_adj_prices_pandas
         px = load_adj_prices_pandas(tickers=tickers)
-        px["date"] = pd.to_datetime(px["date"])
+        if len(px):
+            x = px["date"].iloc[0]
+            if isinstance(x, datetime):
+                px["date"] = [v.date() if isinstance(v, datetime) else v for v in px["date"]]
     except Exception as e:
         print(f"price load failed ({e}); 21-day path omitted", flush=True)
         px = None
 
-    d_out = date.date() if hasattr(date, "date") and callable(date.date) else date
+    d_out = fc_date
     done = set()
     rows = []
     if OUT.exists():
@@ -489,7 +489,7 @@ def main():
         if ticker in done:
             print(f"{i}/{n} {ticker} skip resume", flush=True)
             continue
-        t_ctx = ctx[(ctx["ticker"] == ticker) & (ctx["as_of_date"] <= date)]
+        t_ctx = ctx[(ctx["ticker"] == ticker) & (ctx["as_of_date"] <= fc_date)]
         if t_ctx.empty:
             print(f"  skip {ticker}: no context", flush=True)
             continue
@@ -497,22 +497,19 @@ def main():
         row = t_ctx.iloc[0]
         tr = None
         if px is not None:
-            g = px[(px["ticker"] == ticker) & (px["date"] <= date)].sort_values("date")
+            g = px[(px["ticker"] == ticker) & (px["date"] <= fc_date)].sort_values("date")
             if len(g) >= 22:
                 c = g["adj_close"] if "adj_close" in g.columns else g.get("close")
                 a, b = c.iloc[-1], c.iloc[-22]
                 if pd.notna(a) and pd.notna(b) and float(b) != 0:
                     tr = float(a) / float(b) - 1
-        brief = build_brief(
-            ticker, regime, vol21, vol_med, mkt_21, row, tr,
-            asof_date=row.get("as_of_date"), forecast_date=date,
-        )
+        brief = build_brief(ticker, mkt_21, row, tr)
         wacc = row.get("wacc")
         fair_ev = row.get("fair_ev_ebitda")
         quality = row.get("quality_score")
         life_cycle = row.get("life_cycle_stage")
         try:
-            direction, prob, horizon, narrative = _llm_predict(ticker, brief, regime)
+            direction, prob, horizon, narrative = _llm_predict(ticker, brief)
         except RuntimeError as e:
             print(f"  skip {ticker}: {e}", flush=True)
             continue
@@ -537,8 +534,10 @@ def main():
         })
         print(f"{i}/{n} {ticker} {direction} {prob:.2f} n={horizon}", flush=True)
         out = pd.DataFrame(rows)
-        out["date"] = [d_out] * len(out)
-        out.to_parquet(OUT, index=False)
+        tbl = pa.Table.from_pandas(out, preserve_index=False)
+        idx = tbl.schema.get_field_index("date")
+        tbl = tbl.set_column(idx, "date", pa.array([d_out] * len(out), type=pa.date32()))
+        pq.write_table(tbl, OUT)
 
     if rows:
         print(f"Wrote {OUT} ({len(rows)} rows)")

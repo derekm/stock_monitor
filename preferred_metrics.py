@@ -650,8 +650,8 @@ def build_table() -> pd.DataFrame:
     # denominator flips discount_to_fair and falsely sets mos_pass.
     out["fair_ev_ebitda"] = np.where(fe > 0, fe, np.nan)
     fe = pd.to_numeric(out["fair_ev_ebitda"], errors="coerce")
-    out["discount_to_fair"] = np.where((fe > 0) & ev.notna(), (fe - ev) / fe, np.nan)
-    out["mos_pass"] = (fe > 0) & ev.notna() & (out["discount_to_fair"] >= 0.15)
+    out["discount_to_fair"] = np.where((fe > 0) & ev.notna() & (ev > 0), (fe - ev) / fe, np.nan)
+    out["mos_pass"] = (fe > 0) & ev.notna() & (ev > 0) & (out["discount_to_fair"] >= 0.15)
 
     p_bad = pd.Series(0.05, index=out.index)
     p_bad = p_bad + out["life_cycle_stage"].eq("Decline").astype(float) * 0.15

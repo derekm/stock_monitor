@@ -175,8 +175,8 @@ fair_pb       = (roe - g) / (cost_of_equity - g)
 | Quality score as proxy | **Separate quality assessment from valuation margin** |
 
 Implemented in `preferred_metrics.py`:
-- `discount_to_fair = (fair_ev_ebitda - ev_ebitda) / fair_ev_ebitda` only when `fair_ev_ebitda > 0`
-- `mos_pass = discount_to_fair >= 0.15` — a negative fair multiple cannot pass
+- `discount_to_fair = (fair_ev_ebitda - ev_ebitda) / fair_ev_ebitda` only when `fair_ev_ebitda > 0` and traded `ev_ebitda > 0`
+- `mos_pass = discount_to_fair >= 0.15` — a negative fair multiple cannot pass; traded EV/EBITDA ≤ 0 cannot pass (KHC −13.58 / SNDK −560.83 were the leftover)
 
 ---
 
