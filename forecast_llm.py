@@ -216,7 +216,11 @@ def build_brief(ticker, regime, vol21, vol_med, mkt_ret_21d, row, ticker_ret_21d
     bits = []
     dec = row.get("decision")
     avoid = isinstance(dec, str) and dec == "AVOID"
-    veto = row.get("fragile_flag") is True or row.get("veto_flag") is True
+    def _flag(x):
+        if x is None or (isinstance(x, float) and pd.isna(x)):
+            return False
+        return bool(x)
+    veto = _flag(row.get("fragile_flag")) or _flag(row.get("veto_flag"))
     fcf = row.get("fcf_margin")
     burn = pd.notna(fcf) and float(fcf) < 0
 
@@ -454,12 +458,37 @@ def main():
         from analytics_common import load_adj_prices_pandas
         px = load_adj_prices_pandas(tickers=tickers)
         px["date"] = pd.to_datetime(px["date"])
-    except Exception:
+    except Exception as e:
+        print(f"price load failed ({e}); 21-day path omitted", flush=True)
         px = None
 
+    d_out = date.date() if hasattr(date, "date") and callable(date.date) else date
+    done = set()
     rows = []
+    if OUT.exists():
+        try:
+            prev = pd.read_parquet(OUT)
+            if "ticker" in prev.columns and len(prev):
+                prev_dates = prev["date"]
+                same = True
+                if "date" in prev.columns:
+                    sample = prev_dates.iloc[0]
+                    sample_d = sample.date() if hasattr(sample, "date") and callable(sample.date) else sample
+                    same = sample_d == d_out
+                if same:
+                    rows = prev.to_dict("records")
+                    done = {str(t) for t in prev["ticker"].astype(str)}
+                    print(f"Resume: {len(done)} already written for {d_out}", flush=True)
+                else:
+                    print(f"Existing parquet is a different date; not mixing. Snapshot kept at {OUT}", flush=True)
+        except Exception as e:
+            print(f"resume skipped ({e})", flush=True)
+
     n = len(tickers)
     for i, ticker in enumerate(tickers, 1):
+        if ticker in done:
+            print(f"{i}/{n} {ticker} skip resume", flush=True)
+            continue
         t_ctx = ctx[(ctx["ticker"] == ticker) & (ctx["as_of_date"] <= date)]
         if t_ctx.empty:
             print(f"  skip {ticker}: no context", flush=True)
@@ -470,9 +499,10 @@ def main():
         if px is not None:
             g = px[(px["ticker"] == ticker) & (px["date"] <= date)].sort_values("date")
             if len(g) >= 22:
-                c = g["close"] if "close" in g.columns else g.get("adj_close")
-                if c is not None and c.iloc[-1] and c.iloc[-22]:
-                    tr = float(c.iloc[-1] / c.iloc[-22] - 1)
+                c = g["adj_close"] if "adj_close" in g.columns else g.get("close")
+                a, b = c.iloc[-1], c.iloc[-22]
+                if pd.notna(a) and pd.notna(b) and float(b) != 0:
+                    tr = float(a) / float(b) - 1
         brief = build_brief(
             ticker, regime, vol21, vol_med, mkt_21, row, tr,
             asof_date=row.get("as_of_date"), forecast_date=date,
@@ -487,7 +517,6 @@ def main():
             print(f"  skip {ticker}: {e}", flush=True)
             continue
         uncertainty = "high" if (vol21 > recent["vol21"].quantile(0.75) or regime == "high_vol_stress") else "normal"
-        d_out = date.date() if hasattr(date, "date") and callable(date.date) else date
         rows.append({
             "date": d_out,
             "ticker": ticker,
@@ -507,11 +536,12 @@ def main():
             "damodaran_narrative": brief,
         })
         print(f"{i}/{n} {ticker} {direction} {prob:.2f} n={horizon}", flush=True)
-
-    out = pd.DataFrame(rows)
-    if not out.empty:
+        out = pd.DataFrame(rows)
+        out["date"] = [d_out] * len(out)
         out.to_parquet(OUT, index=False)
-        print(f"Wrote {OUT} ({len(out)} rows)")
+
+    if rows:
+        print(f"Wrote {OUT} ({len(rows)} rows)")
     else:
         print("No rows generated")
 
