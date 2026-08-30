@@ -192,6 +192,20 @@ Edge is **process + discipline**, not a single factor.
 ### Data integrity
 - Price pipeline health checks (the independent-synthetic corr ≈ 0 failure mode)
 - Factor-structured or vendor data as default for regime research
+- **LLM forecast brief is starved of coverage, not of ideas.** `forecast_llm.py` can only cite what is dense, ticker-keyed, and wordable. On disk (2026-08-29) these layers are too thin or too easy to misread to drive a desk note:
+  - **Earnings mix:** `gains_strategic_investments` is filled for CRM only until a universe `edgar_companyfacts_v2` backfill. 61% of latest names with both NI and OI have |NI−OI|/|OI| > 25%; without SI/marks the model treats the gap as cash generation (CRM Q2: NI $3.53B vs OI $2.33B, marks +$2.61B). 3B still flipped burn/shortfall into “discipline” (ANGH 61% cash burn).
+  - **Screen/policy:** `buy_candidates` is 552 names (PARA missing). `implied_r_screen` is 470 and leaked **RAL implied r −21.9%** — the ROE>0 and P/B>0 gate in the plan is not holding on the file. `preferred_metrics.decision` covers the universe and is the usable policy label.
+  - **RIP panels that look rich but are not brief-ready:** Ilmanen ER (`expected_returns_decomp`, 9,026 names last date) is 0–1 ranks — word top/bottom third, never dump the number. Cochrane CF vs DR (`implied_r_decomp`, 8,669 names) has CF>DR on **0.7%** of rows — not a discriminator. `regime_clusters.peer_group` maps AAPL → `financial_services_76` and PARA → healthcare. `ride_book` is 9 names. `fragility_veto` is 13 names (SMCI). Dynamic aggregator Sharpe −0.14 — do not size, do not cite 0–1 family scores (3B reads them as percents).
+  - **Taleb / ride:** `shock_ride_tickers` ~494 names (AAPL-only in the LLM sample). `fragile_flag` is ~10% and none of the mega-caps. Gap/Hill tails exist but are not yet a one-line veto the model won't invert.
+  - **Fundamentals holes:** `revenue_yoy` / `revenue_qoq` / `ebitda_ttm` / `prior_estimate_*` are empty on the panel. `ev_ebitda` on `fundamentals.parquet` is 6.8% notna (the preferred snapshot is denser). Latest Unclassified life-cycle is still ~half the universe (missing TTM / short history / Damodaran mid-gap).
+  - **Quality 0:** many names score 0/100; 1B called that “excellent.” Gate is ≥50 in the brief; the score itself needs a real floor, not a recitable zero.
+  - **Horizon:** HMM is market-level, not per-ticker. Adaptive persist vs vol is **−0.07** (bar +0.60 fail). Do not expect the GGUF to infer a validity interval from calm-tape vol. Stamp `horizon_days` in Python or expand a per-name vol/ride series first.
+  - **Fair EV/EBITDA (gated 2026-08-29):** negative Gordon multiples are NaN (MOS −14.4 was g 2% / ROIC 0.81%, reinvestment 2.47). Latest positive **486 / 9,345**. Do not add a provenance sister for a g/ROE path that no longer writes — NaN is the provenance. Remaining silent fill is **g**, not the multiple: **461 / 486** latest positives have `implied_growth = 0.02` from `fillna`. Tag that if anything.
+  - **MoS leftover:** `mos_pass` requires `fair_ev_ebitda > 0` (82 true). Still passes on **negative traded EV/EBITDA**: KHC −13.58, SNDK −560.83. Separate bug from negative-fair.
+  - **Book life-cycle:** BAYRY / HMC / HPQ / T latest **Unclassified**. BAYRY has no SEC CIK (ADR → BAYN.DE). HMC/HPQ/T need a Damodaran-gap diagnosis, not another classifier tweak. Unclassified universe still **4,991 / 9,345 = 53.4%** after TTM 76.7%.
+  - **SI cache:** `companyfacts_cache/` is **1 file** (CRM). Universe SI backfill not launched.
+  - **LLM series:** `forecast_llm.parquet` is **9 rows / 1 date** (2026-08-24, the book). `--lookback 21` still clobbers a 252-day series; conformal stays blocked. Do not let the GGUF write the brief — 3B already inverts Python facts (HMC 1.8% FCF → “above industry”). Python owns the dossier. Live prompts are 249–293 tokens inside `n_ctx=1024` (headroom ~510 after `max_tokens=220`); do not spend it on more fields.
+  Expand these files (full-universe SI, implied-r with the ROE/P/B gate actually applied, ride, buy_candidates; worded aggregator and ER ranks; TTM/yoy on the panel; drop `fillna(0.02)` on implied growth; gate `mos_pass` on traded EV/EBITDA > 0) before adding more prompt fields.
 
 ### Architecture gaps (known, not yet built)
 
@@ -214,7 +228,7 @@ These are concrete holes in the current architecture, distinct from the research
 | 4 | Taleb/Spitznagel/Haghani | ⏳ Planned | Tail index, fragility veto, barbell construction, leverage space |
 | 5 | López de Prado | ⏳ Planned | Meta-labeling, CPCV, regime clustering, triple-barrier labeling |
 | 6 | Hoffstein/Vince | ⏳ Planned | Rebalancing luck, glide optimization, sequence risk, leverage space |
-| 7 | Lo/Amodei | ⏳ Planned | Adaptive HMM, population dynamics, LLM forecasting, conformal prediction |
+| 7 | Lo/Amodei | ⏳ Planned | Adaptive HMM, population dynamics, LLM forecasting, conformal prediction. Blocker for the LLM desk note: anemic SI / implied-r / ride / buy_candidates coverage and unitless aggregator scores — see Data integrity. |
 
 ---
 

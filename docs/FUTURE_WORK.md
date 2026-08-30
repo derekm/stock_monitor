@@ -28,6 +28,7 @@
 ### Data integrity
 - Price pipeline health checks (the independent-synthetic corr ≈ 0 failure mode)
 - Factor-structured or vendor data as default for regime research
+- **LLM-brief coverage gaps (come back):** see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) §5 Data integrity. Snapshot 2026-08-29: SI CRM-only (cache 1 JSON); implied-r 470 with 28 negatives still on file; buy_candidates 552; ride_book 9; veto 13 (SMCI); Unclassified 53.4%; fair EV/EBITDA 486/9345 with 461/486 g filled at 2%; KHC/SNDK `mos_pass` on traded EV ≤ 0; forecast_llm 9×1 date. Do not LLM-write the brief.
 
 ### Architecture gaps (known, not yet built)
 

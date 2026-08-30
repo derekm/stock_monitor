@@ -155,14 +155,14 @@ fair_pb       = (roe - g) / (cost_of_equity - g)
 
 ### 4.3 Coverage
 
-| Metric | Tickers | Pct |
-|--------|---------|-----|
-| fair_pe | 459 | 5.3% |
-| fair_ev_ebitda | 586 | 6.8% |
-| fair_ev_sales | 586 | 6.8% |
-| fair_pb | 586 | 6.8% |
+| Metric | Latest tickers (2026-08-29) | Pct of 9,345 |
+|--------|-----------------------------|--------------|
+| fair_pe | 454 | 4.9% |
+| fair_ev_ebitda | 486 (0 negative) | 5.2% |
+| fair_ev_sales | 365 | 3.9% |
+| fair_pb | 454 | 4.9% |
 
-*Low coverage = requires WACC + ROIC/ROE + growth data; improves with EDGAR backfill.*
+*Low coverage = WACC + ROIC>0 + reinvestment in [0, 1). 461/486 latest EV/EBITDA positives have implied_growth = 0.02 (`fillna`), not reported g. Come back: stop filling g; do not add a fair_ev provenance sister (g/ROE path is dead; NaN is the provenance).*
 
 ---
 
