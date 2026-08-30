@@ -155,7 +155,7 @@ fair_pb       = (roe - g) / (cost_of_equity - g)
 
 ### 4.3 Coverage
 
-| Metric | Latest tickers (2026-08-29) | Pct of 9,345 |
+| Metric | Latest tickers (2026-08-30) | Pct of 9,345 |
 |--------|-----------------------------|--------------|
 | fair_pe | 454 | 4.9% |
 | fair_ev_ebitda | 486 (0 negative) | 5.2% |
