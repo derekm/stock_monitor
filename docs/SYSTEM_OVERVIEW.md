@@ -220,15 +220,19 @@ These are concrete holes in the current architecture, distinct from the research
 
 ### Research Integration Plan (Phase 1 Priority Deep Dives)
 
-| # | Researcher | Status | Key Deliverables |
-|---|------------|--------|------------------|
-| 1 | Fama/French + Novy-Marx | ✅ **Gate 1 PASSED** | FF5+MOM factors, Novy-Marx quality, signal factor loadings, factor-neutral aggregator |
-| 2 | Ilmanen + Ang | 🔄 **ACTIVE** | 4-pillar expected returns, carry/value/momentum/defensive decomposition |
-| 3 | Asness/Pedersen | ⏳ Next | Dynamic IC-weighted signal aggregation, cost-aware optimization, signal decay curves |
-| 4 | Taleb/Spitznagel/Haghani | ⏳ Planned | Tail index, fragility veto, barbell construction, leverage space |
-| 5 | López de Prado | ⏳ Planned | Meta-labeling, CPCV, regime clustering, triple-barrier labeling |
-| 6 | Hoffstein/Vince | ⏳ Planned | Rebalancing luck, glide optimization, sequence risk, leverage space |
-| 7 | Lo/Amodei | ⏳ Planned | Adaptive HMM, population dynamics, LLM forecasting, conformal prediction. Blocker for the LLM desk note: anemic SI / implied-r / ride / buy_candidates coverage and unitless aggregator scores — see Data integrity. |
+Source of truth: [RESEARCH_INTEGRATION_PLAN.md](RESEARCH_INTEGRATION_PLAN.md). Status here is the **measured** gate, not the wish-list checkbox. Close is still fail when the bar is missed.
+
+| # | Researcher | Status | Measured |
+|---|------------|--------|----------|
+| 1 | Fama/French + Novy-Marx | Closed (2026-08-23) | Gate ∩ NM **63%** (bar 80% **fail**). Residual IC **+0.0117** (bar +0.02 **fail**). Do not loosen 15/15/1.0. |
+| 2 | Ilmanen + Ang | Active | 4-pillar ER on disk (9,026 last date). OOS hit-edge **+6.3pp pass**; top−EW **+1.4% fail**. Word top/bottom third in the brief; never dump 0–1 ranks. CF>DR **0.7%** — not a discriminator. |
+| 3 | Asness/Pedersen | Active | Sharpe dyn−static **−0.14** (1.41 vs 1.55, bar +0.15 **fail**). Do not size on `--dynamic`. Do not put 0–1 aggregator scores in the LLM brief. |
+| 4 | Taleb/Spitznagel/Haghani | Started | Hill veto **13 names** (SMCI). 90/10 TMI/BPI barbell maxDD ratio **0.98** (bar <0.50 **fail**). `ride_book` **9**. Fragile ~10%. |
+| 5 | López de Prado | Measured (2026-08-25) | CPCV − random **+0.1pp** (bar +3% **fail**). Regime clustering **+46.4%** full-universe **pass**. Does **not** replace HMM. `peer_group` is junk for mega-caps (AAPL → `financial_services_76`). |
+| 6 | Hoffstein/Vince | Started | 7-day glide luck **−50.8%** (bar 40% **pass**). LS median terminal **18.54** vs ERC **6.40**. Do not size live books at f=1.50. |
+| 7 | Lo/Amodei | Started | Persist vs vol **−0.074** (bar +0.60 **fail**). Conformal **88.9%** vs 90% (**fail**); GGUF parquet is **9×1 date** so bands stay blocked. LLM desk note is live (3B default) — coverage blockers in §5 Data integrity. |
+
+LLM brief: Python owns the dossier. Do not LLM-write it. Do not spend the ~510-token `n_ctx=1024` headroom on unitless scores.
 
 ---
 

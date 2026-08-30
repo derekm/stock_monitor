@@ -43,15 +43,17 @@ These are concrete holes in the current architecture, distinct from the research
 
 ### Research Integration Plan (Phase 1 Priority Deep Dives)
 
-| # | Researcher | Status | Key Deliverables |
-|---|------------|--------|------------------|
-| 1 | Fama/French + Novy-Marx | ✅ **Gate 1 PASSED** | FF5+MOM factors, Novy-Marx quality, signal factor loadings, factor-neutral aggregator |
-| 2 | Ilmanen + Ang | 🔄 **ACTIVE** | 4-pillar expected returns, carry/value/momentum/defensive decomposition |
-| 3 | Asness/Pedersen | ⏳ Next | Dynamic IC-weighted signal aggregation, cost-aware optimization, signal decay curves |
-| 4 | Taleb/Spitznagel/Haghani | ⏳ Planned | Tail index, fragility veto, barbell construction, leverage space |
-| 5 | López de Prado | ⏳ Planned | Meta-labeling, CPCV, regime clustering, triple-barrier labeling |
-| 6 | Hoffstein/Vince | ⏳ Planned | Rebalancing luck, glide optimization, sequence risk, leverage space |
-| 7 | Lo/Amodei | ⏳ Planned | Adaptive HMM, population dynamics, LLM forecasting, conformal prediction |
+Source of truth: [RESEARCH_INTEGRATION_PLAN.md](RESEARCH_INTEGRATION_PLAN.md). Status is the measured gate.
+
+| # | Researcher | Status | Measured |
+|---|------------|--------|----------|
+| 1 | Fama/French + Novy-Marx | Closed (2026-08-23) | Gate ∩ NM **63%** (bar 80% **fail**). Residual IC **+0.0117** (bar +0.02 **fail**). Do not loosen 15/15/1.0. |
+| 2 | Ilmanen + Ang | Active | OOS hit-edge **+6.3pp pass**; top−EW **+1.4% fail**. Word ER ranks; never dump 0–1. |
+| 3 | Asness/Pedersen | Active | Sharpe dyn−static **−0.14** (bar +0.15 **fail**). Do not size on `--dynamic`. |
+| 4 | Taleb/Spitznagel/Haghani | Started | Veto 13 names (SMCI). Barbell maxDD ratio **0.98** (bar <0.50 **fail**). |
+| 5 | López de Prado | Measured (2026-08-25) | CPCV **+0.1pp fail**. Clustering **+46.4% pass**. Does not replace HMM. |
+| 6 | Hoffstein/Vince | Started | 7-day glide **−50.8% pass**. Do not size live at f=1.50. |
+| 7 | Lo/Amodei | Started | Persist/vol **−0.074 fail**. Conformal **88.9% fail**. LLM open — see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) §5. |
 
 ---
 
