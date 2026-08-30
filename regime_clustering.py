@@ -263,12 +263,27 @@ def _name_clusters(clusters: pd.DataFrame) -> dict[int, str]:
 
 
 def _hybrid_peer_group(clusters: pd.DataFrame) -> pd.Series:
-    """For each cluster, use it as the peer group only if it's tighter than GICS.
+    """Cluster as peer only if tighter than GICS, not mixed, and the name's
+    GICS sector is the cluster's dominant sector.
 
-    Compares within-cluster correlation dispersion to within-dominant-GICS-sector
-    dispersion. Falls back to the GICS sector name where the cluster is looser.
+    Cluster-level dispersion can look tight on a 400-name core while AAPL
+    (Technology) sits in financial_services_76. mixed_* and sector-mismatch
+    rows fall back to GICS. No mega-cap denylist.
     """
-    # Build correlation matrix from prices
+    tightness = _cluster_tightness_map(clusters)
+    return _peer_group_overlay(clusters, tightness)
+
+
+def _dominant_sector(clusters: pd.DataFrame) -> pd.Series:
+    """cluster id → majority GICS sector."""
+    def _top(s):
+        vc = s.dropna().value_counts()
+        return vc.index[0] if len(vc) else None
+    return clusters.groupby("cluster")["sector"].agg(_top)
+
+
+def _cluster_tightness_map(clusters: pd.DataFrame) -> dict:
+    """cluster_name → cluster_name if tighter than GICS, else dominant GICS."""
     import pyarrow.parquet as pq
     DATA_DIR = Path(__file__).parent
     PRICES_FILE = DATA_DIR / "daily_prices/"
@@ -277,7 +292,7 @@ def _hybrid_peer_group(clusters: pd.DataFrame) -> pd.Series:
     tbl = pq.read_table(PRICES_FILE, columns=["ticker", "date", "close"])
     px = pd.DataFrame({
         "ticker": tbl.column("ticker").to_pandas().astype(str).str.upper(),
-        "date": pd.to_datetime(tbl.column("date").to_pandas()),
+        "date": tbl.column("date").to_pandas(),
         "close": tbl.column("close").to_pandas().astype("float64"),
     })
     del tbl
@@ -292,9 +307,9 @@ def _hybrid_peer_group(clusters: pd.DataFrame) -> pd.Series:
     corr = pd.DataFrame(corr_np, index=rets.columns, columns=rets.columns)
     del X, corr_np
 
-    def group_dispersion(group, labels, tickers):
+    def group_dispersion(group, labels, tickers_s):
         members = labels[labels == group].index
-        member_tickers = [tickers.iloc[i] for i in members]
+        member_tickers = [tickers_s.iloc[i] for i in members]
         m = [t for t in member_tickers if t in corr.index]
         if len(m) < 2:
             return np.nan
@@ -302,25 +317,58 @@ def _hybrid_peer_group(clusters: pd.DataFrame) -> pd.Series:
         iu = np.triu_indices(len(m), k=1)
         return float(np.std(sub[iu]))
 
-    # Map each cluster to its peer group
     peer_map = {}
-    tickers = clusters["ticker"]
+    tickers_s = clusters["ticker"]
     for c, g in clusters.groupby("cluster_name"):
         top_sector = g["sector"].value_counts()
         if len(top_sector) == 0:
             peer_map[c] = c
             continue
         dominant = top_sector.index[0]
-        cl_disp = group_dispersion(c, clusters["cluster_name"], tickers)
-        gics_disp = group_dispersion(dominant, clusters["sector"], tickers)
+        cl_disp = group_dispersion(c, clusters["cluster_name"], tickers_s)
+        gics_disp = group_dispersion(dominant, clusters["sector"], tickers_s)
         if np.isnan(cl_disp) or np.isnan(gics_disp):
             peer_map[c] = c
         elif cl_disp < gics_disp:
-            peer_map[c] = c  # cluster is tighter
+            peer_map[c] = c
         else:
-            peer_map[c] = dominant  # GICS is tighter, fall back
+            peer_map[c] = dominant
+    return peer_map
 
-    return clusters["cluster_name"].map(peer_map)
+
+def _peer_group_overlay(clusters: pd.DataFrame, tightness: dict | None = None) -> pd.Series:
+    """Apply mixed_* and per-ticker GICS mismatch on top of a cluster-level map.
+
+    If tightness is None, reuse clusters['peer_group'] (relabel of a saved file
+    without rebuilding the correlation matrix).
+    """
+    if tightness is None:
+        chosen = clusters["peer_group"]
+    else:
+        chosen = clusters["cluster_name"].map(tightness)
+    dominant = clusters["cluster"].map(_dominant_sector(clusters))
+    name = clusters["cluster_name"].astype(str)
+    sector = clusters["sector"]
+    mixed = name.str.startswith("mixed_")
+    mismatch = sector.notna() & dominant.notna() & (sector != dominant)
+    out = chosen.copy()
+    fallback = mixed | mismatch
+    out = out.where(~fallback, sector)
+    return out
+
+
+def relabel_peers(save: bool = True) -> pd.DataFrame:
+    """Rebuild peer_group on the saved cluster file. Does not re-cluster."""
+    if not OUT_CLUSTERS.exists():
+        raise FileNotFoundError(OUT_CLUSTERS)
+    df = pd.read_parquet(OUT_CLUSTERS)
+    df["peer_group"] = _peer_group_overlay(df)
+    if save:
+        df.to_parquet(OUT_CLUSTERS, index=False)
+        print(f"Relabeled peer_group → {OUT_CLUSTERS} ({len(df)} rows)")
+        mixed = df["cluster_name"].astype(str).str.startswith("mixed_").sum()
+        print(f"  mixed_* clusters forced to GICS: {int(mixed)}")
+    return df
 
 
 # ── main ────────────────────────────────────────────────────────────────────
@@ -471,8 +519,13 @@ def main():
     ap.add_argument("--max-assets", type=int, default=None)
     ap.add_argument("--sweep", action="store_true",
                     help="run the linkage x lookback robustness sweep instead of one config")
+    ap.add_argument("--relabel-peers", action="store_true",
+                    help="rebuild peer_group on the saved cluster file (no re-cluster)")
     ap.add_argument("--save", action="store_true")
     args = ap.parse_args()
+    if args.relabel_peers:
+        relabel_peers(save=True)
+        return 0
     if args.sweep:
         sweep(metric=args.metric, max_assets=args.max_assets, save=args.save)
         return 0

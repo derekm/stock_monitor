@@ -70,7 +70,7 @@ replacement until a balanced-partition variant is measured.
 python regime_clustering.py --save                        # default: corr, average, 5y, 400 assets
 python regime_clustering.py --metric dcor --years 3 --max-assets 150 --linkage ward
 python regime_clustering.py --sweep --save                # linkage x lookback robustness table
-python regime_clustering.py --k 20 --save                 # override cluster count
+python regime_clustering.py --relabel-peers               # mixed_* + GICS-mismatch → sector; no re-cluster
 ```
 
 ### Options
@@ -82,6 +82,7 @@ python regime_clustering.py --k 20 --save                 # override cluster cou
 - `--max-assets N` — cap by **median dollar volume**, not alphabetically (default 400)
 - `--sweep` — run the robustness table instead of one config
 - `--save` — write parquet outputs
+- `--relabel-peers` — rebuild `peer_group` on the saved file: `mixed_*` and names whose GICS sector ≠ the cluster's dominant sector fall back to GICS. Does not re-cluster.
 
 ## Outputs
 
@@ -104,8 +105,8 @@ Schema family: see `docs/SCHEMAS.md` → *Regime clustering*.
   symmetrized and zero-diagonalised before linkage.
 - **dCor is O(n²) per pair**, so the sample is deterministically subsampled to
   `max_n=750` rows; keep `--max-assets` modest (≤150) when using `--metric dcor`.
-- **Do not read a single config as the result.** The bar outcome flips with
-  linkage; use `--sweep`.
+- **`peer_group` is not `cluster_name`.** Cluster-level dispersion can look tight while AAPL (Technology) sits in `financial_services_76`. `_hybrid_peer_group` falls back to GICS when the cluster is `mixed_*` or the name's sector ≠ the cluster's dominant sector. Relabel with `--relabel-peers`; do not denylist mega-caps.
+- **Do not read a single config as the result.** The bar outcome flips with linkage; use `--sweep`.
 
 ## Related programs
 
