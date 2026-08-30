@@ -539,6 +539,8 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `economic_calendar.csv` | `economic_calendar.py` | Calendar / events |
 || `estimate_revisions.parquet` | `estimate_revisions.py` | Fundamental |
 || `filings_sentiment.csv` | `filings_sentiment.py` | Sentiment / alternative |
+|| `ticker_news.parquet` | `ticker_news.py` | Sentiment / alternative |
+|| `ticker_news_notes.parquet` | `ticker_news.py --notes` | Sentiment / alternative |
 || `options_skew.parquet` | `options_skew.py` | Options |
 || `signal_model_oos.csv` | `signal_model.py` | Aggregate |
 || `signal_model_weights.csv` | `signal_model.py` | Aggregate |

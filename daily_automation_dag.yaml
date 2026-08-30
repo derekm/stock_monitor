@@ -279,6 +279,16 @@ jobs:
     timeout: 900
     desc: "HRP/codependence asset clusters vs GICS dispersion (Phase 1.5)"
 
+  ticker_news:
+    cmd: ["ticker_news.py", "--save", "--days", "2"]
+    timeout: 600
+    desc: "Polygon news firehose → ticker_news.parquet (append-only)"
+
+  ticker_news_notes:
+    cmd: ["ticker_news.py", "--notes", "--save"]
+    timeout: 7200
+    desc: "3B one-sentence press notes for the LLM brief"
+
 # dependencies: job -> list of jobs that must finish first
 dependencies:
   rebalance: [hmm]
@@ -335,6 +345,8 @@ dependencies:
   bogle_bpi: [update_prices, market_cap]
   bogle_pmi: [update_prices, market_cap]
   regime_clusters: [market_cap]
+  ticker_news: []
+  ticker_news_notes: [ticker_news]
   export: [aggregate, technical, econ_cal, est_rev, shadow,
             taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility,
             taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride,

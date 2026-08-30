@@ -76,6 +76,7 @@ IMPLIED_R = DATA_DIR / "implied_r_screen.parquet"
 FRAGILITY = DATA_DIR / "fragility_screen.parquet"
 ER_DECOMP = DATA_DIR / "expected_returns_decomp.parquet"
 FRAGILITY_VETO = DATA_DIR / "fragility_veto.parquet"
+NEWS_NOTES = DATA_DIR / "ticker_news_notes.parquet"
 OUT = DATA_DIR / "forecast_llm.parquet"
 
 
@@ -142,6 +143,7 @@ def load_damodaran_context():
         (IMPLIED_R, ["implied_r_clean_pct"]),
         (FRAGILITY, ["fragile_flag"]),
         (FRAGILITY_VETO, ["veto_flag"]),
+        (NEWS_NOTES, ["news_note"]),
     ):
         snap = _ticker_snap(path, cols)
         if snap is not None and len(snap.columns) > 1:
@@ -333,6 +335,10 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None) -> str:
     ):
         bits.append(f"Over the last quarter {_fmt_px('the shares', float(r63))}.")
 
+    nn = row.get("news_note")
+    if isinstance(nn, str) and nn.strip():
+        bits.append("Press (not a reason to own): " + nn.strip().rstrip(".") + ".")
+
     return " ".join(bits)
 
 
@@ -341,6 +347,7 @@ Sentence 1: where the shares go over the foreseeable future.
 Sentence 2: leftover cash, profit versus the cost of capital, or dollars of firm value per dollar of operating profit — not sales growth and not a 21-day bounce when the brief says do not own or the business spends cash.
 Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
 Too expensive means the shares do not go up: leftover cash and sales growth do not override buyers overpaying.
+Press is last week's headlines, not leftover cash, and does not override do-not-own or too-expensive.
 JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
 
 
