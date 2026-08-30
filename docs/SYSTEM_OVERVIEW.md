@@ -205,8 +205,8 @@ Edge is **process + discipline**, not a single factor.
   - **MoS leftover:** `mos_pass` requires `fair_ev_ebitda > 0` (82 true). Still passes on **negative traded EV/EBITDA**: KHC −13.58, SNDK −560.83. Separate bug from negative-fair.
   - **Book life-cycle:** BAYRY / HMC / HPQ / T latest **Unclassified**. BAYRY has no SEC CIK (ADR → BAYN.DE). HMC/HPQ/T need a Damodaran-gap diagnosis, not another classifier tweak. Unclassified universe still **4,991 / 9,345 = 53.4%** after TTM 76.7%.
   - **SI cache:** `companyfacts_cache/` is **1 file** (CRM). Universe SI backfill not launched.
-  - **LLM series:** `forecast_llm.parquet` is **16 rows / 1 date** (2026-08-24, stratified test). `--lookback 21` still clobbers a 252-day series; conformal stays blocked. 3B default; `max_tokens=120`; live prompts ~297–385 tokens inside `n_ctx=1024` (headroom ~520). Stay **one-shot** — full k=2 few-shot leaves ~30 tok on the fattest brief; a coverage-gated few-shot run is 5–8h on MX550. Do not let the GGUF write the brief. Python owns the dossier. Do not spend headroom on sector/macro tape or unitless scores.
-  - **Coverage-gated desk-note universe:** classified stage + 3y growth + FCF + ROIC−WACC on the same `as_of_date` is **365** latest names (was 413). Not a coverage-gated job until the 16 is stable.
+  - **LLM series:** `forecast_llm.py` writes **last HMM date only** (no `--lookback` date loop). Default universe is the coverage-gated set (**365**). Stratified test was **16×1 date** (2026-08-24). Conformal stays blocked until a multi-date series exists. 3B default; `max_tokens=120`; live prompts ~297–385 tokens inside `n_ctx=1024` (headroom ~520). Stay **one-shot**. Do not let the GGUF write the brief. Python owns the dossier. Do not spend headroom on sector/macro tape or unitless scores.
+  - **Coverage-gated desk-note universe:** classified stage + 3y growth + FCF + ROIC−WACC on the same `as_of_date` is **365** latest names (was 413). Default CLI with no `--tickers` runs that set.
   Expand these files (full-universe SI, implied-r with the ROE/P/B gate actually applied, ride, buy_candidates; worded aggregator and ER ranks; TTM/yoy on the panel; drop `fillna(0.02)` on implied growth; gate `mos_pass` on traded EV/EBITDA > 0; rebuild sector EW returns from `daily_prices`) before adding more prompt fields. Do not add date-identical macro.
 
 ### Architecture gaps (known, not yet built)
@@ -232,9 +232,9 @@ Source of truth: [RESEARCH_INTEGRATION_PLAN.md](RESEARCH_INTEGRATION_PLAN.md). S
 | 4 | Taleb/Spitznagel/Haghani | Started | Hill veto **13 names** (SMCI). 90/10 TMI/BPI barbell maxDD ratio **0.98** (bar <0.50 **fail**). `ride_book` **9**. Fragile ~10%. |
 | 5 | López de Prado | Measured (2026-08-25) | CPCV − random **+0.1pp** (bar +3% **fail**). Regime clustering **+46.4%** full-universe **pass**. Does **not** replace HMM. `peer_group` falls back to GICS on `mixed_*` and sector-mismatch (AAPL → Technology, not `financial_services_76`). |
 | 6 | Hoffstein/Vince | Started | 7-day glide luck **−50.8%** (bar 40% **pass**). LS median terminal **18.54** vs ERC **6.40**. Do not size live books at f=1.50. |
-| 7 | Lo/Amodei | Started | Persist vs vol **−0.074** (bar +0.60 **fail**). Conformal **88.9%** vs 90% (**fail**); GGUF parquet is **16×1 date** so bands stay blocked. LLM desk note is live (3B default) — coverage blockers in §5 Data integrity. |
+| 7 | Lo/Amodei | Started | Persist vs vol **−0.074** (bar +0.60 **fail**). Conformal **88.9%** vs 90% (**fail**). LLM desk note live (3B, last-date, coverage-gated **365**). Bands stay blocked until a multi-date series. |
 
-LLM brief: Python owns the dossier. Do not LLM-write it. Do not spend the ~520-token `n_ctx=1024` headroom on unitless scores or sector/macro tape. Stay one-shot on any coverage-gated run.
+LLM brief: Python owns the dossier. Do not LLM-write it. Do not spend the ~520-token `n_ctx=1024` headroom on unitless scores or sector/macro tape. Stay one-shot. Default run is last-date coverage-gated **365**.
 
 ---
 

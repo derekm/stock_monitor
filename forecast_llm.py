@@ -1,34 +1,65 @@
 #!/usr/bin/env python3
 """
-forecast_llm_v2.py — LLM directional forecasts with Damodaran context and advanced prompting.
+forecast_llm.py — LLM directional forecasts with Damodaran context.
 
-Uses Qwen2.5-Math 1.5B GGUF via llama-cpp-python on MX550.
-Advanced system/user/assistant prompt format.
+Llama-3.2 1B/3B Instruct GGUF via llama-cpp-python on MX550.
+JSON-grammar constrained output; rationale is two outcome-only sentences.
 """
 from __future__ import annotations
 import argparse
+import json
+import re
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from llama_cpp import Llama
+from llama_cpp import Llama, LlamaGrammar
 
-MODEL_PATH = Path(r"C:\Users\derek\models\Qwen2.5-Math-1.5B-Instruct-Q4_K_M.gguf")
+MODEL_1B = Path(r"C:\Users\derek\models\Llama-3.2-1B-Instruct-Q4_K_M.gguf")
+MODEL_3B = Path(r"C:\Users\derek\models\Llama-3.2-3B-Instruct-Q4_K_M.gguf")
+MODEL_PATH = MODEL_3B
 _llm = None
+_grammar = None
 
-def _get_llm():
-    global _llm
-    if _llm is None:
-        print("Initializing Qwen-Math on NVIDIA MX550...")
-        _llm = Llama(
-            model_path=str(MODEL_PATH),
+FORECAST_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "direction": {"type": "string", "enum": ["up", "sideways", "down"]},
+        "prob": {"type": "number"},
+        "horizon_days": {"type": "integer"},
+        "rationale": {"type": "string"},
+    },
+    "required": ["direction", "prob", "horizon_days", "rationale"],
+}
+
+def _get_llm(model_path: Path | None = None):
+    global _llm, _grammar, MODEL_PATH
+    path = Path(model_path) if model_path is not None else MODEL_PATH
+    if _llm is None or path != MODEL_PATH:
+        if _llm is not None:
+            del _llm
+            _llm = None
+        MODEL_PATH = path
+        print(f"Initializing {path.name} on NVIDIA MX550...")
+        kwargs = dict(
+            model_path=str(path),
             n_gpu_layers=99,
             n_ctx=1024,
             n_batch=512,
             n_ubatch=512,
             flash_attn=True,
+            chat_format="llama-3",
             verbose=False,
         )
-    return _llm
+        try:
+            _llm = Llama(**kwargs)
+        except Exception as e:
+            print(f"  full GPU offload failed ({e}); retry n_gpu_layers=20 n_batch=128")
+            kwargs["n_gpu_layers"] = 20
+            kwargs["n_batch"] = 128
+            kwargs["n_ubatch"] = 128
+            _llm = Llama(**kwargs)
+        _grammar = LlamaGrammar.from_json_schema(json.dumps(FORECAST_JSON_SCHEMA))
+    return _llm, _grammar
 
 DATA_DIR = Path(__file__).parent
 STATES = DATA_DIR / "hmm_regime_states.parquet"
@@ -37,7 +68,40 @@ WACC_FILE = DATA_DIR / "wacc_per_ticker.parquet"
 FAIR_MULTIPLES = DATA_DIR / "fair_multiples.parquet"
 QUALITY = DATA_DIR / "quality_scores.parquet"
 FUND = DATA_DIR / "fundamentals.parquet"
+PREFERRED = DATA_DIR / "preferred_metrics.parquet"
+MOMENTUM = DATA_DIR / "momentum_metrics.parquet"
+IMPLIED_R = DATA_DIR / "implied_r_screen.parquet"
+FRAGILITY = DATA_DIR / "fragility_screen.parquet"
+ER_DECOMP = DATA_DIR / "expected_returns_decomp.parquet"
+FRAGILITY_VETO = DATA_DIR / "fragility_veto.parquet"
 OUT = DATA_DIR / "forecast_llm.parquet"
+
+
+def _er_snap() -> pd.DataFrame | None:
+    """Last date only. Full file is 12M rows — do not pandas-read it."""
+    if not ER_DECOMP.exists():
+        return None
+    import duckdb
+    con = duckdb.connect()
+    path = str(ER_DECOMP).replace("\\", "/")
+    return con.execute(
+        f"""
+        with last as (select max(date) d from read_parquet('{path}'))
+        select ticker, n_pillars, expected_return, carry, value, momentum, defensive
+        from read_parquet('{path}') e, last
+        where e.date = last.d and n_pillars >= 2
+        """
+    ).df()
+
+
+def _ticker_snap(path: Path, cols: list[str]) -> pd.DataFrame | None:
+    if not path.exists():
+        return None
+    df = pd.read_parquet(path)
+    if "ticker" not in df.columns:
+        return None
+    keep = ["ticker"] + [c for c in cols if c in df.columns]
+    return df[keep].drop_duplicates("ticker", keep="last")
 
 def load_states():
     df = pd.read_parquet(STATES)
@@ -56,137 +120,394 @@ def load_damodaran_context():
     ctx = lc.merge(w, on=["ticker","as_of_date"], how="left")
     ctx = ctx.merge(fm, on=["ticker","as_of_date"], how="left")
     ctx = ctx.merge(q[["ticker","as_of_date","quality_score","roic_wacc_spread"]], on=["ticker","as_of_date"], how="left")
+    fund = pd.read_parquet(FUND)
+    fund["as_of_date"] = pd.to_datetime(fund["as_of_date"])
+    mix = [c for c in (
+        "net_income_quarterly", "operating_income_quarterly", "gains_strategic_investments",
+    ) if c in fund.columns]
+    if mix:
+        ctx = ctx.merge(fund[["ticker", "as_of_date"] + mix], on=["ticker", "as_of_date"], how="left")
+    for path, cols in (
+        (PREFERRED, ["decision", "buffett_pass", "trifecta_pass", "mos_pass", "nm_quality", "ev_ebitda"]),
+        (MOMENTUM, ["mom_12_1", "ret_63d"]),
+        (IMPLIED_R, ["implied_r_clean_pct"]),
+        (FRAGILITY, ["fragile_flag"]),
+        (FRAGILITY_VETO, ["veto_flag"]),
+    ):
+        snap = _ticker_snap(path, cols)
+        if snap is not None and len(snap.columns) > 1:
+            ctx = ctx.merge(snap, on="ticker", how="left")
+    er = _er_snap()
+    if er is not None and len(er):
+        ctx = ctx.merge(er, on="ticker", how="left")
     return ctx
 
-def build_damodaran_narrative(row):
-    stage = row.get("life_cycle_stage","Unclassified")
-    wacc = row.get("wacc", np.nan)
-    roic = row.get("roic", np.nan)
-    quality = row.get("quality_score", np.nan)
-    fair_ev = row.get("fair_ev_ebitda", np.nan)
-    if stage == "Young Growth":
-        driver = "TAM capture and path to profitability"
-    elif stage == "High Growth":
-        driver = "reinvestment efficiency and margin expansion"
-    elif stage == "Mature Growth":
-        driver = "ROIC > WACC sustain and FCF conversion"
-    elif stage == "Mature Stable":
-        driver = "FCF yield and capital return"
-    elif stage == "Decline":
-        driver = "asset value / liquidation risk"
+def _fmt_money(x):
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    ax = abs(x)
+    if ax >= 1e9:
+        return f"{x / 1e9:+.2f} billion"
+    if ax >= 1e6:
+        return f"{x / 1e6:+.0f} million"
+    return f"{x:,.0f}"
+
+
+def _fmt_pct(x, digits=1):
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    return f"{x:.{digits}%}"
+
+
+def _fmt_cagr(x):
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    if x >= 0:
+        return f"sales growing {_fmt_pct(x)} a year"
+    return f"sales shrinking {_fmt_pct(abs(x))} a year"
+
+
+def _fmt_fcf(x):
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    if x < 0:
+        ax = abs(x)
+        if ax >= 1:
+            return f"spends {ax:.1f} dollars of cash for every dollar of sales"
+        return f"spends extra cash equal to {_fmt_pct(ax)} of sales"
+    if x < 0.10:
+        return f"only {_fmt_pct(x)} of sales is leftover cash (cash left after running the business) — thin, not rich"
+    return f"{_fmt_pct(x)} of sales is leftover cash (cash left after running the business)"
+
+
+def _fmt_spread(x):
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    pp = f"{abs(x) * 100:.1f}"
+    if x >= 0:
+        return f"profit beats the cost of capital (the return lenders and shareholders require) by {pp} points — value is being created"
+    return f"profit misses the cost of capital (the return lenders and shareholders require) by {pp} points — value is being destroyed"
+
+
+def _fmt_px(name, x):
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    verb = "rose" if x >= 0 else "fell"
+    return f"{name} {verb} {_fmt_pct(abs(x))}"
+
+
+def _pick_cite(g3_s, fcf_s, spread_s, px_s, fcf, spread, tr, g3):
+    """Business fact only. 21-day price stays in the brief for the path sentence, never as the cite when a fundamental exists."""
+    if fcf_s and pd.notna(fcf) and fcf < 0:
+        return fcf_s
+    if spread_s and pd.notna(spread) and abs(spread) >= 0.10:
+        return spread_s
+    if g3_s:
+        return g3_s
+    if fcf_s:
+        return fcf_s
+    if spread_s:
+        return spread_s
+    return px_s
+
+
+def build_brief(ticker, regime, vol21, vol_med, mkt_ret_21d, row, ticker_ret_21d=None, asof_date=None, forecast_date=None) -> str:
+    """Prose dossier. Binding facts first; no labels the model can echo as a buy."""
+    bits = []
+    dec = row.get("decision")
+    avoid = isinstance(dec, str) and dec == "AVOID"
+    veto = row.get("fragile_flag") is True or row.get("veto_flag") is True
+    fcf = row.get("fcf_margin")
+    burn = pd.notna(fcf) and float(fcf) < 0
+
+    stage = row.get("life_cycle_stage")
+    if avoid or veto:
+        bits.append(f"{ticker}.")
+        if avoid:
+            bits.append("Do not own — a hold-or-sell instruction, not a comment on last week's price.")
+        if veto:
+            bits.append("Do not own: too crash-prone (the crash-risk test failed even if the recent price is up).")
+    elif stage and stage != "Unclassified":
+        stage_l = str(stage).lower()
+        gloss = {
+            "young growth": "early high-growth, often still spending cash",
+            "high growth": "sales still ramping, not yet a cash cow",
+            "mature growth": "still growing, no longer a startup",
+            "mature stable": "grown-up cash business",
+            "decline": "sales shrinking",
+        }.get(stage_l)
+        if gloss:
+            bits.append(f"{ticker} is in a {stage_l} phase ({gloss}).")
+        else:
+            bits.append(f"{ticker} is in a {stage_l} phase.")
     else:
-        driver = "insufficient data for stage"
-    parts = [f"Life cycle {stage}", f"driver {driver}"]
-    if pd.notna(wacc):
-        parts.append(f"WACC {wacc:.1%}")
-    if pd.notna(roic):
-        parts.append(f"ROIC {roic:.1%}")
-    if pd.notna(quality):
-        parts.append(f"quality {quality:.0f}")
-    if pd.notna(fair_ev):
-        parts.append(f"fair EV/EBITDA {fair_ev:.1f}")
-    return "; ".join(parts)
+        bits.append(f"{ticker}.")
 
-SYSTEM_PROMPT = """You are a clinical quant analyst. You output JSON only with keys direction, prob, rationale.
-Direction is one of up, sideways, down. Prob is 0.0-1.0.
-Be concise, no fluff."""
+    px_s = _fmt_px("the shares", ticker_ret_21d)
+    mkt_s = _fmt_px("the market", mkt_ret_21d)
+    bounce = pd.notna(ticker_ret_21d) and float(ticker_ret_21d) > 0 and (avoid or burn or veto)
+    if px_s and mkt_s:
+        line = f"Over the last 21 days {px_s}; {mkt_s}."
+        if bounce:
+            line += " That 21-day bounce is not a reason to own."
+        bits.append(line)
+    elif px_s:
+        line = f"Over the last 21 days {px_s}."
+        if bounce:
+            line += " That 21-day bounce is not a reason to own."
+        bits.append(line)
 
-def _llm_predict(regime, vol21, life_cycle, wacc, roic, fair_ev, quality, damo_narr):
-    llm = _get_llm()
-    wacc_str = f"{wacc:.1%}" if pd.notna(wacc) else "NA"
-    roic_str = f"{roic:.1%}" if pd.notna(roic) else "NA"
-    fair_str = f"{fair_ev:.1f}" if pd.notna(fair_ev) else "NA"
-    qual_str = f"{quality:.0f}" if pd.notna(quality) else "NA"
-    life_str = life_cycle if life_cycle else "Unclassified"
-    
-    system_msg = SYSTEM_PROMPT
-    user_msg = f"""Ticker context:
-Regime: {regime}
-Vol21: {vol21:.4f}
-Life cycle: {life_str}
-WACC: {wacc_str} | ROIC: {roic_str} | Fair EV/EBITDA: {fair_str} | Quality: {qual_str}
-Damodaran narrative: {damo_narr}
-Task: Forecast 21d directional bias. Output JSON only with keys direction, prob, rationale."""
-    
-    # Strict Qwen ChatML format
-    prompt = (
-        f"<|im_start|>system\n{system_msg}<|im_end|>\n"
-        f"<|im_start|>user\n{user_msg}<|im_end|>\n"
-        f"<|im_start|>assistant\n"
-    )
-    
-    try:
-        out = llm.create_completion(
-            prompt=prompt,
-            max_tokens=128,
-            temperature=0.7,
-            top_p=0.8,
-            stop=["<|im_end|>"],
+    g3 = row.get("revenue_growth_3y")
+    spread = row.get("roic_wacc_spread")
+    if pd.isna(spread):
+        wacc, roic = row.get("wacc"), row.get("roic")
+        if pd.notna(wacc) and pd.notna(roic):
+            spread = roic - wacc
+    fcf_s = _fmt_fcf(fcf)
+    spread_s = _fmt_spread(spread)
+    g3_s = _fmt_cagr(g3)
+    for s in (fcf_s, spread_s):
+        if s:
+            bits.append(s[0].upper() + s[1:] + ".")
+
+    fair = row.get("fair_ev_ebitda")
+    ev = row.get("ev_ebitda")
+    expensive = False
+    if pd.notna(fair) and float(fair) > 0 and pd.notna(ev) and float(ev) > 0:
+        evf, ff = float(ev), float(fair)
+        if evf >= ff * 1.15:
+            expensive = True
+            bits.append(
+                f"Too expensive (buyers overpay): they pay {evf:.1f} dollars of firm value (equity plus net debt) per 1 dollar of operating profit; {ff:.1f} would be enough."
+            )
+        elif evf <= ff * 0.85:
+            bits.append(
+                f"Cheap (buyers underpay): they pay {evf:.1f} dollars of firm value (equity plus net debt) per 1 dollar of operating profit; {ff:.1f} would be fair."
+            )
+        else:
+            bits.append(
+                f"Price is about right at {evf:.1f} dollars of firm value (equity plus net debt) per 1 dollar of operating profit (fair is {ff:.1f})."
+            )
+    elif pd.notna(fair) and float(fair) > 0:
+        bits.append(
+            f"A justified ratio is {float(fair):.1f} dollars of firm value (equity plus net debt) per 1 dollar of operating profit — that is not the traded price."
         )
-        text = out["choices"][0]["text"]
-        return "up", 0.55, text
-    except Exception as e:
-        return "up", 0.55, f"LLM error: {e}"
+    if g3_s and (not avoid) and (not burn) and (not expensive):
+        bits.append(g3_s[0].upper() + g3_s[1:] + ".")
+
+    ni = row.get("net_income_quarterly")
+    oi = row.get("operating_income_quarterly")
+    if pd.notna(ni) and pd.notna(oi) and oi != 0 and abs(ni - oi) / abs(oi) >= 0.25:
+        bits.append(
+            f"The profit they reported {_fmt_money(ni)} is not the profit from running the business {_fmt_money(oi)}."
+        )
+    si = row.get("gains_strategic_investments")
+    if pd.notna(si) and pd.notna(ni) and abs(si) >= 0.20 * abs(ni):
+        bits.append(f"Paper gains on investments, not sales, were {_fmt_money(si)} last quarter.")
+    q = row.get("quality_score")
+    if pd.notna(q) and float(q) >= 50:
+        bits.append(f"Business quality is {float(q):.0f} of 100.")
+    if row.get("trifecta_pass") is True:
+        bits.append("It clears the three cheapness tests.")
+    if row.get("mos_pass") is True:
+        bits.append("Price is at least 15% below a fair ratio of firm value (equity plus net debt) to operating profit.")
+    ir = row.get("implied_r_clean_pct")
+    # Skip the yearly hurdle when expensive is already in the brief (PFE mixed 6.7% with 16.5x).
+    if (not expensive) and pd.notna(ir) and float(ir) > 0:
+        bits.append(f"Owners need {float(ir):.1f}% a year from this stock to make today's price fair — that is an annual hurdle, not a P/E ratio.")
+    er = row.get("expected_return")
+    if pd.notna(er):
+        if float(er) >= 0.70:
+            bits.append("Carry, value, price-trend, and defensive ingredients of expected return rank near the top of the market.")
+        elif float(er) <= 0.30:
+            bits.append("Carry, value, price-trend, and defensive ingredients of expected return rank near the bottom of the market.")
+    mom = row.get("mom_12_1")
+    # A one-year price run is not a reason to own a burning or do-not-own name.
+    if (not avoid) and (not burn) and (not expensive) and pd.notna(mom) and abs(float(mom)) >= 0.20:
+        bits.append(
+            f"Over the past year excluding last month the shares {_fmt_px('the shares', float(mom)).removeprefix('the shares ')}."
+        )
+    r63 = row.get("ret_63d")
+    if (
+        (not avoid) and (not burn) and (not expensive)
+        and r63 is not None and pd.notna(r63) and ticker_ret_21d is not None and pd.notna(ticker_ret_21d)
+        and (float(r63) * float(ticker_ret_21d) < 0 or (abs(float(r63)) >= 0.15 and abs(float(r63)) >= 2 * abs(float(ticker_ret_21d))))
+    ):
+        bits.append(f"Over the last quarter {_fmt_px('the shares', float(r63))}.")
+
+    return " ".join(bits)
+
+
+SYSTEM_PROMPT = """You are a buy-side analyst. Write a two-sentence forecast, not a restatement.
+Sentence 1: where the shares go over the foreseeable future.
+Sentence 2: leftover cash, profit versus the cost of capital, or dollars of firm value per dollar of operating profit — not sales growth and not a 21-day bounce when the brief says do not own or the business spends cash.
+Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
+Too expensive means the shares do not go up: leftover cash and sales growth do not override buyers overpaying.
+JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
+
+
+def _parse_forecast(text, brief=""):
+    json_match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not json_match:
+        raise ValueError("no JSON object")
+    data = json.loads(json_match.group(0))
+    direction = str(data["direction"]).strip().lower()
+    if direction not in {"up", "sideways", "down"}:
+        raise ValueError(f"bad direction {direction!r}")
+    prob = float(data["prob"])
+    if not (0.10 <= prob <= 0.90):
+        raise ValueError(f"bad prob {prob}")
+    horizon = int(data["horizon_days"])
+    if horizon <= 0:
+        raise ValueError(f"bad horizon {horizon}")
+    rationale = str(data["rationale"]).strip()
+    if not rationale:
+        raise ValueError("empty rationale")
+    return direction, prob, horizon, rationale
+
+
+def _clamp_horizon(horizon, regime):
+    return min(max(int(horizon), 1), 252)
+
+
+def _coverage_tickers(ctx: pd.DataFrame) -> list[str]:
+    """Classified stage + 3y sales growth + FCF + ROIC−WACC on each ticker's last as_of."""
+    last = ctx.sort_values("as_of_date").groupby("ticker", sort=False).tail(1)
+    stage = last["life_cycle_stage"]
+    mask = (
+        stage.notna()
+        & (stage.astype(str) != "Unclassified")
+        & last["revenue_growth_3y"].notna()
+        & last["fcf_margin"].notna()
+        & last["roic_wacc_spread"].notna()
+    )
+    return last.loc[mask, "ticker"].astype(str).tolist()
+
+
+def _llm_predict(ticker, brief, regime):
+    llm, grammar = _get_llm()
+    user_msg = brief
+    last_err = None
+    last_text = ""
+    for attempt in range(6):
+        extra = ""
+        if attempt:
+            extra = " Forecast; use one operating number as the reason."
+        out = llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg + extra},
+            ],
+            max_tokens=120,
+            temperature=min(0.3 + 0.1 * attempt, 0.7),
+            top_p=0.9,
+            grammar=grammar,
+        )
+        last_text = out["choices"][0]["message"]["content"]
+        try:
+            direction, prob, horizon, rationale = _parse_forecast(last_text, brief)
+            return direction, prob, _clamp_horizon(horizon, regime), rationale
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(f"LLM JSON parse failed: {last_err}; raw={last_text!r}")
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--lookback", type=int, default=252)
     ap.add_argument("--tickers", type=str, default="")
+    ap.add_argument("--tickers-file", type=str, default="")
+    ap.add_argument("--model", type=str, default="3b", choices=["1b", "3b"])
     args = ap.parse_args()
-    
+    _get_llm(MODEL_3B if args.model == "3b" else MODEL_1B)
+
     st = load_states()
-    recent = st.tail(args.lookback).copy()
+    recent = st.tail(max(int(args.lookback), 21)).copy()
     recent["mkt_ret_21d"] = recent["mkt_ret"].rolling(21).mean()
-    
+    last_rows = recent.dropna(subset=["mkt_ret_21d"])
+    if last_rows.empty:
+        print("No HMM row with 21-day market return")
+        return
+    r = last_rows.iloc[-1]
+    date = r["date"]
+    regime = r["regime"]
+    vol21 = r["vol21"]
+    avg_corr = r["avg_corr"]
+    mkt_21 = float(r["mkt_ret_21d"])
+    vol_med = float(recent["vol21"].median()) if len(recent) else float("nan")
+
     ctx = load_damodaran_context()
-    fund = pd.read_parquet(FUND)
-    fund["as_of_date"] = pd.to_datetime(fund["as_of_date"])
-    fund_latest = fund.sort_values("as_of_date").groupby("ticker").tail(1)
-    
-    tickers = [t.strip() for t in args.tickers.split(",") if t.strip()] if args.tickers else None
-    if tickers:
-        fund_latest = fund_latest[fund_latest["ticker"].isin(tickers)]
-        ctx = ctx[ctx["ticker"].isin(tickers)]
-    
+    if args.tickers:
+        tickers = [t.strip() for t in args.tickers.split(",") if t.strip()]
+    elif args.tickers_file:
+        tickers = [t.strip() for t in Path(args.tickers_file).read_text(encoding="utf-8").splitlines() if t.strip()]
+    else:
+        tickers = _coverage_tickers(ctx)
+        print(f"Coverage-gated tickers: {len(tickers)}")
+    if not tickers:
+        print("No tickers")
+        return
+    ctx = ctx[ctx["ticker"].isin(tickers)]
+
+    px = None
+    try:
+        from analytics_common import load_adj_prices_pandas
+        px = load_adj_prices_pandas(tickers=tickers)
+        px["date"] = pd.to_datetime(px["date"])
+    except Exception:
+        px = None
+
     rows = []
-    for _, r in recent.dropna(subset=["mkt_ret_21d"]).iterrows():
-        date = r["date"]
-        regime = r["regime"]
-        vol21 = r["vol21"]
-        avg_corr = r["avg_corr"]
-        top_tickers = fund_latest["ticker"].head(50).tolist()
-        for ticker in top_tickers:
-            t_ctx = ctx[(ctx["ticker"]==ticker) & (ctx["as_of_date"]<=date)]
-            if t_ctx.empty:
-                continue
-            t_ctx = t_ctx.sort_values("as_of_date").iloc[[-1]]
-            damo_narr = build_damodaran_narrative(t_ctx.iloc[0])
-            wacc = t_ctx.iloc[0].get("wacc")
-            roic = t_ctx.iloc[0].get("roic")
-            fair_ev = t_ctx.iloc[0].get("fair_ev_ebitda")
-            quality = t_ctx.iloc[0].get("quality_score")
-            life_cycle = t_ctx.iloc[0].get("life_cycle_stage")
-            
-            direction, prob, narrative = _llm_predict(regime, vol21, life_cycle, wacc, roic, fair_ev, quality, damo_narr)
-            uncertainty = "high" if (vol21 > recent["vol21"].quantile(0.75) or regime == "high_vol_stress") else "normal"
-            rows.append({
-                "date": date,
-                "ticker": ticker,
-                "regime": regime,
-                "mkt_ret_21d": float(r["mkt_ret_21d"]),
-                "vol21": float(vol21),
-                "avg_corr": float(avg_corr),
-                "forecast_dir": direction,
-                "forecast_prob": prob,
-                "narrative": narrative,
-                "uncertainty_flag": uncertainty,
-                "life_cycle_stage": life_cycle,
-                "wacc": float(wacc) if pd.notna(wacc) else None,
-                "fair_ev_ebitda": float(fair_ev) if pd.notna(fair_ev) else None,
-                "quality_score": float(quality) if pd.notna(quality) else None,
-                "damodaran_narrative": damo_narr,
-            })
-    
+    n = len(tickers)
+    for i, ticker in enumerate(tickers, 1):
+        t_ctx = ctx[(ctx["ticker"] == ticker) & (ctx["as_of_date"] <= date)]
+        if t_ctx.empty:
+            print(f"  skip {ticker}: no context", flush=True)
+            continue
+        t_ctx = t_ctx.sort_values("as_of_date").iloc[[-1]]
+        row = t_ctx.iloc[0]
+        tr = None
+        if px is not None:
+            g = px[(px["ticker"] == ticker) & (px["date"] <= date)].sort_values("date")
+            if len(g) >= 22:
+                c = g["close"] if "close" in g.columns else g.get("adj_close")
+                if c is not None and c.iloc[-1] and c.iloc[-22]:
+                    tr = float(c.iloc[-1] / c.iloc[-22] - 1)
+        brief = build_brief(
+            ticker, regime, vol21, vol_med, mkt_21, row, tr,
+            asof_date=row.get("as_of_date"), forecast_date=date,
+        )
+        wacc = row.get("wacc")
+        fair_ev = row.get("fair_ev_ebitda")
+        quality = row.get("quality_score")
+        life_cycle = row.get("life_cycle_stage")
+        try:
+            direction, prob, horizon, narrative = _llm_predict(ticker, brief, regime)
+        except RuntimeError as e:
+            print(f"  skip {ticker}: {e}", flush=True)
+            continue
+        uncertainty = "high" if (vol21 > recent["vol21"].quantile(0.75) or regime == "high_vol_stress") else "normal"
+        d_out = date.date() if hasattr(date, "date") and callable(date.date) else date
+        rows.append({
+            "date": d_out,
+            "ticker": ticker,
+            "regime": regime,
+            "mkt_ret_21d": mkt_21,
+            "vol21": float(vol21),
+            "avg_corr": float(avg_corr),
+            "forecast_dir": direction,
+            "forecast_prob": prob,
+            "horizon_days": horizon,
+            "narrative": narrative,
+            "uncertainty_flag": uncertainty,
+            "life_cycle_stage": life_cycle,
+            "wacc": float(wacc) if pd.notna(wacc) else None,
+            "fair_ev_ebitda": float(fair_ev) if pd.notna(fair_ev) else None,
+            "quality_score": float(quality) if pd.notna(quality) else None,
+            "damodaran_narrative": brief,
+        })
+        print(f"{i}/{n} {ticker} {direction} {prob:.2f} n={horizon}", flush=True)
+
     out = pd.DataFrame(rows)
     if not out.empty:
         out.to_parquet(OUT, index=False)

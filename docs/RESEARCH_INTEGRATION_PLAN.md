@@ -167,7 +167,7 @@ Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector
 - [x] Regime population shares (11m HMM file) → `regime_population.parquet`
 - [x] Adaptive persist vs vol → `adaptive_hmm_states.parquet` (bar **+0.60 fail**)
 - [x] Split conformal on TMI |r|/σ₂₁: coverage **88.9%** vs 90% bar → `conformal_bands.parquet` (**fail**, 1.1pp short)
-- [ ] LLM forecasting
+- [x] LLM forecasting (prototype, 2026-08-30): `forecast_llm.py` local Llama-3.2-3B Instruct Q4, Python-owned brief, JSON grammar. Not fine-tuned. Not production.
 - [ ] Ensemble weights
 
 **Adaptive HMM (persistence vs vol) — CORRECTED 2026-08-24.** The recorded **−0.90 (n=169)** is not reproducible as a *regime-persistence* result. Measuring persistence the natural way — **regime run length vs mean in-run `vol21`** — gives essentially **zero** relationship on both samples:
@@ -186,7 +186,7 @@ Both **fail the +0.60 bar**, and both agree, so this is **not** a truncated-wind
 **Deliverables:**
 - [ ] **Adaptive HMM**: Extend `hmm_regime_detection.py` with Lo's **time-varying transition probabilities** (regime persistence changes with volatility) → `adaptive_hmm_states.parquet`
 - [ ] **Population dynamics**: Add `statistical_profiler.py` metric: **regime population fitness** (fraction of tickers in each regime, evolution over time) → `regime_population.parquet`
-- [ ] **LLM forecasting integration**: Prototype `forecast_granite.py` → `forecast_llm.py` using fine-tuned LLM (e.g., FinGPT, BloombergGPT, or local Llama) for directional + narrative forecasts
+- [x] **LLM forecasting integration**: `forecast_llm.py` — Llama-3.2-3B Instruct Q4 on MX550; Python writes the dossier; model writes a two-sentence JSON forecast. Coverage-gated set is **365** (classified stage + 3y growth + FCF + ROIC−WACC). Last HMM date only; one-shot; `n_ctx=1024`. Not FinGPT/BloombergGPT; not fine-tuned. Conformal still blocked on a 1-date series.
 - [ ] **Uncertainty calibration**: Upgrade `regime_calibrate.py` with **conformal prediction** (distribution-free prediction intervals) + Amodei's **constitutional uncertainty** (model expresses "I don't know") → `conformal_bands.parquet`
 - [ ] **Regime-selected ensemble**: Enhance `regime_serving.py` with **dynamic model weighting** (Lo's evolutionary weight update based on recent regime performance) → `ensemble_weights.parquet`
 

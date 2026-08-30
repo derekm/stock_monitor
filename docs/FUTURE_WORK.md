@@ -28,7 +28,7 @@
 ### Data integrity
 - Price pipeline health checks (the independent-synthetic corr ≈ 0 failure mode)
 - Factor-structured or vendor data as default for regime research
-- **LLM-brief coverage gaps (come back):** see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) §5 Data integrity. Snapshot 2026-08-30: SI CRM-only (cache 1 JSON); implied-r 470 with 28 negatives still on file; buy_candidates 552; ride_book 9; veto 13 (SMCI); Unclassified 53.4%; quality 0 on **4,161 / 9,345**; fair EV/EBITDA 486/9345 with 461/486 g filled at 2%; KHC/SNDK `mos_pass` on traded EV ≤ 0; forecast_llm **16×1 date**; coverage-gated desk-note set **365** (was 413). Sector/macro stay out of the brief (`sector_prices` levels junk; exo stale 2026-07-28; ERP already in WACC). Stay one-shot. Do not LLM-write the brief.
+- **LLM-brief coverage gaps (come back):** see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) §5 Data integrity. Snapshot 2026-08-30: SI CRM-only; implied-r 470 with 28 negatives; buy_candidates 552; ride_book 9; veto 13; Unclassified 53.4%; quality 0 on **4,161 / 9,345**; fair EV/EBITDA 486/9345 with 461/486 g=2%; KHC/SNDK `mos_pass` on traded EV ≤ 0; coverage-gated desk-note set **365** (was 413). Sector/macro stay out. Stay one-shot. Do not LLM-write the brief.
 
 ### Architecture gaps (known, not yet built)
 
@@ -53,7 +53,7 @@ Source of truth: [RESEARCH_INTEGRATION_PLAN.md](RESEARCH_INTEGRATION_PLAN.md). S
 | 4 | Taleb/Spitznagel/Haghani | Started | Veto 13 names (SMCI). Barbell maxDD ratio **0.98** (bar <0.50 **fail**). |
 | 5 | López de Prado | Measured (2026-08-25) | CPCV **+0.1pp fail**. Clustering **+46.4% pass**. Does not replace HMM. |
 | 6 | Hoffstein/Vince | Started | 7-day glide **−50.8% pass**. Do not size live at f=1.50. |
-| 7 | Lo/Amodei | Started | Persist/vol **−0.074 fail**. Conformal **88.9% fail**. LLM **16×1 date**. See [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) §5. |
+| 7 | Lo/Amodei | Started | Persist/vol **−0.074 fail**. Conformal **88.9% fail**. LLM desk note live; coverage-gated **365**. See [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) §5. |
 
 ---
 
