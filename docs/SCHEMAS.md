@@ -99,6 +99,8 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
   **LLM desk notes** (`forecast_llm.parquet`): `date`, `ticker`, `profile`
   (`value` | `exuberant` | `compounder`), `forecast_dir`, `forecast_prob`, `horizon_days`,
   `narrative`, `damodaran_narrative`. Long table; resume on `(date, ticker, profile)`.
+  Press sidecar: article objects in `news_articles/YYYY/MM/DD/{id}.json`; mentions in
+  `ticker_news_mentions.parquet`.
 
 ### Index level series  (`index_levels`)
 
@@ -543,8 +545,10 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `economic_calendar.csv` | `economic_calendar.py` | Calendar / events |
 || `estimate_revisions.parquet` | `estimate_revisions.py` | Fundamental |
 || `filings_sentiment.csv` | `filings_sentiment.py` | Sentiment / alternative |
-|| `ticker_news.parquet` | `ticker_news.py` | Sentiment / alternative |
-|| `ticker_news_notes.parquet` | `ticker_news.py --notes` | Sentiment / alternative |
+| `ticker_news.parquet` | `ticker_news.py` | Sentiment / alternative |
+| `ticker_news_articles.parquet` | `ticker_news.py` | Sentiment / alternative |
+| `ticker_news_mentions.parquet` | `ticker_news.py` | Sentiment / alternative |
+| `ticker_news_notes.parquet` | `ticker_news.py --notes` | Sentiment / alternative |
 || `options_skew.parquet` | `options_skew.py` | Options |
 || `signal_model_oos.csv` | `signal_model.py` | Aggregate |
 || `signal_model_weights.csv` | `signal_model.py` | Aggregate |

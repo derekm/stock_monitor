@@ -32,7 +32,14 @@ from analytics_common import DATA_DIR
 
 OUT_NEWS = DATA_DIR / "ticker_news.parquet"
 OUT_NOTES = DATA_DIR / "ticker_news_notes.parquet"
+OUT_ARTICLES = DATA_DIR / "ticker_news_articles.parquet"
+OUT_MENTIONS = DATA_DIR / "ticker_news_mentions.parquet"
+BUCKET = DATA_DIR / "news_articles"
 POLY_NEWS = "https://api.polygon.io/v2/reference/news"
+_UA = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+}
 
 
 def _polygon_key() -> str:
@@ -219,7 +226,115 @@ def ingest(days: int, tickers: list[str] | None, save: bool) -> pd.DataFrame:
         out = pd.concat([old, new], ignore_index=True) if len(old) else new
         _write_dates(out, OUT_NEWS, "published_date")
         print(f"Wrote {OUT_NEWS} ({len(out)} rows)")
+        extract_articles(save=True)
+    elif save:
+        extract_articles(save=True)
     return new
+
+
+def _object_key(published, article_id: str) -> str:
+    d = _as_date(published) or date.today()
+    return f"{d.year:04d}/{d.month:02d}/{d.day:02d}/{article_id}.json"
+
+
+def bucket_put(key: str, obj: dict) -> Path:
+    path = BUCKET / key
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
+def bucket_exists(key: str) -> bool:
+    return (BUCKET / key).is_file()
+
+
+def _extract_html(html: str) -> str:
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "lxml")
+    ps = []
+    for p in soup.find_all("p"):
+        s = " ".join(p.get_text(" ", strip=True).split())
+        if len(s) >= 40:
+            ps.append(s)
+    skip = ("cookie", "subscribe", "sign up for", "advertisement")
+    ps = [p for p in ps if not any(k in p.lower()[:48] for k in skip)]
+    text = "\n\n".join(ps)
+    if len(text) >= 200:
+        return text[:80000]
+    md = soup.find("meta", attrs={"property": "og:description"}) or soup.find(
+        "meta", attrs={"name": "description"}
+    )
+    if md and md.get("content"):
+        return str(md["content"]).strip()[:80000]
+    return text[:80000]
+
+
+def fetch_article(url: str) -> tuple[str, str]:
+    """Return (status, body). status is ok, empty, http_N, or error."""
+    try:
+        r = requests.get(url, headers=_UA, timeout=25, allow_redirects=True)
+    except Exception as e:
+        return f"error:{type(e).__name__}", ""
+    if r.status_code != 200:
+        return f"http_{r.status_code}", ""
+    body = _extract_html(r.text)
+    if len(body) < 80:
+        return "empty", body
+    return "ok", body
+
+
+def extract_articles(save: bool = True, limit: int | None = None) -> pd.DataFrame:
+    news = _load_news()
+    if news.empty:
+        print("No ticker_news.parquet — ingest first")
+        return pd.DataFrame()
+    uniq = news.drop_duplicates("article_id")
+    rows = []
+    n = 0
+    for rec in uniq.itertuples(index=False):
+        aid = str(rec.article_id)
+        url = str(rec.url or "")
+        pub = _as_date(rec.published_date)
+        if not url or pub is None:
+            continue
+        key = _object_key(pub, aid)
+        if bucket_exists(key):
+            continue
+        n += 1
+        if limit is not None and n > limit:
+            break
+        status, body = fetch_article(url)
+        obj = {
+            "article_id": aid,
+            "url": url,
+            "headline": str(rec.headline or "")[:300],
+            "source": str(rec.source or "")[:80],
+            "published_date": pub.isoformat(),
+            "fetched_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "status": status,
+            "n_chars": len(body),
+            "body": body,
+        }
+        if save:
+            bucket_put(key, obj)
+        rows.append({k: obj[k] for k in obj if k != "body"} | {"key": key})
+        print(f"  {status} {len(body):5d} {url[:70]}", flush=True)
+        time.sleep(0.15)
+    idx = pd.DataFrame(rows)
+    if save and len(idx):
+        old = pd.read_parquet(OUT_ARTICLES) if OUT_ARTICLES.exists() else pd.DataFrame()
+        if len(old):
+            seen = set(old["article_id"].astype(str))
+            idx = idx[~idx["article_id"].astype(str).isin(seen)]
+            idx = pd.concat([old, idx], ignore_index=True) if len(idx) else old
+        _write_dates(idx, OUT_ARTICLES, "published_date")
+        print(f"Wrote {OUT_ARTICLES} ({len(idx)} rows); bucket {BUCKET}")
+    else:
+        print(f"extracted {len(idx)} new objects")
+    return idx
 
 
 _NAME_TOKS: dict[str, list[str]] | None = None
@@ -265,13 +380,18 @@ def _headline_pack(news: pd.DataFrame, ticker: str, asof: date, lookback: int = 
 
 
 NEWS_SYSTEM = """You write one sentence of press context for a buy-side brief.
-Use only the headlines. Do not invent numbers, prices, or filings.
+Use only the provided per-company summaries. Do not invent numbers, prices, or filings.
 Do not make a buy or sell call. Press is not leftover cash.
 JSON keys: note (string, one sentence)."""
 
+MENTION_SYSTEM = """You list companies this article actually discusses.
+Return JSON only. Each mention is one company the article covers in substance, not a passing ticker tag.
+Do not invent tickers. summary is one sentence about that company in this article.
+JSON keys: mentions (array of {company, ticker, summary})."""
+
 
 def _llm_note(headlines: str) -> str:
-    from llama_cpp import Llama, LlamaGrammar
+    from llama_cpp import LlamaGrammar
     from forecast_llm import MODEL_3B, _get_llm
 
     schema = {
@@ -300,16 +420,160 @@ def _llm_note(headlines: str) -> str:
     return note[:220]
 
 
+def _llm_mentions(headline: str, body: str, hint: str) -> list[dict]:
+    from llama_cpp import LlamaGrammar
+    from forecast_llm import MODEL_3B, _get_llm
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "mentions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "company": {"type": "string"},
+                        "ticker": {"type": "string"},
+                        "summary": {"type": "string"},
+                    },
+                    "required": ["company", "ticker", "summary"],
+                },
+            }
+        },
+        "required": ["mentions"],
+    }
+    llm, _ = _get_llm(MODEL_3B)
+    grammar = LlamaGrammar.from_json_schema(json.dumps(schema))
+    if hasattr(llm, "reset"):
+        llm.reset()
+    user = f"Headline: {headline}\n"
+    if hint:
+        user += f"Polygon tagged (hint only): {hint}\n"
+    user += "Article:\n" + body[:2800]
+    out = llm.create_chat_completion(
+        messages=[
+            {"role": "system", "content": MENTION_SYSTEM},
+            {"role": "user", "content": user},
+        ],
+        max_tokens=180,
+        temperature=0.2,
+        grammar=grammar,
+    )
+    text = out["choices"][0]["message"]["content"]
+    m = json.loads(text[text.find("{") : text.rfind("}") + 1])
+    return list(m.get("mentions") or [])
+
+
+def _known_tickers() -> set[str]:
+    s: set[str] = set()
+    p = DATA_DIR / "monitored_stocks.parquet"
+    if p.exists():
+        m = pd.read_parquet(p)
+        if "ticker" in m.columns:
+            s |= set(m["ticker"].astype(str).str.upper())
+    news = _load_news()
+    if len(news):
+        s |= set(news["ticker"].astype(str).str.upper())
+    return s
+
+
+def write_mentions(save: bool, use_llm: bool, limit: int | None = None) -> pd.DataFrame:
+    if not OUT_ARTICLES.exists():
+        print("No article index — extract first")
+        return pd.DataFrame()
+    arts = pd.read_parquet(OUT_ARTICLES)
+    arts = arts[arts["status"].astype(str) == "ok"]
+    if arts.empty:
+        print("No extracted bodies")
+        return pd.DataFrame()
+    done = set()
+    if OUT_MENTIONS.exists():
+        old_m = pd.read_parquet(OUT_MENTIONS)
+        done = set(old_m["article_id"].astype(str))
+    else:
+        old_m = pd.DataFrame()
+    known = _known_tickers()
+    news = _load_news()
+    rows = []
+    n = 0
+    for rec in arts.itertuples(index=False):
+        aid = str(rec.article_id)
+        if aid in done:
+            continue
+        n += 1
+        if limit is not None and n > limit:
+            break
+        key = str(rec.key) if hasattr(rec, "key") else _object_key(rec.published_date, aid)
+        path = BUCKET / key
+        if not path.is_file():
+            continue
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        body = str(obj.get("body") or "")
+        headline = str(obj.get("headline") or rec.headline or "")
+        hint = ""
+        if len(news):
+            tags = news.loc[news["article_id"].astype(str) == aid, "ticker"].astype(str).unique().tolist()
+            hint = ",".join(tags[:12])
+        if not use_llm:
+            continue
+        try:
+            mentions = _llm_mentions(headline, body, hint)
+        except Exception as e:
+            print(f"  skip {aid[:12]}: {e}", flush=True)
+            continue
+        pub = _as_date(obj.get("published_date") or rec.published_date)
+        for m in mentions:
+            t = str(m.get("ticker") or "").strip().upper()
+            if t not in known:
+                continue
+            summ = str(m.get("summary") or "").strip()
+            if not summ:
+                continue
+            rows.append({
+                "article_id": aid,
+                "url": str(obj.get("url") or rec.url or "")[:400],
+                "ticker": t,
+                "company": str(m.get("company") or t)[:80],
+                "summary": summ[:400],
+                "published_date": pub,
+            })
+        print(f"  mentions {aid[:12]} n={len(rows)}", flush=True)
+    out = pd.DataFrame(rows)
+    if save and len(out):
+        if len(old_m):
+            out = pd.concat([old_m, out], ignore_index=True)
+        _write_dates(out, OUT_MENTIONS, "published_date")
+        print(f"Wrote {OUT_MENTIONS} ({len(out)} rows)")
+    return out
+
+
+def _mention_pack(mentions: pd.DataFrame, ticker: str, asof: date, lookback: int = 7) -> str | None:
+    g = mentions[mentions["ticker"].astype(str) == ticker]
+    if g.empty:
+        return None
+    lo = asof - timedelta(days=lookback)
+    g = g.copy()
+    g["_d"] = [_as_date(v) for v in g["published_date"]]
+    g = g[g["_d"].notna() & (g["_d"] >= lo) & (g["_d"] <= asof)]
+    if g.empty:
+        return None
+    g = g.sort_values("_d", ascending=False).drop_duplicates("summary").head(4)
+    return " | ".join(str(s).strip() for s in g["summary"] if str(s).strip())
+
+
 def write_notes(tickers: list[str] | None, save: bool, use_llm: bool) -> pd.DataFrame:
     news = _load_news()
     if news.empty:
         print("No ticker_news.parquet — ingest first")
         return pd.DataFrame()
     asof = date.today()
+    mentions = pd.read_parquet(OUT_MENTIONS) if OUT_MENTIONS.exists() else pd.DataFrame()
     names = tickers or sorted(news["ticker"].astype(str).unique())
     rows = []
     for i, t in enumerate(names, 1):
-        pack = _headline_pack(news, t, asof)
+        pack = _mention_pack(mentions, t, asof) if len(mentions) else None
+        if not pack:
+            pack = _headline_pack(news, t, asof)
         if not pack:
             continue
         if use_llm:
@@ -341,12 +605,24 @@ def main():
     ap.add_argument("--days", type=int, default=2)
     ap.add_argument("--tickers", type=str, default="")
     ap.add_argument("--notes", action="store_true")
-    ap.add_argument("--no-llm", action="store_true", help="Store headline pack, skip 3B")
+    ap.add_argument("--extract", action="store_true", help="Fetch article bodies into news_articles/")
+    ap.add_argument("--mentions", action="store_true", help="LLM mention JSON per article (needs GPU)")
+    ap.add_argument("--limit", type=int, default=0, help="Cap new extracts/mentions (0 = all)")
+    ap.add_argument("--no-llm", action="store_true", help="Skip 3B")
     args = ap.parse_args()
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()] or None
+    lim = args.limit or None
+    if args.extract:
+        extract_articles(save=args.save, limit=lim)
+        return
+    if args.mentions:
+        write_mentions(save=args.save, use_llm=not args.no_llm, limit=lim)
+        return
     if args.notes:
         if not OUT_NEWS.exists():
             ingest(args.days, tickers, args.save)
+        if not args.no_llm:
+            write_mentions(args.save, use_llm=True, limit=lim)
         write_notes(tickers, args.save, use_llm=not args.no_llm)
     else:
         ingest(args.days, tickers, args.save)

@@ -30,6 +30,10 @@ sp500_changes_page.html
 
 # regenerable cache
 granite_series_cache.parquet
+companyfacts_cache/
+
+# article object store (S3-key layout; bodies stay off git)
+news_articles/
 
 # trained model checkpoints (regenerable; large) -- do NOT commit
 granite_ckpts/
