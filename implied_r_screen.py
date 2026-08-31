@@ -416,7 +416,9 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
     pb = pd.to_numeric(df["pb_ratio"], errors="coerce")
     roe = pd.to_numeric(df["roe"], errors="coerce")
     ok = roe.gt(0) & pb.gt(0) & np.isfinite(roe) & np.isfinite(pb)
-    df["implied_r"] = np.where(ok, 2.0 * roe / (pb + 1.0), np.nan)
+    ir = np.where(ok, 2.0 * roe / (pb + 1.0), np.nan)
+    ir = np.where(np.isfinite(ir) & (ir > 0), ir, np.nan)
+    df["implied_r"] = ir
     df["implied_r_damodaran"] = df["implied_r"]
     df["cf_yield"] = np.where(ok, roe / pb, np.nan)
     df["discount_rate"] = df["implied_r"]
@@ -433,6 +435,8 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
 
     # Value verdict
     def verdict(r):
+        if r is None or not np.isfinite(r):
+            return None
         if r >= R_CHEAP:
             return "CHEAP"
         if r > R_FAIR_HI:
@@ -488,7 +492,7 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
     df["erp_value"] = current_erp
     
     cols = ["ticker", "sector", "is_financial", "r_distorted", "price", "bvps",
-            "pb_ratio", "roe", "beta", "debt_to_equity", "implied_r_pct", "implied_r_clean_pct",
+            "pb_ratio", "roe", "beta", "debt_to_equity", "implied_r", "implied_r_pct", "implied_r_clean_pct",
             "cost_of_equity", "cost_of_equity_damodaran", "wacc_damodaran",
             "excess_ret_pct", "excess_ret_damodaran_pct", "excess_ret_verdict",
             "r_g0_pct", "r_g_ceiling_pct", "cheap_robust", "rich_robust",

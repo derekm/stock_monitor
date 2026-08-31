@@ -215,7 +215,6 @@ def compute_fair_multiples(fund: pd.DataFrame, erp: float = 0.0423, rf: float = 
     
     # Long-term growth cap
     g_long = fund["revenue_growth"].clip(lower=0, upper=0.03)
-    g_long = g_long.fillna(0.02)
     
     tax_rate = 0.25
     
