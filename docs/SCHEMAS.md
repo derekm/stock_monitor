@@ -97,7 +97,7 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
   continual-retrains → `forecast_granite` emits these → `analyze_granite_forecasts`
   scores them → `granite_service` serves them. `tspulse_anomaly` flags bad prints.
   **LLM desk notes** (`forecast_llm.parquet`): `date`, `ticker`, `profile`
-  (`value` | `exuberant`), `forecast_dir`, `forecast_prob`, `horizon_days`,
+  (`value` | `exuberant` | `compounder`), `forecast_dir`, `forecast_prob`, `horizon_days`,
   `narrative`, `damodaran_narrative`. Long table; resume on `(date, ticker, profile)`.
 
 ### Index level series  (`index_levels`)

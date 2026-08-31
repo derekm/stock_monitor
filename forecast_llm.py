@@ -4,7 +4,7 @@ forecast_llm.py — LLM directional forecasts with Damodaran context.
 
 Llama-3.2 1B/3B Instruct GGUF via llama-cpp-python on MX550.
 JSON-grammar constrained output; rationale is two outcome-only sentences.
-Job profiles (`value`, `exuberant`) are a config map. Innermost loop is
+Job profiles (`value`, `exuberant`, `compounder`) are a config map. Innermost loop is
 profile per ticker. `llm.reset()` before every generation so profiles are
 not KV order-dependent. One long parquet; `profile` is the identity.
 """
@@ -237,6 +237,14 @@ Buyers overpaying does not by itself send the shares down. A crowd can keep payi
 Press is last week's headlines. It can describe a crowd; it does not override do-not-own.
 JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
 
+COMPOUNDER_SYSTEM = """You are a buy-side analyst. Write a two-sentence forecast, not a restatement.
+Sentence 1: where the shares go over the foreseeable future.
+Sentence 2: leftover cash, profit versus the cost of capital, or dollars of firm value per dollar of operating profit — not a 21-day bounce and not a one-year price run.
+Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
+Leftover cash and profit above the cost of capital can carry the shares even when buyers overpay. Too expensive without leftover cash, or with profit missing the cost of capital, means the shares do not go up.
+Press is last week's headlines, not leftover cash, and does not override do-not-own.
+JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
+
 PROFILES: dict[str, JobProfile] = {
     "value": JobProfile(
         name="value",
@@ -253,6 +261,14 @@ PROFILES: dict[str, JobProfile] = {
         omit_mom_if_expensive=False,
         omit_implied_r_if_expensive=True,
         press_lead="Press (crowd tape, not leftover cash): ",
+    ),
+    "compounder": JobProfile(
+        name="compounder",
+        system=COMPOUNDER_SYSTEM,
+        omit_growth_if_expensive=False,
+        omit_mom_if_expensive=True,
+        omit_implied_r_if_expensive=True,
+        press_lead="Press (not a reason to own): ",
     ),
 }
 
@@ -473,7 +489,7 @@ def main():
         "--profiles",
         type=str,
         default="value,exuberant",
-        help="Comma list of JobProfile names. Innermost loop per ticker. Default both.",
+        help="Comma list of JobProfile names (value, exuberant, compounder). Innermost loop per ticker.",
     )
     args = ap.parse_args()
     wanted = []
