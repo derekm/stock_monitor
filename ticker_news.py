@@ -442,7 +442,8 @@ JSON keys: note (string, one sentence)."""
 
 MENTION_SYSTEM = """You list companies this article actually discusses.
 Return JSON only. Each mention is one company the article covers in substance, not a passing ticker tag.
-Do not invent tickers. summary is one sentence about that company in this article.
+Do not invent tickers. If the company has no listed ticker, leave ticker empty.
+summary is one sentence about that company in this article, from that company's side.
 JSON keys: mentions (array of {company, ticker, summary})."""
 
 
@@ -616,7 +617,6 @@ def write_mentions(save: bool, use_llm: bool, limit: int | None = None) -> pd.Da
         done = set(old_m["article_id"].astype(str))
     else:
         old_m = pd.DataFrame()
-    known = _known_tickers()
     news = _load_news()
     rows = []
     n = 0
@@ -646,8 +646,8 @@ def write_mentions(save: bool, use_llm: bool, limit: int | None = None) -> pd.Da
         pub = _as_date(rec.published_date)
         for m in mentions:
             t = str(m.get("ticker") or "").strip().upper()
-            if t not in known:
-                continue
+            if t in {"", "NONE", "N/A", "NA", "NULL"}:
+                t = ""
             summ = str(m.get("summary") or "").strip()
             if not summ:
                 continue
