@@ -287,7 +287,7 @@ jobs:
   ticker_news_notes:
     cmd: ["ticker_news.py", "--notes", "--save"]
     timeout: 7200
-    desc: "3B one-sentence press notes for the LLM brief"
+    desc: "3B press notes on Intel Vulkan (.venv-xpu); not MX550"
 
 # dependencies: job -> list of jobs that must finish first
 dependencies:

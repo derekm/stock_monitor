@@ -26,13 +26,25 @@ Do not commit `news_articles/`.
 ```bash
 python ticker_news.py --save --days 2          # firehose + extract bodies
 python ticker_news.py --extract --save         # bodies only (resume)
-python ticker_news.py --mentions --save        # 3B JSON mentions — not during forecast
+python ticker_news.py --mentions --save        # 3B JSON mentions on Intel Vulkan
 python ticker_news.py --notes --save           # mention packs → one-sentence notes
 python ticker_news.py --notes --save --no-llm  # packs only, no GGUF
 ```
 
-`--mentions` / `--notes` without `--no-llm` load the 3B on the MX550 — do not
-overlap a `forecast_llm` run.
+`--mentions` / `--notes` without `--no-llm` load the 3B on Intel Iris Xe
+(Vulkan0, `.venv-xpu`). Forecast stays on CUDA MX550. Pin is
+`GGML_VK_VISIBLE_DEVICES=0` so Vulkan does not pick the NVIDIA card.
+
+```bash
+# Intel Vulkan 3B — parallel-safe with forecast_llm on MX550
+C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe ticker_news.py --mentions --save
+C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe ticker_news.py --notes --save
+```
+
+CUDA `.venv` refuses the news LLM (no `ggml-vulkan.dll`) so it cannot steal
+the MX550. Measured 2026-08-30: 29/29 layers on Iris Xe, 15458 MiB free,
+decode ~0.26 tok/s (no matrix cores). Mentions are short JSON; do not expect
+CUDA speed.
 
 ## Outputs
 

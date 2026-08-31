@@ -5,6 +5,7 @@ ticker_news.py — Daily per-ticker news ingest + optional 3B desk note.
 Polygon firehose (preferred), yfinance per-ticker fallback. Append-only
 `ticker_news.parquet`. Optional `--notes` writes one-sentence press copy
 into `ticker_news_notes.parquet` for the LLM brief (not a price call).
+Mentions/notes 3B is Intel Iris Xe (Vulkan, `.venv-xpu`), not MX550.
 
 Usage:
     python ticker_news.py --save
@@ -35,6 +36,9 @@ OUT_NOTES = DATA_DIR / "ticker_news_notes.parquet"
 OUT_ARTICLES = DATA_DIR / "ticker_news_articles.parquet"
 OUT_MENTIONS = DATA_DIR / "ticker_news_mentions.parquet"
 BUCKET = DATA_DIR / "news_articles"
+MODEL_3B = Path(r"C:\Users\derek\models\Llama-3.2-3B-Instruct-Q4_K_M.gguf")
+XPU_PYTHON = Path(r"C:\Users\derek\src\stockmagic\.venv-xpu\Scripts\python.exe")
+_news_llm = None
 POLY_NEWS = "https://api.polygon.io/v2/reference/news"
 _UA = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -390,16 +394,49 @@ Do not invent tickers. summary is one sentence about that company in this articl
 JSON keys: mentions (array of {company, ticker, summary})."""
 
 
+def _pin_intel_vulkan() -> None:
+    os.environ.setdefault("GGML_VK_VISIBLE_DEVICES", "0")
+    os.environ.setdefault("GGML_VK_PREFER_HOST_MEMORY", "1")
+
+
+def _get_news_llm():
+    """3B on Intel Iris Xe via Vulkan. Refuses the CUDA wheel (MX550 stays on forecast)."""
+    global _news_llm
+    _pin_intel_vulkan()
+    import llama_cpp
+    from llama_cpp import Llama
+
+    lib = Path(llama_cpp.__file__).parent
+    vulkan = (lib / "ggml-vulkan.dll").is_file()
+    if not vulkan:
+        raise SystemExit(
+            "News LLM is Intel Vulkan, not MX550. "
+            f"Use {XPU_PYTHON}"
+        )
+    if _news_llm is None:
+        print("Initializing 3B on Intel Iris Xe (Vulkan0)...", flush=True)
+        _news_llm = Llama(
+            model_path=str(MODEL_3B),
+            n_gpu_layers=99,
+            n_ctx=1024,
+            n_batch=128,
+            n_ubatch=128,
+            flash_attn=True,
+            chat_format="llama-3",
+            verbose=False,
+        )
+    return _news_llm
+
+
 def _llm_note(headlines: str) -> str:
     from llama_cpp import LlamaGrammar
-    from forecast_llm import MODEL_3B, _get_llm
 
     schema = {
         "type": "object",
         "properties": {"note": {"type": "string"}},
         "required": ["note"],
     }
-    llm, _ = _get_llm(MODEL_3B)
+    llm = _get_news_llm()
     grammar = LlamaGrammar.from_json_schema(json.dumps(schema))
     if hasattr(llm, "reset"):
         llm.reset()
@@ -422,7 +459,6 @@ def _llm_note(headlines: str) -> str:
 
 def _llm_mentions(headline: str, body: str, hint: str) -> list[dict]:
     from llama_cpp import LlamaGrammar
-    from forecast_llm import MODEL_3B, _get_llm
 
     schema = {
         "type": "object",
@@ -442,7 +478,7 @@ def _llm_mentions(headline: str, body: str, hint: str) -> list[dict]:
         },
         "required": ["mentions"],
     }
-    llm, _ = _get_llm(MODEL_3B)
+    llm = _get_news_llm()
     grammar = LlamaGrammar.from_json_schema(json.dumps(schema))
     if hasattr(llm, "reset"):
         llm.reset()
@@ -612,6 +648,8 @@ def main():
     args = ap.parse_args()
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()] or None
     lim = args.limit or None
+    if (args.mentions or args.notes) and not args.no_llm:
+        _pin_intel_vulkan()
     if args.extract:
         extract_articles(save=args.save, limit=lim)
         return
