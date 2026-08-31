@@ -99,7 +99,7 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
   **LLM desk notes** (`forecast_llm.parquet`): `date`, `ticker`, `profile`
   (`value` | `exuberant` | `compounder`), `forecast_dir`, `forecast_prob`, `horizon_days`,
   `narrative`, `damodaran_narrative`. Long table; resume on `(date, ticker, profile)`.
-  Press sidecar: article objects in `news_articles/YYYY/MM/DD/{id}.json`; mentions in
+  Press sidecar: article text in `news_articles/YYYY/MM/DD/{id}.md`; mentions in
   `ticker_news_mentions.parquet`.
 
 ### Index level series  (`index_levels`)

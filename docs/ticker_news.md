@@ -1,9 +1,9 @@
 # ticker_news.py — daily per-ticker press ingest + article bucket + notes
 
-Polygon firehose (preferred) or yfinance fallback. Article bodies live in an
-S3-key object store (`news_articles/YYYY/MM/DD/{article_id}.json`). Mentions
-are LLM JSON per article so one story can cover every company it actually
-names. A second LLM call folds those summaries into one brief sentence.
+Polygon firehose (preferred) or yfinance fallback. Article bodies live as
+text (`news_articles/YYYY/MM/DD/{article_id}.md`) via Docling's HTML backend.
+Mentions are LLM JSON per article so one story can cover every company it
+actually names. A second LLM call folds those summaries into one brief sentence.
 
 ## Why it exists
 
@@ -15,11 +15,11 @@ Mentions come from the article, not the tag list.
 
 Layout is S3-compatible so the folder can be synced later:
 
-`news_articles/YYYY/MM/DD/{article_id}.json`
+`news_articles/YYYY/MM/DD/{article_id}.md`
 
-Each object: article_id, url, headline, source, published_date, fetched_utc,
-status, n_chars, body. Index: `ticker_news_articles.parquet` (no body).
-Do not commit `news_articles/`.
+Plain UTF-8 article text (Docling HTML → `export_to_text`, bs4 fallback).
+Metadata lives in `ticker_news_articles.parquet`, not in the object.
+Do not commit `news_articles/`. Mentions stay JSON arrays in parquet.
 
 ## Usage
 
@@ -50,8 +50,10 @@ on this 3B, n_ctx=2048, -b 256 -t 6, count-1-to-16 (32 tok): **CPU ngl=0
 CPU is faster; Xe is for not stealing forecast cores/MX550. First Xe 0.26 tok/s
 was n_ctx=512 / n_batch=128 without q8 KV — not this CLI. Do not set
 `GGML_VULKAN_DISABLE_F16` (Iris Xe fp16 works; that flag is f32 shaders, slower).
-Granite-Docling is `C:\Users\derek\src\docling\.venv` for `~/research` PDFs
-(2–7 min/paper). It is not the news HTML path and does not replace mention JSON.
+Granite-Docling PDF VLM stays in `C:\Users\derek\src\docling\.venv` for
+`~/research` PDFs. News HTML uses the same venv's **HTML backend**
+(`html_to_md.py`, ~1.5s/page) — not the PDF VLM. Bodies are `.md` text, not
+JSON. Mention output is still a JSON array.
 
 ## Outputs
 

@@ -38,6 +38,8 @@ OUT_MENTIONS = DATA_DIR / "ticker_news_mentions.parquet"
 BUCKET = DATA_DIR / "news_articles"
 MODEL_3B = Path(r"C:\Users\derek\models\Llama-3.2-3B-Instruct-Q4_K_M.gguf")
 XPU_PYTHON = Path(r"C:\Users\derek\src\stockmagic\.venv-xpu\Scripts\python.exe")
+DOCLING_PY = Path(r"C:\Users\derek\src\docling\.venv\Scripts\python.exe")
+DOCLING_HTML = Path(r"C:\Users\derek\src\docling\html_to_md.py")
 NEWS_CTX_MAX = 32768  # llama-cli -c ceiling; live n_ctx is article-sized
 _news_llm = None
 _news_ctx = 0
@@ -239,22 +241,36 @@ def ingest(days: int, tickers: list[str] | None, save: bool) -> pd.DataFrame:
     return new
 
 
-def _object_key(published, article_id: str) -> str:
+def _object_key(published, article_id: str, ext: str = "md") -> str:
     d = _as_date(published) or date.today()
-    return f"{d.year:04d}/{d.month:02d}/{d.day:02d}/{article_id}.json"
+    return f"{d.year:04d}/{d.month:02d}/{d.day:02d}/{article_id}.{ext}"
 
 
-def bucket_put(key: str, obj: dict) -> Path:
+def bucket_put_text(key: str, text: str) -> Path:
     path = BUCKET / key
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
     return path
 
 
 def bucket_exists(key: str) -> bool:
     return (BUCKET / key).is_file()
+
+
+def bucket_read(published, article_id: str) -> str:
+    """Text body. .md first; leftover .json objects are a one-time fallback."""
+    md = BUCKET / _object_key(published, article_id, "md")
+    if md.is_file():
+        return md.read_text(encoding="utf-8", errors="replace")
+    js = BUCKET / _object_key(published, article_id, "json")
+    if js.is_file():
+        try:
+            return str(json.loads(js.read_text(encoding="utf-8")).get("body") or "")
+        except Exception:
+            return ""
+    return ""
 
 
 def _extract_html(html: str) -> str:
@@ -279,6 +295,33 @@ def _extract_html(html: str) -> str:
     return text[:80000]
 
 
+def _docling_body(html: str) -> str:
+    """Docling HTML backend → text. Empty string means fall back to bs4."""
+    if not DOCLING_PY.is_file() or not DOCLING_HTML.is_file():
+        return ""
+    import subprocess
+    import tempfile
+
+    html_bytes = html.encode("utf-8", errors="replace")
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "article.html"
+        dst = Path(td) / "article.md"
+        src.write_bytes(html_bytes)
+        env = os.environ.copy()
+        env.setdefault("TORCH_COMPILE_DISABLE", "1")
+        env.setdefault("TORCHINDUCTOR_DISABLE", "1")
+        r = subprocess.run(
+            [str(DOCLING_PY), str(DOCLING_HTML), str(src), str(dst)],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            env=env,
+        )
+        if r.returncode != 0 or not dst.is_file():
+            return ""
+        return dst.read_text(encoding="utf-8", errors="replace").strip()
+
+
 def fetch_article(url: str) -> tuple[str, str]:
     """Return (status, body). status is ok, empty, http_N, or error."""
     last = "error:ReadTimeout"
@@ -293,7 +336,7 @@ def fetch_article(url: str) -> tuple[str, str]:
             continue
         if r.status_code != 200:
             return f"http_{r.status_code}", ""
-        body = _extract_html(r.text)
+        body = _docling_body(r.text) or _extract_html(r.text)
         if len(body) < 80:
             return "empty", body
         return "ok", body
@@ -314,27 +357,26 @@ def extract_articles(save: bool = True, limit: int | None = None) -> pd.DataFram
         pub = _as_date(rec.published_date)
         if not url or pub is None:
             continue
-        key = _object_key(pub, aid)
-        if bucket_exists(key):
+        key = _object_key(pub, aid, "md")
+        if bucket_exists(key) or bucket_exists(_object_key(pub, aid, "json")):
             continue
         n += 1
         if limit is not None and n > limit:
             break
         status, body = fetch_article(url)
-        obj = {
+        if save and status == "ok" and body:
+            bucket_put_text(key, body)
+        rows.append({
             "article_id": aid,
             "url": url,
             "headline": str(rec.headline or "")[:300],
             "source": str(rec.source or "")[:80],
-            "published_date": pub.isoformat(),
+            "published_date": pub,
             "fetched_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": status,
             "n_chars": len(body),
-            "body": body,
-        }
-        if save:
-            bucket_put(key, obj)
-        rows.append({k: obj[k] for k in obj if k != "body"} | {"key": key})
+            "key": key,
+        })
         print(f"  {status} {len(body):5d} {url[:70]}", flush=True)
         time.sleep(0.15)
     idx = pd.DataFrame(rows)
@@ -585,13 +627,10 @@ def write_mentions(save: bool, use_llm: bool, limit: int | None = None) -> pd.Da
         n += 1
         if limit is not None and n > limit:
             break
-        key = str(rec.key) if hasattr(rec, "key") else _object_key(rec.published_date, aid)
-        path = BUCKET / key
-        if not path.is_file():
+        body = bucket_read(rec.published_date, aid)
+        if not body:
             continue
-        obj = json.loads(path.read_text(encoding="utf-8"))
-        body = str(obj.get("body") or "")
-        headline = str(obj.get("headline") or rec.headline or "")
+        headline = str(rec.headline or "")
         hint = ""
         if len(news):
             tags = news.loc[news["article_id"].astype(str) == aid, "ticker"].astype(str).unique().tolist()
@@ -600,10 +639,11 @@ def write_mentions(save: bool, use_llm: bool, limit: int | None = None) -> pd.Da
             continue
         try:
             mentions = _llm_mentions(headline, body, hint)
+            print(json.dumps(mentions, ensure_ascii=False)[:1200], flush=True)
         except Exception as e:
             print(f"  skip {aid[:12]}: {e}", flush=True)
             continue
-        pub = _as_date(obj.get("published_date") or rec.published_date)
+        pub = _as_date(rec.published_date)
         for m in mentions:
             t = str(m.get("ticker") or "").strip().upper()
             if t not in known:
@@ -613,7 +653,7 @@ def write_mentions(save: bool, use_llm: bool, limit: int | None = None) -> pd.Da
                 continue
             rows.append({
                 "article_id": aid,
-                "url": str(obj.get("url") or rec.url or "")[:400],
+                "url": str(getattr(rec, "url", "") or "")[:400],
                 "ticker": t,
                 "company": str(m.get("company") or t)[:80],
                 "summary": summ[:400],
