@@ -4,11 +4,15 @@ forecast_llm.py — LLM directional forecasts with Damodaran context.
 
 Llama-3.2 1B/3B Instruct GGUF via llama-cpp-python on MX550.
 JSON-grammar constrained output; rationale is two outcome-only sentences.
+Job profiles (`value`, `exuberant`) are a config map. Innermost loop is
+profile per ticker. `llm.reset()` before every generation so profiles are
+not KV order-dependent. One long parquet; `profile` is the identity.
 """
 from __future__ import annotations
 import argparse
 import json
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
@@ -207,8 +211,55 @@ def _fmt_px(name, x):
     return f"{name} {verb} {_fmt_pct(abs(x))}"
 
 
-def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None) -> str:
+@dataclass(frozen=True)
+class JobProfile:
+    name: str
+    system: str
+    omit_growth_if_expensive: bool
+    omit_mom_if_expensive: bool
+    omit_implied_r_if_expensive: bool
+    press_lead: str
+
+
+VALUE_SYSTEM = """You are a buy-side analyst. Write a two-sentence forecast, not a restatement.
+Sentence 1: where the shares go over the foreseeable future.
+Sentence 2: leftover cash, profit versus the cost of capital, or dollars of firm value per dollar of operating profit — not sales growth and not a 21-day bounce when the brief says do not own or the business spends cash.
+Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
+Too expensive means the shares do not go up: leftover cash and sales growth do not override buyers overpaying.
+Press is last week's headlines, not leftover cash, and does not override do-not-own or too-expensive.
+JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
+
+EXUBERANT_SYSTEM = """You are a buy-side analyst. Write a two-sentence forecast, not a restatement.
+Sentence 1: where the shares go over the foreseeable future.
+Sentence 2: leftover cash, cost of capital, dollars of firm value, or whether a crowd is still paying up — not a 21-day bounce when the brief says do not own or the business spends cash.
+Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
+Buyers overpaying does not by itself send the shares down. A crowd can keep paying up; that is exuberance, not a bargain and not a reason to own a do-not-own name.
+Press is last week's headlines. It can describe a crowd; it does not override do-not-own.
+JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
+
+PROFILES: dict[str, JobProfile] = {
+    "value": JobProfile(
+        name="value",
+        system=VALUE_SYSTEM,
+        omit_growth_if_expensive=True,
+        omit_mom_if_expensive=True,
+        omit_implied_r_if_expensive=True,
+        press_lead="Press (not a reason to own): ",
+    ),
+    "exuberant": JobProfile(
+        name="exuberant",
+        system=EXUBERANT_SYSTEM,
+        omit_growth_if_expensive=False,
+        omit_mom_if_expensive=False,
+        omit_implied_r_if_expensive=True,
+        press_lead="Press (crowd tape, not leftover cash): ",
+    ),
+}
+
+
+def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfile | None = None) -> str:
     """Prose dossier. Binding facts first; no labels the model can echo as a buy."""
+    profile = profile or PROFILES["value"]
     bits = []
     dec = row.get("decision")
     avoid = isinstance(dec, str) and dec == "AVOID"
@@ -292,7 +343,8 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None) -> str:
         bits.append(
             f"A justified ratio is {float(fair):.1f} dollars of firm value (equity plus net debt) per 1 dollar of operating profit — that is not the traded price."
         )
-    if g3_s and (not avoid) and (not burn) and (not expensive):
+    hide_g = expensive and profile.omit_growth_if_expensive
+    if g3_s and (not avoid) and (not burn) and (not hide_g):
         bits.append(g3_s[0].upper() + g3_s[1:] + ".")
 
     ni = row.get("net_income_quarterly")
@@ -312,8 +364,8 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None) -> str:
     if _flag(row.get("mos_pass")) and pd.notna(ev) and float(ev) > 0 and pd.notna(fair) and float(fair) > 0:
         bits.append("Price is at least 15% below a fair ratio of firm value (equity plus net debt) to operating profit.")
     ir = row.get("implied_r_clean_pct")
-    # Skip the yearly hurdle when expensive is already in the brief (PFE mixed 6.7% with 16.5x).
-    if (not expensive) and pd.notna(ir) and float(ir) > 0:
+    hide_ir = expensive and profile.omit_implied_r_if_expensive
+    if (not hide_ir) and pd.notna(ir) and float(ir) > 0:
         bits.append(f"Owners need {float(ir):.1f}% a year from this stock to make today's price fair — that is an annual hurdle, not a P/E ratio.")
     er = row.get("expected_return")
     if pd.notna(er):
@@ -322,14 +374,14 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None) -> str:
         elif float(er) <= 0.30:
             bits.append("Carry, value, price-trend, and defensive ingredients of expected return rank near the bottom of the market.")
     mom = row.get("mom_12_1")
-    # A one-year price run is not a reason to own a burning or do-not-own name.
-    if (not avoid) and (not burn) and (not expensive) and pd.notna(mom) and abs(float(mom)) >= 0.20:
+    hide_m = expensive and profile.omit_mom_if_expensive
+    if (not avoid) and (not burn) and (not hide_m) and pd.notna(mom) and abs(float(mom)) >= 0.20:
         bits.append(
             f"Over the past year excluding last month the shares {_fmt_px('the shares', float(mom)).removeprefix('the shares ')}."
         )
     r63 = row.get("ret_63d")
     if (
-        (not avoid) and (not burn) and (not expensive)
+        (not avoid) and (not burn) and (not hide_m)
         and r63 is not None and pd.notna(r63) and ticker_ret_21d is not None and pd.notna(ticker_ret_21d)
         and (float(r63) * float(ticker_ret_21d) < 0 or (abs(float(r63)) >= 0.15 and abs(float(r63)) >= 2 * abs(float(ticker_ret_21d))))
     ):
@@ -337,18 +389,9 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None) -> str:
 
     nn = row.get("news_note")
     if isinstance(nn, str) and nn.strip():
-        bits.append("Press (not a reason to own): " + nn.strip().rstrip(".") + ".")
+        bits.append(profile.press_lead + nn.strip().rstrip(".") + ".")
 
     return " ".join(bits)
-
-
-SYSTEM_PROMPT = """You are a buy-side analyst. Write a two-sentence forecast, not a restatement.
-Sentence 1: where the shares go over the foreseeable future.
-Sentence 2: leftover cash, profit versus the cost of capital, or dollars of firm value per dollar of operating profit — not sales growth and not a 21-day bounce when the brief says do not own or the business spends cash.
-Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
-Too expensive means the shares do not go up: leftover cash and sales growth do not override buyers overpaying.
-Press is last week's headlines, not leftover cash, and does not override do-not-own or too-expensive.
-JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
 
 
 def _parse_forecast(text, brief=""):
@@ -389,8 +432,9 @@ def _coverage_tickers(ctx: pd.DataFrame) -> list[str]:
     return last.loc[mask, "ticker"].astype(str).tolist()
 
 
-def _llm_predict(ticker, brief):
+def _llm_predict(ticker, brief, system: str):
     llm, grammar = _get_llm()
+    # Reset every generation. Skipping it makes later profiles continue prior JSON (order-dependent).
     if hasattr(llm, "reset"):
         llm.reset()
     user_msg = brief
@@ -402,7 +446,7 @@ def _llm_predict(ticker, brief):
             extra = " Forecast; use one operating number as the reason."
         out = llm.create_chat_completion(
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system},
                 {"role": "user", "content": user_msg + extra},
             ],
             max_tokens=120,
@@ -425,7 +469,25 @@ def main():
     ap.add_argument("--tickers", type=str, default="")
     ap.add_argument("--tickers-file", type=str, default="")
     ap.add_argument("--model", type=str, default="3b", choices=["1b", "3b"])
+    ap.add_argument(
+        "--profiles",
+        type=str,
+        default="value,exuberant",
+        help="Comma list of JobProfile names. Innermost loop per ticker. Default both.",
+    )
     args = ap.parse_args()
+    wanted = []
+    for name in args.profiles.split(","):
+        name = name.strip()
+        if not name:
+            continue
+        if name not in PROFILES:
+            raise SystemExit(f"unknown profile {name!r}; known {sorted(PROFILES)}")
+        if name not in wanted:
+            wanted.append(name)
+    profiles = [PROFILES[n] for n in wanted]
+    if not profiles:
+        raise SystemExit("no profiles")
     _get_llm(MODEL_3B if args.model == "3b" else MODEL_1B)
 
     st = load_states()
@@ -483,47 +545,66 @@ def main():
                     sample_d = sample.date() if hasattr(sample, "date") and callable(sample.date) else sample
                     same = sample_d == d_out
                 if same:
+                    if "profile" not in prev.columns:
+                        prev["profile"] = "value"
                     rows = prev.to_dict("records")
-                    done = {str(t) for t in prev["ticker"].astype(str)}
+                    done = {
+                        (str(t), str(p))
+                        for t, p in zip(prev["ticker"].astype(str), prev["profile"].astype(str))
+                    }
                     print(f"Resume: {len(done)} already written for {d_out}", flush=True)
                 else:
                     print(f"Existing parquet is a different date; not mixing. Snapshot kept at {OUT}", flush=True)
         except Exception as e:
             print(f"resume skipped ({e})", flush=True)
 
-    n = len(tickers)
-    for i, ticker in enumerate(tickers, 1):
-        if ticker in done:
-            print(f"{i}/{n} {ticker} skip resume", flush=True)
+    jobs = [(t, p) for t in tickers for p in profiles]
+    n = len(jobs)
+    print(f"Jobs: {n} ({len(tickers)} tickers × {len(profiles)} profiles {wanted})", flush=True)
+    ctx_by_ticker = {}
+    tr_by_ticker = {}
+    for i, (ticker, profile) in enumerate(jobs, 1):
+        if (ticker, profile.name) in done:
+            print(f"{i}/{n} {ticker} {profile.name} skip resume", flush=True)
             continue
-        t_ctx = ctx[(ctx["ticker"] == ticker) & (ctx["as_of_date"] <= fc_date)]
-        if t_ctx.empty:
+        if ticker not in ctx_by_ticker:
+            t_ctx = ctx[(ctx["ticker"] == ticker) & (ctx["as_of_date"] <= fc_date)]
+            if t_ctx.empty:
+                ctx_by_ticker[ticker] = None
+            else:
+                ctx_by_ticker[ticker] = t_ctx.sort_values("as_of_date").iloc[-1]
+            tr = None
+            if px is not None:
+                g = px[(px["ticker"] == ticker) & (px["date"] <= fc_date)].sort_values("date")
+                if len(g) >= 22:
+                    c = g["adj_close"] if "adj_close" in g.columns else g.get("close")
+                    a, b = c.iloc[-1], c.iloc[-22]
+                    if pd.notna(a) and pd.notna(b) and float(b) != 0:
+                        tr = float(a) / float(b) - 1
+            tr_by_ticker[ticker] = tr
+        row = ctx_by_ticker[ticker]
+        if row is None:
             print(f"  skip {ticker}: no context", flush=True)
             continue
-        t_ctx = t_ctx.sort_values("as_of_date").iloc[[-1]]
-        row = t_ctx.iloc[0]
-        tr = None
-        if px is not None:
-            g = px[(px["ticker"] == ticker) & (px["date"] <= fc_date)].sort_values("date")
-            if len(g) >= 22:
-                c = g["adj_close"] if "adj_close" in g.columns else g.get("close")
-                a, b = c.iloc[-1], c.iloc[-22]
-                if pd.notna(a) and pd.notna(b) and float(b) != 0:
-                    tr = float(a) / float(b) - 1
-        brief = build_brief(ticker, mkt_21, row, tr)
+        tr = tr_by_ticker.get(ticker)
+        brief = build_brief(ticker, mkt_21, row, tr, profile)
+        if n <= 32:
+            print(f"  SYSTEM {profile.name}: {profile.system}", flush=True)
+            print(f"  brief {ticker} {profile.name}: {brief}", flush=True)
         wacc = row.get("wacc")
         fair_ev = row.get("fair_ev_ebitda")
         quality = row.get("quality_score")
         life_cycle = row.get("life_cycle_stage")
         try:
-            direction, prob, horizon, narrative = _llm_predict(ticker, brief)
+            direction, prob, horizon, narrative = _llm_predict(ticker, brief, profile.system)
         except RuntimeError as e:
-            print(f"  skip {ticker}: {e}", flush=True)
+            print(f"  skip {ticker} {profile.name}: {e}", flush=True)
             continue
         uncertainty = "high" if (vol21 > recent["vol21"].quantile(0.75) or regime == "high_vol_stress") else "normal"
         rows.append({
             "date": d_out,
             "ticker": ticker,
+            "profile": profile.name,
             "regime": regime,
             "mkt_ret_21d": mkt_21,
             "vol21": float(vol21),
@@ -539,7 +620,8 @@ def main():
             "quality_score": float(quality) if pd.notna(quality) else None,
             "damodaran_narrative": brief,
         })
-        print(f"{i}/{n} {ticker} {direction} {prob:.2f} n={horizon}", flush=True)
+        done.add((ticker, profile.name))
+        print(f"{i}/{n} {ticker} {profile.name} {direction} {prob:.2f} n={horizon}", flush=True)
         out = pd.DataFrame(rows)
         tbl = pa.Table.from_pandas(out, preserve_index=False)
         idx = tbl.schema.get_field_index("date")

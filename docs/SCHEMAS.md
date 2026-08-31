@@ -96,6 +96,9 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
   `ttm_backfill`/`train_adjusted_full` pretrain (adj-close) → `granite_daily`
   continual-retrains → `forecast_granite` emits these → `analyze_granite_forecasts`
   scores them → `granite_service` serves them. `tspulse_anomaly` flags bad prints.
+  **LLM desk notes** (`forecast_llm.parquet`): `date`, `ticker`, `profile`
+  (`value` | `exuberant`), `forecast_dir`, `forecast_prob`, `horizon_days`,
+  `narrative`, `damodaran_narrative`. Long table; resume on `(date, ticker, profile)`.
 
 ### Index level series  (`index_levels`)
 
@@ -322,6 +325,7 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `forecasts_granite.parquet` | `analyze_granite_forecasts.py` | Forecast / anomaly |
 | `forecasts_granite.parquet` | `forecast_granite.py` | Forecast / anomaly |
 | `forecasts_granite.parquet` | `granite_daily.py` | Forecast / anomaly |
+| `forecast_llm.parquet` | `forecast_llm.py` | Forecast / anomaly |
 | `binding_basket_risk.csv` | `binding_constraints_analysis.py` | Screen / decision |
 | `binding_constraints_impact.csv` | `binding_constraints_analysis.py` | Screen / decision |
 | `binding_near_miss_detail.csv` | `binding_constraints_analysis.py` | Screen / decision |

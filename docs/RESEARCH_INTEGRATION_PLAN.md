@@ -186,7 +186,7 @@ Both **fail the +0.60 bar**, and both agree, so this is **not** a truncated-wind
 **Deliverables:**
 - [ ] **Adaptive HMM**: Extend `hmm_regime_detection.py` with Lo's **time-varying transition probabilities** (regime persistence changes with volatility) → `adaptive_hmm_states.parquet`
 - [ ] **Population dynamics**: Add `statistical_profiler.py` metric: **regime population fitness** (fraction of tickers in each regime, evolution over time) → `regime_population.parquet`
-- [x] **LLM forecasting integration**: `forecast_llm.py` — Llama-3.2-3B Instruct Q4 on MX550; Python writes the dossier; model writes a two-sentence JSON forecast. Coverage-gated set is **365** (classified stage + 3y growth + FCF + ROIC−WACC). Last HMM date only; one-shot; `n_ctx=1024`. Not FinGPT/BloombergGPT; not fine-tuned. Conformal still blocked on a 1-date series.
+- [x] **LLM forecasting integration**: `forecast_llm.py` — Llama-3.2-3B Instruct Q4 on MX550; Python writes the dossier; model writes a two-sentence JSON forecast. Coverage-gated set is **365**. Two profiles in one long table: `value` (too-expensive → not up) and `exuberant` (crowd can keep paying up). Last HMM date only; one-shot; `n_ctx=1024`. Not FinGPT/BloombergGPT; not fine-tuned. Conformal still blocked on a 1-date series.
 - [ ] **Uncertainty calibration**: Upgrade `regime_calibrate.py` with **conformal prediction** (distribution-free prediction intervals) + Amodei's **constitutional uncertainty** (model expresses "I don't know") → `conformal_bands.parquet`
 - [ ] **Regime-selected ensemble**: Enhance `regime_serving.py` with **dynamic model weighting** (Lo's evolutionary weight update based on recent regime performance) → `ensemble_weights.parquet`
 
