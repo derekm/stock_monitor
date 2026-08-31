@@ -196,37 +196,121 @@ Both **fail the +0.60 bar**, and both agree, so this is **not** a truncated-wind
 
 ## Phase 2: Core Extensions (Weeks 15–26)
 
-### 8. Jegadeesh/Titman — Momentum Foundations
-**Target:** `momentum_analytics.py`, `fractal_windows.py`, `backtest_price_vs_momentum.py`
-**Deliverable:** Replicate original 12-2 momentum; compare vs our fractal stack; document where fractal adds value
+**Spec (2026-08-30).** Phase 1 is not a clean pass: Gate ∩ NM **63%** (bar 80 fail), persist/vol **−0.074** (bar +0.60 fail), barbell maxDD ratio **0.98** (bar <0.50 fail), Sharpe dyn−static **−0.14**. Gate 3 is **not** closed. Phase 2 does not wait on a passing barbell, and does not reopen those bars.
+
+Hard constraints from Phase 1, still in force:
+
+- One researcher at a time. Order below.
+- Sidecar panels. Never write derived columns onto `daily_prices`.
+- Do not loosen Novy-Marx 15/15/1.0.
+- Do not size on `--dynamic` (Sharpe −0.14).
+- Do not put sector/macro tape or 0–1 aggregator scores in the LLM brief.
+- Universe = `daily_prices/`. `monitored_stocks.parquet` is sleeve metadata.
+- Verify by running on the full tape, not a 16-name toy.
+
+**Already on disk (do not rebuild as Phase 2):** 12-1 in `momentum_analytics.py` / `expected_returns.py` / `factor_library.py`; TSMOM 3/6/12 + JT-6 in `momentum_research.py` (2026-08-11: hit-on ~0.60–0.67, spread ~+6–7.5%/yr); CF/DR in `implied_r_decomp.parquet` (CF>DR **0.7%** of rows — not a discriminator); dual-pass in `preferred_metrics.py`; 8-K lexicon in `filings_sentiment.py`.
+
+**Blocked until coverage jobs finish:** universe SI (`companyfacts_cache/` is CRM only); `gross_profit` empty so GP/A cannot be Gray/Vogel QV; `sector_prices` levels are unusable (do not feed Faber GTAA).
+
+### 8. Jegadeesh/Titman — Momentum Foundations (start here)
+
+**Status:** Spec. 12-1 and JT-6 exist; **12-2** (skip last two months) is the missing paper replica.
+
+**Target:** `momentum_analytics.py`, `fractal_windows.py`, `backtest_price_vs_momentum.py`, `momentum_research.py`
+
+**Do:** Write 12-2 as a sidecar column (252d return, skip last 42d). PIT long-short vs TMI, costs on. Compare 12-1 vs 12-2 vs fractal `momentum_stack` on the same dates. Document where fractal adds spread after costs, or drop it from the claim.
+
+**Do not:** Re-implement TSMOM (that is item 13, already measured). Do not put 12-1 in the `value` brief when expensive (already omitted).
+
+**Bar:** 12-2 long-short net of 10 bps beats 12-1 by **+2 pp annualized** over the overlapping tape, or fractal beats both by that amount. Else fractal is a ride tool, not a JT replica.
+
+**Output:** `momentum_jt.parquet` (ticker × date × `mom_12_1`, `mom_12_2`, `mom_fractal`); `docs/momentum_analytics.md` fold-in.
 
 ### 9. Gray/Vogel — Quantitative Value/Momentum
+
+**Status:** Blocked on GP/A. Dual-pass (ROE/ROIC + trifecta) is not Alpha Architect QV.
+
 **Target:** `preferred_metrics.py`, `inclusion_criteria.py`, `dual_screen_analysis.py`
-**Deliverable:** Implement Alpha Architect's exact screens (QV: EV/EBITDA + GP/A + low leverage; QM: 12-1 momentum + quality); A/B test vs our dual-pass
+
+**Do:** After `gross_profit` is on the panel, QV = cheap EV/EBITDA + GP/A + low leverage (paper definitions, PIT). QM = 12-1 + `nm_quality` (≥2 legs). A/B vs current dual-pass / `value_pass` on the same calendar.
+
+**Do not:** Substitute Rev/A for GP/A and call it QV. Do not loosen 15/15/1.0 to make overlap.
+
+**Bar:** QV∩NM ≥ **80%** on names with GP/A, or report fail. QV long-short vs dual-pass: quote net spread, not overlap theater.
+
+**Output:** `gray_vogel_qv.parquet`, `gray_vogel_qm.parquet`.
 
 ### 10. Faber — GTAA + Shareholder Yield
-**Target:** `arista.py`, `macro_shock.py`, `cross_asset_analysis.py`, `build_bogle_funds.py`
-**Deliverable:** Add GTAA sleeve (trend-following across 10 asset classes via sector ETFs); shareholder yield screen
+
+**Status:** Not started. `sector_prices` levels are junk (Health Care −0.000123, Industrials 181,957). `build_bogle_funds.py` is equity indexes, not GTAA.
+
+**Do:** Rebuild **asset-class EW returns** from `daily_prices/` (or listed ETFs with real prices): equities, bonds, REITs, commodities, gold, USD. 10-month SMA trend per class. Shareholder yield = dividend + net buyback on the fundamentals panel when those columns exist.
+
+**Do not:** Trend `sector_prices` levels. Do not put GTAA state in the LLM brief.
+
+**Bar:** GTAA vs TMI: maxDD ratio **< 0.70** (2020 and 2022) and full-sample net CAGR within **2 pp** of TMI. Else it is a DD tool, not a return engine.
+
+**Output:** `gtaa_sleeve.parquet`, `shareholder_yield.parquet`.
 
 ### 11. Cochrane — Discount Rate Decomposition
-**Target:** `implied_r_screen.py`, `macro_fragility.py`, `damodaran_quality.py`
-**Deliverable:** Full CF/DR decomposition for every ticker; link to macro shock indicators
+
+**Status:** Formula live. Coverage is the gap. `implied_r_screen` is **470** names; CF>DR **0.7%**.
+
+**Do:** Keep `r = 2·ROE/(P/B+1)` gated ROE>0, P/B>0, r>0 (`4e0d1ca`). Expand the screen to every name with those three. Word CF vs DR as top/bottom third in consumers, never dump 0–1.
+
+**Do not:** Link CF/DR to `macro_shock` as a second cost-of-capital line. Do not treat CF>DR as a signal until it is not 0.7%.
+
+**Bar:** Latest implied-r notna **≥ 2,000** names with r>0, or report the binding hole (ROE vs P/B vs price).
+
+**Output:** same `implied_r_screen.parquet` / `implied_r_decomp.parquet` (long, not a new schema).
 
 ### 12. Baker/Wurgler — Sentiment + Catering
-**Target:** `filings_sentiment.py`, `estimate_revisions.py`, `hmm_regime_detection.py`
-**Deliverable:** Sentiment index from 8-K + earnings calls; regime-sentiment interaction
+
+**Status:** Lexicon MVP only (`filings_sentiment.py`). Not a market sentiment index.
+
+**Do:** One dated 8-K residual series per ticker (filing minus 21d market). Catering test: high residual vs subsequent issuance / buyback. Press mentions (`ticker_news_mentions.parquet`) stay a brief sidecar, not this index.
+
+**Do not:** Mix Polygon firehose tags into 8-K sentiment. Do not HMM-interact until the residual has IC.
+
+**Bar:** 8-K residual IC vs next-21d residual return **> 0** on a CPCV split, or drop the catering claim.
+
+**Output:** `filings_sentiment_residual.parquet`.
 
 ### 13. Moskowitz — Time-Series Momentum
-**Target:** `fractal_windows.py`, `ride_longevity.py`, `momentum_analytics.py`
-**Deliverable:** TSMOM factor (12-month lookback, vol-scaled); compare vs cross-sectional momentum
+
+**Status:** Absorbed by item 8. TSMOM 3/6/12 already measured (~+7%/yr spread, hit ~0.60).
+
+**Do (only after 8's bar):** Vol-scale TSMOM-12 (`sign(r_12) / σ_20`) as a **date-level** overlay vs CS 12-2, same costs.
+
+**Bar:** Vol-scaled TSMOM-12 Sharpe **> CS 12-2 Sharpe** on the same tape, or keep CS only.
+
+**Output:** `tsmom_overlay.parquet` if the bar is tested; else a one-line fail in `docs/momentum_research.md`.
 
 ### 14. Perold/Sharpe — CPPI + Risk Parity
-**Target:** `vol_target.py`, `risk_parity_analytics.py`, `portfolio_optimization.py`
-**Deliverable:** CPPI floor + multiplier optimization; compare ERC vs HRP vs CPPI
+
+**Status:** ERC exists (`risk_parity_analytics.py`). Vince LS already **beats** ERC on median terminal (18.54 vs 6.40). CPPI floor+multiplier is new.
+
+**Do:** CPPI on TMI with floor = 90% peak and m in {2,3,4}. Compare CPPI vs ERC vs HRP vs LS on the **same** 400 block-bootstrap paths.
+
+**Do not:** Size live books at Vince f=1.50. Do not declare CPPI a winner on one crisis.
+
+**Bar:** CPPI maxDD **< ERC maxDD** and terminal wealth **not** worse than ERC median by 20%. Else ERC stays the risk-parity claim; LS stays the leverage claim.
+
+**Output:** `cppi_paths.parquet`.
 
 ### 15. Merton — ICAPM + Multi-Hedge
-**Target:** `black_litterman.py`, `portfolio_optimization.py`, `regime_aware_constraints.py`
-**Deliverable:** ICAPM hedge portfolios (inflation, labor income, currency); integrate with BL views
+
+**Status:** Last. `black_litterman.py` exists. Macro panels are stale or junk (ERP already inside WACC; `exogenous_panel` ~1 month behind prices).
+
+**Do:** Hedge portfolios as **allocation sleeves** (TIPS, labor-income proxy, USD), not brief lines. BL views only from Phase 1 signals that passed their bar (ER hit-edge +6.3pp is in; dyn weights are out).
+
+**Do not:** Put inflation/oil/CPI in `forecast_llm.py`. Do not invent a labor-income factor from GICS.
+
+**Bar:** ICAPM-hedged TMI vs TMI: maxDD ratio **< 0.85** with net CAGR loss **< 1.5 pp/yr**. Else BL stays a view engine, not an ICAPM claim.
+
+**Output:** `icapm_hedge_sleeves.parquet`.
+
+**Phase 2 sequence:** 8 (12-2 vs fractal) → 11 (implied-r coverage, unblocked) → 13 only if 8 passes → 9 when GP/A exists → 10 after asset-class returns exist → 14 → 12 → 15. Dashboard tile per closed item. Shadow-book costs before any live sleeve.
 
 ---
 
@@ -301,8 +385,8 @@ Both **fail the +0.60 bar**, and both agree, so this is **not** a truncated-wind
 |------|----------|----------|
 | **Gate 1 (Week 4)** | FF5 replication validated; quality gate comparison done | **Closed (fail bar).** Overlap **60%** (bar 80%). `buffett_pass` ≠ QMJ. Residual IC open. Do not loosen 15/15/1.0. |
 | **Gate 2 (Week 8)** | Dynamic signal weighting beats static; expected return decomposition live | Continue Phase 1 |
-| **Gate 3 (Week 14)** | Taleb layer hardened; barbell portfolio backtested | Enter Phase 2 |
-| **Gate 4 (Week 26)** | ML regime upgraded; sequence risk metrics live | Enter Phase 3 |
+| **Gate 3 (Week 14)** | Taleb layer hardened; barbell portfolio backtested | **Not closed.** Barbell maxDD ratio **0.98** (bar <0.50 fail). Phase 2 spec started anyway; barbell stays a Phase 1 leftover. |
+| **Gate 4 (Week 26)** | Item 8 bar (12-2 vs 12-1 / fractal +2 pp) and item 11 (≥2,000 implied-r names) | Enter remaining Phase 2 (9–10, 14) |
 | **Gate 5 (Week 38)** | LLM forecaster production; Leverage Space complete | Maintenance mode |
 
 ---
@@ -329,4 +413,4 @@ fund = pd.read_parquet('fundamentals.parquet')
 
 ---
 
-*Plan version: 2026-08-22. Update after each gate review.*
+*Plan version: 2026-08-30. Phase 2 spec: 12-2 first; do not rebuild TSMOM/CF-DR. Update after each gate review.*

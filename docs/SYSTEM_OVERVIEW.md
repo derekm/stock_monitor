@@ -236,6 +236,8 @@ Source of truth: [RESEARCH_INTEGRATION_PLAN.md](RESEARCH_INTEGRATION_PLAN.md). S
 
 LLM brief: Python owns the dossier. Do not LLM-write it. Do not spend the ~520-token `n_ctx=1024` headroom on unitless scores or sector/macro tape. Stay one-shot. Default run is last-date coverage-gated **365**.
 
+Phase 2 spec (2026-08-30): start Jegadeesh/Titman **12-2** vs 12-1/fractal (+2 pp bar). Do not rebuild TSMOM or CF/DR. Gray/Vogel blocked on GP/A. Faber blocked on junk `sector_prices`. Gate 3 (barbell) still fail.
+
 ---
 
 ## 6. Daily command
