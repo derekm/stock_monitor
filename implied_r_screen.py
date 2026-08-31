@@ -449,7 +449,10 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
     
     df["verdict"] = df["implied_r"].apply(verdict)
     df["implied_r_pct"] = (df["implied_r"] * 100).round(1)
-    df["fwd_pe_bench"] = df["fwd_pe_bench"].round(1)
+    if "fwd_pe_bench" not in df.columns:
+        df["fwd_pe_bench"] = np.nan
+    else:
+        df["fwd_pe_bench"] = pd.to_numeric(df["fwd_pe_bench"], errors="coerce").round(1)
     df["price"] = df["price"].round(2)
     df["bvps"] = df["bvps"].round(2)
 
