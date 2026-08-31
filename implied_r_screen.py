@@ -449,12 +449,14 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
     
     df["verdict"] = df["implied_r"].apply(verdict)
     df["implied_r_pct"] = (df["implied_r"] * 100).round(1)
-    if "fwd_pe_bench" not in df.columns:
-        df["fwd_pe_bench"] = np.nan
-    else:
-        df["fwd_pe_bench"] = pd.to_numeric(df["fwd_pe_bench"], errors="coerce").round(1)
+    df["fwd_pe_bench"] = np.nan
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+    pb_num = pd.to_numeric(df["pb_ratio"], errors="coerce")
+    df["bvps"] = np.where(pb_num > 0, df["price"] / pb_num, np.nan)
     df["price"] = df["price"].round(2)
-    df["bvps"] = df["bvps"].round(2)
+    df["bvps"] = pd.to_numeric(df["bvps"], errors="coerce").round(2)
+    coe_d = pd.to_numeric(df["cost_of_equity_damodaran"], errors="coerce")
+    df["excess_ret_damodaran_pct"] = ((pd.to_numeric(df["roe"], errors="coerce") - coe_d) * 100).round(1)
 
     # Fair-value range
     fv = df.apply(lambda r: pd.Series(fair_value_range(r["roe"], r["bvps"])), axis=1)
@@ -503,6 +505,9 @@ def screen(min_cap_b: float = 0.0, erp_source: str = "damodaran", erp_freq: str 
             "r_gt_roe", "pb_lt_1", "triplet_ok", "as_of",
             "fv_lo_r10", "fv_mid_r8p5", "fv_hi_r7", "vs_fair", "fv_gap_pct",
             "erp_used", "erp_value"]
+    for c in cols:
+        if c not in df.columns:
+            df[c] = np.nan
     return df[cols]
 
 
