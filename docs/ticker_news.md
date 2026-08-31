@@ -32,19 +32,26 @@ python ticker_news.py --notes --save --no-llm  # packs only, no GGUF
 ```
 
 `--mentions` / `--notes` without `--no-llm` load the 3B on Intel Iris Xe
-(Vulkan0, `.venv-xpu`). Forecast stays on CUDA MX550. Pin is
-`GGML_VK_VISIBLE_DEVICES=0` so Vulkan does not pick the NVIDIA card.
+(Vulkan0, `.venv-xpu`). Equivalent to:
+
+`llama-cli -m Llama-3.2-3B-Instruct-Q4_K_M.gguf -ngl 99 -c <sys+user> -ub 256 -b 256 -ctk q8_0 -ctv q8_0 --flash-attn -t 6`
+
+`-c` is system (extraction goals + JSON schema) plus user (article text), cap 32768.
+Forecast stays on CUDA MX550. Pin `GGML_VK_VISIBLE_DEVICES=0`.
 
 ```bash
-# Intel Vulkan 3B — parallel-safe with forecast_llm on MX550
 C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe ticker_news.py --mentions --save
 C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe ticker_news.py --notes --save
 ```
 
-CUDA `.venv` refuses the news LLM (no `ggml-vulkan.dll`) so it cannot steal
-the MX550. Measured 2026-08-30: 29/29 layers on Iris Xe, 15458 MiB free,
-decode ~0.26 tok/s (no matrix cores). Mentions are short JSON; do not expect
-CUDA speed.
+CUDA `.venv` refuses the news LLM (no `ggml-vulkan.dll`). Measured 2026-08-30
+on this 3B, n_ctx=2048, -b 256 -t 6, count-1-to-16 (32 tok): **CPU ngl=0
+4.15s / ~7.5 tok/s mix**; **Xe ngl=99 q8 KV + FA 6.61s / ~4.8 tok/s mix**.
+CPU is faster; Xe is for not stealing forecast cores/MX550. First Xe 0.26 tok/s
+was n_ctx=512 / n_batch=128 without q8 KV — not this CLI. Do not set
+`GGML_VULKAN_DISABLE_F16` (Iris Xe fp16 works; that flag is f32 shaders, slower).
+Granite-Docling is `C:\Users\derek\src\docling\.venv` for `~/research` PDFs
+(2–7 min/paper). It is not the news HTML path and does not replace mention JSON.
 
 ## Outputs
 

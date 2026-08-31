@@ -38,7 +38,10 @@ OUT_MENTIONS = DATA_DIR / "ticker_news_mentions.parquet"
 BUCKET = DATA_DIR / "news_articles"
 MODEL_3B = Path(r"C:\Users\derek\models\Llama-3.2-3B-Instruct-Q4_K_M.gguf")
 XPU_PYTHON = Path(r"C:\Users\derek\src\stockmagic\.venv-xpu\Scripts\python.exe")
+NEWS_CTX_MAX = 32768  # llama-cli -c ceiling; live n_ctx is article-sized
 _news_llm = None
+_news_ctx = 0
+_GGML_TYPE_Q8_0 = 8  # llama-cli -ctk q8_0 -ctv q8_0
 POLY_NEWS = "https://api.polygon.io/v2/reference/news"
 _UA = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -278,16 +281,23 @@ def _extract_html(html: str) -> str:
 
 def fetch_article(url: str) -> tuple[str, str]:
     """Return (status, body). status is ok, empty, http_N, or error."""
-    try:
-        r = requests.get(url, headers=_UA, timeout=25, allow_redirects=True)
-    except Exception as e:
-        return f"error:{type(e).__name__}", ""
-    if r.status_code != 200:
-        return f"http_{r.status_code}", ""
-    body = _extract_html(r.text)
-    if len(body) < 80:
-        return "empty", body
-    return "ok", body
+    last = "error:ReadTimeout"
+    for attempt in range(3):
+        try:
+            r = requests.get(
+                url, headers=_UA, timeout=(8, 20), allow_redirects=True
+            )
+        except Exception as e:
+            last = f"error:{type(e).__name__}"
+            time.sleep(0.4 * (attempt + 1))
+            continue
+        if r.status_code != 200:
+            return f"http_{r.status_code}", ""
+        body = _extract_html(r.text)
+        if len(body) < 80:
+            return "empty", body
+        return "ok", body
+    return last, ""
 
 
 def extract_articles(save: bool = True, limit: int | None = None) -> pd.DataFrame:
@@ -399,9 +409,18 @@ def _pin_intel_vulkan() -> None:
     os.environ.setdefault("GGML_VK_PREFER_HOST_MEMORY", "1")
 
 
-def _get_news_llm():
-    """3B on Intel Iris Xe via Vulkan. Refuses the CUDA wheel (MX550 stays on forecast)."""
-    global _news_llm
+def _n_ctx_for_prompts(*parts: str) -> int:
+    """llama-cli -c sized to system + user (article/doctags), cap NEWS_CTX_MAX."""
+    n_chars = sum(len(p or "") for p in parts)
+    need = max(2048, n_chars // 3 + 384)
+    need = min(NEWS_CTX_MAX, need)
+    return ((need + 255) // 256) * 256
+
+
+def _get_news_llm(n_ctx: int | None = None):
+    """3B ≡ llama-cli -ngl 99 -b 256 -ub 256 -ctk q8_0 -ctv q8_0 --flash-attn -t 6.
+    n_ctx is article-sized (llama-cli -c). Refuses the CUDA wheel."""
+    global _news_llm, _news_ctx
     _pin_intel_vulkan()
     import llama_cpp
     from llama_cpp import Llama
@@ -413,18 +432,42 @@ def _get_news_llm():
             "News LLM is Intel Vulkan, not MX550. "
             f"Use {XPU_PYTHON}"
         )
+    ctx = int(n_ctx) if n_ctx else 2048
+    if _news_llm is not None and ctx > _news_ctx:
+        del _news_llm
+        _news_llm = None
     if _news_llm is None:
-        print("Initializing 3B on Intel Iris Xe (Vulkan0)...", flush=True)
-        _news_llm = Llama(
+        print(
+            f"Initializing 3B on Intel Iris Xe (Vulkan0) n_ctx={ctx} "
+            f"ngl=99 b=256 ctk=q8_0 t=6...",
+            flush=True,
+        )
+        kwargs = dict(
             model_path=str(MODEL_3B),
             n_gpu_layers=99,
-            n_ctx=1024,
-            n_batch=128,
-            n_ubatch=128,
+            n_ctx=ctx,
+            n_batch=256,
+            n_ubatch=256,
+            n_threads=6,
             flash_attn=True,
+            type_k=_GGML_TYPE_Q8_0,
+            type_v=_GGML_TYPE_Q8_0,
             chat_format="llama-3",
             verbose=False,
         )
+        try:
+            _news_llm = Llama(**kwargs)
+        except Exception as e:
+            print(f"  q8 KV + flash_attn failed ({e}); retry type_v default", flush=True)
+            kwargs.pop("type_v", None)
+            try:
+                _news_llm = Llama(**kwargs)
+            except Exception as e2:
+                print(f"  flash_attn failed ({e2}); retry flash_attn=False", flush=True)
+                kwargs["flash_attn"] = False
+                kwargs["type_v"] = _GGML_TYPE_Q8_0
+                _news_llm = Llama(**kwargs)
+        _news_ctx = ctx
     return _news_llm
 
 
@@ -436,7 +479,7 @@ def _llm_note(headlines: str) -> str:
         "properties": {"note": {"type": "string"}},
         "required": ["note"],
     }
-    llm = _get_news_llm()
+    llm = _get_news_llm(_n_ctx_for_prompts(NEWS_SYSTEM, headlines))
     grammar = LlamaGrammar.from_json_schema(json.dumps(schema))
     if hasattr(llm, "reset"):
         llm.reset()
@@ -478,14 +521,17 @@ def _llm_mentions(headline: str, body: str, hint: str) -> list[dict]:
         },
         "required": ["mentions"],
     }
-    llm = _get_news_llm()
-    grammar = LlamaGrammar.from_json_schema(json.dumps(schema))
-    if hasattr(llm, "reset"):
-        llm.reset()
     user = f"Headline: {headline}\n"
     if hint:
         user += f"Polygon tagged (hint only): {hint}\n"
-    user += "Article:\n" + body[:2800]
+    user += "Article:\n" + (body or "")
+    llm = _get_news_llm(_n_ctx_for_prompts(MENTION_SYSTEM, user))
+    grammar = LlamaGrammar.from_json_schema(json.dumps(schema))
+    if hasattr(llm, "reset"):
+        llm.reset()
+    cap = max(2000, (_news_ctx - 1024) * 3)
+    if len(user) > cap:
+        user = user[:cap]
     out = llm.create_chat_completion(
         messages=[
             {"role": "system", "content": MENTION_SYSTEM},
