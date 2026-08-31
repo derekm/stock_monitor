@@ -407,7 +407,7 @@ def _get_news_llm():
     from llama_cpp import Llama
 
     lib = Path(llama_cpp.__file__).parent
-    vulkan = (lib / "ggml-vulkan.dll").is_file()
+    vulkan = (lib / "lib" / "ggml-vulkan.dll").is_file() or (lib / "ggml-vulkan.dll").is_file()
     if not vulkan:
         raise SystemExit(
             "News LLM is Intel Vulkan, not MX550. "
