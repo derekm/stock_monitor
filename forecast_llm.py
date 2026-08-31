@@ -5,7 +5,8 @@ forecast_llm.py — LLM directional forecasts with Damodaran context.
 Llama-3.2 1B/3B Instruct GGUF via llama-cpp-python on MX550.
 JSON-grammar constrained output; rationale is two outcome-only sentences.
 Job profiles (`value`, `exuberant`, `compounder`) are a config map. Innermost loop is
-profile per ticker. `llm.reset()` before every generation so profiles are
+profile per ticker. SYSTEM is assembled from the same on/off facts as the
+brief (no press lecture if there is no press line). `llm.reset()` before every generation so profiles are
 not KV order-dependent. One long parquet; `profile` is the identity.
 """
 from __future__ import annotations
@@ -214,68 +215,64 @@ def _fmt_px(name, x):
 @dataclass(frozen=True)
 class JobProfile:
     name: str
-    system: str
     omit_growth_if_expensive: bool
     omit_mom_if_expensive: bool
     omit_implied_r_if_expensive: bool
     press_lead: str
+    allow_crowd: bool
+    sys_expensive: str
 
 
-VALUE_SYSTEM = """You are a buy-side analyst. Write a two-sentence forecast, not a restatement.
-Sentence 1: where the shares go over the foreseeable future.
-Sentence 2: leftover cash, profit versus the cost of capital, or dollars of firm value per dollar of operating profit — not sales growth and not a 21-day bounce when the brief says do not own or the business spends cash.
-Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
-Too expensive means the shares do not go up: leftover cash and sales growth do not override buyers overpaying.
-Press is last week's headlines, not leftover cash, and does not override do-not-own or too-expensive.
-JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
+@dataclass
+class Brief:
+    text: str = ""
+    do_not_own: bool = False
+    bounce: bool = False
+    fcf: bool = False
+    burn: bool = False
+    spread: bool = False
+    cheap: bool = False
+    expensive: bool = False
+    growth: bool = False
+    mom: bool = False
+    press: bool = False
 
-EXUBERANT_SYSTEM = """You are a buy-side analyst. Write a two-sentence forecast, not a restatement.
-Sentence 1: where the shares go over the foreseeable future.
-Sentence 2: leftover cash, cost of capital, dollars of firm value, or whether a crowd is still paying up — not a 21-day bounce when the brief says do not own or the business spends cash.
-Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
-Buyers overpaying does not by itself send the shares down. A crowd can keep paying up; that is exuberance, not a bargain and not a reason to own a do-not-own name.
-Press is last week's headlines. It can describe a crowd; it does not override do-not-own.
-JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
-
-COMPOUNDER_SYSTEM = """You are a buy-side analyst. Write a two-sentence forecast, not a restatement.
-Sentence 1: where the shares go over the foreseeable future.
-Sentence 2: leftover cash, profit versus the cost of capital, or dollars of firm value per dollar of operating profit — not a 21-day bounce and not a one-year price run.
-Do not own means hold or sell. Missing the cost of capital is value destruction, not a bargain. Cheap (buyers underpay) is not a sell.
-Leftover cash and profit above the cost of capital can carry the shares even when buyers overpay. Too expensive without leftover cash, or with profit missing the cost of capital, means the shares do not go up.
-Press is last week's headlines, not leftover cash, and does not override do-not-own.
-JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale."""
 
 PROFILES: dict[str, JobProfile] = {
     "value": JobProfile(
         name="value",
-        system=VALUE_SYSTEM,
         omit_growth_if_expensive=True,
         omit_mom_if_expensive=True,
         omit_implied_r_if_expensive=True,
         press_lead="Press (not a reason to own): ",
+        allow_crowd=False,
+        sys_expensive="Too expensive means the shares do not go up: leftover cash and sales growth do not override buyers overpaying.",
     ),
     "exuberant": JobProfile(
         name="exuberant",
-        system=EXUBERANT_SYSTEM,
         omit_growth_if_expensive=False,
         omit_mom_if_expensive=False,
         omit_implied_r_if_expensive=True,
         press_lead="Press (crowd tape, not leftover cash): ",
+        allow_crowd=True,
+        sys_expensive="Buyers overpaying does not by itself send the shares down. A crowd can keep paying up; that is exuberance, not a bargain.",
     ),
     "compounder": JobProfile(
         name="compounder",
-        system=COMPOUNDER_SYSTEM,
         omit_growth_if_expensive=False,
         omit_mom_if_expensive=True,
         omit_implied_r_if_expensive=True,
         press_lead="Press (not a reason to own): ",
+        allow_crowd=False,
+        sys_expensive="Leftover cash and profit above the cost of capital can carry the shares even when buyers overpay. Too expensive without leftover cash, or with profit missing the cost of capital, means the shares do not go up.",
     ),
 }
 
 
-def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfile | None = None) -> str:
+def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfile | None = None) -> Brief:
     """Prose dossier. Binding facts first; no labels the model can echo as a buy."""
     profile = profile or PROFILES["value"]
+    out = Brief()
     bits = []
     dec = row.get("decision")
     avoid = isinstance(dec, str) and dec == "AVOID"
@@ -286,14 +283,17 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
     veto = _flag(row.get("fragile_flag")) or _flag(row.get("veto_flag"))
     fcf = row.get("fcf_margin")
     burn = pd.notna(fcf) and float(fcf) < 0
+    out.burn = bool(burn)
 
     stage = row.get("life_cycle_stage")
     if avoid or veto:
         bits.append(f"{ticker}.")
         if avoid:
             bits.append("Do not own — a hold-or-sell instruction, not a comment on last week's price.")
+            out.do_not_own = True
         if veto:
             bits.append("Do not own: too crash-prone (the crash-risk test failed even if the recent price is up).")
+            out.do_not_own = True
     elif stage and stage != "Unclassified":
         stage_l = str(stage).lower()
         gloss = {
@@ -317,11 +317,13 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
         line = f"Over the last 21 days {px_s}; {mkt_s}."
         if bounce:
             line += " That 21-day bounce is not a reason to own."
+            out.bounce = True
         bits.append(line)
     elif px_s:
         line = f"Over the last 21 days {px_s}."
         if bounce:
             line += " That 21-day bounce is not a reason to own."
+            out.bounce = True
         bits.append(line)
 
     g3 = row.get("revenue_growth_3y")
@@ -333,9 +335,12 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
     fcf_s = _fmt_fcf(fcf)
     spread_s = _fmt_spread(spread)
     g3_s = _fmt_cagr(g3)
-    for s in (fcf_s, spread_s):
-        if s:
-            bits.append(s[0].upper() + s[1:] + ".")
+    if fcf_s:
+        bits.append(fcf_s[0].upper() + fcf_s[1:] + ".")
+        out.fcf = True
+    if spread_s:
+        bits.append(spread_s[0].upper() + spread_s[1:] + ".")
+        out.spread = True
 
     fair = row.get("fair_ev_ebitda")
     ev = row.get("ev_ebitda")
@@ -344,10 +349,12 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
         evf, ff = float(ev), float(fair)
         if evf >= ff * 1.15:
             expensive = True
+            out.expensive = True
             bits.append(
                 f"Too expensive (buyers overpay): they pay {evf:.1f} dollars of firm value (equity plus net debt) per 1 dollar of operating profit; {ff:.1f} would be enough."
             )
         elif evf <= ff * 0.85:
+            out.cheap = True
             bits.append(
                 f"Cheap (buyers underpay): they pay {evf:.1f} dollars of firm value (equity plus net debt) per 1 dollar of operating profit; {ff:.1f} would be fair."
             )
@@ -362,6 +369,7 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
     hide_g = expensive and profile.omit_growth_if_expensive
     if g3_s and (not avoid) and (not burn) and (not hide_g):
         bits.append(g3_s[0].upper() + g3_s[1:] + ".")
+        out.growth = True
 
     ni = row.get("net_income_quarterly")
     oi = row.get("operating_income_quarterly")
@@ -395,6 +403,7 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
         bits.append(
             f"Over the past year excluding last month the shares {_fmt_px('the shares', float(mom)).removeprefix('the shares ')}."
         )
+        out.mom = True
     r63 = row.get("ret_63d")
     if (
         (not avoid) and (not burn) and (not hide_m)
@@ -402,12 +411,67 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
         and (float(r63) * float(ticker_ret_21d) < 0 or (abs(float(r63)) >= 0.15 and abs(float(r63)) >= 2 * abs(float(ticker_ret_21d))))
     ):
         bits.append(f"Over the last quarter {_fmt_px('the shares', float(r63))}.")
+        out.mom = True
 
     nn = row.get("news_note")
     if isinstance(nn, str) and nn.strip():
         bits.append(profile.press_lead + nn.strip().rstrip(".") + ".")
+        out.press = True
 
-    return " ".join(bits)
+    out.text = " ".join(bits)
+    return out
+
+
+def build_system(brief: Brief, profile: JobProfile) -> str:
+    """SYSTEM lectures only for facts that are in this ticker's brief."""
+    lines = [
+        "You are a buy-side analyst. Write a two-sentence forecast, not a restatement.",
+        "Sentence 1: where the shares go over the foreseeable future.",
+    ]
+    s2 = []
+    if brief.fcf:
+        s2.append("leftover cash")
+    if brief.spread:
+        s2.append("profit versus the cost of capital")
+    if brief.expensive or brief.cheap:
+        s2.append("dollars of firm value per dollar of operating profit")
+    if brief.mom and profile.allow_crowd:
+        s2.append("whether a crowd is still paying up")
+    nots = []
+    if brief.bounce or brief.do_not_own or brief.burn:
+        nots.append("not a 21-day bounce when the brief says do not own or the business spends cash")
+    if brief.mom and not profile.allow_crowd:
+        nots.append("not a one-year price run")
+    if s2:
+        line = "Sentence 2: " + ", ".join(s2)
+        if nots:
+            line += " — " + "; ".join(nots)
+        line += "."
+        lines.append(line)
+    if brief.do_not_own:
+        lines.append("Do not own means hold or sell.")
+    if brief.spread:
+        lines.append("Missing the cost of capital is value destruction, not a bargain.")
+    if brief.cheap:
+        lines.append("Cheap (buyers underpay) is not a sell.")
+    if brief.expensive and profile.sys_expensive:
+        lines.append(profile.sys_expensive)
+    if brief.press:
+        parts = ["Press is last week's headlines"]
+        if profile.allow_crowd:
+            parts.append("it can describe a crowd")
+        if brief.fcf:
+            parts.append("not leftover cash")
+        ov = []
+        if brief.do_not_own:
+            ov.append("do-not-own")
+        if brief.expensive:
+            ov.append("too-expensive")
+        if ov:
+            parts.append("does not override " + " or ".join(ov))
+        lines.append(", ".join(parts) + ".")
+    lines.append("JSON keys: direction (up, sideways, down), prob (0.10-0.90), horizon_days, rationale.")
+    return "\n".join(lines)
 
 
 def _parse_forecast(text, brief=""):
@@ -604,15 +668,16 @@ def main():
             continue
         tr = tr_by_ticker.get(ticker)
         brief = build_brief(ticker, mkt_21, row, tr, profile)
+        system = build_system(brief, profile)
         if n <= 32:
-            print(f"  SYSTEM {profile.name}: {profile.system}", flush=True)
-            print(f"  brief {ticker} {profile.name}: {brief}", flush=True)
+            print(f"  SYSTEM {profile.name}: {system}", flush=True)
+            print(f"  brief {ticker} {profile.name}: {brief.text}", flush=True)
         wacc = row.get("wacc")
         fair_ev = row.get("fair_ev_ebitda")
         quality = row.get("quality_score")
         life_cycle = row.get("life_cycle_stage")
         try:
-            direction, prob, horizon, narrative = _llm_predict(ticker, brief, profile.system)
+            direction, prob, horizon, narrative = _llm_predict(ticker, brief.text, system)
         except RuntimeError as e:
             print(f"  skip {ticker} {profile.name}: {e}", flush=True)
             continue
@@ -634,7 +699,7 @@ def main():
             "wacc": float(wacc) if pd.notna(wacc) else None,
             "fair_ev_ebitda": float(fair_ev) if pd.notna(fair_ev) else None,
             "quality_score": float(quality) if pd.notna(quality) else None,
-            "damodaran_narrative": brief,
+            "damodaran_narrative": brief.text,
         })
         done.add((ticker, profile.name))
         print(f"{i}/{n} {ticker} {profile.name} {direction} {prob:.2f} n={horizon}", flush=True)
