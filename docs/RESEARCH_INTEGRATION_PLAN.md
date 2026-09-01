@@ -218,7 +218,15 @@ Hard constraints from Phase 1, still in force:
 
 **Target:** `momentum_analytics.py`, `fractal_windows.py`, `backtest_price_vs_momentum.py`, `momentum_research.py`
 
-**Do:** Write 12-2 as a sidecar column (252d return, skip last 42d). PIT long-short vs TMI, costs on. Compare 12-1 vs 12-2 vs fractal `momentum_stack` on the same dates. Document where fractal adds spread after costs, or drop it from the claim.
+**Checklist:**
+- [ ] Add `mom_12_2` column to `momentum_analytics.py` (252d return, skip last 42 trading days; PIT, no lookahead)
+- [ ] Compute `mom_12_1`, `mom_12_2`, `mom_fractal` on identical date grids (same universe, same calendar)
+- [ ] Long-short backtest (top/bottom quintile, equal weight, monthly rebalance, 10 bps cost) for each momentum definition
+- [ ] Compare annualized spread: 12-2 vs 12-1 vs fractal on overlapping dates (full history from `daily_prices/`)
+- [ ] Document fractal `momentum_stack` incremental contribution after costs vs 12-2
+- [ ] If fractal does not beat 12-2 by +2 pp/yr net: reclassify fractal as ride tool, not JT replica in `docs/momentum_analytics.md`
+- [ ] Write `momentum_jt.parquet` (ticker × date × `mom_12_1`, `mom_12_2`, `mom_fractal`)
+- [ ] Fold results into `docs/momentum_analytics.md` (methodology + results table)
 
 **Do not:** Re-implement TSMOM (that is item 13, already measured). Do not put 12-1 in the `value` brief when expensive (already omitted).
 
@@ -232,7 +240,14 @@ Hard constraints from Phase 1, still in force:
 
 **Target:** `preferred_metrics.py`, `inclusion_criteria.py`, `dual_screen_analysis.py`
 
-**Do:** After `gross_profit` is on the panel, QV = cheap EV/EBITDA + GP/A + low leverage (paper definitions, PIT). QM = 12-1 + `nm_quality` (≥2 legs). A/B vs current dual-pass / `value_pass` on the same calendar.
+**Checklist:**
+- [ ] Wait for `gross_profit` backfill (`gp_fill.py` / edgar v2) to complete — verify ≥8,000 names have GP/A
+- [ ] Implement QV per paper: EV/EBITDA (cheap quintile) + GP/A (top quintile) + low leverage (D/E ≤ median) — all PIT on filing calendar
+- [ ] Implement QM per paper: 12-1 momentum + `nm_quality` (≥2 legs: GP/A top quintile, low accruals, safe leverage)
+- [ ] A/B test: QV vs current `value_pass` (trifecta ∨ B/M ∨ EY); QM vs `nm_score` top quintile
+- [ ] Long-short backtest both against TMI with same costs (10 bps) and same calendar
+- [ ] Report net spread, not just overlap percentages
+- [ ] Write `gray_vogel_qv.parquet`, `gray_vogel_qm.parquet` (ticker × date × qv_flag, qm_flag, components)
 
 **Do not:** Substitute Rev/A for GP/A and call it QV. Do not loosen 15/15/1.0 to make overlap.
 
@@ -244,7 +259,14 @@ Hard constraints from Phase 1, still in force:
 
 **Status:** Not started. `sector_prices` levels are junk (Health Care −0.000123, Industrials 181,957). `build_bogle_funds.py` is equity indexes, not GTAA.
 
-**Do:** Rebuild **asset-class EW returns** from `daily_prices/` (or listed ETFs with real prices): equities, bonds, REITs, commodities, gold, USD. 10-month SMA trend per class. Shareholder yield = dividend + net buyback on the fundamentals panel when those columns exist.
+**Checklist:**
+- [ ] Define asset-class universe from `daily_prices/`: map tickers → asset class (equity/bond/REIT/commodity/gold/USD) using a maintained mapping table
+- [ ] Build equal-weight daily returns per asset class (PIT, no survivorship bias)
+- [ ] Implement 10-month SMA trend per class (trend = price > SMA200; signal = 1/0; monthly rebalance)
+- [ ] Backtest GTAA: trend-following allocation vs TMI (equal-weight equity) on full history
+- [ ] Compute shareholder yield from fundamentals panel: `dividend_yield + net_buyback_yield` when both columns exist; fallback to dividend yield only
+- [ ] Validate shareholder yield coverage ≥ 500 names on latest date
+- [ ] Write `gtaa_sleeve.parquet` (date × asset_class × trend_flag, weight); `shareholder_yield.parquet` (ticker × date × sy)
 
 **Do not:** Trend `sector_prices` levels. Do not put GTAA state in the LLM brief.
 
@@ -256,7 +278,14 @@ Hard constraints from Phase 1, still in force:
 
 **Status:** Formula live. Coverage is the gap. `implied_r_screen` is **470** names; CF>DR **0.7%**.
 
-**Do:** Keep `r = 2·ROE/(P/B+1)` gated ROE>0, P/B>0, r>0 (`4e0d1ca`). Expand the screen to every name with those three. Word CF vs DR as top/bottom third in consumers, never dump 0–1.
+**Checklist:**
+- [ ] Keep `r = 2·ROE/(P/B+1)` gated ROE>0, P/B>0, r>0 (`4e0d1ca` commit)
+- [ ] Expand screen: compute implied-r for every name with valid ROE, P/B, price on each filing date
+- [ ] Verify latest implied-r notna count ≥ 2,000 names with r>0
+- [ ] If < 2,000: diagnose binding hole (ROE≤0 count, P/B≤0 count, price missing count) and document in `docs/implied_r_coverage.md`
+- [ ] CF vs DR: compute `cf_yield = ROE / P/B`, `discount_rate = 2·ROE/(P/B+1)`; report top/bottom tercile in consumers
+- [ ] Do not dump 0–1 scores; word as "CF>DR" / "CF<DR" / "inconclusive" in briefs
+- [ ] Write updated `implied_r_screen.parquet` / `implied_r_decomp.parquet` (same schema, longer coverage)
 
 **Do not:** Link CF/DR to `macro_shock` as a second cost-of-capital line. Do not treat CF>DR as a signal until it is not 0.7%.
 
@@ -268,7 +297,13 @@ Hard constraints from Phase 1, still in force:
 
 **Status:** Lexicon MVP only (`filings_sentiment.py`). Not a market sentiment index.
 
-**Do:** One dated 8-K residual series per ticker (filing minus 21d market). Catering test: high residual vs subsequent issuance / buyback. Press mentions (`ticker_news_mentions.parquet`) stay a brief sidecar, not this index.
+**Checklist:**
+- [ ] Extract dated 8-K sentiment per ticker: filing text → lexicon score (residual = score − 21d market return)
+- [ ] Build panel: `filings_sentiment_residual.parquet` (ticker × filing_date × residual)
+- [ ] Catering test: high residual (top tercile) → subsequent issuance (SEO/debt) / buyback in next 63 trading days
+- [ ] Test IC of residual vs next-21d residual return using CPCV (López de Prado splits from `cv_splits.parquet`)
+- [ ] If IC ≤ 0 on CPCV: drop catering claim, keep only lexicon as brief sidecar
+- [ ] Keep Polygon firehose mentions (`ticker_news_mentions.parquet`) separate — they feed brief press line, not this index
 
 **Do not:** Mix Polygon firehose tags into 8-K sentiment. Do not HMM-interact until the residual has IC.
 
@@ -280,6 +315,13 @@ Hard constraints from Phase 1, still in force:
 
 **Status:** Absorbed by item 8. TSMOM 3/6/12 already measured (~+7%/yr spread, hit ~0.60).
 
+**Checklist:**
+- [ ] Only run after item 8 bar passes (12-2 vs fractal decision is made)
+- [ ] Implement vol-scaled TSMOM-12: `sign(r_12) / σ_20` as date-level overlay (same universe, same calendar as item 8)
+- [ ] Backtest vs CS 12-2 on identical dates, same costs (10 bps)
+- [ ] Compare Sharpe ratios; if vol-scaled TSMOM-12 Sharpe ≤ CS 12-2 Sharpe: keep CS only, write one-line fail note
+- [ ] If bar passes: write `tsmom_overlay.parquet` (date × ticker × tsmom_signal, weight)
+
 **Do (only after 8's bar):** Vol-scale TSMOM-12 (`sign(r_12) / σ_20`) as a **date-level** overlay vs CS 12-2, same costs.
 
 **Bar:** Vol-scaled TSMOM-12 Sharpe **> CS 12-2 Sharpe** on the same tape, or keep CS only.
@@ -290,7 +332,12 @@ Hard constraints from Phase 1, still in force:
 
 **Status:** ERC exists (`risk_parity_analytics.py`). Vince LS already **beats** ERC on median terminal (18.54 vs 6.40). CPPI floor+multiplier is new.
 
-**Do:** CPPI on TMI with floor = 90% peak and m in {2,3,4}. Compare CPPI vs ERC vs HRP vs LS on the **same** 400 block-bootstrap paths.
+**Checklist:**
+- [ ] Implement CPPI on TMI: floor = 90% peak NAV, multipliers m ∈ {2,3,4}
+- [ ] Simulate 400 block-bootstrap paths (same paths as Vince LS vs ERC test in `ls_vs_erc.parquet`)
+- [ ] Compare: CPPI (m=2,3,4) vs ERC vs HRP vs Vince LS on median terminal wealth, maxDD, drawdown duration
+- [ ] Test across multiple start dates (not just one crisis)
+- [ ] Document cost assumptions (rebalancing frequency, transaction costs)
 
 **Do not:** Size live books at Vince f=1.50. Do not declare CPPI a winner on one crisis.
 
@@ -302,7 +349,12 @@ Hard constraints from Phase 1, still in force:
 
 **Status:** Last. `black_litterman.py` exists. Macro panels are stale or junk (ERP already inside WACC; `exogenous_panel` ~1 month behind prices).
 
-**Do:** Hedge portfolios as **allocation sleeves** (TIPS, labor-income proxy, USD), not brief lines. BL views only from Phase 1 signals that passed their bar (ER hit-edge +6.3pp is in; dyn weights are out).
+**Checklist:**
+- [ ] Build hedge sleeves from liquid instruments: TIPS (bond proxy), USD (currency proxy), labor-income proxy (use SPY sector-neutral construction per Santos & Veronesi 2006)
+- [ ] Implement ICAPM hedging: estimate hedge coefficients from Merton's multi-factor model on rolling 252d windows
+- [ ] Backtest: ICAPM-hedged TMI vs TMI (net of hedge costs) on full history
+- [ ] BL views: only from Phase 1 signals that passed bars (ER hit-edge +6.3pp ✓; dyn weights ✗)
+- [ ] Write `icapm_hedge_sleeves.parquet` (date × sleeve × weight)
 
 **Do not:** Put inflation/oil/CPI in `forecast_llm.py`. Do not invent a labor-income factor from GICS.
 
