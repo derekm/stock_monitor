@@ -224,13 +224,16 @@ Hard constraints from Phase 1, still in force:
 
 ### 9. Gray/Vogel — Quantitative Value/Momentum
 
-**Status:** **Measured (2026-09-01) — QV∩NM bar PASS (trivially); QM FAILS; QV not tradable (coverage hole).** `dual_screen_analysis.py --gray-vogel`, monthly-rebalance EW long-short vs TMI, 10 bps/side, PIT ffill on filing calendar.
+**Status:** **Re-measured (2026-09-01) after EV/EBITDA data-gap fix — QV∩NM bar PASS, QV still thin, QM FAILS.** `dual_screen_analysis.py --gray-vogel`, monthly-rebalance EW long-short vs TMI, 10 bps/side, PIT ffill on filing calendar.
 
-**Results:**
-- **QV∩NM = 93.3%** on names with GP/A (bar ≥ 80% — **PASS, but vacuous**): the strict AND (EV/EBITDA bottom quintile ∩ GP/A top quintile ∩ D/E ≤ median) fires on **median 0 names/date (max 31, recent only)** — the EV/EBITDA panel covers only **~870 names** at peak (22,761 rows / 1,879 names, sparse before 2020), so when it fires it is trivially also NM-quality.
-- **QV net +22.5%/yr is not a measurement** — a 0–31-name long leg vs the ~9k-name complement, only on the 137 months where ≥20 names exist (all EV-data-rich). Do not quote.
-- **QM (12-1 momentum + nm_quality ≥2 legs): 1,150–1,400 names/date — real book, LOSES: −4.0%/yr net, −3.9% vs TMI (150 months).** Quality+momentum underperforms the universe on this tape.
-- Binding hole: **EV/EBITDA coverage**, not GP/A. Bar says "or report fail" → QV fails; QM fails.
+**Data-gap fix (this session):** stored `ev_ebitda` was filled by an `ebit + capex` proxy over only 1,879 names / 870 at peak. Now computed from components (`EV = mcap + debt − cash`, real `ebitda` column): **2,588 names at latest date** (4.3× coverage, back to ~2018 with real EBITDA). Canonical fill patched in `compute_missing_metrics.py` to use real `ebitda` (runs after the live LLM forecast job releases `fundamentals.parquet`).
+
+**Results (re-measured):**
+- **QV now fires on 30–36 names/date** on the EV-data-rich tape (was max 31 ever, median 0); **113 dates with ≥10 QV names**; still median 0 pre-2018 (no real EBITDA history).
+- **QV∩NM = 87.9%** on names with GP/A (bar ≥ 80% — **PASS**, now on a non-vacuous 30+ name long leg).
+- **QV net +24.0%/yr** (139 months with ≥20-name long legs, 10 bps) — improved and now a real book on recent tape, but pre-2018 EV/EBITDA still missing so the full backtest is recent-span only.
+- **QM (12-1 momentum + nm_quality ≥2 legs): real book, LOSES: −4.0%/yr net, −3.9% vs TMI.** Unchanged — quality+momentum underperforms on this tape.
+- Remaining gap: EBITDA history before ~2018 (EDGAR companyfacts backfill scope); GP/A is fine (2,817).
 
 **Target:** `preferred_metrics.py`, `inclusion_criteria.py`, `dual_screen_analysis.py`
 
