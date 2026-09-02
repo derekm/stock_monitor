@@ -99,6 +99,11 @@ Migration is re-runnable and idempotent: `python migrate_fundamentals_schema.py
   **LLM desk notes** (`forecast_llm.parquet`): `date`, `ticker`, `profile`
   (`value` | `exuberant` | `compounder`), `forecast_dir`, `forecast_prob`, `horizon_days`,
   `narrative`, `damodaran_narrative`. Long table; resume on `(date, ticker, profile)`.
+  Multi-date via `--dates-file` / `--as-of`: latest date keeps full snapshot panels;
+  historical dates are PIT-only (undated snapshot panels dropped to avoid lookahead).
+  `conformal_bands.parquet`: `date`, `regime`, `lower`, `upper`, `horizon_days`, `n`,
+  `coverage_rate`, `coverage_flag` — split-conformal coverage of LLM prob vs forward
+  market return over the row's own horizon (bar 0.90).
   Press sidecar: article text in `news_articles/YYYY/MM/DD/{id}.md`; mentions in
   `ticker_news_mentions.parquet`.
 

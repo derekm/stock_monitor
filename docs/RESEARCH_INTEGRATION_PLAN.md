@@ -24,8 +24,8 @@
 **Success metric (measured):** Gate ∩ NM-quality = **63%** after persisted D/E (bar 80% fail). CAPM residual IC on **fixed MKT** = **+0.0117** (bar +0.02 fail). Do not loosen 15/15/1.0.
 
 **Parked (later — not gate-loosening):**
-1. Backfill `gross_profit` then GP/A — **10k fill running** (`gp_fill.py` / edgar v2). Rebuild NM GP/A + true MKT after it exits.
-2. Residual IC ≥ +0.02 after MKT is sane (PIT `daily_mcap.parquet`, not last-shares)
+1. ~~Backfill `gross_profit` then GP/A~~ — **fill landed (113,717 rows, 2,817 names). Rebuilt 2026-09-01:** `novymarx_gross_profitability.parquet` latest nn **2,810** (was Rev/A fallback); `ff5_factors.parquet` RMW **+9.50%/11.35% vol** (was +7.4% via Rev/A), MKT **−2.59%/14.45%** (was −6.44%/16% on the stale snapshot). Fixed `load_prices` / `residual_ic` hive-read for `daily_prices/` partition layout; repaired truncated `daily_prices` 08-21/08-24 (12.5k missing tickers refetched via `update_polygon.py`), which now **detects partial dates** (`_partial_dates`, <50% of universe) and re-fetches them instead of leaving gaps. `daily_mcap.parquet` dense through **2026-08-31** (5,355 names).
+2. Residual IC after MKT sane: **+0.0169** (84m, fixed MKT) — bar +0.02, **still fail**, up from +0.0117. Re-measure after GP/A panel flows into ER.
 3. **Derived panels, not live `daily_prices` writes** (Windows lock):
    - [x] `daily_mcap.parquet` — PIT shares × adj_close, stock-only, `--save` does not touch `daily_prices`
    - [x] As-of share join (merge_asof backward) — TSM last mcap $2.16T
@@ -186,8 +186,9 @@ Both **fail the +0.60 bar**, and both agree, so this is **not** a truncated-wind
 **Deliverables:**
 - [ ] **Adaptive HMM**: Extend `hmm_regime_detection.py` with Lo's **time-varying transition probabilities** (regime persistence changes with volatility) → `adaptive_hmm_states.parquet`
 - [ ] **Population dynamics**: Add `statistical_profiler.py` metric: **regime population fitness** (fraction of tickers in each regime, evolution over time) → `regime_population.parquet`
-- [x] **LLM forecasting integration**: `forecast_llm.py` — Llama-3.2-3B Instruct Q4 on MX550; Python writes the dossier; model writes a two-sentence JSON forecast. Coverage-gated set is **365**. Profiles in one long table: `value` (too-expensive → not up), `exuberant` (crowd can keep paying up), `compounder` (leftover cash + ROIC−WACC beat can carry expensive). Last HMM date only; one-shot; `n_ctx=1024`. Not FinGPT/BloombergGPT; not fine-tuned. Conformal still blocked on a 1-date series.
-- [ ] **Uncertainty calibration**: Upgrade `regime_calibrate.py` with **conformal prediction** (distribution-free prediction intervals) + Amodei's **constitutional uncertainty** (model expresses "I don't know") → `conformal_bands.parquet`
+- [x] **LLM forecasting integration**: `forecast_llm.py` — Llama-3.2-3B Instruct Q4 on MX550; Python writes the dossier; model writes a two-sentence JSON forecast. Coverage-gated set is **365**. Profiles in one long table: `value` (too-expensive → not up), `exuberant` (crowd can keep paying up), `compounder` (leftover cash + ROIC−WACC beat can carry expensive). One-shot; `n_ctx=1024`. Not FinGPT/BloombergGPT; not fine-tuned.
+- [ ] **Multi-date forecast timeseries (unblocks conformal)**: `forecast_llm.py` now accepts `--dates-file` / `--as-of` and writes one long parquet keyed `(date, ticker, profile)` — latest date keeps full snapshots, historical dates are PIT-only (undated snapshot panels like preferred/momentum/fragility are dropped to avoid lookahead). Resume key is `(date, ticker, profile)`. `conformal_bands.py` scores y = 1 if forward market return over the row's own `horizon_days` > 0 and applies per-regime 90% split-conformal. Bar 0.90 coverage — not yet measured.
+- [ ] **Uncertainty calibration**: conformal bands above + Amodei's **constitutional uncertainty** (model expresses "I don't know"; `uncertainty_flag` already emits high/normal) → `conformal_bands.parquet`
 - [ ] **Regime-selected ensemble**: Enhance `regime_serving.py` with **dynamic model weighting** (Lo's evolutionary weight update based on recent regime performance) → `ensemble_weights.parquet`
 
 **Success metric:** Adaptive HMM regime persistence correlation with realized vol > 0.6; conformal bands achieve 90% coverage

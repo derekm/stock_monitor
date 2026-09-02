@@ -22,11 +22,8 @@ DATA_DIR = Path(__file__).parent
 
 
 def load_prices() -> pd.DataFrame:
-    """Load daily adj close, snapshot first (Windows lock)."""
-    import shutil, tempfile
-    snap = Path(tempfile.gettempdir()) / "fl_daily_prices/"
-    shutil.copy2(DATA_DIR / "daily_prices/", snap)
-    prices = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
+    """Load daily adj close (hive dir read; READ of daily_prices is permitted)."""
+    prices = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["date", "ticker", "adj_close", "close"])
     prices["ticker"] = prices["ticker"].astype(str).str.upper()
     prices = prices.drop_duplicates(subset=["date", "ticker"], keep="last")
     px = prices["adj_close"].where(prices["adj_close"].notna(), prices["close"])
@@ -444,7 +441,7 @@ def residual_ic() -> pd.DataFrame:
     ff["date"] = pd.to_datetime(ff["date"]).dt.normalize()
     ff["month"] = ff["date"].dt.to_period("M")
     mkt = ff.groupby("month")["MKT"].sum()
-    snap = Path(tempfile.gettempdir()) / "ph_daily_prices/"
+    snap = DATA_DIR / "daily_prices/"
     px = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
     px["ticker"] = px["ticker"].astype(str).str.upper()
     px = px[px["ticker"].isin(names)]

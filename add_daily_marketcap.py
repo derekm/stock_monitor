@@ -23,7 +23,11 @@ SHARES_MAX = 2e11
 def _snap(src: Path) -> Path:
     dest = Path(tempfile.gettempdir()) / f"mcap_{src.name}"
     if not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
-        shutil.copy2(src, dest)
+        if src.is_dir():
+            shutil.rmtree(dest, ignore_errors=True)
+            shutil.copytree(src, dest)
+        else:
+            shutil.copy2(src, dest)
     return dest
 
 
@@ -32,8 +36,9 @@ def _to_date(s: pd.Series) -> pd.Series:
 
 
 def build_panel(years: int | None, stock_only: bool) -> pd.DataFrame:
+    # READ of daily_prices/ is permitted (Windows lock issue is fundamentals.parquet, a file).
     prices = pd.read_parquet(
-        _snap(DATA_DIR / "daily_prices/"),
+        DATA_DIR / "daily_prices/",
         columns=["date", "ticker", "adj_close", "close"],
     )
     prices["ticker"] = prices["ticker"].astype(str).str.upper()

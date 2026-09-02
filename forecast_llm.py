@@ -82,32 +82,40 @@ FRAGILITY = DATA_DIR / "fragility_screen.parquet"
 ER_DECOMP = DATA_DIR / "expected_returns_decomp.parquet"
 FRAGILITY_VETO = DATA_DIR / "fragility_veto.parquet"
 NEWS_NOTES = DATA_DIR / "ticker_news_notes.parquet"
+NEWS_PRESS = DATA_DIR / "ticker_news_press.parquet"
 OUT = DATA_DIR / "forecast_llm.parquet"
 
 
-def _er_snap() -> pd.DataFrame | None:
-    """Last date only. Full file is 12M rows — do not pandas-read it."""
+def _er_snap(as_of=None) -> pd.DataFrame | None:
+    """Best ER rows for a date (PIT: max(date) <= as_of). Full file is 12M rows — do not pandas-read it."""
     if not ER_DECOMP.exists():
         return None
     import duckdb
     con = duckdb.connect()
     path = str(ER_DECOMP).replace("\\", "/")
+    date_cond = f"and e.date <= DATE '{as_of}'" if as_of is not None else ""
     return con.execute(
         f"""
-        with last as (select max(date) d from read_parquet('{path}'))
+        with last as (select max(date) d from read_parquet('{path}') e where 1=1 {date_cond})
         select ticker, n_pillars, expected_return, carry, value, momentum, defensive
         from read_parquet('{path}') e, last
-        where e.date = last.d and n_pillars >= 2
+        where e.date = last.d and n_pillars >= 2 {date_cond}
         """
     ).df()
 
 
-def _ticker_snap(path: Path, cols: list[str]) -> pd.DataFrame | None:
+def _ticker_snap(path: Path, cols: list[str], as_of=None) -> pd.DataFrame | None:
+    """Latest per-ticker rows, optionally PIT (row date <= as_of) for historical runs."""
     if not path.exists():
         return None
     df = pd.read_parquet(path)
     if "ticker" not in df.columns:
         return None
+    date_col = next((c for c in ("as_of_date", "as_of", "date") if c in df.columns), None)
+    if as_of is not None:
+        if date_col is None:
+            return None  # undated snapshot — cannot be PIT for a historical date
+        df = df[pd.to_datetime(df[date_col]) <= pd.Timestamp(as_of)]
     keep = ["ticker"] + [c for c in cols if c in df.columns]
     return df[keep].drop_duplicates("ticker", keep="last")
 
@@ -119,7 +127,7 @@ def load_states():
             df["date"] = [v.date() if isinstance(v, datetime) else v for v in df["date"]]
     return df.sort_values("date")
 
-def load_damodaran_context():
+def load_damodaran_context(as_of=None):
     lc = pd.read_parquet(LIFE_CYCLE)
     w = pd.read_parquet(WACC_FILE)
     fm = pd.read_parquet(FAIR_MULTIPLES)
@@ -143,17 +151,18 @@ def load_damodaran_context():
     if mix:
         ctx = ctx.merge(fund[["ticker", "as_of_date"] + mix], on=["ticker", "as_of_date"], how="left")
     for path, cols in (
-        (PREFERRED, ["decision", "buffett_pass", "trifecta_pass", "mos_pass", "nm_quality", "ev_ebitda"]),
-        (MOMENTUM, ["mom_12_1", "ret_63d"]),
-        (IMPLIED_R, ["implied_r_clean_pct"]),
-        (FRAGILITY, ["fragile_flag"]),
-        (FRAGILITY_VETO, ["veto_flag"]),
-        (NEWS_NOTES, ["news_note"]),
-    ):
-        snap = _ticker_snap(path, cols)
-        if snap is not None and len(snap.columns) > 1:
-            ctx = ctx.merge(snap, on="ticker", how="left")
-    er = _er_snap()
+            (PREFERRED, ["decision", "buffett_pass", "trifecta_pass", "mos_pass", "nm_quality", "ev_ebitda"]),
+            (MOMENTUM, ["mom_12_1", "ret_63d"]),
+            (IMPLIED_R, ["implied_r_clean_pct"]),
+            (FRAGILITY, ["fragile_flag"]),
+            (FRAGILITY_VETO, ["veto_flag"]),
+            (NEWS_NOTES, ["news_note"]),
+            (NEWS_PRESS, ["press_line"]),
+        ):
+            snap = _ticker_snap(path, cols, as_of=as_of)
+            if snap is not None and len(snap.columns) > 1:
+                ctx = ctx.merge(snap, on="ticker", how="left")
+    er = _er_snap(as_of=as_of)
     if er is not None and len(er):
         ctx = ctx.merge(er, on="ticker", how="left")
     return ctx
@@ -413,7 +422,7 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
         bits.append(f"Over the last quarter {_fmt_px('the shares', float(r63))}.")
         out.mom = True
 
-    nn = row.get("news_note")
+    nn = row.get("press_line") or row.get("news_note")
     if isinstance(nn, str) and nn.strip():
         bits.append(profile.press_lead + nn.strip().rstrip(".") + ".")
         out.press = True
@@ -555,6 +564,24 @@ def main():
         default="value,exuberant",
         help="Comma list of JobProfile names (value, exuberant, compounder). Innermost loop per ticker.",
     )
+    ap.add_argument(
+        "--dates-file",
+        type=str,
+        default="",
+        help="File with one ISO date per line; forecast as-of each (multi-date timeseries). Default: last HMM date.",
+    )
+    ap.add_argument(
+        "--as-of",
+        type=str,
+        action="append",
+        help="Forecast as-of this ISO date (repeatable). Default: last HMM date.",
+    )
+    ap.add_argument(
+        "--out",
+        type=str,
+        default="",
+        help="Override output parquet (default forecast_llm.parquet). For scratch/timeseries pilots.",
+    )
     args = ap.parse_args()
     wanted = []
     for name in args.profiles.split(","):
@@ -571,22 +598,33 @@ def main():
     _get_llm(MODEL_3B if args.model == "3b" else MODEL_1B)
 
     st = load_states()
-    recent = st.tail(max(int(args.lookback), 21)).copy()
-    recent["mkt_ret_21d"] = (1.0 + recent["mkt_ret"]).rolling(21).apply(lambda x: float(x.prod() - 1.0), raw=True)
-    last_rows = recent.dropna(subset=["mkt_ret_21d"])
-    if last_rows.empty:
+    st = st.sort_values("date").reset_index(drop=True)
+    st["mkt_ret_21d"] = (1.0 + st["mkt_ret"]).rolling(21).apply(lambda x: float(x.prod() - 1.0), raw=True)
+    valid = st.dropna(subset=["mkt_ret_21d"])
+    if valid.empty:
         print("No HMM row with 21-day market return")
         return
-    r = last_rows.iloc[-1]
-    fc_date = r["date"]
-    if isinstance(fc_date, datetime):
-        fc_date = fc_date.date()
-    regime = r["regime"]
-    vol21 = r["vol21"]
-    avg_corr = r["avg_corr"]
-    mkt_21 = float(r["mkt_ret_21d"])
 
-    ctx = load_damodaran_context()
+    # fc_dates: explicit historical dates, or the last HMM date (live run).
+    fc_dates = []
+    if args.dates_file:
+        for line in Path(args.dates_file).read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                fc_dates.append(pd.Timestamp(line).date())
+    elif args.as_of:
+        for d in args.as_of:
+            fc_dates.append(pd.Timestamp(d).date())
+    else:
+        r0 = valid.iloc[-1]
+        fc_dates = [r0["date"].date() if isinstance(r0["date"], datetime) else r0["date"]]
+    fc_dates = sorted({d for d in fc_dates if d in set(valid["date"].map(lambda x: x.date() if isinstance(x, datetime) else x))})
+    if not fc_dates:
+        print("No valid as-of dates (need HMM rows with 21d market return)")
+        return
+    print(f"As-of dates: {fc_dates}", flush=True)
+
+    ctx = load_damodaran_context(as_of=fc_dates[-1])
     if args.tickers:
         tickers = [t.strip() for t in args.tickers.split(",") if t.strip()]
     elif args.tickers_file:
@@ -611,106 +649,116 @@ def main():
         print(f"price load failed ({e}); 21-day path omitted", flush=True)
         px = None
 
-    d_out = fc_date
     done = set()
     rows = []
-    if OUT.exists():
+    out_path = Path(args.out) if args.out else OUT
+    if out_path.exists():
         try:
-            prev = pd.read_parquet(OUT)
+            prev = pd.read_parquet(out_path)
             if "ticker" in prev.columns and len(prev):
-                prev_dates = prev["date"]
-                same = True
-                if "date" in prev.columns:
-                    sample = prev_dates.iloc[0]
-                    sample_d = sample.date() if hasattr(sample, "date") and callable(sample.date) else sample
-                    same = sample_d == d_out
-                if same:
-                    if "profile" not in prev.columns:
-                        prev["profile"] = "value"
-                    rows = prev.to_dict("records")
-                    done = {
-                        (str(t), str(p))
-                        for t, p in zip(prev["ticker"].astype(str), prev["profile"].astype(str))
-                    }
-                    print(f"Resume: {len(done)} already written for {d_out}", flush=True)
-                else:
-                    print(f"Existing parquet is a different date; not mixing. Snapshot kept at {OUT}", flush=True)
+                if "profile" not in prev.columns:
+                    prev["profile"] = "value"
+                rows = prev.to_dict("records")
+                for rec in rows:
+                    d = rec.get("date")
+                    if hasattr(d, "date") and callable(d.date):
+                        d = d.date()
+                    done.add((d, str(rec["ticker"]), str(rec["profile"])))
+                print(f"Resume: {len(done)} (date,ticker,profile) already written", flush=True)
         except Exception as e:
             print(f"resume skipped ({e})", flush=True)
 
     jobs = [(t, p) for t in tickers for p in profiles]
     n = len(jobs)
-    print(f"Jobs: {n} ({len(tickers)} tickers × {len(profiles)} profiles {wanted})", flush=True)
-    ctx_by_ticker = {}
-    tr_by_ticker = {}
-    for i, (ticker, profile) in enumerate(jobs, 1):
-        if (ticker, profile.name) in done:
-            print(f"{i}/{n} {ticker} {profile.name} skip resume", flush=True)
-            continue
-        if ticker not in ctx_by_ticker:
-            t_ctx = ctx[(ctx["ticker"] == ticker) & (ctx["as_of_date"] <= fc_date)]
-            if t_ctx.empty:
-                ctx_by_ticker[ticker] = None
-            else:
-                ctx_by_ticker[ticker] = t_ctx.sort_values("as_of_date").iloc[-1]
-            tr = None
-            if px is not None:
-                g = px[(px["ticker"] == ticker) & (px["date"] <= fc_date)].sort_values("date")
-                if len(g) >= 22:
-                    c = g["adj_close"] if "adj_close" in g.columns else g.get("close")
-                    a, b = c.iloc[-1], c.iloc[-22]
-                    if pd.notna(a) and pd.notna(b) and float(b) != 0:
-                        tr = float(a) / float(b) - 1
-            tr_by_ticker[ticker] = tr
-        row = ctx_by_ticker[ticker]
-        if row is None:
-            print(f"  skip {ticker}: no context", flush=True)
-            continue
-        tr = tr_by_ticker.get(ticker)
-        brief = build_brief(ticker, mkt_21, row, tr, profile)
-        system = build_system(brief, profile)
-        if n <= 32:
-            print(f"  SYSTEM {profile.name}: {system}", flush=True)
-            print(f"  brief {ticker} {profile.name}: {brief.text}", flush=True)
-        wacc = row.get("wacc")
-        fair_ev = row.get("fair_ev_ebitda")
-        quality = row.get("quality_score")
-        life_cycle = row.get("life_cycle_stage")
-        try:
-            direction, prob, horizon, narrative = _llm_predict(ticker, brief.text, system)
-        except RuntimeError as e:
-            print(f"  skip {ticker} {profile.name}: {e}", flush=True)
-            continue
-        uncertainty = "high" if (vol21 > recent["vol21"].quantile(0.75) or regime == "high_vol_stress") else "normal"
-        rows.append({
-            "date": d_out,
-            "ticker": ticker,
-            "profile": profile.name,
-            "regime": regime,
-            "mkt_ret_21d": mkt_21,
-            "vol21": float(vol21),
-            "avg_corr": float(avg_corr),
-            "forecast_dir": direction,
-            "forecast_prob": prob,
-            "horizon_days": horizon,
-            "narrative": narrative,
-            "uncertainty_flag": uncertainty,
-            "life_cycle_stage": life_cycle,
-            "wacc": float(wacc) if pd.notna(wacc) else None,
-            "fair_ev_ebitda": float(fair_ev) if pd.notna(fair_ev) else None,
-            "quality_score": float(quality) if pd.notna(quality) else None,
-            "damodaran_narrative": brief.text,
-        })
-        done.add((ticker, profile.name))
-        print(f"{i}/{n} {ticker} {profile.name} {direction} {prob:.2f} n={horizon}", flush=True)
-        out = pd.DataFrame(rows)
-        tbl = pa.Table.from_pandas(out, preserve_index=False)
-        idx = tbl.schema.get_field_index("date")
-        tbl = tbl.set_column(idx, "date", pa.array([d_out] * len(out), type=pa.date32()))
-        pq.write_table(tbl, OUT)
+    print(f"Jobs: {n} ({len(tickers)} tickers × {len(profiles)} profiles {wanted}) × {len(fc_dates)} dates", flush=True)
+    for fc_date in fc_dates:
+        r = valid[valid["date"].map(lambda x: x.date() if isinstance(x, datetime) else x) == fc_date].iloc[-1]
+        regime = r["regime"]
+        vol21 = float(r["vol21"])
+        avg_corr = float(r["avg_corr"])
+        mkt_21 = float(r["mkt_ret_21d"])
+        vol_q75 = float(valid[valid["date"] <= pd.Timestamp(fc_date)]["vol21"].quantile(0.75))
+        # Latest date: full latest snapshots (live behavior). Historical dates: PIT rows only —
+        # undated snapshot panels (preferred/momentum/fragility) are dropped to avoid lookahead.
+        as_of_arg = None if fc_date == valid["date"].map(lambda x: x.date() if isinstance(x, datetime) else x).max() else fc_date
+        date_ctx = load_damodaran_context(as_of=as_of_arg)
+        date_ctx = date_ctx[date_ctx["ticker"].isin(tickers)]
+        print(f"\n=== as-of {fc_date} regime={regime} vol21={vol21:.4f} mkt21={mkt_21:.2%} ===", flush=True)
+        ctx_by_ticker = {}
+        tr_by_ticker = {}
+        for i, (ticker, profile) in enumerate(jobs, 1):
+            if (fc_date, ticker, profile.name) in done:
+                print(f"{i}/{n} {ticker} {profile.name} skip resume", flush=True)
+                continue
+            if ticker not in ctx_by_ticker:
+                t_ctx = date_ctx[(date_ctx["ticker"] == ticker) & (date_ctx["as_of_date"] <= fc_date)]
+                if t_ctx.empty:
+                    ctx_by_ticker[ticker] = None
+                else:
+                    ctx_by_ticker[ticker] = t_ctx.sort_values("as_of_date").iloc[-1]
+                tr = None
+                if px is not None:
+                    g = px[(px["ticker"] == ticker) & (px["date"] <= fc_date)].sort_values("date")
+                    if len(g) >= 22:
+                        c = g["adj_close"] if "adj_close" in g.columns else g.get("close")
+                        a, b = c.iloc[-1], c.iloc[-22]
+                        if pd.notna(a) and pd.notna(b) and float(b) != 0:
+                            tr = float(a) / float(b) - 1
+                tr_by_ticker[ticker] = tr
+            row = ctx_by_ticker[ticker]
+            if row is None:
+                print(f"  skip {ticker}: no context", flush=True)
+                continue
+            tr = tr_by_ticker.get(ticker)
+            brief = build_brief(ticker, mkt_21, row, tr, profile)
+            system = build_system(brief, profile)
+            if n <= 32:
+                print(f"  SYSTEM {profile.name}: {system}", flush=True)
+                print(f"  brief {ticker} {profile.name}: {brief.text}", flush=True)
+            wacc = row.get("wacc")
+            fair_ev = row.get("fair_ev_ebitda")
+            quality = row.get("quality_score")
+            life_cycle = row.get("life_cycle_stage")
+            try:
+                direction, prob, horizon, narrative = _llm_predict(ticker, brief.text, system)
+            except RuntimeError as e:
+                print(f"  skip {ticker} {profile.name}: {e}", flush=True)
+                continue
+            uncertainty = "high" if (vol21 > vol_q75 or regime == "high_vol_stress") else "normal"
+            rows.append({
+                "date": fc_date,
+                "ticker": ticker,
+                "profile": profile.name,
+                "regime": regime,
+                "mkt_ret_21d": mkt_21,
+                "vol21": vol21,
+                "avg_corr": avg_corr,
+                "forecast_dir": direction,
+                "forecast_prob": prob,
+                "horizon_days": horizon,
+                "narrative": narrative,
+                "uncertainty_flag": uncertainty,
+                "life_cycle_stage": life_cycle,
+                "wacc": float(wacc) if pd.notna(wacc) else None,
+                "fair_ev_ebitda": float(fair_ev) if pd.notna(fair_ev) else None,
+                "quality_score": float(quality) if pd.notna(quality) else None,
+                "damodaran_narrative": brief.text,
+            })
+            done.add((fc_date, ticker, profile.name))
+            print(f"{i}/{n} {ticker} {profile.name} {direction} {prob:.2f} n={horizon}", flush=True)
+            out = pd.DataFrame(rows)
+            tbl = pa.Table.from_pandas(out, preserve_index=False)
+            idx = tbl.schema.get_field_index("date")
+            dates = pa.array(
+                [d.date() if hasattr(d, "date") and not isinstance(d, datetime) else d for d in out["date"]],
+                type=pa.date32(),
+            )
+            tbl = tbl.set_column(idx, "date", dates)
+            pq.write_table(tbl, out_path)
 
     if rows:
-        print(f"Wrote {OUT} ({len(rows)} rows)")
+        n_dates = len({r0["date"] for r0 in rows})
+        print(f"Wrote {out_path} ({len(rows)} rows, {n_dates} dates)")
     else:
         print("No rows generated")
 

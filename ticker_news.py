@@ -35,6 +35,7 @@ OUT_NEWS = DATA_DIR / "ticker_news.parquet"
 OUT_NOTES = DATA_DIR / "ticker_news_notes.parquet"
 OUT_ARTICLES = DATA_DIR / "ticker_news_articles.parquet"
 OUT_MENTIONS = DATA_DIR / "ticker_news_mentions.parquet"
+OUT_PRESS = DATA_DIR / "ticker_news_press.parquet"
 BUCKET = DATA_DIR / "news_articles"
 MODEL_3B = Path(r"C:\Users\derek\models\Llama-3.2-3B-Instruct-Q4_K_M.gguf")
 XPU_PYTHON = Path(r"C:\Users\derek\src\stockmagic\.venv-xpu\Scripts\python.exe")
@@ -589,6 +590,47 @@ def _llm_mentions(headline: str, body: str, hint: str) -> list[dict]:
     return list(m.get("mentions") or [])
 
 
+PRESS_SYSTEM = """You are a financial news summarizer.
+Input: a list of per-article summaries about ONE company.
+Output: ONE sentence — the press line for that company's brief.
+Rules:
+- Synthesize; do not list.
+- No hedging words ("may", "could", "might").
+- No meta commentary ("the article says").
+- Facts only: product, deal, guidance, earnings, M&A, regulatory, technical.
+- If nothing material, return empty string."""
+
+
+def _llm_press_line(ticker: str, summaries: list[str]) -> str:
+    from llama_cpp import LlamaGrammar
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "press_line": {"type": "string", "description": "One sentence news sentiment blurb for the brief"}
+        },
+        "required": ["press_line"],
+    }
+    user = "Company: " + ticker + "\nArticle summaries:\n" + "\n".join(f"- {s}" for s in summaries) + '\n\nReturn JSON: {"press_line": "..."} (empty string if no material news)'
+    llm = _get_news_llm(_n_ctx_for_prompts(PRESS_SYSTEM, user))
+    grammar = LlamaGrammar.from_json_schema(json.dumps(schema))
+    if hasattr(llm, "reset"):
+        llm.reset()
+    out = llm.create_chat_completion(
+        messages=[
+            {"role": "system", "content": PRESS_SYSTEM},
+            {"role": "user", "content": user},
+        ],
+        max_tokens=256,
+        temperature=0.1,
+        grammar=grammar,
+    )
+    text = out["choices"][0]["message"]["content"]
+    m = json.loads(text[text.find("{") : text.rfind("}") + 1])
+    press_line = str(m.get("press_line") or "").strip()
+    return press_line
+
+
 def _known_tickers() -> set[str]:
     s: set[str] = set()
     p = DATA_DIR / "monitored_stocks.parquet"
@@ -669,6 +711,51 @@ def write_mentions(save: bool, use_llm: bool, limit: int | None = None) -> pd.Da
     return out
 
 
+def write_press(save: bool, use_llm: bool) -> pd.DataFrame:
+    """Render per-ticker press lines from mentions."""
+    if not OUT_MENTIONS.exists():
+        print("No mentions — run --mentions first")
+        return pd.DataFrame()
+    mentions = pd.read_parquet(OUT_MENTIONS)
+    if mentions.empty:
+        print("No mention rows")
+        return pd.DataFrame()
+
+    # Group by ticker (skip blank)
+    tickers = [t for t in mentions["ticker"].unique() if t and t.strip()]
+    print(f"Rendering press lines for {len(tickers)} tickers...")
+
+    rows = []
+    for ticker in tickers:
+        t_men = mentions[mentions["ticker"] == ticker]
+        summaries = t_men["summary"].tolist()
+        if not summaries:
+            continue
+        if use_llm:
+            try:
+                press_line = _llm_press_line(ticker, summaries)
+            except Exception as e:
+                print(f"  skip {ticker}: {e}", flush=True)
+                continue
+        else:
+            press_line = " | ".join(summaries[:3])
+        rows.append({"ticker": ticker, "press_line": press_line, "n_mentions": len(summaries), "as_of_date": date.today()})
+        if press_line:
+            print(f"  {ticker}: {press_line}")
+        else:
+            print(f"  {ticker}: (empty)")
+
+    out = pd.DataFrame(rows)
+    if save and len(out):
+        old = pd.read_parquet(OUT_PRESS) if OUT_PRESS.exists() else pd.DataFrame()
+        if len(old):
+            old = old[~old["ticker"].astype(str).isin(set(out["ticker"]))]
+            out = pd.concat([old, out], ignore_index=True)
+        _write_dates(out, OUT_PRESS, "as_of_date")
+        print(f"Wrote {OUT_PRESS} ({len(out)} rows)")
+    return out
+
+
 def _mention_pack(mentions: pd.DataFrame, ticker: str, asof: date, lookback: int = 7) -> str | None:
     g = mentions[mentions["ticker"].astype(str) == ticker]
     if g.empty:
@@ -729,18 +816,22 @@ def main():
     ap.add_argument("--notes", action="store_true")
     ap.add_argument("--extract", action="store_true", help="Fetch article bodies into news_articles/")
     ap.add_argument("--mentions", action="store_true", help="LLM mention JSON per article (needs GPU)")
+    ap.add_argument("--press", action="store_true", help="Render per-ticker press lines from mentions (needs GPU)")
     ap.add_argument("--limit", type=int, default=0, help="Cap new extracts/mentions (0 = all)")
     ap.add_argument("--no-llm", action="store_true", help="Skip 3B")
     args = ap.parse_args()
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()] or None
     lim = args.limit or None
-    if (args.mentions or args.notes) and not args.no_llm:
+    if (args.mentions or args.notes or args.press) and not args.no_llm:
         _pin_intel_vulkan()
     if args.extract:
         extract_articles(save=args.save, limit=lim)
         return
     if args.mentions:
         write_mentions(save=args.save, use_llm=not args.no_llm, limit=lim)
+        return
+    if args.press:
+        write_press(save=args.save, use_llm=not args.no_llm)
         return
     if args.notes:
         if not OUT_NEWS.exists():

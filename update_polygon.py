@@ -85,6 +85,23 @@ def existing_dates() -> set[date]:
     return dates
 
 
+def _partial_dates(window: list[date], have: set[date], frac: float = 0.5) -> list[date]:
+    """Dates present but with <frac of the full-universe ticker count (partial fetch)."""
+    if not window or not PRICES.exists():
+        return []
+    df = pd.read_parquet(PRICES, columns=["date", "ticker"])
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    per_day = df.groupby("date")["ticker"].count()
+    if per_day.empty:
+        return []
+    full = float(per_day.max())
+    out = []
+    for d in window:
+        if d in have and d in per_day.index and per_day.loc[d] < frac * full:
+            out.append(d)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--days", type=int, default=5, help="Max days of history to pull (default: 5, incremental)")
@@ -104,20 +121,31 @@ def main():
     to_d = date.today() - timedelta(days=1)  # yesterday at most (today's data not ready)
     from_d = to_d - timedelta(days=args.days)
 
-    # Only fetch dates we don't already have
+    # Only fetch dates we don't already have, plus dates present with a partial
+    # universe (interrupted fetch) so a truncated day is completed, not left as a gap.
+    have = existing_dates()
     missing = []
+    window = []
     for i in range((to_d - from_d).days + 1):
         day = from_d + timedelta(days=i)
         if day.weekday() >= 5:
             continue
+        window.append(day)
         if day not in have:
             missing.append(day)
+    partial = _partial_dates(window, have)
+    for d in partial:
+        if d not in missing:
+            missing.append(d)
+    missing.sort()
 
     if not missing:
         print(f"All dates through {to_d} already present — nothing to fetch.")
         return
 
-    print(f"Fetching {len(missing)} missing dates: {missing[0]} → {missing[-1]}")
+    print(f"Fetching {len(missing)} missing/partial dates: {missing[0]} → {missing[-1]}")
+    if partial:
+        print(f"  partial (refetch): {partial}")
 
     frames = []
     for day in missing:
@@ -158,3 +186,7 @@ def main():
         print(f"\nAppended {len(new)} polygon bars -> {PRICES} (partitioned)")
     else:
         print(f"\nFetched {len(new)} polygon bars (dry run, --save to persist)")
+
+
+if __name__ == "__main__":
+    main()

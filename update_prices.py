@@ -107,6 +107,22 @@ def existing_ticker_dates() -> dict[str, set[date]]:
     return td
 
 
+def _partial_dates(window: list[date], have_dates: set[date], n_universe: int) -> list[date]:
+    """Dates present but with <50% of the universe's tickers (interrupted writes)."""
+    if not window or n_universe <= 0 or not PRICES_DIR.exists():
+        return []
+    cols = ["date", "ticker"]
+    df = pd.read_parquet(PRICES_DIR, columns=cols)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    per_day = df.groupby("date")["ticker"].count()
+    out = []
+    for d in window:
+        if d in have_dates and d in per_day.index:
+            if per_day.loc[d] < 0.5 * n_universe:
+                out.append(d)
+    return out
+
+
 def drop_phantom_rows(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty or "volume" not in df.columns:
         return df
@@ -267,12 +283,22 @@ def cmd_fetch(args):
     to_d = date.today() - timedelta(days=1)
     from_d = to_d - timedelta(days=args.days)
     missing_dates = []
+    window = []
     for i in range((to_d - from_d).days + 1):
         day = from_d + timedelta(days=i)
         if day.weekday() >= 5:
             continue
+        window.append(day)
         if day not in have_dates:
             missing_dates.append(day)
+
+    # Partial dates: present but with a small fraction of the universe (interrupted
+    # fetch). Refetch them so a truncated day is completed, not left as a gap.
+    partial_dates = _partial_dates(window, have_dates, len(all_tickers))
+    for d in partial_dates:
+        if d not in missing_dates:
+            missing_dates.append(d)
+    missing_dates.sort()
 
     print(f"Active universe: {len(all_tickers)} tickers")
     print(f"Existing dates: {len(have_dates)}")
