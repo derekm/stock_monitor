@@ -94,7 +94,7 @@
 - [x] Regime clustering (HRP + distance corr) → `regime_clustering.py` → `regime_clusters.parquet`, `regime_cluster_dispersion.parquet`, `regime_cluster_sweep.parquet`
 - [x] **Clustered sectors** — named by dominant sector composition. `cluster_name` + hybrid `peer_group` columns.
 - [x] **Hybrid peer_group wired into `peer_analytics.py` and `cross_section.py`** — tighter peer groups (financial_services_76, mixed_healthcare, energy_89) with GICS fallback for the 2% where clustering is looser.
-- [ ] SHAP (tree SHAP; coef stability is the stand-in)
+- [x] SHAP (tree SHAP) — `--shap-stability`; see deliverable list
 
 **Regime clustering — measured (2026-08-25), 4,678 liquid listed names (61% coverage), k = 11 = #GICS sectors:**
 
@@ -121,15 +121,15 @@ Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector
 **Success metric (measured):** CPCV does **not** beat shuffled KFold by 3pp on this persistence task. Do not claim CPCV as a lift. Regime clustering **does** clear ≥20% on 5/8 configs (best dcor/ward **+29.3%**), but not on all.
 **Target files:** `subindustry_regime.py`, `peer_analytics.py`, `cross_section.py`, `signal_model.py`, `hmm_regime_detection.py`, `regime_clustering.py`
 **Core papers:** López de Prado *Advances in Financial ML* (2018): CPCV, meta-labeling, regime clustering, triple-barrier
-**Deliverables:**
+**Deliverables (all built + measured):**
 - [x] **SHAP (tree SHAP)** — `--shap-stability` live; coef stability no longer the stand-in
 - [x] **Meta-labeling**: `signal_model.py --meta-label` — primary GBC for direction + meta GBR for size. **Measured: meta IC 0.152 vs primary 0.220 (delta −0.068) — no lift, do not size on it.** → `signal_model_meta_oos.parquet`, `signal_model_meta_weights.parquet`
-- [ ] **CPCV (Combinatorial Purged Cross-Validation)**: Replace random train/test in `signal_model.py` with CPCV (no leakage, respects time structure) → `cv_splits.json` + updated model
-- [ ] **Regime clustering**: Replace HMM in `hmm_regime_detection.py` with López de Prado's **Hierarchical Risk Parity + regime clustering** (codependence + distance correlation) → `regime_clusters.parquet`
-- [ ] **Triple-barrier labeling** for `peer_analytics.py` / `cross_section.py`: label each ticker-window with (touch upper, touch lower, timeout) → `triple_barrier_labels.parquet`
-- [ ] **Feature importance stability**: Add SHAP stability across CPCV folds → `feature_stability.parquet`
+- [x] **CPCV** — `cv_splits.parquet` via `cv_utils.cpcv_folds`; CPCV acc **53.7%** vs random **53.6%** (+0.1pp, bar +3% **fail**). Do not claim CPCV as a lift.
+- [x] **Regime clustering** — `regime_clustering.py` (HRP + distance corr) → `regime_clusters.parquet`; full-universe dispersion −46.4% (ward/5y), 5/8 configs clear ≥20% bar. **Addition, not HMM replacement** (HMM labels dates; clustering groups assets).
+- [x] **Triple-barrier labeling** → `triple_barrier_labels.parquet` (touch upper/lower/timeout on book+CORE)
+- [x] **Feature importance stability** — SHAP + coef stability across CPCV folds → `feature_stability.parquet` (SHAP stability: cross 3.39 > preferred 1.95 > peer 1.48 > pair 1.06 > earnings 0.54)
 
-**Success metric:** CPCV OOS accuracy > random-split OOS by ≥3%; regime clusters reduce within-cluster correlation dispersion by ≥20%
+**Success metric:** CPCV OOS accuracy > random-split OOS by ≥3% — **fail (+0.1pp)**; regime clusters reduce within-cluster correlation dispersion by ≥20% — **pass on 5/8 configs, best +29.3%.**
 
 ---
 
@@ -154,7 +154,7 @@ Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector
 - [x] Adaptive persist vs vol → `adaptive_hmm_states.parquet` (bar **+0.60 fail**)
 - [x] Split conformal on TMI |r|/σ₂₁: coverage **88.9%** vs 90% bar → `conformal_bands.parquet` (**fail**, 1.1pp short)
 - [x] LLM forecasting (prototype, 2026-08-30): `forecast_llm.py` local Llama-3.2-3B Instruct Q4, Python-owned brief, JSON grammar. Not fine-tuned. Not production.
-- [ ] Ensemble weights
+- [x] Ensemble weights — spec'd; **blocked on pass8 RPT sweep** (GPU, multi-day; `regime_model_best_rpt.parquet` has 5 rows — AEP only)
 
 **Adaptive HMM (persistence vs vol) — CORRECTED 2026-08-24.** The recorded **−0.90 (n=169)** is not reproducible as a *regime-persistence* result. Measuring persistence the natural way — **regime run length vs mean in-run `vol21`** — gives essentially **zero** relationship on both samples:
 
@@ -170,12 +170,12 @@ Both **fail the +0.60 bar**, and both agree, so this is **not** a truncated-wind
 **Target files:** `hmm_regime_detection.py`, `statistical_profiler.py`, `forecast_granite.py`, `granite_daily.py`, `regime_calibrate.py`, `regime_serving.py`
 **Core papers:** Lo *Adaptive Markets Hypothesis* (2004/2017), Amodei et al. *Constitutional AI* (2022), Granite TTM papers (IBM 2023-2024)
 **Deliverables:**
-- [ ] **Adaptive HMM**: Extend `hmm_regime_detection.py` with Lo's **time-varying transition probabilities** (regime persistence changes with volatility) → `adaptive_hmm_states.parquet`
-- [ ] **Population dynamics**: Add `statistical_profiler.py` metric: **regime population fitness** (fraction of tickers in each regime, evolution over time) → `regime_population.parquet`
+- [x] **Adaptive HMM** — `adaptive_hmm_states.parquet` (both samples with `n_runs`); persistence/vol corr **−0.074** (278 runs, full history) vs bar +0.60 → **fail**. Do not quote −0.90.
+- [x] **Population dynamics** — `regime_population.parquet` (regime population shares, 11m HMM file)
 - [x] **LLM forecasting integration**: `forecast_llm.py` — Llama-3.2-3B Instruct Q4 on MX550; Python writes the dossier; model writes a two-sentence JSON forecast. Coverage-gated set is **365**. Profiles in one long table: `value` (too-expensive → not up), `exuberant` (crowd can keep paying up), `compounder` (leftover cash + ROIC−WACC beat can carry expensive). One-shot; `n_ctx=1024`. Not FinGPT/BloombergGPT; not fine-tuned.
-- [ ] **Multi-date forecast timeseries (unblocks conformal)**: `forecast_llm.py` now accepts `--dates-file` / `--as-of` and writes one long parquet keyed `(date, ticker, profile)` — latest date keeps full snapshots, historical dates are PIT-only (undated snapshot panels like preferred/momentum/fragility are dropped to avoid lookahead). Resume key is `(date, ticker, profile)`. `conformal_bands.py` scores y = 1 if forward market return over the row's own `horizon_days` > 0 and applies per-regime 90% split-conformal. Bar 0.90 coverage — not yet measured.
+- [ ] **Multi-date forecast timeseries (unblocks conformal)**: `forecast_llm.py` accepts `--dates-file` / `--as-of` and writes one long parquet keyed `(date, ticker, profile)` — latest date keeps full snapshots, historical dates are PIT-only (undated snapshot panels like preferred/momentum/fragility are dropped to avoid lookahead). Resume key is `(date, ticker, profile)`. **11-date run in progress (2026-09-01, 365×3×11, resumable);** `conformal_bands.py` scores y = 1 if forward market return over the row's own `horizon_days` > 0 and applies per-regime 90% split-conformal. Bar 0.90 coverage — not yet measured.
 - [ ] **Uncertainty calibration**: conformal bands above + Amodei's **constitutional uncertainty** (model expresses "I don't know"; `uncertainty_flag` already emits high/normal) → `conformal_bands.parquet`
-- [ ] **Regime-selected ensemble**: Enhance `regime_serving.py` with **dynamic model weighting** (Lo's evolutionary weight update based on recent regime performance) → `ensemble_weights.parquet`
+- [ ] **Regime-selected ensemble**: Enhance `regime_serving.py` with **dynamic model weighting** (Lo's evolutionary weight update based on recent regime performance) → `ensemble_weights.parquet` — blocked on pass8 RPT sweep (GPU, multi-day)
 
 **Success metric:** Adaptive HMM regime persistence correlation with realized vol > 0.6; conformal bands achieve 90% coverage
 
