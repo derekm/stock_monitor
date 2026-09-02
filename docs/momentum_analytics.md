@@ -35,6 +35,30 @@ Flags: `--universe` (index list or `all`, default `all`), `--save`. Reads
   `young_gate_reliability`, `signal_age_months`)
 - `momentum_quintiles.parquet` — cross-sectional quintile spreads
 - `momentum_ic.parquet` — IC vs forward 21d return
+- `momentum_jt.parquet` — Phase 2 item 8 long-short comparison (annualized
+  net/gross per signal, overlap tape) — see below
+
+## Phase 2 item 8 — JT 12-2 vs 12-1 vs 12-month fractals (measured 2026-09-01)
+
+Construction: monthly-rebalance EW top/bottom-quintile long-short, 10 bps/side,
+448-month full tape (PIT signals at month-end, hold one month, vs TMI).
+
+| signal | full-window geometry | skip | net ann. |
+|--------|----------------------|------|----------|
+| `mom_12_1` | 252d return, skip 21d (existing) | 21d | **+16.4%** |
+| `mom_12_2` | 252d return, skip 42d (paper replica) | 42d | **+17.8%** |
+| `mom_fractal_12_b3_21` | stack (21,3)(42,3)(63,3)(84,3) = 63/126/189/252d | 21d | +11.0% |
+| `mom_fractal_12_b3_42` | same | 42d | +11.8% |
+| `mom_fractal_12_b6_21` | single view (42,6) = 2-month bars × 6 | 21d | +10.9% |
+| `mom_fractal_12_b6_42` | same | 42d | **+12.1%** |
+
+Verdict: **12-2 beats 12-1 by +1.3 pp/yr — below the +2 pp bar (FAIL).** The
+longer skip helps (12-2 > 12-1), and finer granularity helps a little (b6_42
+edges b3_42 by +0.3 pp), but no 12-month fractal clears the JT pair (best
+fractal − best JT = **−5.6 pp**). **The fractal stack is a ride tool, not a
+Jegadeesh/Titman replica** — its 15–90d breadth semantics do not carry the
+12-month premium. Skip semantics: windows end `skip` trading days before the
+signal date (JT's drop-the-recent-month), matching 12-1/12-2.
 
 (Outputs are parquet; older CSV mirrors removed.)
 

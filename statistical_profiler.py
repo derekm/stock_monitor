@@ -56,6 +56,15 @@ OUT = DATA_DIR / "fractal_profiles.parquet"
 # of lengths 3,6,9,12,15) — the finest, quickest view. Then (5,3), (10,3),
 # (15,3), (30,3) scale up to 15d/30d/45d/90d coarser full windows.
 CONFIGS = [(3, 5), (5, 3), (10, 3), (15, 3), (30, 3)]
+# 12-month ladder (Phase 2 item 8): base 21d (~1 month), b=3 repetition like the
+# existing ladder, full windows 63/126/189/252d = 3/6/9/12 months. With a skip
+# column (21d = 12-1 analog, 42d = 12-2 analog) it is the fractal comparable to
+# Jegadeesh/Titman 12-month formation windows.
+CONFIGS_12M = [(21, 3), (42, 3), (63, 3), (84, 3)]
+# Finer-granularity 12-month variant: 2-month bars x 6 = 12 months (21 spans in
+# one view) — tests whether finer granularity at the same horizon beats the
+# coarse b=3 stack, without the 13x blowup of (21,12).
+CONFIGS_12M_FINE = [(42, 6)]
 MIN_DAYS = 60
 
 # stats computed per window (kept in a stable order for schema documentation)
@@ -75,11 +84,13 @@ STAT_COLS = [
 ]
 
 
-def spans_configs():
+def spans_configs(configs=None):
     """All (span_from, span_to, span_len) for the granularity ladder."""
     from fractal_windows import spans_generator
+    if configs is None:
+        configs = CONFIGS
     out = []
-    for a, b in CONFIGS:
+    for a, b in configs:
         for f, t in spans_generator(a, b):
             out.append((f, t, t - f))
     # dedupe by length is NOT wanted here — keep all (f,t) so experiments can
@@ -304,11 +315,25 @@ def profile_ticker(close: pd.Series, volume: pd.Series | None,
                    spans: list[tuple[int, int, int]],
                    open_: pd.Series | None = None,
                    high: pd.Series | None = None,
-                   low: pd.Series | None = None) -> pd.DataFrame:
+                   low: pd.Series | None = None,
+                   skip: int = 0) -> pd.DataFrame:
     """Full long-format statistical profile of one ticker across all spans.
 
     Returns DataFrame: date, span_from, span_to, span_len, + all STAT_COLS.
+    skip>0: JT-style — the profile date stays the signal date but every window
+    ENDS `skip` trading days earlier (close.shift(skip)); volume/OHLC shifted
+    the same way so all stats cover the identical shifted window.
     """
+    if skip:
+        close = close.shift(skip)
+        if volume is not None:
+            volume = volume.shift(skip)
+        if open_ is not None:
+            open_ = open_.shift(skip)
+        if high is not None:
+            high = high.shift(skip)
+        if low is not None:
+            low = low.shift(skip)
     frames = []
     lens = sorted({L for _, _, L in spans})
     for L in lens:
@@ -330,12 +355,17 @@ def profile_ticker(close: pd.Series, volume: pd.Series | None,
 
 def build_profiles(tickers_cap: int | None = None, window: int = 1500,
                    tickers_list: list[str] | None = None,
-                   batched: bool = False, device=None) -> pd.DataFrame:
+                   batched: bool = False, device=None,
+                   configs=None, skip: int = 0) -> pd.DataFrame:
     """Compute profiles for a universe (or explicit ticker list).
 
     batched=True uses the tensor_ops batched engine (GPU when available) instead
     of the per-ticker pandas loop. Outputs are identical (asserted in
     test_basic.py) apart from `price_mode`, which the batched path leaves NaN.
+
+    configs: ladder to use (default CONFIGS). skip>0 shifts the window END back
+    `skip` trading days (JT-style skip; profile date stays the signal date and
+    a `skip` column is attached + the window end is date-skip).
     """
     from macro_sector_shock import _load_price_matrix, _price_universe
     w = _load_price_matrix()
@@ -363,15 +393,18 @@ def build_profiles(tickers_cap: int | None = None, window: int = 1500,
     hm = vp.pivot(index="date", columns="ticker", values="high")
     lm = vp.pivot(index="date", columns="ticker", values="low")
 
-    spans = spans_configs()
+    spans = spans_configs(configs)
     frames = []
     # Batched fast path: compute every ticker's stats for a given span length in
     # one tensor_ops call (GPU when available) instead of per-ticker pandas.
     # Verified identical to the per-ticker path in test_basic.py; measured
     # 13.8x faster than the loop at 300 tickers x 1500 days on CUDA.
     if batched:
-        return _build_profiles_batched(w, vm, om, hm, lm, tickers, spans,
-                                       window, device=device)
+        pfs = _build_profiles_batched(w, vm, om, hm, lm, tickers, spans,
+                                      window, device=device, skip=skip)
+        if skip and (pfs is not None) and len(pfs):
+            pfs["skip"] = int(skip)
+        return pfs
     for t in tickers:
         c = w[t].dropna()
         if len(c) < MIN_DAYS:
@@ -381,9 +414,11 @@ def build_profiles(tickers_cap: int | None = None, window: int = 1500,
         op = om[t].reindex(c.index) if t in om.columns else None
         hi = hm[t].reindex(c.index) if t in hm.columns else None
         lo = lm[t].reindex(c.index) if t in lm.columns else None
-        pf = profile_ticker(c, vol, spans, open_=op, high=hi, low=lo)
+        pf = profile_ticker(c, vol, spans, open_=op, high=hi, low=lo, skip=skip)
         if pf.empty:
             continue
+        if skip:
+            pf["skip"] = int(skip)
         pf["ticker"] = t
         frames.append(pf)
     if not frames:
@@ -723,7 +758,7 @@ def _profile_batch_resident(c, v, o, h, lo, L, dev) -> dict:
 
 
 def _build_profiles_batched(w, vm, om, hm, lm, tickers, spans, window,
-                            device=None) -> pd.DataFrame:
+                            device=None, skip: int = 0) -> pd.DataFrame:
     """Long-format profiles via the batched engine, one pass per span length."""
     import numpy as np
 
@@ -731,6 +766,8 @@ def _build_profiles_batched(w, vm, om, hm, lm, tickers, spans, window,
     if not keep:
         return pd.DataFrame()
     sub = w[keep].tail(window)
+    if skip:
+        sub = sub.shift(skip)   # JT skip: windows end `skip` days before the date
     dates = sub.index
     close = sub.to_numpy(dtype=float).T                     # [T, D]
 
@@ -744,6 +781,11 @@ def _build_profiles_batched(w, vm, om, hm, lm, tickers, spans, window,
         return m.to_numpy(dtype=float).T
 
     vol, op, hi, lo = _mat(vm), _mat(om), _mat(hm), _mat(lm)
+    if skip:  # OHLCV shifted with close so stats cover the identical window
+        for m in (vol, op, hi, lo):
+            if m is not None:
+                m[:] = np.roll(m, skip, axis=1)
+                m[:, :skip] = np.nan
 
     # tickers with too little real history are dropped, matching the loop's
     # `len(c) < MIN_DAYS: continue`

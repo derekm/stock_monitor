@@ -359,6 +359,7 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 || `momentum_quintiles.parquet` | `momentum_analytics.py` | Screen / decision ||
 || `momentum_research_backtest.parquet` | `momentum_research_backtest.py` | Screen / decision ||
 || `momentum_research_confidence.parquet` | `momentum_research_confidence.py` | Screen / decision ||
+|| `momentum_jt.parquet` | `momentum_research_backtest.py --jt` | Phase 2 item 8: annualized net/gross LS per signal (mom_12_1, mom_12_2, mom_fractal_12_b3_21/42, mom_fractal_12_b6_21/42), overlap tape ||
 || `fractal_windows_backtest.parquet` | `fractal_windows_backtest.py` | Screen / decision ||
 || `fractal_windows_backtest.parquet` | `fractal_windows_backtest_gpu.py` | Screen / decision ||
 || `near_dual_candidates.csv` | `inclusion_criteria.py` | Screen / decision ||

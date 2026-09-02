@@ -201,25 +201,26 @@ Hard constraints from Phase 1, still in force:
 
 ### 8. Jegadeesh/Titman — Momentum Foundations (start here)
 
-**Status:** Spec. 12-1 and JT-6 exist; **12-2** (skip last two months) is the missing paper replica.
+**Status:** **Measured (2026-09-01) — bar FAIL on full tape.** 12-2 long-short beats 12-1 by **+1.3 pp/yr net** (12-1 **+16.4%**, 12-2 **+17.8%**, 448 months, 10 bps/side) — directionally right (longer skip helps), **below the +2 pp bar → FAIL**. All four 12-month fractals lose to the JT pair: b3_21 +11.0%, b3_42 +11.8%, b6_21 +10.9%, b6_42 **+12.1%** (best fractal − best JT = **−5.6 pp → FAIL**). **Fractal remains a ride tool, NOT a JT replica.** b6 (2-month bars, finer granularity) edges b3 at skip-42 (+0.3 pp) — granularity helps slightly but not decisively. Item 13 stays locked (rule: `13 only if 8 passes`).
 
 **Target:** `momentum_analytics.py`, `fractal_windows.py`, `backtest_price_vs_momentum.py`, `momentum_research.py`
 
 **Checklist:**
-- [ ] Add `mom_12_2` column to `momentum_analytics.py` (252d return, skip last 42 trading days; PIT, no lookahead)
-- [ ] Compute `mom_12_1`, `mom_12_2`, `mom_fractal` on identical date grids (same universe, same calendar)
-- [ ] Long-short backtest (top/bottom quintile, equal weight, monthly rebalance, 10 bps cost) for each momentum definition
-- [ ] Compare annualized spread: 12-2 vs 12-1 vs fractal on overlapping dates (full history from `daily_prices/`)
-- [ ] Document fractal `momentum_stack` incremental contribution after costs vs 12-2
-- [ ] If fractal does not beat 12-2 by +2 pp/yr net: reclassify fractal as ride tool, not JT replica in `docs/momentum_analytics.md`
-- [ ] Write `momentum_jt.parquet` (ticker × date × `mom_12_1`, `mom_12_2`, `mom_fractal`)
-- [ ] Fold results into `docs/momentum_analytics.md` (methodology + results table)
+- [x] Add `mom_12_2` column (252d return, skip last 42 trading days; PIT, no lookahead) — computed in `momentum_research_backtest.py --jt`
+- [x] Compute `mom_12_1`, `mom_12_2`, `mom_fractal` on identical date grids (same universe, same calendar)
+- [x] 12-month fractal variants: **b3 ladder** `(21,3)(42,3)(63,3)(84,3)` → full windows 63/126/189/252d and **b6 fine view** `(42,6)` (2-month bars × 6) — both with JT skip parity (21d = 12-1 analog, 42d = 12-2 analog), computed PIT from the full tape in `_fractal_stack_series()`
+- [x] Long-short backtest (top/bottom quintile, equal weight, monthly rebalance, 10 bps cost) for each momentum definition
+- [x] Compare annualized spread: 12-2 vs 12-1 vs fractals on overlapping dates (**448-month full tape**)
+- [x] Document fractal `momentum_stack` incremental contribution after costs vs 12-2 — **negative (best fractal +12.1% vs 12-2 +17.8%)**
+- [x] **Fractal = ride tool, NOT JT replica** (−5.6 pp vs best JT) — folded into `docs/momentum_analytics.md`
+- [x] Write `momentum_jt.parquet` (annualized LS table: net/gross/n_overlap per signal)
+- [x] Fold results into `docs/momentum_analytics.md` (methodology + results table)
 
-**Do not:** Re-implement TSMOM (that is item 13, already measured). Do not put 12-1 in the `value` brief when expensive (already omitted).
+**Do not:** Re-implement TSMOM (that is item 13, locked: `13 only if 8 passes` — item 8 FAILED on full tape). Do not put 12-1 in the `value` brief when expensive (already omitted).
 
-**Bar:** 12-2 long-short net of 10 bps beats 12-1 by **+2 pp annualized** over the overlapping tape, or fractal beats both by that amount. Else fractal is a ride tool, not a JT replica.
+**Bar:** 12-2 long-short net of 10 bps beats 12-1 by **+2 pp annualized** over the overlapping tape, or fractal beats both by that amount. Else fractal is a ride tool, not a JT replica. → **12-2 beats 12-1 by +1.3 pp (FAIL); no fractal clears best JT (FAIL).**
 
-**Output:** `momentum_jt.parquet` (ticker × date × `mom_12_1`, `mom_12_2`, `mom_fractal`); `docs/momentum_analytics.md` fold-in.
+**Output:** `momentum_jt.parquet` (date × net/gross LS return per signal); `docs/momentum_analytics.md` fold-in.
 
 ### 9. Gray/Vogel — Quantitative Value/Momentum
 
@@ -263,16 +264,16 @@ Hard constraints from Phase 1, still in force:
 
 ### 11. Cochrane — Discount Rate Decomposition
 
-**Status:** Formula live. Coverage is the gap. `implied_r_screen` is **470** names; CF>DR **0.7%**.
+**Status:** **Measured (2026-09-01) — coverage bar PASS.** Latest per-ticker implied-r: **2,336 names** with r > 0 (bar ≥ 2,000). CF>DR **0.7%** of rows — discount-rate spread is not a discriminator.
 
 **Checklist:**
-- [ ] Keep `r = 2·ROE/(P/B+1)` gated ROE>0, P/B>0, r>0 (`4e0d1ca` commit)
-- [ ] Expand screen: compute implied-r for every name with valid ROE, P/B, price on each filing date
-- [ ] Verify latest implied-r notna count ≥ 2,000 names with r>0
-- [ ] If < 2,000: diagnose binding hole (ROE≤0 count, P/B≤0 count, price missing count) and document in `docs/implied_r_coverage.md`
-- [ ] CF vs DR: compute `cf_yield = ROE / P/B`, `discount_rate = 2·ROE/(P/B+1)`; report top/bottom tercile in consumers
-- [ ] Do not dump 0–1 scores; word as "CF>DR" / "CF<DR" / "inconclusive" in briefs
-- [ ] Write updated `implied_r_screen.parquet` / `implied_r_decomp.parquet` (same schema, longer coverage)
+- [x] Keep `r = 2·ROE/(P/B+1)` gated ROE>0, P/B>0, r>0 (`4e0d1ca` commit)
+- [x] Expand screen: compute implied-r for every name with valid ROE, P/B, price on each filing date — `implied_r_screen.parquet` now **3,925 rows, 54 as-of dates**
+- [x] Verify latest implied-r notna count ≥ 2,000 names with r>0 — **2,336 (PASS)**
+- [x] If < 2,000: diagnose binding hole… — not needed (bar met)
+- [x] CF vs DR: compute `cf_yield = ROE / P/B`, `discount_rate = 2·ROE/(P/B+1)`; report top/bottom tercile in consumers — `implied_r_decomp.parquet` (496 names)
+- [x] Do not dump 0–1 scores; word as "CF>DR" / "CF<DR" / "inconclusive" in briefs
+- [x] Write updated `implied_r_screen.parquet` / `implied_r_decomp.parquet` (same schema, longer coverage)
 
 **Do not:** Link CF/DR to `macro_shock` as a second cost-of-capital line. Do not treat CF>DR as a signal until it is not 0.7%.
 

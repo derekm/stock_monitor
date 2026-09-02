@@ -85,6 +85,16 @@ def window_profiles(log_ret: pd.Series, span_from: int, span_to: int,
     }
 
 
+def span_uptrend(ret: pd.Series, slope: pd.Series) -> pd.Series:
+    """Reusable uptrend flag for fractal spans: ret > 0 AND slope > 0.
+
+    Mirrors `fractal_signal`'s per-span uptrend definition (shared with
+    `momentum_stack` / `fractal_consensus`) so persisted profiles and derived
+    panels compute the SAME flag rather than a local proxy.
+    """
+    return (ret.fillna(0) > 0) & (slope.fillna(0) > 0)
+
+
 def fractal_signal(close: pd.Series, a: int, b: int,
                    past_start: int = 0, past_end: int | None = None) -> pd.DataFrame:
     """Compute a momentum signal for EVERY fractal span, sliding forward.
