@@ -677,7 +677,8 @@ def main():
         vol21 = float(r["vol21"])
         avg_corr = float(r["avg_corr"])
         mkt_21 = float(r["mkt_ret_21d"])
-        vol_q75 = float(valid[valid["date"] <= pd.Timestamp(fc_date)]["vol21"].quantile(0.75))
+        _d = pd.to_datetime(valid["date"]).dt.date
+        vol_q75 = float(valid[_d <= fc_date]["vol21"].quantile(0.75))
         # Latest date: full latest snapshots (live behavior). Historical dates: PIT rows only —
         # undated snapshot panels (preferred/momentum/fragility) are dropped to avoid lookahead.
         as_of_arg = None if fc_date == valid["date"].map(lambda x: x.date() if isinstance(x, datetime) else x).max() else fc_date

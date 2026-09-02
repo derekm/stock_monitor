@@ -1,9 +1,11 @@
-# Quality Gate vs Novy-Marx — Phase 1.1 final
+# Quality Gate vs Novy-Marx — Phase 1.1 final (+ re-measure 2026-09-01)
 
-**Closed:** 2026-08-23  
+**Closed:** 2026-08-23  \
 **Verdict:** Gate ∩ NM-quality = **60/95 = 63%** after persisted component D/E (bar 80% — **fail**). Pre-persist dated-asset panel was 49/82 = 60%. `buffett_pass` is Buffett ROE/ROIC/D/E. It is **not** QMJ. **Do not loosen 15/15/1.0.**
 
-**Inputs:** `preferred_metrics.parquet` (8,669), `fundamentals.parquet` (323,150 dated rows), `novymarx_*.parquet` (3,665 filing dates), `quality_gate_comparison.parquet`
+**Re-measured 2026-09-01 after the `gross_profit` backfill:** Gate ∩ NM-quality = **169/368 = 45.9%** (bar 80% — **fail, worse**). Two things changed, both data-driven: (1) fundamentals backfill lifted ROE/ROIC/D-E coverage so the gate grew **98 → 370** names; (2) the NM GP leg now uses **real GP/A** (2,810 names) instead of the Rev/A proxy (6,281), and 177 of the 370 gate names lack the GP leg entirely. The 15/15/1.0 thresholds were **not** loosened.
+
+**Inputs:** `preferred_metrics.parquet` (9,345), `fundamentals.parquet` (336,052 dated rows), `novymarx_*.parquet` (3,691 filing dates), `quality_gate_comparison.parquet`
 
 ---
 

@@ -27,20 +27,27 @@ STATES = DATA_DIR / "hmm_regime_states.parquet"
 OUT = DATA_DIR / "conformal_bands.parquet"
 
 
-def _forward_outcome(fc: pd.DataFrame, st: pd.DataFrame) -> pd.Series:
-    """y = 1 if cumulative mkt_ret over horizon_days after fc date > 0."""
-    st = st.sort_values("date").reset_index(drop=True)
-    cum = (1.0 + st["mkt_ret"]).cumprod()
-    dates = st["date"].to_numpy()
-    cumv = cum.to_numpy()
+def _market_daily() -> pd.DataFrame:
+    """EW daily market return from daily_prices (full history, to the last fetch)."""
+    p = pd.read_parquet(DATA_DIR / "daily_prices/", columns=["date", "ticker", "adj_close"])
+    p["date"] = pd.to_datetime(p["date"]).dt.date
+    p["r"] = p.groupby("ticker")["adj_close"].pct_change()
+    out = p.groupby("date")["r"].mean().dropna().rename("mkt_ret").reset_index()
+    return out.sort_values("date")
+
+
+def _forward_outcome(fc: pd.DataFrame, mkt: pd.DataFrame) -> pd.Series:
+    """y = 1 if cumulative EW market return over horizon_days after fc date > 0."""
+    dates = mkt["date"].to_numpy()
+    cum = (1.0 + mkt["mkt_ret"]).cumprod().to_numpy()
     y = []
     for d, h in zip(fc["date"], fc["horizon_days"]):
         pos = np.searchsorted(dates, d, side="right")  # first date AFTER forecast
         end = pos + int(h)
-        if end >= len(cumv):
+        if end >= len(cum):
             y.append(np.nan)  # no realized forward window yet
         else:
-            y.append(1.0 if (cumv[end] / cumv[pos - 1] - 1.0) > 0 else 0.0)
+            y.append(1.0 if (cum[end] / cum[pos - 1] - 1.0) > 0 else 0.0)
     return pd.Series(y, index=fc.index)
 
 
@@ -49,12 +56,10 @@ def main():
         print(f"missing {FORECAST}")
         return
     fc = pd.read_parquet(FORECAST)
-    st = pd.read_parquet(STATES)
-    st["date"] = pd.to_datetime(st["date"]).dt.date
     fc["date"] = pd.to_datetime(fc["date"]).dt.date
 
-    # Daily market return series must be complete enough for forward windows.
-    fc["outcome"] = _forward_outcome(fc, st)
+    mkt = _market_daily()
+    fc["outcome"] = _forward_outcome(fc, mkt)
     fc = fc.dropna(subset=["outcome"])
     dates = sorted(fc["date"].unique())
     if len(dates) < 2:

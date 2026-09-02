@@ -20,6 +20,7 @@
 - [x] `ff5_factors.parquet` MKT **−6.44%/16% vol** (corr TMI 0.78). RMW **+7.4%/11% vol** via Rev/A fallback (`gross_profit` column is empty). TMI remains the market book.
 - [x] `factor_attribution.py` named to actual factor columns
 - [x] CAPM residual IC (PIT ER_{t-1} vs r_t − β̂_{36m} MKT_t, **fixed MKT**): **+0.0117** / 85m (bar +0.02 — **fail**)
+- [x] **Re-measured 2026-09-01 after `gross_profit` backfill (real GP/A, not Rev/A)**: Gate ∩ NM **169/368 = 45.9%** (bar 80% — fail, worse); gate grew 98→370 as fundamentals coverage widened; 177/370 gate names lack the GP leg. FF5 RMW **+9.50%/11.35% vol**, MKT **−2.59%/14.45%**. Residual IC **+0.0169** / 84m (bar +0.02 — still fail). 15/15/1.0 untouched.
 
 **Success metric (measured):** Gate ∩ NM-quality = **63%** after persisted D/E (bar 80% fail). CAPM residual IC on **fixed MKT** = **+0.0117** (bar +0.02 fail). Do not loosen 15/15/1.0.
 
@@ -99,6 +100,7 @@
 - [x] Meta-labeling: **meta_y mean 0** (no name ride≥0.5)
 - [x] CPCV on TMI lag features → `cv_splits.parquet`: CPCV acc **53.7%** vs random KFold **53.6%** (**+0.1pp**, bar +3% **fail**)
 - [x] Feature-coef stability across 15 CPCV folds → `feature_stability.parquet` (lag1 0.37; ma21 sign-unstable)
+- [x] **SHAP stability across CPCV folds (2026-09-01)**: `signal_model.py --shap-stability` → `feature_stability.parquet` now carries `shap_mean/shap_std/stability`. Ranked: cross **3.39** > preferred **1.95** > peer **1.48** > pair **1.06** > earnings **0.54**. Cross-sectional family is the most stable input; earnings is the least (its SHAP magnitude is also ~1,000× smaller — weak, not unstable).
 - [x] Regime clustering (HRP + distance corr) → `regime_clustering.py` → `regime_clusters.parquet`, `regime_cluster_dispersion.parquet`, `regime_cluster_sweep.parquet`
 - [x] **Clustered sectors** — named by dominant sector composition. `cluster_name` + hybrid `peer_group` columns.
 - [x] **Hybrid peer_group wired into `peer_analytics.py` and `cross_section.py`** — tighter peer groups (financial_services_76, mixed_healthcare, energy_89) with GICS fallback for the 2% where clustering is looser.
@@ -130,6 +132,7 @@ Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector
 **Target files:** `subindustry_regime.py`, `peer_analytics.py`, `cross_section.py`, `signal_model.py`, `hmm_regime_detection.py`, `regime_clustering.py`
 **Core papers:** López de Prado *Advances in Financial ML* (2018): CPCV, meta-labeling, regime clustering, triple-barrier
 **Deliverables:**
+- [x] **SHAP (tree SHAP)** — `--shap-stability` live; coef stability no longer the stand-in
 - [ ] **Meta-labeling**: Wrap `signal_model.py` GradientBoosting with meta-label (primary model = direction, meta = position size) → `meta_labeled_signals.parquet`
 - [ ] **CPCV (Combinatorial Purged Cross-Validation)**: Replace random train/test in `signal_model.py` with CPCV (no leakage, respects time structure) → `cv_splits.json` + updated model
 - [ ] **Regime clustering**: Replace HMM in `hmm_regime_detection.py` with López de Prado's **Hierarchical Risk Parity + regime clustering** (codependence + distance correlation) → `regime_clusters.parquet`
