@@ -133,7 +133,7 @@ Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector
 **Core papers:** López de Prado *Advances in Financial ML* (2018): CPCV, meta-labeling, regime clustering, triple-barrier
 **Deliverables:**
 - [x] **SHAP (tree SHAP)** — `--shap-stability` live; coef stability no longer the stand-in
-- [ ] **Meta-labeling**: Wrap `signal_model.py` GradientBoosting with meta-label (primary model = direction, meta = position size) → `meta_labeled_signals.parquet`
+- [x] **Meta-labeling**: `signal_model.py --meta-label` — primary GBC for direction + meta GBR for size. **Measured: meta IC 0.152 vs primary 0.220 (delta −0.068) — no lift, do not size on it.** → `signal_model_meta_oos.parquet`, `signal_model_meta_weights.parquet`
 - [ ] **CPCV (Combinatorial Purged Cross-Validation)**: Replace random train/test in `signal_model.py` with CPCV (no leakage, respects time structure) → `cv_splits.json` + updated model
 - [ ] **Regime clustering**: Replace HMM in `hmm_regime_detection.py` with López de Prado's **Hierarchical Risk Parity + regime clustering** (codependence + distance correlation) → `regime_clusters.parquet`
 - [ ] **Triple-barrier labeling** for `peer_analytics.py` / `cross_section.py`: label each ticker-window with (touch upper, touch lower, timeout) → `triple_barrier_labels.parquet`
