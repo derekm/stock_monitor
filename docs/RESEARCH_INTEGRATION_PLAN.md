@@ -224,18 +224,24 @@ Hard constraints from Phase 1, still in force:
 
 ### 9. Gray/Vogel — Quantitative Value/Momentum
 
-**Status:** Blocked on GP/A. Dual-pass (ROE/ROIC + trifecta) is not Alpha Architect QV.
+**Status:** **Measured (2026-09-01) — QV∩NM bar PASS (trivially); QM FAILS; QV not tradable (coverage hole).** `dual_screen_analysis.py --gray-vogel`, monthly-rebalance EW long-short vs TMI, 10 bps/side, PIT ffill on filing calendar.
+
+**Results:**
+- **QV∩NM = 93.3%** on names with GP/A (bar ≥ 80% — **PASS, but vacuous**): the strict AND (EV/EBITDA bottom quintile ∩ GP/A top quintile ∩ D/E ≤ median) fires on **median 0 names/date (max 31, recent only)** — the EV/EBITDA panel covers only **~870 names** at peak (22,761 rows / 1,879 names, sparse before 2020), so when it fires it is trivially also NM-quality.
+- **QV net +22.5%/yr is not a measurement** — a 0–31-name long leg vs the ~9k-name complement, only on the 137 months where ≥20 names exist (all EV-data-rich). Do not quote.
+- **QM (12-1 momentum + nm_quality ≥2 legs): 1,150–1,400 names/date — real book, LOSES: −4.0%/yr net, −3.9% vs TMI (150 months).** Quality+momentum underperforms the universe on this tape.
+- Binding hole: **EV/EBITDA coverage**, not GP/A. Bar says "or report fail" → QV fails; QM fails.
 
 **Target:** `preferred_metrics.py`, `inclusion_criteria.py`, `dual_screen_analysis.py`
 
 **Checklist:**
-- [ ] Wait for `gross_profit` backfill (`gp_fill.py` / edgar v2) to complete — verify ≥8,000 names have GP/A
-- [ ] Implement QV per paper: EV/EBITDA (cheap quintile) + GP/A (top quintile) + low leverage (D/E ≤ median) — all PIT on filing calendar
-- [ ] Implement QM per paper: 12-1 momentum + `nm_quality` (≥2 legs: GP/A top quintile, low accruals, safe leverage)
-- [ ] A/B test: QV vs current `value_pass` (trifecta ∨ B/M ∨ EY); QM vs `nm_score` top quintile
-- [ ] Long-short backtest both against TMI with same costs (10 bps) and same calendar
-- [ ] Report net spread, not just overlap percentages
-- [ ] Write `gray_vogel_qv.parquet`, `gray_vogel_qm.parquet` (ticker × date × qv_flag, qm_flag, components)
+- [x] Wait for `gross_profit` backfill — done (113,717 rows, 2,817 names GP/A; ≥8,000 not met, Rev/A NOT used)
+- [x] Implement QV per paper: EV/EBITDA (cheap quintile) + GP/A (top quintile) + low leverage (D/E ≤ median) — PIT ffill on filing calendar (`dual_screen_analysis.py --gray-vogel`)
+- [x] Implement QM per paper: 12-1 momentum + `nm_quality` (≥2 legs: GP/A top quintile, low accruals, safe leverage)
+- [x] A/B test: QV vs current `value_pass`; QM vs `nm_score` top quintile — **QV∩NM 93.3% (vacuous — QV fires on 0 names/date median); QM loses**
+- [x] Long-short backtest both against TMI with same costs (10 bps) and same calendar — **QM −4.0%/yr net, −3.9% vs TMI**
+- [x] Report net spread, not just overlap percentages — QV's +22.5% is a 0–31-name long leg, **not quoted**
+- [x] Write `gray_vogel_ls.parquet` (annualized LS + QV∩NM); note: full ticker×date × qv/qm flag panel not written — do not build on an empty-flag signal
 
 **Do not:** Substitute Rev/A for GP/A and call it QV. Do not loosen 15/15/1.0 to make overlap.
 
