@@ -66,7 +66,17 @@ def gray_vogel_backtest() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     fund = pd.read_parquet(FUND)
     fund = fund.sort_values(["as_of_date", "ticker"])
-    eveb = fund.pivot(index="as_of_date", columns="ticker", values="ev_ebitda")
+    # EV/EBITDA computed from components — the stored `ev_ebitda` column is
+    # sparse (1,447 computed rows; filled only where ebit+capex both existed).
+    # Real `ebitda` covers 220k rows / 3,294 names. EV = mcap + debt - cash.
+    mcap = fund.pivot(index="as_of_date", columns="ticker", values="market_cap")
+    de_int = fund.pivot(index="as_of_date", columns="ticker", values="total_debt")
+    cash = fund.pivot(index="as_of_date", columns="ticker", values="cash_and_equivalents")
+    ebitda = fund.pivot(index="as_of_date", columns="ticker", values="ebitda")
+    ev_calc = mcap + de_int - cash
+    eveb_calc = ev_calc / ebitda.replace(0, np.nan)
+    eveb_calc = eveb_calc.replace([np.inf, -np.inf], np.nan)
+    eveb = eveb_calc.where(eveb_calc > 0)   # negative EV/EBITDA is not a cheap multiple
     de = fund.pivot(index="as_of_date", columns="ticker", values="debt_to_equity")
     w = _load_price_matrix()
     lp = np.log(w.replace(0, np.nan))

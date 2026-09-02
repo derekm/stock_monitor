@@ -13,8 +13,50 @@ FUND_PATH = Path('fundamentals.parquet')
 
 print("Loading fundamentals...")
 fund = pd.read_parquet(FUND_PATH)
-fund['as_of_date'] = pd.to_datetime(fund['as_of_date'])
+from datetime import date as _date, datetime as _dt
+
+def _as_date(x):
+    if isinstance(x, _date) and not isinstance(x, _dt):
+        return x
+    if pd.isna(x):
+        return pd.NaT
+    if isinstance(x, pd.Timestamp):
+        return x.date()
+    if hasattr(x, "date"):
+        return x.date()
+    return pd.Timestamp(x).date()
+
+if "as_of_date" in fund.columns:
+    fund["as_of_date"] = fund["as_of_date"].map(_as_date)
 print(f"Loaded: {len(fund)} rows, {fund['ticker'].nunique()} tickers")
+
+# ============================================================
+# 0. REVENUE_TTM from quarterly (PIT) then ffill
+# ============================================================
+print("\n=== Filling revenue_ttm ===")
+fund = fund.sort_values(["ticker", "as_of_date"]).reset_index(drop=True)
+if "revenue_quarterly" in fund.columns:
+    q = pd.to_numeric(fund["revenue_quarterly"], errors="coerce")
+    sub = fund.loc[q.notna(), ["ticker", "as_of_date"]].copy()
+    sub["qrev"] = q[q.notna()].to_numpy()
+    sub["_ts"] = pd.to_datetime(sub["as_of_date"])
+    g = sub.groupby("ticker", sort=False)
+    sub["ttm4"] = g["qrev"].transform(lambda s: s.rolling(4, min_periods=4).sum())
+    sub["d0"] = g["_ts"].shift(3)
+    span = (sub["_ts"] - sub["d0"]).dt.days
+    ok = sub["ttm4"].notna() & (span >= 240) & (span <= 400)
+    ttm_map = sub.loc[ok, ["ticker", "as_of_date", "ttm4"]]
+    fund = fund.merge(ttm_map, on=["ticker", "as_of_date"], how="left")
+    need = fund["revenue_ttm"].isna() & fund["ttm4"].notna()
+    print(f"Filled revenue_ttm from 4q rolling: {int(need.sum())}")
+    fund.loc[need, "revenue_ttm"] = fund.loc[need, "ttm4"]
+    fund.drop(columns=["ttm4"], inplace=True)
+fund["revenue_ttm"] = fund.groupby("ticker")["revenue_ttm"].ffill()
+if "free_cash_flow" in fund.columns:
+    fund["free_cash_flow"] = fund.groupby("ticker")["free_cash_flow"].ffill()
+if "revenue_quarterly" in fund.columns:
+    fund["revenue_quarterly"] = fund.groupby("ticker")["revenue_quarterly"].ffill()
+print(f"revenue_ttm coverage now {fund['revenue_ttm'].notna().mean():.1%} rows")
 
 # ============================================================
 # 1. COMPUTE EARNINGS STABILITY
@@ -136,8 +178,8 @@ de_mask = fund['total_debt'].notna() & fund['shareholders_equity'].notna() & (fu
 fund.loc[de_mask, 'debt_to_equity'] = fund.loc[de_mask, 'total_debt'] / fund.loc[de_mask, 'shareholders_equity']
 print(f"D/E: {de_mask.sum()}")
 
-# FCF Margin
-fcfm_mask = fund['free_cash_flow'].notna() & fund['revenue_quarterly'].notna() & (fund['revenue_quarterly'] > 0) & fund['fcf_margin'].isna()
+# FCF Margin — TTM FCF / TTM revenue (never quarterly)
+fcfm_mask = fund['free_cash_flow'].notna() & fund['revenue_ttm'].notna() & (fund['revenue_ttm'] > 0) & fund['fcf_margin'].isna()
 fund.loc[fcfm_mask, 'fcf_margin'] = fund.loc[fcfm_mask, 'free_cash_flow'] / fund.loc[fcfm_mask, 'revenue_ttm']
 print(f"FCF Margin: {fcfm_mask.sum()}")
 
@@ -152,14 +194,12 @@ ev_mask = (
     fund['market_cap'].notna() & 
     fund['total_debt'].notna() & 
     fund['cash_and_equivalents'].notna() & 
-    fund['ebit'].notna() & 
-    fund['capital_expenditure_ttm'].notna() &
+    fund['ebitda'].notna() &   # real EBITDA column (220k rows), not ebit+capex proxy
     fund['ev_ebitda'].isna()
 )
 ev = fund['market_cap'] + fund['total_debt'] - fund['cash_and_equivalents']
-ebitda_approx = fund['ebit'] + fund['capital_expenditure_ttm'].abs()
-fund.loc[ev_mask & (ebitda_approx > 0), 'ev_ebitda'] = ev[ev_mask & (ebitda_approx > 0)] / ebitda_approx[ev_mask & (ebitda_approx > 0)]
-print(f"EV/EBITDA: {(ev_mask & (ebitda_approx > 0)).sum()}")
+fund.loc[ev_mask & (fund['ebitda'] > 0), 'ev_ebitda'] = ev[ev_mask & (fund['ebitda'] > 0)] / fund['ebitda'][ev_mask & (fund['ebitda'] > 0)]
+print(f"EV/EBITDA (real ebitda): {(ev_mask & (fund['ebitda'] > 0)).sum()}")
 
 # PB Ratio
 pb_mask = fund['market_cap'].notna() & fund['shareholders_equity'].notna() & (fund['shareholders_equity'] > 0) & fund['pb_ratio'].isna()
