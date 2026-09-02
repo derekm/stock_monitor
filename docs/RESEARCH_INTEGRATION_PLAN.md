@@ -97,7 +97,7 @@
 **Status:** **Measured (2026-08-25)** — CPCV − random **+0.1pp** (bar +3% fail). meta_y=0. Regime clustering **passes (+46.4% full-universe)**. Hybrid `peer_group` wired into consumers.
 **Deliverables:**
 - [x] Triple-barrier on book+CORE → `triple_barrier_labels.parquet`
-- [x] Meta-labeling: **meta_y mean 0** (no name ride≥0.5)
+- [x] Meta-labeling: **meta IC 0.152 vs primary IC 0.220 (delta −0.068, 2026-09-01 re-run)** — meta-labeling **hurts**; `meta_y` mean 0 (no name ride ≥0.5). Implemented, measured, **do not size on it**.
 - [x] CPCV on TMI lag features → `cv_splits.parquet`: CPCV acc **53.7%** vs random KFold **53.6%** (**+0.1pp**, bar +3% **fail**)
 - [x] Feature-coef stability across 15 CPCV folds → `feature_stability.parquet` (lag1 0.37; ma21 sign-unstable)
 - [x] **SHAP stability across CPCV folds (2026-09-01)**: `signal_model.py --shap-stability` → `feature_stability.parquet` now carries `shap_mean/shap_std/stability`. Ranked: cross **3.39** > preferred **1.95** > peer **1.48** > pair **1.06** > earnings **0.54**. Cross-sectional family is the most stable input; earnings is the least (its SHAP magnitude is also ~1,000× smaller — weak, not unstable).
