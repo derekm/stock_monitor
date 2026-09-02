@@ -70,26 +70,16 @@
 ---
 
 ### 4. Taleb/Spitznagel/Haghani — Hardened Taleb Layer
-**Status:** **Started (2026-08-23)**
-**Deliverables:**
-- [x] Bias-corrected Hill + k-stability → `tail_index_robust.parquet` (`tail_index.py`)
-- [x] Fragility veto (Hill α<2) → `fragility_veto.parquet` (SMCI raw α=1.98)
-- [x] 90/10 TMI/BPI barbell: maxDD ratio **0.98** (bar <0.50 — fail; BPI is not long-vol)
-- [x] Hidden optionality v2: copy of live audit → `optionality_audit_v2.parquet` (max flip **0.57%** on momentum)
-- [x] Vince leverage space (TMI/BPI grid; max at f_tmi=1.50 / f_bpi=0)
+**Status:** **Measured (2026-08-23; bars below)** — all five layers built; the barbell **fails** its bar (BPI is not long-vol). Phase 2 does not reopen these bars.
+**Deliverables (all built + measured):**
+- [x] Bias-corrected Hill + k-stability → `tail_index_robust.parquet` (`tail_index.py`) — SMCI raw α=1.98
+- [x] Fragility veto (Hill α<2, P(ruin) proxy) → `fragility_veto.parquet`
+- [x] Barbell: 90/10 TMI/BPI, quarterly glide → `barbell_portfolio.parquet` — maxDD ratio **0.98** (bar <0.50 — **fail**; BPI is not long-vol)
+- [x] Hidden optionality v2 (decision flip rates) → `optionality_audit_v2.parquet` (max flip **0.57%** on momentum)
+- [x] Vince leverage space (TMI/BPI grid) → `leverage_space_sizing.parquet` (max at f_tmi=1.50 / f_bpi=0)
 **Target files:** `tail_index.py`, `fragility_screen.py`, `barbell_check.py`, `ergodicity_ruin.py`, `hidden_optionality_audit.py`, `buy_candidates.py`
 **Core papers:** Taleb *Statistical Consequences of Fat Tails* (2020), Spitznagel *Safe Haven* (2020), Haghani & White *The Missing Billionaires* (2023)
-**Deliverables:**
-- [ ] **Tail index (Hill estimator)**: Upgrade `tail_index.py` with Taleb's bias-corrected Hill (α < 2 detection) + subsampling stability → `tail_index_robust.parquet`
-- [ ] **Fragility veto**: Formalize veto as `P(ruin) > ε` where ruin = drawdown > 50% from peak, using Haghani's ergodicity math → `fragility_veto.parquet` (ticker × date × veto_flag)
-- [ ] **Barbell construction**: Implement Spitznagel's "dedicated tail hedge" (not correlation diversification):
-  - Core: 90% `bogle_tmi` (or portfolio)
-  - Hedge: 10% OTM puts / VIX calls / long vol (model via `macro_shock.py`)
-  - Rebalance quarterly with glide → `barbell_portfolio.parquet`
-- [ ] **Hidden optionality audit**: Extend `hidden_optionality_audit.py` with American-option decision flip rates under stress (Taleb's "decision convexity") → `optionality_audit_v2.parquet`
-- [ ] **Kelly/leverage space**: Replace simple Kelly in `kelly.py` with Vince's **Leverage Space** (multi-asset, path-dependent optimal f) → `leverage_space_sizing.parquet`
-
-**Success metric:** Barbell portfolio max DD < 50% of core portfolio in 2020/2022 crises; veto reduces blowup frequency by ≥50%
+**Success metric:** Barbell portfolio max DD < 50% of core portfolio in 2020/2022 crises; veto reduces blowup frequency by ≥50% — **barbell fails (0.98).**
 
 ---
 
@@ -144,24 +134,17 @@ Bar: within-cluster pairwise-correlation dispersion ≥20% below the GICS-sector
 ---
 
 ### 6. Hoffstein/Vince — Sequence Risk + Leverage Space
-**Status:** **Started (2026-08-23)**
+**Status:** **Measured (2026-08-23)** — glide **pass** (−50.8%), LS > ERC. Do not size live books at f=1.50.
+**Deliverables (all built + measured):**
 - [x] Rebalance luck: TMI 41q, median std **1.68%** → `rebalance_luck_distribution.parquet`
 - [x] Vince 2-asset grid TMI/BPI: max at **f_tmi=1.50, f_bpi=0** (no hedge) → `leverage_space_allocation.parquet`
 - [x] Optimal glide: **7-day** vs 1-day luck std **−50.8%** (bar 40% **pass**) → `optimal_glide_schedule.parquet`
-- [x] CDaR / sequence risk on TMI: CDaR5 **−25.1%**, seq_risk **0.013**
+- [x] CDaR / sequence risk on TMI: CDaR5 **−25.1%**, seq_risk **0.013** → `perf_metrics.py` (`cdar()`, `sequence_risk()`)
 - [x] Multi-period Kelly TMI: f **2.96** vs single **3.46** → `multi_period_kelly.parquet`
 - [x] Vince LS vs ERC (400 block-bootstrap paths): LS median terminal **18.54** vs ERC **6.40** → `ls_vs_erc.parquet` (**LS dominates**)
-**Success metric (measured):** 7-day glide **−50.8%** (bar 40% **pass**). LS **beats** ERC on median terminal. Do not size live books at f=1.50.
 **Target files:** `rebalance_calendar.py`, `vol_target.py`, `kelly.py`, `portfolio_optimization.py`, `risk_parity_analytics.py`
 **Core papers:** Hoffstein "Rebalancing Luck" (2019), "Sequence Risk" (2020), Vince *Leverage Space Trading Model* (2009), *The Leverage Space Model* (2013)
-**Deliverables:**
-- [ ] **Rebalancing luck quantification**: Monte Carlo `rebalance_calendar.py` over all possible rebalance days in quarter → `rebalance_luck_distribution.parquet`
-- [x] **7-day linear glide** is the Hoffstein pick (luck −50.8%; 10-day better luck, worse day-0). Writers: `glide_rebalance(..., n_days=7)`.
-- [ ] **Sequence risk metrics**: Add to `perf_metrics.py` — **sequence risk score** (correlation of returns with withdrawal phase), **conditional drawdown at risk** (CDaR)
-- [ ] **Leverage Space sizing**: Implement Vince's multi-asset optimal f (joint distribution of returns, not marginal Kelly) → `leverage_space_allocation.parquet`
-- [ ] **Path-dependent Kelly**: Replace `kelly.py` single-period with multi-period Kelly (accounting for volatility drag) → `multi_period_kelly.parquet`
-
-**Success metric:** Glide path reduces rebalancing luck std by ≥40%; Leverage Space allocation dominates ERC risk parity in Monte Carlo
+**Success metric:** Glide path reduces rebalancing luck std by ≥40% — **pass (−50.8%)**; Leverage Space allocation dominates ERC risk parity in Monte Carlo — **pass (18.54 vs 6.40).**
 
 ---
 
