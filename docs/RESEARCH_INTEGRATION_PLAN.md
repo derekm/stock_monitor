@@ -226,7 +226,7 @@ Hard constraints from Phase 1, still in force:
 
 **Status:** **Re-measured (2026-09-01) after EV/EBITDA data-gap fix — QV∩NM bar PASS, QV still thin, QM FAILS.** `dual_screen_analysis.py --gray-vogel`, monthly-rebalance EW long-short vs TMI, 10 bps/side, PIT ffill on filing calendar.
 
-**Data-gap fix (this session):** stored `ev_ebitda` was filled by an `ebit + capex` proxy over only 1,879 names / 870 at peak. Now computed from components (`EV = mcap + debt − cash`, real `ebitda` column): **2,588 names at latest date** (4.3× coverage, back to ~2018 with real EBITDA). Canonical fill patched in `compute_missing_metrics.py` to use real `ebitda` (runs after the live LLM forecast job releases `fundamentals.parquet`).
+**Data-gap fix (this session):** stored `ev_ebitda` was filled by an `ebit + capex` proxy over only 1,879 names / 870 at peak. Now computed from components (`EV = mcap + debt − cash`, real `ebitda` column): **2,588 names at latest date** (4.3× coverage, back to ~2018 with real EBITDA). Canonical fill LANDED 2026-09-02 once the LLM writer exited: `compute_missing_metrics.py` on real `ebitda` raised stored `ev_ebitda` 22,761 → **70,176 rows**; re-rerun of `--gray-vogel` on the filled panel reproduces the same verdict (QV +24.0%/yr, QV∩NM 87.9% PASS, QM −4.0%/yr FAIL) — stable.
 
 **Results (re-measured):**
 - **QV now fires on 30–36 names/date** on the EV-data-rich tape (was max 31 ever, median 0); **113 dates with ≥10 QV names**; still median 0 pre-2018 (no real EBITDA history).
@@ -329,18 +329,29 @@ Also fixed on the way: `build_bogle_funds.py` `load_prices` was `shutil.copy2` o
 
 ### 14. Perold/Sharpe — CPPI + Risk Parity
 
-**Status:** ERC exists (`risk_parity_analytics.py`). Vince LS already **beats** ERC on median terminal (18.54 vs 6.40). CPPI floor+multiplier is new.
+**Status:** **Measured (2026-09-02) — CPPI maxDD bar PASS, terminal-wealth bar FAIL at every m → CPPI is a floor tool; ERC stays the risk-parity claim, Vince LS stays the leverage claim.** `cppi_backtest.py`: 400 SHARED block-bootstrap paths (21d blocks, seed 0) over rebuilt-real TMI/BPI daily returns (2016-08→2026-08). Books: CPPI floor 0.9×peak with m ∈ {2,3,4} (TMI leg, cash residual), ERC inverse-vol (w_tmi 0.47), HRP (analytic 2-asset reduction = inverse-variance, w_tmi 0.45 — `hrp_weights_from_cov` crashes on 2-asset frames), Vince LS f=1.50 TMI.
+
+| book | median terminal | p05 | median maxDD | median underwater (days) |
+|---|---|---|---|---|
+| cppi_m2 | 1.23 | 1.08 | 4.3% | 278 |
+| cppi_m3 | 1.33 | 1.09 | 6.1% | 303 |
+| cppi_m4 | 1.41 | 1.09 | 7.6% | 324 |
+| erc | 1.86 | 1.03 | 21.5% | 327 |
+| hrp | 1.82 | 1.00 | 21.6% | 338 |
+| vincent_ls | 4.37 | 1.73 | 30.1% | 261 |
+
+CPPI keeps DD ≤ 7.6% vs ERC 21.5% — best floor per unit risk — but median terminal 1.23–1.41 misses the 0.8×ERC (1.49) bar even at m=4. Bar result: **FAIL** (both conditions required). Also re-ran `kelly.py ls-vs-erc` on rebuilt indexes: LS median 4.37 vs ERC 1.92 — the earlier 0.995-vs-0.997 result was drag-only shell data and is superseded.
 
 **Checklist:**
-- [ ] Implement CPPI on TMI: floor = 90% peak NAV, multipliers m ∈ {2,3,4}
-- [ ] Simulate 400 block-bootstrap paths (same paths as Vince LS vs ERC test in `ls_vs_erc.parquet`)
-- [ ] Compare: CPPI (m=2,3,4) vs ERC vs HRP vs Vince LS on median terminal wealth, maxDD, drawdown duration
-- [ ] Test across multiple start dates (not just one crisis)
-- [ ] Document cost assumptions (rebalancing frequency, transaction costs)
+- [x] CPPI on TMI: floor = 90% peak NAV, m ∈ {2,3,4}
+- [x] 400 block-bootstrap paths, same block size (21d) as the Vince/ERC test; paths SHARED across books
+- [x] CPPI vs ERC vs HRP vs Vince LS on median terminal, maxDD, underwater run
+- [ ] Multiple start dates — not run (bootstrap paths already resample the full window; single-window caveat documented)
+- [x] Cost assumptions: none charged (index-level bootstrap, monthly-equivalent drift; same convention as ls_vs_erc)
 
 **Do not:** Size live books at Vince f=1.50. Do not declare CPPI a winner on one crisis.
 
-**Bar:** CPPI maxDD **< ERC maxDD** and terminal wealth **not** worse than ERC median by 20%. Else ERC stays the risk-parity claim; LS stays the leverage claim.
+**Bar:** CPPI maxDD **< ERC maxDD** and terminal wealth **not** worse than ERC median by 20%. Else ERC stays the risk-parity claim; LS stays the leverage claim. → **Bar FAIL: ERC + LS stand.**
 
 **Output:** `cppi_paths.parquet`.
 
