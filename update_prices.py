@@ -262,6 +262,45 @@ def fetch_yfinance(tickers: list[str], days: int, batch_size: int = 50, max_work
 # Main fetch
 # ---------------------------------------------------------------------------
 
+def existing_pairs_between(dates: list[date]) -> set[tuple[date, str]]:
+    """(date, ticker) pairs already in the hive, restricted to the window.
+
+    Reads ONLY the year/month partitions overlapping `dates` (columns
+    date+ticker), not the whole hive — cheap enough to run every daily fetch."""
+    pairs: set[tuple[date, str]] = set()
+    if not PRICES_DIR.exists() or not dates:
+        return pairs
+    lo, hi = min(dates), max(dates)
+    for year_dir in PRICES_DIR.iterdir():
+        if not year_dir.is_dir() or not year_dir.name.startswith("year="):
+            continue
+        try:
+            y = int(year_dir.name.split("=")[1])
+        except ValueError:
+            continue
+        if y < lo.year or y > hi.year:
+            continue
+        for month_dir in year_dir.iterdir():
+            if not month_dir.is_dir() or not month_dir.name.startswith("month="):
+                continue
+            try:
+                m = int(month_dir.name.split("=")[1])
+            except ValueError:
+                continue
+            if (y, m) < (lo.year, lo.month) or (y, m) > (hi.year, hi.month):
+                continue
+            for pq in month_dir.glob("*.parquet"):
+                try:
+                    df = pd.read_parquet(pq, columns=["date", "ticker"])
+                    d = pd.to_datetime(df["date"]).dt.date
+                    for dd, tt in zip(d, df["ticker"].astype(str)):
+                        if lo <= dd <= hi:
+                            pairs.add((dd, tt))
+                except Exception:
+                    pass
+    return pairs
+
+
 def cmd_fetch(args):
     # Polygon key must resolve even when the DAG runner's env lacks it:
     # same .env fallback chain as ticker_news._polygon_key() (the DAG parent
@@ -320,16 +359,36 @@ def cmd_fetch(args):
 
     frames = []
 
+    # Strict gap set: (date, ticker) pairs absent from the hive, over the
+    # missing/partial dates only. Every fetched row must land in this set —
+    # no re-stamping of already-present pairs (append-only semantics; the
+    # yfinance window fetch returns the full period, so filter it down).
+    needed = set()
+    if missing_dates:
+        have_pairs = existing_pairs_between(window)
+        for d in missing_dates:
+            for t in all_tickers:
+                if (d, t) not in have_pairs:
+                    needed.add((d, t))
+    print(f"Needed (date, ticker) pairs: {len(needed)}")
+
     # Primary: Polygon (fetch ALL tickers for missing dates in 1 request/day)
     if use_polygon and missing_dates:
         print(f"\n=== Polygon (primary) ===")
         poly_df = fetch_polygon(missing_dates, api_key)
         if len(poly_df):
             poly_df = drop_phantom_rows(poly_df)
+            if needed:
+                poly_df = poly_df[
+                    poly_df.apply(
+                        lambda r: (r["date"].date() if hasattr(r["date"], "date") else r["date"], str(r["ticker"])) in needed,
+                        axis=1,
+                    )
+                ]
             frames.append(poly_df)
             print(f"Polygon: {len(poly_df)} rows")
 
-    # Fallback: yfinance for tickers Polygon missed (or if no Polygon key).
+    # Fallback: yfinance for pairs Polygon couldn't cover (or no Polygon key).
     # Guarded on missing_dates: when the hive is already current this crawl of
     # the FULL universe has nothing to fill and previously ran for >1h every
     # day (observed DAG timeout 2026-09-03 after wave-0 gating).
@@ -350,6 +409,13 @@ def cmd_fetch(args):
             yf_df = fetch_yfinance(yf_tickers, args.days)
             if len(yf_df):
                 yf_df = drop_phantom_rows(yf_df)
+                if needed:
+                    yf_df = yf_df[
+                        yf_df.apply(
+                            lambda r: (r["date"].date() if hasattr(r["date"], "date") else r["date"], str(r["ticker"])) in needed,
+                            axis=1,
+                        )
+                    ]
                 frames.append(yf_df)
                 print(f"yfinance: {len(yf_df)} rows")
 
