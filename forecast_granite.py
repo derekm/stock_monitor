@@ -44,7 +44,7 @@ FORECAST_FILE = DATA_DIR / "forecasts_granite.parquet"
 FORECAST_CSV = DATA_DIR / "forecasts_granite.parquet"
 BACKTEST_FILE = DATA_DIR / "forecast_backtest_metrics.parquet"
 
-from granite_config import DEFAULT_MODEL  # canonical Granite model id
+from granite_config import DEFAULT_MODEL, hf_model_cached  # canonical Granite model id
 
 from ttm_features import (  # noqa: E402
     build_panel,
@@ -282,7 +282,8 @@ def load_granite_model(model_name: str = DEFAULT_MODEL, base: str = "ibm"):
             model.load_state_dict(state["model"])
         else:
             # IBM base
-            model = TinyTimeMixerForPrediction.from_pretrained(model_name)
+            model = TinyTimeMixerForPrediction.from_pretrained(
+                model_name, local_files_only=hf_model_cached(model_name))
         model.eval()
         _model, _model_name, _model_base = model, model_name, base
         return model, "granite"
@@ -292,7 +293,8 @@ def load_granite_model(model_name: str = DEFAULT_MODEL, base: str = "ibm"):
             import torch  # noqa: F401
 
             print(f"Loading via transformers: {model_name}")
-            model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+            model = AutoModel.from_pretrained(model_name, trust_remote_code=True,
+                                              local_files_only=hf_model_cached(model_name))
             model.eval()
             _model, _model_name, _model_base = model, model_name, base
             return model, "transformers"
@@ -617,7 +619,8 @@ def cmd_forecast(args):
                 ckpt_ch = int(state.get("n_channels", 1))
                 ckpt_rpt = bool(state.get("rpt", False))
                 ckpt_exog = bool(state.get("exog", False)) or ckpt_ch >= 4
-                base_cfg = AutoConfig.from_pretrained(gd.DEFAULT_MODEL)
+                base_cfg = AutoConfig.from_pretrained(gd.DEFAULT_MODEL,
+                                                      local_files_only=hf_model_cached())
                 base_cfg.num_input_channels = ckpt_ch
                 if ckpt_rpt:
                     base_cfg.resolution_prefix_tuning = True
@@ -627,7 +630,8 @@ def cmd_forecast(args):
                     # count / RPT) so the state dict matches — deepcopying the
                     # general 1-channel model would size-mismatch silently.
                     regime_model = type(model).from_pretrained(
-                        gd.DEFAULT_MODEL, config=base_cfg, ignore_mismatched_sizes=True)
+                        gd.DEFAULT_MODEL, config=base_cfg, ignore_mismatched_sizes=True,
+                        local_files_only=hf_model_cached())
                 else:
                     regime_model = _copy.deepcopy(model)
                 regime_model.load_state_dict(state["model"], strict=False)

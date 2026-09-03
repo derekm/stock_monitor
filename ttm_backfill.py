@@ -275,6 +275,14 @@ def _clean_price_frame(prices: pd.DataFrame, recent_trading_days: int | None = N
         raise ValueError(f"_clean_price_frame: missing column {price_col!r}")
     need = ["ticker", "date", price_col]
     df = prices.drop_duplicates(subset=need).copy()
+    # Non-finite closes (missing/partial pulls, NaN from conflict merges) poison
+    # every downstream window: log-return NaN escapes the spike filter below
+    # (NaN.abs() > limit is False, so those rows survive) and training loss
+    # turns NaN at a random step. Drop them here, before any window math.
+    df = df[np.isfinite(df[price_col]) & (df[price_col] > 0)]
+    n_nonfinite = len(prices.drop_duplicates(subset=need)) - len(df)
+    if n_nonfinite:
+        print(f"  [_clean] dropped {n_nonfinite} non-finite/<=0 price rows", flush=True)
     if recent_trading_days is not None and recent_trading_days > 0:
         df = (
             df.sort_values(["ticker", "date"])
@@ -376,6 +384,12 @@ def build_windows(cfg: DataConfig, prices: pd.DataFrame) -> dict[str, list[tuple
                 c = s[k: k + C]
                 tgt = s[k + C: k + C + H]
                 if len(c) == C and len(tgt) == H:
+                    # Flat / non-finite context windows poison TTM's instance
+                    # norm (scale=0/NaN) and surface as NaN loss at a random
+                    # step (observed step 109 in the 2026-09-02 cron run).
+                    if not (np.isfinite(c).all() and np.isfinite(tgt).all()
+                            and float(np.ptp(c)) > 0.0):
+                        continue
                     wins_by_ticker.setdefault(tk, []).append((c, tgt, tk))
         elif cfg.pad_short:
             idxs = range(H, len(s) + 1)
@@ -408,7 +422,9 @@ def make_model(context_length: int = CONTEXT, prediction_length: int = HORIZON,
     otherwise the IBM pretrained weights seed the new architecture.
     """
     from tsfm_public.models.tinytimemixer import TinyTimeMixerConfig, TinyTimeMixerForPrediction
-    cfg = TinyTimeMixerConfig.from_pretrained(gd.DEFAULT_MODEL)
+    from granite_config import hf_model_cached
+    cfg = TinyTimeMixerConfig.from_pretrained(gd.DEFAULT_MODEL,
+                                              local_files_only=hf_model_cached())
     cfg.context_length = context_length
     cfg.prediction_length = prediction_length
     cfg.patch_length = patch_length
@@ -501,6 +517,16 @@ def train_checkpoint(wins, tc: TrainConfig, device, out_dir: Path, name: str,
     n = len(wins)
     meta = {**(meta or {}), "name": name, "n": n, "out_dir": str(out_dir)}
     step, t0 = _train_loop(model, dl, tc, device, cb, meta)
+    if step < tc.steps:
+        # NaN/inf loss aborted the loop — the state dict is unlearned or
+        # partially-corrupt. Do NOT persist it: a poisoned checkpoint would
+        # warm-start every downstream regime (2026-09-02 cron: NaN at step
+        # 109 on global, then padded crashed resolving it).
+        print(f"  ABORTED: no checkpoint written for {name} after NaN/inf "
+              f"loss at step {step}", flush=True)
+        if cb and getattr(cb, "on_train_abort", None):
+            cb.on_train_abort({"name": name, "step": step, "n": n})
+        return None
     d = date.today().isoformat().replace("-", "")
     out_path = out_dir / f"{name}_{d}.pt"
     # Only move an internally-created model to CPU before saving (memory). A
@@ -546,12 +572,17 @@ def score_windows(model, wins, device) -> float:
 # =============================================================================
 def _resolve_warm_sd(regime_name: str, regimes: list[RegimeConfig],
                      device, short_warm: str = "padded"):
-    """Return the warm-start state dict for a regime, based on its warm_from."""
+    """Return the warm-start state dict for a regime, based on its warm_from.
+
+    `regime_name` here IS the warm_from name (e.g. "global") — the source
+    regime whose checkpoint seeds the next one. "pretrained" is a sentinel,
+    not a regime, so it falls out to None (no warm-start)."""
+    import torch
     by_name = {r.name: r for r in regimes}
-    warm_from = regimes[by_name[regime_name].warm_from] if regime_name in by_name else None
-    if warm_from is None or regime_name == "pretrained":
+    if regime_name not in by_name or regime_name == "pretrained":
         return None
-    ckpt = gd.latest_ckpt_in(warm_from.out_dir)
+    src = by_name[regime_name]
+    ckpt = gd.latest_ckpt_in(src.out_dir)
     if ckpt is None:
         return None
     return torch.load(ckpt, map_location=device)

@@ -147,6 +147,11 @@ def build_windows(cache: pd.DataFrame, tickers: list[str] | None = None):
             ctx = s[st: st + CONTEXT]
             tgt = s[st + CONTEXT: st + CONTEXT + HORIZON]
             if len(ctx) == CONTEXT and len(tgt) == HORIZON:
+                # Flat/non-finite context windows break TTM instance-norm
+                # (scale=0 -> NaN loss). Same guard as ttm_backfill.build_windows.
+                if not (np.isfinite(ctx).all() and np.isfinite(tgt).all()
+                        and float(np.ptp(ctx)) > 0.0):
+                    continue
                 wins.append((ctx, tgt))
     return wins
 

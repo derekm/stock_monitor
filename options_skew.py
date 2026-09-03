@@ -125,6 +125,9 @@ def main():
         else:
             tickers = []
     df = build(tickers, max_tickers=args.max_tickers)
+    if df.empty:
+        print("=== Options skew / put-call (0 tickers — yfinance chain fetch failed or empty) ===")
+        return
     print(f"=== Options skew / put-call ({len(df)} tickers) ===")
     cols = [c for c in ["ticker", "date", "spot", "atm_iv", "skew", "put_call_vol", "expiry"] if c in df.columns]
     print(df[cols].sort_values("ticker").to_string(index=False))

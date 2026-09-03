@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
 import time
@@ -98,6 +99,13 @@ def run_job(name: str) -> bool:
     print(f"\n══ {name} ══", flush=True)
     t0 = time.time()
     try:
+        # Disk preflight: several jobs (crisis_correlation, export) write
+        # 0.5-2 GB intermediates and OSError 112 mid-job if the drive fills.
+        # Failing loudly here beats failing at step 2000 of a 20-minute job.
+        free_gb = shutil.disk_usage(DATA_DIR).free / 1e9
+        if free_gb < 12:
+            print(f"WARNING: only {free_gb:.1f} GB free on {DATA_DIR} — "
+                  f"heavy jobs (crisis, export, bogle) may OSError 112", flush=True)
         # -u on the child and flush=True on every parent print: when this runner
         # is redirected to a file (nohup / start /B / cron), block buffering made
         # the log look empty for the whole run — dag_remainder.log sat at 42 bytes
