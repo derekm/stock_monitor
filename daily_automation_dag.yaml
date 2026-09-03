@@ -301,12 +301,6 @@ jobs:
     timeout: 7200
     desc: "3B per-ticker press lines from mentions on Intel Iris Xe Vulkan (.venv-xpu)"
 
-  news_notes:
-    python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
-    cmd: ["ticker_news.py", "--notes", "--save"]
-    timeout: 7200
-    desc: "3B desk notes on Intel Iris Xe Vulkan (.venv-xpu); mentions already done upstream"
-
   llm_forecast:
     python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
     cmd: ["forecast_llm.py"]
@@ -375,9 +369,8 @@ dependencies:
   # overlap the news stages; all 3B stages run on Vulkan .venv-xpu.
   news_mentions: [ticker_news]
   news_press: [news_mentions]
-  news_notes: [news_press]
   expected_returns: [preferred, market_cap]
-  llm_forecast: [news_press, news_notes, hmm, preferred, implied_r, damodaran, taleb_fragility, market_cap, momentum, expected_returns]
+  llm_forecast: [news_press, hmm, preferred, implied_r, damodaran, taleb_fragility, market_cap, momentum, expected_returns]
   export: [aggregate, technical, econ_cal, est_rev, shadow,
             taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility,
             taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride,

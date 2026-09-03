@@ -554,7 +554,7 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `ticker_news.parquet` | `ticker_news.py` | Sentiment / alternative |
 | `ticker_news_articles.parquet` | `ticker_news.py` | Sentiment / alternative |
 | `ticker_news_mentions.parquet` | `ticker_news.py` | Sentiment / alternative |
-| `ticker_news_notes.parquet` | `ticker_news.py --notes` | Sentiment / alternative |
+| `ticker_news_press.parquet` | `ticker_news.py --press` | Sentiment / alternative |
 || `options_skew.parquet` | `options_skew.py` | Options |
 || `signal_model_oos.csv` | `signal_model.py` | Aggregate |
 || `signal_model_weights.csv` | `signal_model.py` | Aggregate |

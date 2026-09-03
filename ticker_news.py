@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-ticker_news.py — Daily per-ticker news ingest + optional 3B desk note.
+ticker_news.py — Daily per-ticker news ingest + 3B mention/press pipeline.
 
 Polygon firehose (preferred), yfinance per-ticker fallback. Append-only
-`ticker_news.parquet`. Optional `--notes` writes one-sentence press copy
-into `ticker_news_notes.parquet` for the LLM brief (not a price call).
-Mentions/notes 3B is Intel Iris Xe (Vulkan, `.venv-xpu`), not MX550.
+`ticker_news.parquet`. `--mentions` extracts per-article mentions with the
+3B; `--press` renders one gated sentence per ticker for the LLM brief (not
+a price call). Both 3B stages run on Intel Iris Xe (Vulkan, `.venv-xpu`),
+not MX550.
 
 Usage:
     python ticker_news.py --save
     python ticker_news.py --save --days 2
-    python ticker_news.py --notes --save --tickers AAPL,NVDA,META
+    python ticker_news.py --press --save --tickers AAPL,NVDA,META
 """
 from __future__ import annotations
 
@@ -32,7 +33,6 @@ import requests
 from analytics_common import DATA_DIR
 
 OUT_NEWS = DATA_DIR / "ticker_news.parquet"
-OUT_NOTES = DATA_DIR / "ticker_news_notes.parquet"
 OUT_ARTICLES = DATA_DIR / "ticker_news_articles.parquet"
 OUT_MENTIONS = DATA_DIR / "ticker_news_mentions.parquet"
 OUT_PRESS = DATA_DIR / "ticker_news_press.parquet"
@@ -401,53 +401,6 @@ def extract_articles(save: bool = True, limit: int | None = None) -> pd.DataFram
     return idx
 
 
-_NAME_TOKS: dict[str, list[str]] | None = None
-
-
-def _name_tokens(ticker: str) -> list[str]:
-    global _NAME_TOKS
-    if _NAME_TOKS is None:
-        _NAME_TOKS = {}
-        p = DATA_DIR / "monitored_stocks.parquet"
-        if p.exists():
-            m = pd.read_parquet(p)
-            if "ticker" in m.columns and "name" in m.columns:
-                for t, n in zip(m["ticker"].astype(str).str.upper(), m["name"].astype(str)):
-                    toks = [t]
-                    for w in n.replace(",", " ").split():
-                        w = "".join(ch for ch in w if ch.isalpha())
-                        if len(w) >= 4:
-                            toks.append(w.upper())
-                    _NAME_TOKS[t] = toks
-    return _NAME_TOKS.get(ticker, [ticker])
-
-
-def _headline_pack(news: pd.DataFrame, ticker: str, asof: date, lookback: int = 7) -> str | None:
-    g = news[news["ticker"].astype(str) == ticker]
-    if g.empty:
-        return None
-    lo = asof - timedelta(days=lookback)
-    g = g.copy()
-    g["_d"] = [_as_date(v) for v in g["published_date"]]
-    g = g[g["_d"].notna() & (g["_d"] >= lo) & (g["_d"] <= asof)]
-    if g.empty:
-        return None
-    g = g.rename(columns={"_d": "pub_d"})
-    toks = _name_tokens(ticker)
-    pat = "|".join(re.escape(t) for t in toks)
-    named = g[g["headline"].astype(str).str.upper().str.contains(pat, na=False, regex=True)]
-    if len(named):
-        g = named
-    g = g.sort_values(["pub_d", "published_utc"], ascending=False).drop_duplicates("headline").head(3)
-    lines = [f"{d.isoformat()}: {h}" for d, h in zip(g["pub_d"], g["headline"])]
-    return " | ".join(lines)
-
-
-NEWS_SYSTEM = """You write one sentence of press context for a buy-side brief.
-Use only the provided per-company summaries. Do not invent numbers, prices, or filings.
-Do not make a buy or sell call. Press is not leftover cash.
-JSON keys: note (string, one sentence)."""
-
 MENTION_SYSTEM = """You list companies this article actually discusses.
 Return JSON only. Each mention is one company the article covers in substance, not a passing ticker tag.
 Do not invent tickers. If the company has no listed ticker, leave ticker empty.
@@ -520,35 +473,6 @@ def _get_news_llm(n_ctx: int | None = None):
                 _news_llm = Llama(**kwargs)
         _news_ctx = ctx
     return _news_llm
-
-
-def _llm_note(headlines: str) -> str:
-    from llama_cpp import LlamaGrammar
-
-    schema = {
-        "type": "object",
-        "properties": {"note": {"type": "string"}},
-        "required": ["note"],
-    }
-    llm = _get_news_llm(_n_ctx_for_prompts(NEWS_SYSTEM, headlines))
-    grammar = LlamaGrammar.from_json_schema(json.dumps(schema))
-    if hasattr(llm, "reset"):
-        llm.reset()
-    out = llm.create_chat_completion(
-        messages=[
-            {"role": "system", "content": NEWS_SYSTEM},
-            {"role": "user", "content": headlines},
-        ],
-        max_tokens=60,
-        temperature=0.3,
-        grammar=grammar,
-    )
-    text = out["choices"][0]["message"]["content"]
-    m = json.loads(text[text.find("{") : text.rfind("}") + 1])
-    note = str(m.get("note") or "").strip()
-    if not note:
-        raise ValueError("empty note")
-    return note[:220]
 
 
 def _llm_mentions(headline: str, body: str, hint: str) -> list[dict]:
@@ -763,64 +687,11 @@ def write_press(save: bool, use_llm: bool) -> pd.DataFrame:
     return out
 
 
-def _mention_pack(mentions: pd.DataFrame, ticker: str, asof: date, lookback: int = 7) -> str | None:
-    g = mentions[mentions["ticker"].astype(str) == ticker]
-    if g.empty:
-        return None
-    lo = asof - timedelta(days=lookback)
-    g = g.copy()
-    g["_d"] = [_as_date(v) for v in g["published_date"]]
-    g = g[g["_d"].notna() & (g["_d"] >= lo) & (g["_d"] <= asof)]
-    if g.empty:
-        return None
-    g = g.sort_values("_d", ascending=False).drop_duplicates("summary").head(4)
-    return " | ".join(str(s).strip() for s in g["summary"] if str(s).strip())
-
-
-def write_notes(tickers: list[str] | None, save: bool, use_llm: bool) -> pd.DataFrame:
-    news = _load_news()
-    if news.empty:
-        print("No ticker_news.parquet — ingest first")
-        return pd.DataFrame()
-    asof = date.today()
-    mentions = pd.read_parquet(OUT_MENTIONS) if OUT_MENTIONS.exists() else pd.DataFrame()
-    names = tickers or sorted(news["ticker"].astype(str).unique())
-    rows = []
-    for i, t in enumerate(names, 1):
-        pack = _mention_pack(mentions, t, asof) if len(mentions) else None
-        if not pack:
-            pack = _headline_pack(news, t, asof)
-        if not pack:
-            continue
-        if use_llm:
-            try:
-                note = _llm_note(pack)
-            except Exception as e:
-                print(f"  skip {t}: {e}", flush=True)
-                continue
-        else:
-            note = pack
-            if len(note) > 220:
-                note = note[:217] + "..."
-        rows.append({"ticker": t, "as_of_date": asof, "n_headlines": pack.count("|") + 1, "news_note": note})
-        print(f"{i}/{len(names)} {t} {note[:80]}", flush=True)
-    out = pd.DataFrame(rows)
-    if save and len(out):
-        old = pd.read_parquet(OUT_NOTES) if OUT_NOTES.exists() else pd.DataFrame()
-        if len(old):
-            old = old[~old["ticker"].astype(str).isin(set(out["ticker"]))]
-            out = pd.concat([old, out], ignore_index=True)
-        _write_dates(out, OUT_NOTES, "as_of_date")
-        print(f"Wrote {OUT_NOTES} ({len(out)} rows)")
-    return out
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--save", action="store_true")
     ap.add_argument("--days", type=int, default=2)
     ap.add_argument("--tickers", type=str, default="")
-    ap.add_argument("--notes", action="store_true")
     ap.add_argument("--extract", action="store_true", help="Fetch article bodies into news_articles/")
     ap.add_argument("--mentions", action="store_true", help="LLM mention JSON per article (needs GPU)")
     ap.add_argument("--press", action="store_true", help="Render per-ticker press lines from mentions (needs GPU)")
@@ -829,7 +700,7 @@ def main():
     args = ap.parse_args()
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()] or None
     lim = args.limit or None
-    if (args.mentions or args.notes or args.press) and not args.no_llm:
+    if (args.mentions or args.press) and not args.no_llm:
         _pin_intel_vulkan()
     if args.extract:
         extract_articles(save=args.save, limit=lim)
@@ -840,14 +711,7 @@ def main():
     if args.press:
         write_press(save=args.save, use_llm=not args.no_llm)
         return
-    if args.notes:
-        if not OUT_NEWS.exists():
-            ingest(args.days, tickers, args.save)
-        if not args.no_llm:
-            write_mentions(args.save, use_llm=True, limit=lim)
-        write_notes(tickers, args.save, use_llm=not args.no_llm)
-    else:
-        ingest(args.days, tickers, args.save)
+    ingest(args.days, tickers, args.save)
 
 
 if __name__ == "__main__":

@@ -87,7 +87,6 @@ IMPLIED_R = DATA_DIR / "implied_r_screen.parquet"
 FRAGILITY = DATA_DIR / "fragility_screen.parquet"
 ER_DECOMP = DATA_DIR / "expected_returns_decomp.parquet"
 FRAGILITY_VETO = DATA_DIR / "fragility_veto.parquet"
-NEWS_NOTES = DATA_DIR / "ticker_news_notes.parquet"
 NEWS_PRESS = DATA_DIR / "ticker_news_press.parquet"
 OUT = DATA_DIR / "forecast_llm.parquet"
 
@@ -162,7 +161,6 @@ def load_damodaran_context(as_of=None):
             (IMPLIED_R, ["implied_r_clean_pct"]),
             (FRAGILITY, ["fragile_flag"]),
             (FRAGILITY_VETO, ["veto_flag"]),
-            (NEWS_NOTES, ["news_note"]),
             (NEWS_PRESS, ["press_line"]),
         ):
             snap = _ticker_snap(path, cols, as_of=as_of)
@@ -428,7 +426,7 @@ def build_brief(ticker, mkt_ret_21d, row, ticker_ret_21d=None, profile: JobProfi
         bits.append(f"Over the last quarter {_fmt_px('the shares', float(r63))}.")
         out.mom = True
 
-    nn = row.get("press_line") or row.get("news_note")
+    nn = row.get("press_line")
     if isinstance(nn, str) and nn.strip():
         bits.append(profile.press_lead + nn.strip().rstrip(".") + ".")
         out.press = True

@@ -27,21 +27,20 @@ Do not commit `news_articles/`. Mentions stay JSON arrays in parquet.
 python ticker_news.py --save --days 2          # firehose + extract bodies
 python ticker_news.py --extract --save         # bodies only (resume)
 python ticker_news.py --mentions --save        # 3B JSON mentions on Intel Vulkan
-python ticker_news.py --notes --save           # mention packs → one-sentence notes
-python ticker_news.py --notes --save --no-llm  # packs only, no GGUF
+python ticker_news.py --press --save           # per-ticker press lines from mentions
 ```
 
-`--mentions` / `--notes` without `--no-llm` load the 3B on Intel Iris Xe
+`--mentions` / `--press` without `--no-llm` load the 3B on Intel Iris Xe
 (Vulkan0, `.venv-xpu`). Equivalent to:
 
 `llama-cli -m Llama-3.2-3B-Instruct-Q4_K_M.gguf -ngl 99 -c <sys+user> -ub 256 -b 256 -ctk q8_0 -ctv q8_0 --flash-attn -t 6`
 
 `-c` is system (extraction goals + JSON schema) plus user (article text), cap 32768.
-Forecast stays on CUDA MX550. Pin `GGML_VK_VISIBLE_DEVICES=0`.
+Pin `GGML_VK_VISIBLE_DEVICES=0`.
 
 ```bash
 C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe ticker_news.py --mentions --save
-C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe ticker_news.py --notes --save
+C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe ticker_news.py --press --save
 ```
 
 CUDA `.venv` refuses the news LLM (no `ggml-vulkan.dll`). Measured 2026-08-30
@@ -62,12 +61,13 @@ JSON. Mention output is still a JSON array.
 - `ticker_news_articles.parquet` — object index
 - `ticker_news_mentions.parquet` — article_id (FK), url, ticker, company, summary. Check in.
   Not the body.
-- `ticker_news_notes.parquet` — ticker, as_of_date, news_note
 - `ticker_news_press.parquet` — ticker, press_line, n_mentions, as_of_date
 
-All 3B stages (`--mentions`, `--press`, `--notes`) run on Intel Iris Xe
+All 3B stages (`--mentions`, `--press`) run on Intel Iris Xe
 Vulkan (`.venv-xpu`). The daily DAG runs them serially after Docling and
-before `llm_forecast`: firehose+extract → mentions → press → notes → forecast.
+before `llm_forecast`: firehose+extract → mentions → press → forecast.
+Notes (`--notes`, headline-only desk notes) were removed — mentions +
+press replaced them; the LLM brief reads `press_line` only.
 
 ## Related
 
