@@ -354,7 +354,7 @@ dependencies:
   preferred: [update_prices]
   crisis: [update_prices]
   factor_rot: [update_prices]
-  taleb_ride_now: [taleb_sector_shock, taleb_subindustry_regime]
+  taleb_ride_now: [taleb_sector_shock, taleb_subindustry_regime, update_prices]
   update_prices: []
   acq_backfill: [update_prices]
   bogle_tmi: [update_prices, market_cap]
