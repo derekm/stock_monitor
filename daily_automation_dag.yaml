@@ -246,8 +246,8 @@ jobs:
 
   update_prices:
     cmd: ["update_prices.py", "fetch", "--days", "5", "--save"]
-    timeout: 600
-    desc: "Daily prices (Polygon primary, yfinance fallback)"
+    timeout: 3600
+    desc: "Daily prices (Polygon primary, yfinance fallback); root gate — all price readers depend on it"
 
   bogle_tmi:
     cmd: ["build_bogle_funds.py", "--fund", "tmi", "--save", "--years", "10"]
@@ -332,7 +332,7 @@ dependencies:
   cross: [peer, earnings, pairs]
   aggregate: [cross, earnings, pairs, peer, preferred]
   technical: [aggregate]
-  econ_cal: []
+  econ_cal: [update_prices]
   est_rev: []
   shadow: [preferred, aggregate]
   damodaran: [preferred]
@@ -346,17 +346,17 @@ dependencies:
   taleb_shock: [hmm]
   taleb_sector_shock: [hmm]
   taleb_shock_ride: [taleb_sector_shock]
-  taleb_arista: []
+  taleb_arista: [update_prices]
   taleb_subindustry_regime: [taleb_sector_shock]
   taleb_barbell: [taleb_fragility, taleb_ergodic]
   taleb_optionality: [aggregate, preferred]
-  hmm: []
-  preferred: []
-  crisis: []
-  factor_rot: []
-  taleb_ride_now: []
+  hmm: [update_prices]
+  preferred: [update_prices]
+  crisis: [update_prices]
+  factor_rot: [update_prices]
+  taleb_ride_now: [taleb_sector_shock, taleb_subindustry_regime]
   update_prices: []
-  acq_backfill: []
+  acq_backfill: [update_prices]
   bogle_tmi: [update_prices, market_cap]
   bogle_qmi: [update_prices, market_cap]
   bogle_qmi_strict: [update_prices, market_cap]
