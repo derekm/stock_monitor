@@ -31,9 +31,11 @@ except ImportError:
 DATA_DIR = Path(__file__).parent
 DAG_FILE = DATA_DIR / "daily_automation_dag.yaml"
 
-# Ceiling for jobs whose YAML timeout is null. Generous enough for the heaviest
-# unset job (export / damodaran) but finite, so a wedged job fails its wave
-# instead of stalling the run forever. Override per job in the YAML.
+# Jobs run WITHOUT timeouts (None = wait forever). These are multi-hour
+# pipelines (update_prices yfinance fallback, export, the Vulkan LLM stages);
+# a timeout kills them mid-write and leaves a partial wave that retries the
+# same slow job next run. Failfast is not worth torn outputs — let jobs
+# finish. Keep DEFAULT_JOB_TIMEOUT = None.
 DEFAULT_JOB_TIMEOUT = None
 
 

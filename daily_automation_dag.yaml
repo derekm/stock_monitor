@@ -1,310 +1,251 @@
 # daily_automation_dag.yaml
 # DAG configuration for run_daily_automation.py
-# Each job: command (list), timeout_seconds (optional), description
+# Each job: command (list), optional python interpreter override, description.
+# Jobs intentionally have NO timeouts — let long pipelines finish.
 
 jobs:
   hmm:
     cmd: ["hmm_regime_detection.py", "--n-states", "3", "--save"]
-    timeout: null
     desc: "HMM regime detection (3 states)"
 
   market_cap:
     cmd: ["add_daily_marketcap.py", "--years", "10", "--save"]
-    timeout: 600
     desc: "PIT daily_mcap.parquet (shares × adj_close); does not write daily_prices"
 
   portfolio_report:
     cmd: ["portfolio_report.py", "--refresh"]
-    timeout: 180
     desc: "Mark personal holdings from trades + last adj_close"
 
   rebalance:
     cmd: ["rebalance_calendar.py", "--months", "18", "--save"]
-    timeout: null
     desc: "Rebalance calendar"
 
   preferred:
     cmd: ["preferred_metrics.py", "--save"]
-    timeout: null
     desc: "Preferred metrics (Buffett + Damodaran)"
 
   implied_r:
     cmd: ["implied_r_screen.py", "--save"]
-    timeout: null
     desc: "Implied cost of capital screen"
 
   momentum:
     cmd: ["momentum_analytics.py", "--save"]
-    timeout: null
     desc: "Momentum analytics"
 
   inclusion:
     cmd: ["inclusion_criteria.py", "--explore-defensive", "--save"]
-    timeout: null
     desc: "Inclusion criteria"
 
   stress:
     cmd: ["stress_dual_pass.py", "--save"]
-    timeout: null
     desc: "Stress dual pass"
 
   crisis:
     cmd: ["crisis_correlation.py", "--save"]
-    timeout: null
     desc: "Crisis correlation"
 
   factor_rot:
     cmd: ["factor_rotation_defense.py", "run", "--save"]
-    timeout: null
     desc: "Factor rotation defense"
 
   risk_enrich:
     cmd: ["risk_enrich.py"]
-    timeout: null
     desc: "Risk enrichment"
 
   rolling:
     cmd: ["rolling_window_analysis.py", "--universe", "all", "--save"]
-    timeout: null
     desc: "Rolling window analysis"
 
   rolling_corr:
     cmd: ["rolling_correlation_windows.py", "--save"]
-    timeout: null
     desc: "Rolling correlation windows"
 
   tail_hedge:
     cmd: ["tail_risk_hedging.py", "--save"]
-    timeout: null
     desc: "Tail risk hedging"
 
   allpairs:
     cmd: ["allpairs_correlations.py", "--window", "63", "--step", "21", "--max-assets", "80"]
-    timeout: null
     desc: "All-pairs correlations"
 
   fund_snap:
     cmd: ["fundamentals_history.py", "snapshot"]
-    timeout: null
     desc: "Fundamentals snapshot"
 
   screen_bt:
     cmd: ["fundamentals_history.py", "backtest-screens"]
-    timeout: null
     desc: "Backtest screens"
 
   backfill_new_tickers:
     cmd: ["acquisition_backfill.py"]
-    timeout: 1800
-    desc: "Backfill new tickers (30min timeout)"
+    desc: "Backfill new tickers (no timeout — pipelines run to completion)"
 
   dupont:
     cmd: ["dupont_analysis.py", "--save"]
-    timeout: null
     desc: "DuPont analysis"
 
   growth:
     cmd: ["growth_tech_analytics.py"]
-    timeout: null
     desc: "Growth tech analytics"
 
   peer:
     cmd: ["peer_analytics.py", "--save"]
-    timeout: null
     desc: "Peer analytics"
 
   earnings:
     cmd: ["earnings_catalyst.py", "--save"]
-    timeout: null
     desc: "Earnings catalyst"
 
   pairs:
     cmd: ["pair_engine.py", "--save", "--max-per-group", "0", "--n-folds", "3"]
-    timeout: 7200
     desc: "Pair engine"
 
   cross:
     cmd: ["cross_section.py", "--save"]
-    timeout: null
     desc: "Cross-section"
 
   aggregate:
     cmd: ["signal_aggregator.py", "--save"]
-    timeout: null
     desc: "Signal aggregator"
 
   technical:
     cmd: ["technical_signals.py", "--save"]
-    timeout: null
     desc: "Technical signals"
 
   econ_cal:
     cmd: ["economic_calendar.py", "--save"]
-    timeout: null
     desc: "Economic calendar"
 
   est_rev:
     cmd: ["estimate_revisions.py", "--save"]
-    timeout: null
     desc: "Estimate revisions"
 
   shadow:
     cmd: ["shadow_book.py", "--save"]
-    timeout: null
     desc: "Shadow book"
 
   damodaran:
     cmd: ["damodaran_quality.py", "--all"]
-    timeout: null
     desc: "Damodaran quality"
 
   lookthrough:
     cmd: ["lookthrough_engine.py"]
-    timeout: null
     desc: "Lookthrough engine"
 
   acq_backfill:
     cmd: ["acquisition_backfill.py"]
-    timeout: null
     desc: "Acquisition backfill"
 
   taleb_tail:
     cmd: ["tail_index.py"]
-    timeout: null
     desc: "Taleb tail index"
 
   taleb_gap:
     cmd: ["gap_risk.py"]
-    timeout: null
     desc: "Taleb gap risk"
 
   taleb_iv_skew:
     cmd: ["iv_skew.py", "--skip-existing"]
-    timeout: 600
     desc: "Taleb IV skew"
 
   taleb_ergodic:
     cmd: ["ergodicity_ruin.py"]
-    timeout: null
     desc: "Taleb ergodicity/ruin"
 
   taleb_fragility:
     cmd: ["fragility_screen.py"]
-    timeout: null
     desc: "Taleb fragility screen"
 
   options_skew:
     cmd: ["options_skew.py", "--save"]
-    timeout: 900
     desc: "Options skew snapshot + PIT history (NOT back-fillable: yfinance serves only the live chain, so a missed day is lost forever)"
 
   taleb_minsky:
     cmd: ["macro_fragility.py", "--save"]
-    timeout: null
     desc: "Taleb Minsky"
 
   taleb_shock:
     cmd: ["macro_shock.py", "--save"]
-    timeout: null
     desc: "Taleb shock"
 
   taleb_sector_shock:
     cmd: ["macro_sector_shock.py", "--save"]
-    timeout: null
     desc: "Taleb sector shock"
 
   taleb_shock_ride:
     cmd: ["shock_ride.py", "--save"]
-    timeout: null
     desc: "Taleb shock ride"
 
   taleb_arista:
     cmd: ["arista.py", "--save"]
-    timeout: null
     desc: "Taleb ARISTA"
 
   taleb_ride_now:
     cmd: ["ride_now.py", "--save"]
-    timeout: null
     desc: "Taleb ride now"
 
   taleb_subindustry_regime:
     cmd: ["subindustry_regime.py", "--save"]
-    timeout: null
     desc: "Taleb subindustry regime"
 
   taleb_barbell:
     cmd: ["barbell_check.py"]
-    timeout: null
     desc: "Taleb barbell"
 
   taleb_optionality:
     cmd: ["hidden_optionality_audit.py"]
-    timeout: null
     desc: "Taleb optionality"
 
 
   update_prices:
     cmd: ["update_prices.py", "fetch", "--days", "5", "--save"]
-    timeout: 3600
     desc: "Daily prices (Polygon primary, yfinance fallback); root gate — all price readers depend on it"
 
   bogle_tmi:
     cmd: ["build_bogle_funds.py", "--fund", "tmi", "--save", "--years", "10"]
-    timeout: 300
     desc: "Bogle Total Market Index (cap-weighted + Fisher chained)"
 
   bogle_qmi:
     cmd: ["build_bogle_funds.py", "--fund", "qmi", "--save", "--years", "10"]
-    timeout: 600
     desc: "Bogle QMI — NM quality top quintile + Fisher"
 
   bogle_qmi_strict:
     cmd: ["build_bogle_funds.py", "--fund", "qmi_strict", "--save", "--years", "10"]
-    timeout: 600
     desc: "Bogle QMI strict — Buffett 15/15/1.0 + Fisher"
 
   bogle_bpi:
     cmd: ["build_bogle_funds.py", "--fund", "bpi", "--save", "--years", "10"]
-    timeout: 300
     desc: "Bogle Bond Proxy Index (defensive sectors, equal-weight)"
 
   bogle_pmi:
     cmd: ["build_bogle_funds.py", "--fund", "pmi", "--save", "--years", "10"]
-    timeout: 1800
     desc: "Bogle Pink Market Index (TMI's OTC/gray complement, EW + 5% cap)"
 
   regime_clusters:
     cmd: ["regime_clustering.py", "--metric", "corr", "--linkage", "ward", "--years", "5", "--save"]
-    timeout: 900
     desc: "HRP/codependence asset clusters vs GICS dispersion (Phase 1.5)"
 
   expected_returns:
     cmd: ["expected_returns.py", "--save"]
-    timeout: 3600
     desc: "Ilmanen 4-pillar ER panel → expected_returns_decomp.parquet (forecast input)"
 
   ticker_news:
     cmd: ["ticker_news.py", "--save", "--days", "2"]
-    timeout: 3600
     desc: "Polygon news firehose + article fetch (Docling) → news_articles bucket; CPU wheel, no LLM"
 
   news_mentions:
     python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
     cmd: ["ticker_news.py", "--mentions", "--save"]
-    timeout: 7200
     desc: "3B mention JSON per article on Intel Iris Xe Vulkan (.venv-xpu); after Docling"
 
   news_press:
     python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
     cmd: ["ticker_news.py", "--press", "--save"]
-    timeout: 7200
     desc: "3B per-ticker press lines from mentions on Intel Iris Xe Vulkan (.venv-xpu)"
 
   llm_forecast:
     python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
     cmd: ["forecast_llm.py"]
-    timeout: 21600
     desc: "3B desk forecast (coverage-gated, 3 profiles) on Intel Iris Xe Vulkan (.venv-xpu); reads press lines"
 
 # dependencies: job -> list of jobs that must finish first

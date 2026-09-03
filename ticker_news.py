@@ -243,9 +243,9 @@ def ingest(days: int, tickers: list[str] | None, save: bool) -> pd.DataFrame:
         out = pd.concat([old, new], ignore_index=True) if len(old) else new
         _write_dates(out, OUT_NEWS, "published_date")
         print(f"Wrote {OUT_NEWS} ({len(out)} rows)")
-        extract_articles(save=True)
+        extract_articles(save=True, recent_days=days)
     elif save:
-        extract_articles(save=True)
+        extract_articles(save=True, recent_days=days)
     return new
 
 
@@ -351,12 +351,23 @@ def fetch_article(url: str) -> tuple[str, str]:
     return last, ""
 
 
-def extract_articles(save: bool = True, limit: int | None = None) -> pd.DataFrame:
+def extract_articles(save: bool = True, limit: int | None = None,
+                     recent_days: int | None = None) -> pd.DataFrame:
     news = _load_news()
     if news.empty:
         print("No ticker_news.parquet — ingest first")
         return pd.DataFrame()
     uniq = news.drop_duplicates("article_id")
+    if recent_days is not None:
+        # Daily runs must NOT re-crawl the whole unfetched backlog (1,899
+        # bodies were stuck behind globenewswire/zacks timeouts, extending
+        # ticker_news past its window on 2026-09-03). Only articles inside
+        # the ingest window get body fetches; older gaps stay for a
+        # dedicated backfill (`--extract` without a window).
+        cutoff = date.today() - timedelta(days=max(0, int(recent_days)))
+        before = len(uniq)
+        uniq = uniq[uniq["published_date"].map(_as_date) >= cutoff]
+        print(f"  extract window: {cutoff.isoformat()}+ ({len(uniq)} of {before} articles)", flush=True)
     rows = []
     n = 0
     for rec in uniq.itertuples(index=False):

@@ -263,7 +263,21 @@ def fetch_yfinance(tickers: list[str], days: int, batch_size: int = 50, max_work
 # ---------------------------------------------------------------------------
 
 def cmd_fetch(args):
-    api_key = os.environ.get("POLYGON_API_KEY", "")
+    # Polygon key must resolve even when the DAG runner's env lacks it:
+    # same .env fallback chain as ticker_news._polygon_key() (the DAG parent
+    # process has no exported key, so os.environ alone silently degrades to a
+    # whole-universe yfinance crawl and times out).
+    api_key = os.environ.get("POLYGON_API_KEY", "").strip()
+    if not api_key:
+        for p in (DATA_DIR / ".env", DATA_DIR.parent / ".env"):
+            if p.exists():
+                for line in p.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("POLYGON_API_KEY="):
+                        api_key = line.split("=", 1)[1].strip()
+                        break
+            if api_key:
+                break
     source = args.source if hasattr(args, 'source') and args.source else "auto"
 
     use_polygon = (source in ("auto", "polygon")) and api_key
@@ -315,9 +329,12 @@ def cmd_fetch(args):
             frames.append(poly_df)
             print(f"Polygon: {len(poly_df)} rows")
 
-    # Fallback: yfinance for tickers Polygon missed (or if no Polygon key)
-    if use_yfinance:
-        if use_polygon and missing_dates:
+    # Fallback: yfinance for tickers Polygon missed (or if no Polygon key).
+    # Guarded on missing_dates: when the hive is already current this crawl of
+    # the FULL universe has nothing to fill and previously ran for >1h every
+    # day (observed DAG timeout 2026-09-03 after wave-0 gating).
+    if use_yfinance and missing_dates:
+        if use_polygon:
             # Find tickers Polygon didn't cover for missing dates
             poly_tickers = set(poly_df["ticker"].unique()) if len(poly_df) else set()
             yf_tickers = [t for t in all_tickers if t not in poly_tickers]
