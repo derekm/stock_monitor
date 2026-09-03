@@ -12,6 +12,7 @@ not KV order-dependent. One long parquet; `profile` is the identity.
 from __future__ import annotations
 import argparse
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -46,7 +47,12 @@ def _get_llm(model_path: Path | None = None):
             del _llm
             _llm = None
         MODEL_PATH = path
-        print(f"Initializing {path.name} on NVIDIA MX550...")
+        # Pinned to Intel Iris Xe Vulkan (.venv-xpu) like the news stages.
+        # MX550/CUDA measured ~6 tok/s decode (2 GB VRAM spill) vs ~15 on Xe;
+        # the runner launches this under .venv-xpu — do not "fix" to CUDA.
+        os.environ.setdefault("GGML_VK_VISIBLE_DEVICES", "0")
+        os.environ.setdefault("GGML_VK_PREFER_HOST_MEMORY", "1")
+        print(f"Initializing {path.name} on Intel Iris Xe (Vulkan0)...")
         kwargs = dict(
             model_path=str(path),
             n_gpu_layers=99,

@@ -279,15 +279,39 @@ jobs:
     timeout: 900
     desc: "HRP/codependence asset clusters vs GICS dispersion (Phase 1.5)"
 
+  expected_returns:
+    cmd: ["expected_returns.py", "--save"]
+    timeout: 3600
+    desc: "Ilmanen 4-pillar ER panel → expected_returns_decomp.parquet (forecast input)"
+
   ticker_news:
     cmd: ["ticker_news.py", "--save", "--days", "2"]
-    timeout: 600
-    desc: "Polygon news firehose → ticker_news.parquet (append-only)"
+    timeout: 3600
+    desc: "Polygon news firehose + article fetch (Docling) → news_articles bucket; CPU wheel, no LLM"
 
-  ticker_news_notes:
+  news_mentions:
+    python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
+    cmd: ["ticker_news.py", "--mentions", "--save"]
+    timeout: 7200
+    desc: "3B mention JSON per article on Intel Iris Xe Vulkan (.venv-xpu); after Docling"
+
+  news_press:
+    python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
+    cmd: ["ticker_news.py", "--press", "--save"]
+    timeout: 7200
+    desc: "3B per-ticker press lines from mentions on Intel Iris Xe Vulkan (.venv-xpu)"
+
+  news_notes:
+    python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
     cmd: ["ticker_news.py", "--notes", "--save"]
     timeout: 7200
-    desc: "3B press notes on Intel Vulkan (.venv-xpu); not MX550"
+    desc: "3B desk notes on Intel Iris Xe Vulkan (.venv-xpu); mentions already done upstream"
+
+  llm_forecast:
+    python: "C:/Users/derek/src/stockmagic/.venv-xpu/Scripts/python.exe"
+    cmd: ["forecast_llm.py"]
+    timeout: 21600
+    desc: "3B desk forecast (coverage-gated, 3 profiles) on Intel Iris Xe Vulkan (.venv-xpu); reads press lines"
 
 # dependencies: job -> list of jobs that must finish first
 dependencies:
@@ -346,7 +370,14 @@ dependencies:
   bogle_pmi: [update_prices, market_cap]
   regime_clusters: [market_cap]
   ticker_news: []
-  ticker_news_notes: [ticker_news]
+  # Serial news chain: firehose+Docling -> mentions -> press -> notes -> LLM
+  # forecast. Forecast consumes the freshest press lines, so it must never
+  # overlap the news stages; all 3B stages run on Vulkan .venv-xpu.
+  news_mentions: [ticker_news]
+  news_press: [news_mentions]
+  news_notes: [news_press]
+  expected_returns: [preferred, market_cap]
+  llm_forecast: [news_press, news_notes, hmm, preferred, implied_r, damodaran, taleb_fragility, market_cap, momentum, expected_returns]
   export: [aggregate, technical, econ_cal, est_rev, shadow,
             taleb_tail, taleb_gap, taleb_iv_skew, taleb_ergodic, taleb_fragility,
             taleb_minsky, taleb_shock, taleb_sector_shock, taleb_shock_ride,

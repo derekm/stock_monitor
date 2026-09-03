@@ -50,6 +50,10 @@ def load_dag() -> tuple[dict, dict]:
     jobs = {}
     for name, spec in dag.get("jobs", {}).items():
         cmd = spec.get("cmd", [])
+        # Per-job interpreter override. Everything downstream of Docling
+        # (mentions, press, notes, llm_forecast) is pinned to the Vulkan
+        # .venv-xpu; ingest/docling/indicators stay on the runner default.
+        py = spec.get("python") or sys.executable
         timeout = spec.get("timeout")
         if timeout is not None:
             timeout = int(timeout)
@@ -60,7 +64,7 @@ def load_dag() -> tuple[dict, dict]:
             # went 15 days stale with no failure surfaced. An unset timeout now
             # gets a ceiling; explicit per-job values still win.
             timeout = DEFAULT_JOB_TIMEOUT
-        jobs[name] = (cmd, timeout)
+        jobs[name] = (py, cmd, timeout)
     
     deps = {}
     for name, dep_list in dag.get("dependencies", {}).items():
@@ -90,7 +94,7 @@ def _wave(name: str, cache: dict[str, int] | None = None) -> int:
 
 
 def run_job(name: str) -> bool:
-    cmd, timeout = JOBS[name]
+    py, cmd, timeout = JOBS[name]
     print(f"\n══ {name} ══", flush=True)
     t0 = time.time()
     try:
@@ -100,7 +104,7 @@ def run_job(name: str) -> bool:
         # while jobs were executing, so a stalled run was indistinguishable from
         # a dead one.
         res = subprocess.run(
-            [sys.executable, "-u"] + cmd,
+            [py, "-u"] + cmd,
             cwd=DATA_DIR,
             timeout=timeout,
             capture_output=True,
