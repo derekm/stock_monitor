@@ -63,6 +63,11 @@ JSON. Mention output is still a JSON array.
 - `ticker_news_mentions.parquet` — article_id (FK), url, ticker, company, summary. Check in.
   Not the body.
 - `ticker_news_notes.parquet` — ticker, as_of_date, news_note
+- `ticker_news_press.parquet` — ticker, press_line, n_mentions, as_of_date
+
+All 3B stages (`--mentions`, `--press`, `--notes`) run on Intel Iris Xe
+Vulkan (`.venv-xpu`). The daily DAG runs them serially after Docling and
+before `llm_forecast`: firehose+extract → mentions → press → notes → forecast.
 
 ## Related
 
