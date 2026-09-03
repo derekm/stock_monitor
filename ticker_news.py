@@ -117,7 +117,14 @@ def fetch_polygon(days: int, api_key: str) -> pd.DataFrame:
     pages = 0
     while next_url and pages < 40:
         pages += 1
-        r = requests.get(next_url, timeout=30)
+        # Polygon news rate-limits hard (429); back off and retry the page
+        # instead of aborting the whole firehose pull.
+        for attempt in range(6):
+            r = requests.get(next_url, timeout=30)
+            if r.status_code == 429:
+                time.sleep(min(8 * (2 ** attempt), 120))
+                continue
+            break
         r.raise_for_status()
         payload = r.json()
         for it in payload.get("results") or []:
