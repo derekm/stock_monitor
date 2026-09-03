@@ -22,7 +22,11 @@ import pandas as pd
 import numpy as np
 
 DATA_DIR = Path(__file__).parent
-FORECAST = DATA_DIR / "forecast_llm.parquet"
+# Multi-date writer output first (conformal needs >= 2 as-of dates);
+# fall back to the single-date live desk file only if the timeseries is absent.
+FORECAST = DATA_DIR / "forecast_llm_timeseries.parquet"
+if not FORECAST.exists():
+    FORECAST = DATA_DIR / "forecast_llm.parquet"
 STATES = DATA_DIR / "hmm_regime_states.parquet"
 OUT = DATA_DIR / "conformal_bands.parquet"
 
@@ -57,6 +61,10 @@ def main():
         return
     fc = pd.read_parquet(FORECAST)
     fc["date"] = pd.to_datetime(fc["date"]).dt.date
+    # Drop as-of dates killed mid-run (partial universe => biased calibration
+    # subset). A complete date carries the modal (date, ticker, profile) count.
+    counts = fc.groupby("date").size()
+    fc = fc[fc["date"].isin(counts[counts == counts.max()].index)]
 
     mkt = _market_daily()
     fc["outcome"] = _forward_outcome(fc, mkt)

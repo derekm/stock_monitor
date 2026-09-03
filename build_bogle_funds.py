@@ -71,14 +71,19 @@ BPI_REBAL_FREQ = "Y"   # Annual (was "A", deprecated in pandas)
 
 
 def load_prices(tickers: list[str] | None = None, years: float | None = None) -> pd.DataFrame:
-    """Load price panel: date x ticker -> close price. Snapshot first (Windows lock)."""
-    import shutil, tempfile
-    print(f"Loading prices from {PRICES_FILE}...")
-    snap = Path(tempfile.gettempdir()) / "bogle_daily_prices/"
-    shutil.copy2(PRICES_FILE, snap)
-    df = pd.read_parquet(snap, columns=["ticker", "date", "close"])
-    if tickers:
-        df = df[df["ticker"].isin(tickers)]
+    """Load price panel: date x ticker -> close price. Hive READ directly
+    (daily_prices/ is a partitioned directory; shutil.copy2 on a dir snapshot
+    is what left this builder on stale pre-migration data)."""
+    print(f"Loading prices from hive {PRICES_FILE}...")
+    frames = []
+    for fp in sorted(PRICES_FILE.glob("year=*/month=*/*.parquet")):
+        df = pd.read_parquet(fp, columns=["ticker", "date", "close"])
+        if tickers:
+            df = df[df["ticker"].isin(tickers)]
+        if len(df):
+            frames.append(df)
+    df = pd.concat(frames, ignore_index=True)
+    df["date"] = pd.to_datetime(df["date"]).dt.normalize()
     if years:
         cutoff = df["date"].max() - timedelta(days=int(years * 365.25))
         df = df[df["date"] >= cutoff]
@@ -204,10 +209,11 @@ def liquid_names(prices: pd.DataFrame, tickers: list[str],
                 mcap["date"] = pd.to_datetime(mcap["date"]).dt.normalize()
                 # coverage per ticker and last-date existence
                 last_date = pd.to_datetime(sub.index.max()).normalize()
-                # pivot for coverage
+                # pivot for coverage. Coverage is measured WITHIN the mcap
+                # panel's own span (daily_mcap starts 2016): measuring it
+                # against the full price history (1990+) dilutes every name
+                # below the 0.8 threshold and the gate passes nobody.
                 mp = mcap.pivot(index="date", columns="ticker", values="market_cap")
-                # align to price index
-                mp = mp.reindex(index=pd.to_datetime(sub.index).normalize())
                 mcap_cov = mp.notna().mean()
                 has_last = mp.loc[last_date].notna() if last_date in mp.index else pd.Series(False, index=mp.columns)
                 # tickers without mcap history are not liquid for TMI

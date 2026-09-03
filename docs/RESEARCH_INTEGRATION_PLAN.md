@@ -254,16 +254,18 @@ Hard constraints from Phase 1, still in force:
 
 ### 10. Faber — GTAA + Shareholder Yield
 
-**Status:** Not started. `sector_prices` levels are junk (Health Care −0.000123, Industrials 181,957). `build_bogle_funds.py` is equity indexes, not GTAA.
+**Status:** **Measured (2026-09-02) — DD-tool bars PASS, CAGR bar FAIL → GTAA is a drawdown tool, not a return engine. Shareholder-yield coverage FAILS the 500-name bar (287 of 365 coverage names pay dividends).** `gtaa_trend.py`: real asset-class ETFs from the price hive (SPY/IWM, EFA/VWO, VNQ/RWR, AGG/LQD/TIP/HYG, GLD/SLV/DBC/GSG/DBA, BIL cash), class index = EW member returns, Faber 10-month SMA, monthly rebalance, weights lagged one month. Same-window 2016-09→2026-08 (TMI starts 2016): GTAA **CAGR +4.3%, vol 6.6%, Sharpe 0.07** vs TMI **CAGR +23.8%, vol 17.0%, Sharpe 1.11** (TMI is survivorship-gated to today's large caps — the bar's TMI is inflated, but even so GTAA's absolute CAGR is far below its equity benchmark). Crisis windows: maxDD ratio **0.30 (2020), 0.17 (2022)** — both under the 0.70 bar. Latest sleeve 2026-08-31: US equity, intl equity, REITs, commodities in-trend (0.2 each), bonds out → cash. Shareholder yield = dividend yield only (no buyback column exists anywhere in fundamentals; `shareholder_yield.parquet` = ticker × date × div_yield_ttm, 287 payers median 1.45%).
+
+Also fixed on the way: `build_bogle_funds.py` `load_prices` was `shutil.copy2` on the hive dir (broken since migration) → now hive-reads directly; mcap gate coverage measured within the `daily_mcap.parquet` span (2016+) instead of diluting against 1990+ price history (gate passed 0 names before). TMI rebuilt from the hive — the old file was drag-only (1000→997, ret_gross all 0) which had been silently weakening every "vs TMI" comparison in items 8/9.
 
 **Checklist:**
-- [ ] Define asset-class universe from `daily_prices/`: map tickers → asset class (equity/bond/REIT/commodity/gold/USD) using a maintained mapping table
-- [ ] Build equal-weight daily returns per asset class (PIT, no survivorship bias)
-- [ ] Implement 10-month SMA trend per class (trend = price > SMA200; signal = 1/0; monthly rebalance)
-- [ ] Backtest GTAA: trend-following allocation vs TMI (equal-weight equity) on full history
-- [ ] Compute shareholder yield from fundamentals panel: `dividend_yield + net_buyback_yield` when both columns exist; fallback to dividend yield only
-- [ ] Validate shareholder yield coverage ≥ 500 names on latest date
-- [ ] Write `gtaa_sleeve.parquet` (date × asset_class × trend_flag, weight); `shareholder_yield.parquet` (ticker × date × sy)
+- [x] Asset-class mapping maintained in `gtaa_trend.py` `ASSET_CLASSES` (ETFs verified in hive; grid 1993→2026)
+- [x] EW class indices from real ETF closes (no `sector_prices`)
+- [x] 10-month SMA trend per class, monthly rebalance, weights lagged (no lookahead)
+- [x] GTAA backtest vs TMI same-window (TMI rebuilt real, see above)
+- [x] Shareholder yield = dividend yield only (no buyback column; fallback path per plan)
+- [ ] Coverage ≥ 500 names — **FAIL: 287 payers** (universe is 365 coverage names; most non-payers are growth/tech)
+- [x] `gtaa_sleeve.parquet`, `gtaa_backtest.parquet`, `shareholder_yield.parquet` written
 
 **Do not:** Trend `sector_prices` levels. Do not put GTAA state in the LLM brief.
 
