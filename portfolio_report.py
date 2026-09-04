@@ -24,14 +24,36 @@ def rebuild_holdings() -> pd.DataFrame:
     trades = pd.read_parquet(TRADES_FILE)
     trades["filled_datetime"] = pd.to_datetime(trades["filled_datetime"])
     buys = trades[trades["transaction_type"].isin(["Buy", "Dividend Reinvestment"])]
-    holdings = buys.groupby("ticker").agg(
+    buys_agg = buys.groupby("ticker").agg(
         shares=("quantity", "sum"),
         cost_basis=("notional", "sum"),
         first_fill=("filled_datetime", "min"),
         last_fill=("filled_datetime", "max"),
         n_trades=("trade_id", "count"),
     ).reset_index()
-    holdings["avg_cost"] = holdings["cost_basis"] / holdings["shares"]
+    buys_agg["avg_cost"] = buys_agg["cost_basis"] / buys_agg["shares"]
+
+    # Net out sells at avg cost: shares and cost basis both shrink.
+    sells = trades[trades["transaction_type"].str.lower() == "sell"]
+    if len(sells):
+        sells_agg = sells.groupby("ticker").agg(shares_sold=("quantity", "sum"),
+                                                proceeds=("notional", "sum")).reset_index()
+        buys_agg = buys_agg.merge(sells_agg, on="ticker", how="left")
+        buys_agg["shares_sold"] = buys_agg["shares_sold"].fillna(0.0)
+        buys_agg["proceeds"] = buys_agg["proceeds"].fillna(0.0)
+        buys_agg["shares"] = buys_agg["shares"] - buys_agg["shares_sold"]
+        buys_agg["cost_basis"] = buys_agg["cost_basis"] - buys_agg["avg_cost"] * buys_agg["shares_sold"]
+        buys_agg = buys_agg[buys_agg["shares"] > 0]  # fully-sold names drop out
+        buys_agg = buys_agg.drop(columns=["shares_sold", "proceeds"])
+
+    holdings = buys_agg
+    if not len(holdings):
+        holdings["last_close"] = []
+        holdings["market_value"] = []
+        holdings["unrealized_pl"] = []
+        holdings["unrealized_pl_pct"] = []
+        holdings["weight"] = []
+        return holdings
 
     tickers = holdings["ticker"].astype(str).str.upper().tolist()
     prices = pd.read_parquet(PRICES_FILE, columns=["date", "ticker", "adj_close", "close"])
