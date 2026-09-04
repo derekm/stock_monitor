@@ -286,6 +286,28 @@ def load_membership() -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def liquid_listed_tickers() -> set[str]:
+    """Tickers in the LIQUID, exchange-listed universe (NMS/NYQ/NCM/NGM/ASE
+    common stocks) — the same gate family as regime_clustering and the Bogle
+    TMI. Wide-pivot consumers MUST apply this BEFORE pivoting daily_prices:
+    the raw hive holds ~16k tickers, so an unfiltered pivot + correlation
+    matrix is ~2 GB per copy and OOMs the box (2026-09-04 crisis, factor_rot).
+    """
+    stocks = DATA_DIR / "monitored_stocks.parquet"
+    if not stocks.exists():
+        # no metadata -> cannot gate; caller must handle
+        return set()
+    ms = pd.read_parquet(stocks, columns=["ticker", "instrument_type", "exchange"])
+    ms["ticker"] = ms["ticker"].astype(str).str.upper()
+    listed = set(ms.loc[
+        ms.get("instrument_type", pd.Series("stock", index=ms.index)).eq("stock")
+        & ms.get("exchange", pd.Series("NMS", index=ms.index)).astype(str)
+          .isin({"NMS", "NYQ", "NCM", "NGM", "ASE"}),
+        "ticker",
+    ])
+    return listed
+
+
 def load_preferred() -> pd.DataFrame:
     p = DATA_DIR / "preferred_metrics.parquet"
     return pd.read_parquet(p) if p.exists() else pd.DataFrame()

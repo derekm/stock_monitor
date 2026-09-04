@@ -98,9 +98,20 @@ def load_panels():
     mkt, cum, mom_score, vol63, ann)."""
     if "panels" in _CACHE:
         return _CACHE["panels"]
+    # Liquid, exchange-listed filter BEFORE the wide pivot: the raw hive is
+    # 16,145 tickers -> the 16k-wide pivot + ffill + log-diff chain held
+    # several ~2 GB copies and OOM'd the 2026-09-04 run (numpy reindex
+    # failed on a (20, 16144) block). The same listed gate as regime_clustering
+    # / Bogle TMI cuts it to ~4.7k names. float32 halves each copy again.
+    from analytics_common import liquid_listed_tickers
+    listed = liquid_listed_tickers()
     prices = pd.read_parquet(PRICES, columns=["date", "ticker", "close"])
+    prices["ticker"] = prices["ticker"].astype(str).str.upper()
+    prices = prices[prices["ticker"].isin(listed)]
+    print(f"liquid universe: {prices['ticker'].nunique()} names")
     prices["date"] = pd.to_datetime(prices["date"])
     wide = prices.pivot_table(index="date", columns="ticker", values="close").sort_index().ffill()
+    wide = wide.astype(np.float32)
     rets = np.log(wide / wide.shift(1)).dropna(how="all")
     mkt = rets.mean(axis=1)
     vol21 = mkt.rolling(21).std() * np.sqrt(252)

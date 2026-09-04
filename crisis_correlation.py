@@ -53,20 +53,30 @@ def vectorized_corr(block: np.ndarray) -> np.ndarray:
     std[std == 0] = 1
     block = block / std
     
-    # Correlation via matrix multiplication
+    # Correlation via matrix multiplication — keeps float32 so the symmetric
+    # 4.7k² matrix stays ~0.18 GB instead of 2.1 GB (float64 16k²) per copy.
     n = block.shape[0]
     # Handle NaN by treating as 0 (already centered)
-    block_clean = np.nan_to_num(block, nan=0.0)
-    corr = block_clean.T @ block_clean / (n - 1)
+    block_clean = np.nan_to_num(block, nan=0.0).astype(np.float32)
+    corr = (block_clean.T @ block_clean) / (n - 1)
+    corr = corr.astype(np.float32)
     np.fill_diagonal(corr, 1.0)
     return corr
 
 
 def run(save: bool = True):
-    # Load data with Polars
-    prices = pl.read_parquet(PRICES, columns=["date", "ticker", "close"])
-    from analytics_common import load_membership
-    stocks = pl.from_pandas(load_membership())
+    # Load data with Polars — read ONLY liquid, exchange-listed names so the
+    # wide pivot and the pairwise correlation matrix stay bounded. The raw
+    # hive is 16,145 tickers: a 16k x 16k float64 corr matrix is ~2.1 GB PER
+    # copy (this job OOM'd the 2026-09-04 run). The liquid gate (same family
+    # as regime_clustering / Bogle TMI) drops it to ~4.7k names -> ~0.18 GB.
+    from analytics_common import liquid_listed_tickers
+    listed = liquid_listed_tickers()
+    prices = pl.scan_parquet(PRICES)
+    prices = prices.filter(pl.col("ticker").is_in(listed)) \
+                   .select(["date", "ticker", "close"]) \
+                   .collect(engine="streaming")
+    print(f"liquid universe: {prices['ticker'].n_unique()} names")
     
     # Pivot to wide format (date x ticker) using Polars
     wide = prices.pivot(index="date", on="ticker", values="close").sort("date")
@@ -75,9 +85,10 @@ def run(save: bool = True):
     wide_ff = wide.fill_null(strategy="forward")
     tickers = [c for c in wide_ff.columns if c != "date"]
     
-    # Convert to numpy for fast correlation computation
+    # Convert to numpy for fast correlation computation — float32 halves the
+    # correlation matrix footprint (16k² -> 2.1 GB; 4.7k² -> 0.18 GB).
     dates = pd.to_datetime(wide_ff["date"].to_numpy()).to_numpy()
-    price_matrix = wide_ff.select(pl.exclude("date")).to_numpy()
+    price_matrix = wide_ff.select(pl.exclude("date")).to_numpy().astype(np.float32)
     
     # Compute log returns
     log_rets = np.log(price_matrix[1:] / price_matrix[:-1])
@@ -154,7 +165,10 @@ def run(save: bool = True):
         print(f"{name:12s} days={n:4d}  avg_corr={avg:.3f}")
     
     # Sector-level crisis vs calm (vectorized)
-    sector_map = {row["ticker"]: row["sector"] for row in stocks.iter_rows(named=True) if row["sector"] is not None}
+    from analytics_common import load_membership
+    _stocks = load_membership()
+    sector_map = {row["ticker"]: row["sector"] for row in _stocks.iterrows()
+                  if pd.notna(row[1].get("sector"))}
     
     for regime_name, mask in [("calm", calm), ("crisis_any", crisis)]:
         c, valid_tickers, n = corr_in(mask)
