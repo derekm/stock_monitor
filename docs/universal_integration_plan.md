@@ -55,9 +55,29 @@ breaches (SMCI) and limit-order fills.**
 
 ## 3. Aggressive profit-taking limit sell ladder
 
-Place GTC limit sells above last close, sized to harvest the trim (shares_delta
-from the sizing plan) in thirds — **front-loaded for the vetoed name**. Rules:
-limit fill = trim executed at the rung; if the stock gaps through, the next rung
+**Brokerage note (Robinhood/retail brokers): fractional orders are MARKET-ONLY
+— limit orders require whole shares.** So the ladder below is conceptual: the
+only *resting limit* orders you can place are whole-share sells on positions
+large enough (BAYRY). All fractional trims must be executed as market orders
+at the moment you choose — you give up the resting-price ladder, not the
+direction. The SMCI front-load was likewise executed as ONE market sell
+(0.4 sh @ $39.72, filled 2026-09-04 — above both rungs, recorded trade 17).
+
+Executable version for the current book (prices/deltas recalc'd 2026-09-04):
+
+| ticker | hold (sh) | trim | executable order |
+|---|---|---|---|
+| BAYRY | 3.00 | −1.03 | whole-share LIMIT sell 1.0 sh (e.g. ≥ $15.00) — the only resting-sell |
+| CAG | 2.31 | −0.55 | fractional MARKET sell ~0.5 sh |
+| KHC | 1.31 | −0.24 | fractional MARKET sell ~0.25 sh |
+| T | 1.47 | −0.16 | skip (≈0) or fractional MARKET sell ~0.15 sh |
+| HMC | 1.10 | −0.14 | fractional MARKET sell ~0.15 sh |
+| MOS | 1.30 | −0.13 | fractional MARKET sell ~0.13 sh |
+| HPQ | 1.00 | +0.14 | fractional MARKET buy ~$4 (small, no limit available) |
+| PFE | 1.03 | +0.06 | skip (≈0) |
+| SMCI | 0.66 | (add vetoed) | **done — 0.4 already sold, hold the rest** |
+
+Rules: limit fill = trim executed at the rung; if the stock gaps through, the next rung
 up catches the remainder (aggressive-by-design, no trailing stop needed).
 
 | ticker | last | trim (sh) | rung 1 (⅓) | rung 2 (⅓) | rung 3 (⅓) | note |
