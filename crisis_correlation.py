@@ -167,8 +167,8 @@ def run(save: bool = True):
     # Sector-level crisis vs calm (vectorized)
     from analytics_common import load_membership
     _stocks = load_membership()
-    sector_map = {row["ticker"]: row["sector"] for row in _stocks.iterrows()
-                  if pd.notna(row[1].get("sector"))}
+    sector_map = {r["ticker"]: r["sector"] for _, r in _stocks.iterrows()
+                  if pd.notna(r.get("sector"))}
     
     for regime_name, mask in [("calm", calm), ("crisis_any", crisis)]:
         c, valid_tickers, n = corr_in(mask)
