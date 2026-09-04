@@ -56,17 +56,28 @@ def save_prices(df, whole_hive: bool = False):
         df = df.copy()
         df["ticker"] = df["ticker"].astype(str)
     df = df.copy()
-    # Keep datetime64[ms] (matches the hive's stored schema, including the
-    # 20:00 session rows) — do NOT normalize to python date here.
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values(["date", "ticker"]).drop_duplicates(subset=["date", "ticker"], keep="last")
+    # Collapse to calendar DATE (date32[day] in parquet) — the daily bar has
+    # no time component; Polygon's 20:00 UTC = 16:00 ET close is the same
+    # calendar day, and yfinance emits midnight. A datetime64[ms] column here
+    # re-introduces the 00:00/20:00 two-row split (migration 2026-09-03).
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+    # Canonical-source dedupe: if both polygon and yfinance carry the same
+    # (date, ticker), keep Polygon (primary, self-consistent adj_close); the
+    # reverse fills only where Polygon has nothing.
+    rank = df.get("source", pd.Series("", index=df.index)).fillna("").astype(str).map(
+        lambda s: {"polygon": 2, "yfinance": 1}.get(s, 0))
+    df["_r"] = rank
+    df = df.sort_values(["date", "ticker", "_r"], kind="stable")
+    df = df.drop_duplicates(subset=["date", "ticker"], keep="last")
+    df = df.drop(columns=["_r"])
     # Append-only partitioned write. pq.write_table(root_dir) treats the
     # directory as a FILE and fails WinError 5 ("open daily_prices denied") —
     # that exact error killed every real save in the 2026-09-03 DAG run.
     # Write each year/month group as its own partition file; readers glob
     # *.parquet under daily_prices/, so nothing is rewritten or deleted.
-    df["_year"] = df["date"].dt.year
-    df["_month"] = df["date"].dt.month
+    dt = pd.to_datetime(df["date"])
+    df["_year"] = dt.dt.year
+    df["_month"] = dt.dt.month
     n_total = 0
     for (y, m), g in df.groupby(["_year", "_month"]):
         part = PRICES_DIR / f"year={y}" / f"month={m}"
@@ -76,7 +87,12 @@ def save_prices(df, whole_hive: bool = False):
                 old.unlink()
         out = part / f"{uuid.uuid4().hex}-0.parquet"
         body = g.drop(columns=["_year", "_month"])
-        pq.write_table(pa.Table.from_pandas(body, preserve_index=False), out)
+        # Explicit date32[day] at the sink: pandas/pyarrow can otherwise
+        # infer an object column of python dates as TIMESTAMP or string.
+        dates = pa.array([d if hasattr(d, "year") else None for d in body["date"]], type=pa.date32())
+        cols = {c: pa.array(body[c], from_pandas=True) for c in body.columns if c != "date"}
+        table = pa.Table.from_arrays([dates] + list(cols.values()), names=["date"] + list(cols.keys()))
+        pq.write_table(table, out)
         n_total += len(g)
         print(f"  wrote {len(g)} rows -> {out.name} (year={y} month={m})")
     print(f"Saved {n_total} price rows to {PRICES_DIR}")
@@ -180,7 +196,10 @@ def polygon_bulk_day(day: date, api_key: str) -> pd.DataFrame:
     res = r.json()
     rows = []
     for b in res.get("results", []):
-        ts = pd.Timestamp(b["t"], unit="ms", tz="UTC").tz_convert(None)
+        # Daily bar -> calendar date. Polygon's timestamp (t) is the exchange
+        # session time (20:00 UTC = 16:00 ET close); keep only the date, never
+        # the time-of-day, so the hive stays date-native.
+        ts = pd.Timestamp(b["t"], unit="ms", tz="UTC").date()
         rows.append({
             "date": ts,
             "ticker": b["T"],

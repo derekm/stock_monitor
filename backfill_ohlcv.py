@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import random
 import time
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -64,26 +65,43 @@ def load_prices():
 
 
 def save_prices(df: pd.DataFrame):
-    """Write the price table without ever silently dropping existing rows.
+    """Persist backfilled price rows into the daily_prices hive.
 
-    DO NOT normalize Timestamp -> date here. `daily_prices/` is
-    datetime64[ms] and carries 112,217 rows stamped 20:00 alongside the 00:00
-    session rows; mapping to calendar dates and then de-duplicating on
-    (date, ticker) collapsed 22,980 of them, so a run that touched 9 OTC
-    tickers silently deleted ~8 rows each from 6,465 LISTED tickers (MSFT,
-    MMM, COST...). The date key is preserved exactly as stored, and the
-    de-dup is a no-op guard rather than a lossy normalization.
+    Canonical convention (2026-09-03): daily bars are (date, ticker) with the
+    date stored as date32[day] — no time component. The old 20:00-vs-00:00
+    split was an artifact: Polygon stamps the close at 20:00 UTC (=16:00 ET),
+    yfinance at midnight; both are the SAME daily bar. Rows for the same
+    (date, ticker) prefer `source == polygon` (primary, self-consistent
+    adj_close), then yfinance, then anything else.
     """
     df = df.copy()
     if isinstance(df["ticker"].dtype, pd.CategoricalDtype):
         df["ticker"] = df["ticker"].astype(str)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+    rank = df.get("source", pd.Series("", index=df.index)).fillna("").astype(str).map(
+        lambda s: {"polygon": 2, "yfinance": 1}.get(s, 0))
+    df["_r"] = rank
     before = len(df)
-    df = df.sort_values(["date", "ticker"]).drop_duplicates(subset=["date", "ticker"], keep="last")
+    df = df.sort_values(["date", "ticker", "_r"], kind="stable")
+    df = df.drop_duplicates(subset=["date", "ticker"], keep="last")
+    df = df.drop(columns=["_r"])
     if len(df) != before:
-        print(f"  WARNING save_prices de-dup removed {before - len(df)} exact (date,ticker) duplicates")
-    table = pa.Table.from_pandas(df, preserve_index=False)
-    pq.write_table(table, PRICES)
-    print(f"  saved {len(df)} rows -> {PRICES}")
+        print(f"  WARNING save_prices de-dup removed {before - len(df)} (date,ticker) duplicates")
+    dt = pd.to_datetime(df["date"])
+    df["_year"] = dt.dt.year
+    df["_month"] = dt.dt.month
+    n = 0
+    for (y, m), g in df.groupby(["_year", "_month"]):
+        part = Path(PRICES) / f"year={y}" / f"month={m}"
+        part.mkdir(parents=True, exist_ok=True)
+        out = part / f"{uuid.uuid4().hex}-0.parquet"
+        body = g.drop(columns=["_year", "_month"])
+        dates = pa.array([d if hasattr(d, "year") else None for d in body["date"]], type=pa.date32())
+        cols = {c: pa.array(body[c], from_pandas=True) for c in body.columns if c != "date"}
+        table = pa.Table.from_arrays([dates] + list(cols.values()), names=["date"] + list(cols.keys()))
+        pq.write_table(table, out)
+        n += len(g)
+    print(f"  saved {n} rows -> {PRICES}")
 
 
 def universe() -> list[str]:

@@ -28,6 +28,7 @@ TTM-ready notes:
 
 import argparse
 import sys
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -100,9 +101,23 @@ def save_prices(df: pd.DataFrame) -> None:
     else:
         df = df.drop_duplicates(subset=["date", "ticker"], keep="last")
     df = df.sort_values(["date", "ticker"])
-    table = pa.Table.from_pandas(df, preserve_index=False)
-    pq.write_table(table, PRICES_FILE)
-    print(f"✓ Saved {len(df)} total rows → {PRICES_FILE} (from {pre} pre-dedup, "
+    # Partitioned append write; pq.write_table to PRICES_FILE (a directory)
+    # fails WinError 5 on Windows ("open daily_prices denied").
+    dt = pd.to_datetime(df["date"])
+    df["_year"] = dt.dt.year
+    df["_month"] = dt.dt.month
+    n = 0
+    for (y, m), g in df.groupby(["_year", "_month"]):
+        part = Path(PRICES_FILE) / f"year={y}" / f"month={m}"
+        part.mkdir(parents=True, exist_ok=True)
+        out = part / f"{uuid.uuid4().hex}-0.parquet"
+        body = g.drop(columns=["_year", "_month"])
+        dates = pa.array([d if hasattr(d, "year") else None for d in body["date"]], type=pa.date32())
+        cols = {c: pa.array(body[c], from_pandas=True) for c in body.columns if c != "date"}
+        table = pa.Table.from_arrays([dates] + list(cols.values()), names=["date"] + list(cols.keys()))
+        pq.write_table(table, out)
+        n += len(g)
+    print(f"✓ Saved {n} total rows → {PRICES_FILE} (from {pre} pre-dedup, "
           f"{int(coll)} conflicting pairs reconciled)")
 
 
