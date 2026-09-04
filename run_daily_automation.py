@@ -144,7 +144,7 @@ def main():
     ap = argparse.ArgumentParser(description="Run daily analytics automation DAG")
     ap.add_argument("--only", help="comma-separated job names to run (plus deps)")
     ap.add_argument("--skip", help="comma-separated job names to skip")
-    ap.add_argument("--max-workers", type=int, default=4)
+    ap.add_argument("--max-workers", type=int, default=2)
     ap.add_argument("--list", action="store_true", help="list valid jobs and exit")
     args = ap.parse_args()
 

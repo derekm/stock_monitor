@@ -33,12 +33,8 @@ def rebuild_holdings() -> pd.DataFrame:
     ).reset_index()
     holdings["avg_cost"] = holdings["cost_basis"] / holdings["shares"]
 
-    import shutil, tempfile
-    snap = Path(tempfile.gettempdir()) / "ph_daily_prices/"
-    if not snap.exists():
-        shutil.copy2(PRICES_FILE, snap)
     tickers = holdings["ticker"].astype(str).str.upper().tolist()
-    prices = pd.read_parquet(snap, columns=["date", "ticker", "adj_close", "close"])
+    prices = pd.read_parquet(PRICES_FILE, columns=["date", "ticker", "adj_close", "close"])
     prices["ticker"] = prices["ticker"].astype(str).str.upper()
     prices = prices[prices["ticker"].isin(tickers)]
     prices["date"] = pd.to_datetime(prices["date"])

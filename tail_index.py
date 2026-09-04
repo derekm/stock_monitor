@@ -33,13 +33,8 @@ DATA_DIR = Path(__file__).resolve().parent
 
 
 def load_close(tickers=None):
-    import shutil, tempfile
-    snap = Path(tempfile.gettempdir()) / "ti_daily_prices/"
-    src = DATA_DIR / "daily_prices/"
-    if not snap.exists():
-        shutil.copy2(src, snap)
     cols = ["date", "ticker", "adj_close", "close"]
-    d = pd.read_parquet(snap, columns=cols)
+    d = pd.read_parquet(DATA_DIR / "daily_prices/", columns=cols)
     d["ticker"] = d["ticker"].astype(str).str.upper()
     if tickers:
         d = d[d["ticker"].isin([t.upper() for t in tickers])]

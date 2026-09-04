@@ -166,11 +166,15 @@ def detect_acquisitions_from_filings(cik: str, ticker: str) -> list[dict]:
     return acquisitions
 
 
-def detect_acquisitions_for_ticker(ticker: str) -> list[dict]:
+def detect_acquisitions_for_ticker(ticker: str, cik_map: dict | None = None) -> list[dict]:
     """
     Detect all acquisitions for a ticker using multiple SEC sources.
+    cik_map is passed in (loaded once by the caller) — re-loading the JSON
+    per ticker across a 16k-universe scan repeatedly spikes memory and caused
+    MemoryError in the 2026-09-04 DAG run.
     """
-    cik_map = load_cik_map()
+    if cik_map is None:
+        cik_map = load_cik_map()
     cik = ticker_to_cik(ticker, cik_map)
     
     if not cik:
@@ -478,10 +482,14 @@ def auto_detect_and_backfill(tickers: list[str] = None):
     
     total_acquisitions = 0
     
+    # Load the CIK map ONCE up front (16k-iteration scans must not re-read
+    # the JSON per ticker — repeated big allocations exhausted RAM on 2026-09-04).
+    cik_map = load_cik_map()
+    
     for i, ticker in enumerate(tickers):
         print(f"\n[{i+1}/{len(tickers)}] {ticker}")
         
-        acquisitions = detect_acquisitions_for_ticker(ticker)
+        acquisitions = detect_acquisitions_for_ticker(ticker, cik_map)
         
         if acquisitions:
             total_acquisitions += len(acquisitions)

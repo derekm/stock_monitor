@@ -335,6 +335,19 @@ def run(window: int = 126) -> None:
     # `date` is DATE on disk -> read as datetime.date; keep it a date.
     m = members(stocks)
     tickers = m["ticker"].tolist()
+    if not tickers:
+        # Empty sleeve (growth_tech_index has no members today) is not a
+        # failure — every cmd_* below would KeyError on an empty frame. Write
+        # empty outputs and return; upstream consumers already handle absent
+        # panels (same convention as options_skew's early return).
+        print("WARNING: growth_tech_index has no members — writing empty outputs.")
+        for out in ["growth_tech_vol_returns.parquet", "growth_tech_membership.parquet",
+                    "growth_tech_risk_models.parquet"]:
+            try:
+                pd.DataFrame().to_parquet(DATA_DIR / out)
+            except Exception:
+                pass
+        return
     wide, rets = load_panel(prices, tickers)
     print(f"Growth tech panel: {len(tickers)} tickers, {len(wide)} days "
           f"({wide.index.min()} → {wide.index.max()})")

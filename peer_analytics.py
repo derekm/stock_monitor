@@ -618,6 +618,14 @@ def generate_signals(
             pl.col("beta_vs_median").mean().alias("avg_beta_vs_median"),
         )
         signals = signals.join(beta_avg, on="ticker", how="left")
+    else:
+        # empty upstream (no group betas computed) — fabricate the columns so
+        # the beta_signal expression below degrades to NEUTRAL_BETA instead of
+        # raising ColumnNotFoundError at collect time.
+        signals = signals.with_columns([
+            pl.lit(False).alias("high_beta_any_group"),
+            pl.lit(False).alias("low_beta_any_group"),
+        ])
 
     # Composite signal scoring
     signals = signals.with_columns([
@@ -654,6 +662,8 @@ def generate_signals(
         .otherwise(pl.lit("PEER_AVERAGE"))
         .alias("peer_signal"),
 
+        # beta columns fabricated in the empty-upstream branch above — the
+        # expression is always safe now.
         pl.when(pl.col("high_beta_any_group"))
         .then(pl.lit("HIGH_BETA"))
         .when(pl.col("low_beta_any_group"))
