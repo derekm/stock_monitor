@@ -143,6 +143,11 @@ const TECH_GLOSSARY = {
     d: "Worst peak-to-trough decline in the equity curve. The ride rule's consistent win: mean maxDD −40% vs buy-hold −78%.",
     f: "maxDD = min_t [C(t) / max_{s≤t} C(s) − 1]",
   },
+  "universal": {
+    t: "Cover universal portfolio",
+    d: "No-lookahead mix you can compute today that matches the best constant-rebalanced portfolio in hindsight up to O(log n) regret (Cover 1991; Dirichlet-½ prior is minimax). Any backtest showing it beats the hindsight oracle at finite n is an implementation bug. Not alpha — the baseline forecasts must beat.",
+    f: "b_hat_k = ∫ b·S_{k-1}(b) dμ(b) / ∫ S_{k-1}(b) dμ(b); regret = ((m−1)/2)·log(n+1)",
+  },
   "oosc": {
     t: "Out-of-sample IC",
     d: "Spearman rank correlation between predicted and realized scores on held-out data (pass-5 rule: 5-fold temporal walk-forward). Weights signals by their OOS IC — never in-sample.",
@@ -549,6 +554,16 @@ document.addEventListener("DOMContentLoaded", attachPopovers);
     <div class="card" style="margin-bottom:1rem">
       <h3>Holdings <span class="info-ic" data-gloss="maxdd">i</span></h3>
       <div class="scroll"><table id="tbl-holdings"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3>Cover universal portfolio — recommended weights &amp; sizing <span class="info-ic" data-gloss="universal">i</span></h3>
+      <p style="color:var(--muted);font-size:0.8rem;margin:0 0 0.5rem">
+        Regret-optimal no-lookahead mix (Dirichlet-½ over all constant-rebalanced
+        portfolios). Target vs current holdings, delta shares at last close, gate
+        = 0.10% (Cover §10: trade iff ΔlnW &gt; ln(1+c)). One row per held name.
+      </p>
+      <div class="scroll" style="max-height:300px"><table id="tbl-universal"><thead></thead><tbody></tbody></table></div>
+      <div class="scroll" style="max-height:300px;margin-top:0.5rem"><table id="tbl-universal-weights"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="card">
       <h3>Asset ↔ sector correlation (home vs market) <span class="info-ic" data-gloss="avgcorr">i</span></h3>
@@ -2145,6 +2160,9 @@ const HEADER_LABELS = {
   mktcap_to_assets: "Mkt/Assets", market_cap_b: "Mkt cap $B", in_portfolio: "In book",
   index_member: "Index", shares: "Shares", avg_cost: "Avg cost", last_close: "Last",
   market_value: "Mkt value", unrealized_pl_pct: "Unreal P/L", weight: "Weight",
+  current_weight_pct: "Current wt %", target_weight_pct: "Target wt %",
+  delta_weight_pct: "Δ wt pp", delta_mv: "Δ $", shares_delta: "Shares Δ",
+  action: "Action", weight_pct: "Weight %",
   momentum_score: "Momentum", factor_composite: "Factor", reasons: "Reasons",
   pct_change: "Forecast %", forecast_close: "Fcst close", history_n: "Hist n",
   backend: "Backend", model: "Model", score: "Score", ret_z: "Ret z", resid_z: "Resid z",
@@ -2451,6 +2469,7 @@ function renderPortfolio() {
   fillTable("tbl-holdings", holdings, [
     "ticker","shares","avg_cost","last_close","market_value","unrealized_pl_pct","weight","sector"
   ]);
+  renderUniversal();  // async; fills the Cover tiles when the lazy tables land
   const corrRows = DATA.asset_sector_corr || [];
   const byT = {};
   corrRows.forEach(r => {
@@ -2471,6 +2490,43 @@ function renderPortfolio() {
     return String(a.ticker).localeCompare(String(b.ticker));
   });
   fillTable("tbl-asset-sector", rows, ["ticker","home_sector","corr_home","corr_mkt"]);
+}
+
+async function renderUniversal() {
+  // Live parquet over HTTP via the catalog (data.json is obsolete — the
+  // lazy catalog-backed read_parquet path is the only data access mechanism).
+  if (!CONN || !window.SQL_CATALOG || !window.SQL_CATALOG.length) return;
+  let plan = [];
+  let w = [];
+  try {
+    plan = await liveTable("universal_sizing_plan") || [];
+    w = await liveTable("universal_book_weights") || [];
+  } catch (e) { console.warn("renderUniversal", e); }
+  // Cover §10 gated sizing recommendation (one row per held name).
+  // weight-like columns are stored as 0-1 fractions; export as *percent* so
+  // fmtCell renders them literally (matches portfolio_holdings percent form):
+  // *_pct keys go through the "already percent" branch of fmtPctSmart.
+  const rows = plan.map(r => ({
+    ticker: r.ticker,
+    current_weight_pct: +(r.current_weight * 100).toFixed(2),
+    target_weight_pct: +(r.target_weight * 100).toFixed(2),
+    delta_weight_pct: +(r.delta_weight * 100).toFixed(2),
+    delta_mv: r.delta_mv,
+    shares_delta: r.shares_delta,
+    action: r.action
+  }));
+  fillTable("tbl-universal", rows || [], [
+    "ticker","current_weight_pct","target_weight_pct","delta_weight_pct",
+    "delta_mv","shares_delta","action"
+  ]);
+  // latest daily gated weights row (weights file ends with the newest date)
+  if (w && w.length) {
+    const last = w[w.length - 1];
+    const wtRows = Object.entries(last)
+      .filter(([k]) => k !== "date")
+      .map(([k, v]) => ({ ticker: k.toUpperCase(), weight_pct: +(v * 100).toFixed(2) }));
+    fillTable("tbl-universal-weights", wtRows, ["ticker", "weight_pct"]);
+  }
 }
 
 function renderValue() {
@@ -5788,6 +5844,7 @@ async function main() {
   else if (typeof populateStockTickers === "function") await populateStockTickers();
   if (typeof initSprintStock === "function") initSprintStock();
   if (typeof renderSprint === "function") renderSprint();
+  if (typeof renderPortfolio === "function") renderPortfolio();  // Cover tiles need CONN
   if (typeof renderSignals === "function") renderSignals();
   if (typeof renderRegimeModels === "function") renderRegimeModels();
   if (typeof renderRptRegimeModels === "function") renderRptRegimeModels();
