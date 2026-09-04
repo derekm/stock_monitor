@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import os
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from pathlib import Path
@@ -41,16 +42,44 @@ def load_prices():
     return pd.DataFrame(columns=["date", "ticker", "open", "high", "low", "close", "volume", "source"])
 
 
-def save_prices(df):
+def save_prices(df, whole_hive: bool = False):
+    """Persist price rows into the partitioned hive.
+
+    whole_hive=False (default, fetch path): df is ONLY new gap rows; already
+    absent from the hive, so writing them as new partition files is true
+    append — no dedupe against existing, no rewrite. whole_hive=True: df is a
+    recombined full hive (cmd_manual/cmd_from_csv single-row or small edits
+    where the row may overwrite an existing (date, ticker) pair); each
+    month's old files are removed so the partition holds exactly df's rows.
+    """
     if isinstance(df["ticker"].dtype, pd.CategoricalDtype):
         df = df.copy()
         df["ticker"] = df["ticker"].astype(str)
     df = df.copy()
-    df["date"] = df["date"].map(lambda d: d.date() if isinstance(d, pd.Timestamp) else d)
+    # Keep datetime64[ms] (matches the hive's stored schema, including the
+    # 20:00 session rows) — do NOT normalize to python date here.
+    df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values(["date", "ticker"]).drop_duplicates(subset=["date", "ticker"], keep="last")
-    table = pa.Table.from_pandas(df, preserve_index=False)
-    pq.write_table(table, PRICES_DIR)
-    print(f"Saved {len(df)} price rows to {PRICES_DIR}")
+    # Append-only partitioned write. pq.write_table(root_dir) treats the
+    # directory as a FILE and fails WinError 5 ("open daily_prices denied") —
+    # that exact error killed every real save in the 2026-09-03 DAG run.
+    # Write each year/month group as its own partition file; readers glob
+    # *.parquet under daily_prices/, so nothing is rewritten or deleted.
+    df["_year"] = df["date"].dt.year
+    df["_month"] = df["date"].dt.month
+    n_total = 0
+    for (y, m), g in df.groupby(["_year", "_month"]):
+        part = PRICES_DIR / f"year={y}" / f"month={m}"
+        part.mkdir(parents=True, exist_ok=True)
+        if whole_hive:
+            for old in part.glob("*.parquet"):
+                old.unlink()
+        out = part / f"{uuid.uuid4().hex}-0.parquet"
+        body = g.drop(columns=["_year", "_month"])
+        pq.write_table(pa.Table.from_pandas(body, preserve_index=False), out)
+        n_total += len(g)
+        print(f"  wrote {len(g)} rows -> {out.name} (year={y} month={m})")
+    print(f"Saved {n_total} price rows to {PRICES_DIR}")
 
 
 def get_active_tickers():
@@ -427,9 +456,13 @@ def cmd_fetch(args):
     new_df["date"] = pd.to_datetime(new_df["date"])
 
     if args.save:
-        existing = load_prices()
-        combined = pd.concat([existing, new_df], ignore_index=True)
-        save_prices(combined)
+        # Append-only: save ONLY the newly fetched gap rows, never the
+        # recombined hive. Passing `existing + new_df` made save_prices
+        # rewrite every month partition each run (777 new files, ~2.4M dup
+        # rows on 2026-09-03) — the gap filter already guarantees new_df
+        # shares no (date, ticker) with the hive, so there is nothing to
+        # merge against.
+        save_prices(new_df)
     else:
         print(f"\nFetched {len(new_df)} rows (dry run, --save to persist)")
 
@@ -449,7 +482,7 @@ def cmd_manual(args):
     }
     new_df = pd.DataFrame([row])
     combined = pd.concat([existing, new_df], ignore_index=True)
-    save_prices(combined)
+    save_prices(combined, whole_hive=True)
     print(f"Recorded {args.ticker.upper()} {d.date()} O={args.open} C={args.close}")
 
 
@@ -466,7 +499,7 @@ def cmd_from_csv(args):
     csv_df["source"] = "csv"
     existing = load_prices()
     combined = pd.concat([existing, csv_df], ignore_index=True)
-    save_prices(combined)
+    save_prices(combined, whole_hive=True)
     print(f"Imported {len(csv_df)} rows from {args.csv}")
 
 
