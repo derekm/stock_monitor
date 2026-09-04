@@ -515,6 +515,7 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `kelly_parameters.parquet` | `preferred_metrics.py` | Other |
 | `universal_paths.parquet` | `universal_portfolio.py` | Other |
 | `universal_book_weights.parquet` | `universal_portfolio.py` | Other |
+| `universal_sizing_plan.parquet` | `universal_portfolio.py` | Other |
 | `monte_carlo_terminal_wealth.csv` | `monte_carlo.py` | Other |
 | `tail_risk_hedge_crisis.csv` | `tail_risk_hedging.py` | Other |
 | `vol_target_vs_risk_parity.csv` | `risk_parity_analytics.py` | Other |

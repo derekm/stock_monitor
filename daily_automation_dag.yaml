@@ -216,8 +216,8 @@ jobs:
     desc: "Bogle Bond Proxy Index (defensive sectors, equal-weight)"
 
   universal_book:
-    cmd: ["universal_portfolio.py", "book", "--save"]
-    desc: "Cover universal portfolio — personal book daily weights (regret-optimal, no lookahead)"
+    cmd: ["universal_portfolio.py", "book", "--save", "--sizing"]
+    desc: "Cover universal portfolio — personal book daily weights + sizing plan (regret-optimal, no lookahead)"
 
   bogle_pmi:
     cmd: ["build_bogle_funds.py", "--fund", "pmi", "--save", "--years", "10"]

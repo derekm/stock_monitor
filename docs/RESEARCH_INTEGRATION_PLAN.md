@@ -374,36 +374,38 @@ CPPI keeps DD ≤ 7.6% vs ERC 21.5% — best floor per unit risk — but median 
 
 ### 23. Cover — Universal Portfolios (pulled forward 2026-09-04)
 
-**Status:** **Measured (2026-09-04)** — research bar PASS; book tool live as weights.
+**Status:** **Measured (2026-09-04)** — research bar PASS; side-info measured (wash); book tool live as weights + sizing plan.
 
 **Core papers:** Cover 1991 *Universal Portfolios* (Math. Finance 1(1):1–29); Cover & Ordentlich 1996 side info (IEEE-IT 42(2):348–363); Ordentlich & Cover 1998 minimax (Math. OR 23(4):960–982) — see `docs/cover_universal_portfolio.md`.
 
-**Engine (`universal_portfolio.py`):** day-k weights = performance-weighted average over all CRPs in the simplex (Dirichlet(1/2) prior = minimax, regret exactly ((m−1)/2)log(n+1)). Exact m=2 via Cover eq. (128) Q-telescope; m≥2 via simplex MC (Kalai–Vempala style). Validated: exact vs 100k-sample MC agree within 0.05% on synthetic 2-asset data; telescope identity Ŝₙ = ΣQ self-checks every run. Zero assumptions, zero lookahead, no shorts (simplex constraint).
+**Engine (`universal_portfolio.py`, refactored to a reusable library):** `UniversalEngine` (exact m=2 via Cover eq. (128) Q-telescope; MC simplex for m≥2, Kalai–Vempala style; telescope identity Ŝₙ = ΣQ self-checks every run; validated exact vs 100k MC within 0.05%), `PortfolioResult` (weights/wealth/gated/trades/stats), `RegimeStates` (tape-level HMM states as side info, reusing `hmm_regime_detection.build_features`), `SizingPlan` (target-vs-holdings trade plan). Zero assumptions, zero lookahead, no shorts (simplex constraint). CLI is a thin wrapper; everything importable.
 
 **Research (shared 400-path, 21d-block bootstrap, seed 0 — same paths as item 14, 2021-08→2026-08):**
 
 | book | median terminal | p05 terminal | median maxDD | median underwater days |
 |---|---|---|---|---|
-| universal | **1.97** | 1.12 | **20.9%** | **48** |
+| universal | **1.96** | 1.12 | **20.9%** | 309 |
+| universal_side (HMM) | **1.94** | 1.10 | 21.1% | 312 |
 | erc | 1.86 | 1.03 | 21.5% | 327 |
 | hrp | 1.82 | 1.00 | 21.6% | 338 |
 | cppi_m3 | 1.33 | 1.09 | 6.1% | 303 |
 | vincent_ls | 4.37 | 1.73 | 30.1% | 261 |
 
-**Bar (same as item 14): median terminal ≥ 0.8×ERC AND median maxDD < ERC → PASS.** Universal beats ERC on both axes (1.97× vs 1.86×; 20.9% vs 21.5%) with no lookahead, and its underwater signature is the standout: median 48 days vs ERC 327 — it never stays buried. Caveat as in the paper: universal trails the hindsight CRP at finite n by construction (that IS the regret bound); Vince LS still owns the leverage claim (4.37× terminal, 30% DD).
+**Bar (same as item 14): median terminal ≥ 0.8×ERC AND median maxDD < ERC → PASS (both universal and universal_side).** Universal beats ERC on both axes (1.96× vs 1.86×; 20.9% vs 21.5%) with no lookahead. **Side-info result: a wash (1.94 vs 1.96, 0.99×)** — on the TMI/BPI index tape the best state-conditional CRP ≈ the best CRP, so HMM state conditioning adds no terminal wealth; the extra regret dimension (d=k(m−1)=3) slightly costs. The side-info claim is honest-but-flat HERE; the states may matter more on the 9-name book. Vince LS still owns the leverage claim (4.37×, 30% DD). Note: 1.96 supersedes the earlier 1.97 figure — the library refactor reports stats off the exact wealth series.
 
-**Book (narrow, personal portfolio, common trading window 2,799 days ≈ 11y, 9 names):** universal (cost-gated, 0.10%) **2.85×** vs equal-weight **2.58×** vs best hindsight name SMCI 13.2×. The honest read: modest +8–11% over the naive no-lookahead baseline; it cannot know SMCI was the winner. Cover §10 rebalance gate: only 24 of 2,799 days trigger (log-wealth gain > log(1+cost)), and the gate *improves* wealth (2.85 vs 2.78 ungated) — the gate is not just cost control, it filters rebalance noise. Latest weights → `universal_book_weights.parquet` (date × ticker × weight); dashboard-exposed.
+**Book (narrow, personal portfolio, common trading window 2,799 days ≈ 11y, 9 names):** universal (cost-gated, 0.10%) **2.85×** vs equal-weight **2.58×** vs best hindsight name SMCI 13.2×. The honest read: modest +8–11% over the naive no-lookahead baseline; it cannot know SMCI was the winner. Cover §10 rebalance gate: only 24 of 2,799 days trigger (log-wealth gain > log(1+cost)), and the gate *improves* wealth (2.85 vs 2.78 ungated) — the gate is not just cost control, it filters rebalance noise. **Sizing wired:** `SizingPlan` compares latest gated weights vs `portfolio_holdings.parquet` (percent-form normalized) → per-name delta shares at last close → `universal_sizing_plan.parquet`; latest plan trims BAYRY/CAG/HMC/KHC/T, adds HPQ/PFE/SMCI (SMCI +0.62 shares). Latest weights → `universal_book_weights.parquet`; dashboard-exposed.
 
 **Checklist:**
 - [x] Exact Dirichlet(1/2) m=2 engine + telescope self-check; MC engine validated vs exact
 - [x] Research: 400 shared bootstrap paths, universal vs erc/hrp/cppi_m3/vincent_ls → `universal_paths.parquet`
 - [x] Book: daily universal weights for BAYRY,CAG,HMC,HPQ,KHC,MOS,PFE,SMCI,T → `universal_book_weights.parquet`
 - [x] Cover §10 cost gate (rebalance iff ΔlnW > ln(1+c)) — measured, improves results
-- [x] Side-information variant (Cover–Ordentlich states = HMM regimes, regret d=k(m−1)) — **not run** (next)
+- [x] Side-information variant (Cover–Ordentlich; HMM states = `RegimeStates`, fitted on the ORIGINAL tape, resampled with the same block draws — no lookahead) — **measured: 0.99× plain, flat on the index tape**
+- [x] Sizing plan vs holdings (percent normalized, delta shares, gate-honoring) → `universal_sizing_plan.parquet`, wired into the `universal_book` DAG job
 
-**Do not:** Claim universal > oracle at finite n (that's a theorem violation). Do not trade the book at Ungated daily weights (gate exists). Do not treat this as alpha — it is the regret-optimal no-lookahead baseline to beat.
+**Do not:** Claim universal > oracle at finite n (that's a theorem violation). Do not trade the book at Ungated daily weights (gate exists). Do not treat this as alpha — it is the regret-optimal no-lookahead baseline to beat. Do not claim HMM side-info adds value on the index tape (measured flat).
 
-**Outputs:** `universal_paths.parquet`, `universal_book_weights.parquet`.
+**Outputs:** `universal_paths.parquet`, `universal_book_weights.parquet`, `universal_sizing_plan.parquet`.
 
 **Phase 2 sequence:** 8 (12-2 vs fractal) → 11 (implied-r coverage, unblocked) → 13 only if 8 passes → 9 when GP/A exists → 10 after asset-class returns exist → 14 → 12 → 15. Dashboard tile per closed item. Shadow-book costs before any live sleeve.
 

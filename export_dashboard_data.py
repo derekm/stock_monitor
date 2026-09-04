@@ -30,6 +30,7 @@ TABLES = [
     "risk_metrics",
     "universal_paths",
     "universal_book_weights",
+    "universal_sizing_plan",
     "factor_sleeve_returns",
     "factor_rotation_weights",
     "factor_rotation_performance",
