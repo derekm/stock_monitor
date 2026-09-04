@@ -204,11 +204,9 @@ jobs:
   bogle_tmi:
     cmd: ["build_bogle_funds.py", "--fund", "tmi", "--save", "--years", "10"]
     desc: "Bogle Total Market Index (cap-weighted + Fisher chained)"
-
   bogle_qmi:
     cmd: ["build_bogle_funds.py", "--fund", "qmi", "--save", "--years", "10"]
     desc: "Bogle QMI — NM quality top quintile + Fisher"
-
   bogle_qmi_strict:
     cmd: ["build_bogle_funds.py", "--fund", "qmi_strict", "--save", "--years", "10"]
     desc: "Bogle QMI strict — Buffett 15/15/1.0 + Fisher"
@@ -216,6 +214,10 @@ jobs:
   bogle_bpi:
     cmd: ["build_bogle_funds.py", "--fund", "bpi", "--save", "--years", "10"]
     desc: "Bogle Bond Proxy Index (defensive sectors, equal-weight)"
+
+  universal_book:
+    cmd: ["universal_portfolio.py", "book", "--save"]
+    desc: "Cover universal portfolio — personal book daily weights (regret-optimal, no lookahead)"
 
   bogle_pmi:
     cmd: ["build_bogle_funds.py", "--fund", "pmi", "--save", "--years", "10"]
@@ -302,6 +304,7 @@ dependencies:
   bogle_qmi: [update_prices, market_cap]
   bogle_qmi_strict: [update_prices, market_cap]
   bogle_bpi: [update_prices, market_cap]
+  universal_book: [update_prices]
   bogle_pmi: [update_prices, market_cap]
   regime_clusters: [market_cap]
   ticker_news: []
