@@ -249,9 +249,9 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `asset_correlation_matrix.csv` | `inclusion_criteria.py` | Correlation matrix |
 | `asset_sector_correlations.csv` | `cross_asset_analysis.py` | Correlation matrix |
 | `correlation_stability_metrics.csv` | `maintain_analytics.py` | Correlation matrix |
-| `crisis_avg_corr_timeseries.csv` | `crisis_correlation.py` | Correlation matrix |
-| `crisis_correlation_pairs.csv` | `crisis_correlation.py` | Correlation matrix |
-| `crisis_correlation_summary.csv` | `crisis_correlation.py` | Correlation matrix |
+| `crisis_avg_corr_timeseries.parquet` | `crisis_correlation.py` | Correlation matrix |
+| `crisis_correlation_pairs.parquet` | `crisis_correlation.py` | Correlation matrix |
+| `crisis_correlation_summary.parquet` | `crisis_correlation.py` | Correlation matrix |
 | `fertilizer_correlation_matrix.csv` | `maintain_analytics.py` | Correlation matrix |
 | `growth_tech_corr_stability.csv` | `growth_tech_analytics.py` | Correlation matrix |
 | `growth_tech_correlation_matrix.csv` | `growth_tech_analytics.py` | Correlation matrix |
@@ -487,7 +487,7 @@ for backtesting and analytics. Produced by `data_validation.py` cleanup.
 | `preferred_metrics_history.csv` | `fundamentals_history.py` | Summary / metrics |
 | `preferred_metrics_history.csv` | `research_hygiene.py` | Summary / metrics |
 | `preferred_metrics_history.parquet` | `fundamentals_history.py` | Summary / metrics |
-| `price_jump_audit.csv` | `data_integrity.py` | Summary / metrics |
+| `price_jump_audit.parquet` | `data_integrity.py` | Summary / metrics |
 | `rebalance_calendar.csv` | `rebalance_calendar.py` | Summary / metrics |
 | `robust_covariance_summary.csv` | `robust_covariance.py` | Summary / metrics |
 | `rolling_window_metrics.csv` | `rolling_window_analysis.py` | Summary / metrics |

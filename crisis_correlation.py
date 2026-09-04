@@ -234,7 +234,7 @@ def run(save: bool = True):
             print("\nLargest corr decreases (diversifiers in stress):")
             print(pairs.tail(10).sort("delta"))
             if save:
-                pairs.write_csv(OUT_PAIR)
+                pairs.write_parquet(OUT_PAIR, compression="zstd")
     
     # Rolling avg pairwise timeseries tagged with crisis flag
     window = 21
@@ -276,8 +276,8 @@ def run(save: bool = True):
     
     summary = pl.DataFrame(results)
     if save:
-        summary.write_csv(OUT)
-        ts.write_csv(OUT_TS)
+        summary.write_parquet(OUT, compression="zstd")
+        ts.write_parquet(OUT_TS, compression="zstd")
         print(f"\nWrote {OUT}\nWrote {OUT_TS}")
     return summary
 

@@ -60,7 +60,7 @@ def audit_price_jumps(max_abs_ret: float = 0.35) -> pl.DataFrame:
         .filter(pl.col("ret").abs() > max_abs_ret)
     )
     df = lf.collect()
-    df.write_csv(JUMP_REPORT)
+    df.write_parquet(JUMP_REPORT, compression="zstd")
     print(f"Jump audit: {df.height} rows > ±{max_abs_ret:.0%} → {JUMP_REPORT.name}")
     return df
 
