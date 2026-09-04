@@ -355,18 +355,134 @@ CPPI keeps DD ≤ 7.6% vs ERC 21.5% — best floor per unit risk — but median 
 
 **Output:** `cppi_paths.parquet`.
 
-### 15. Merton — ICAPM + Multi-Hedge
+#### 14b. Spec — CPPI floor overlay on the personal book (narrow)
 
-**Status:** Last. `black_litterman.py` exists. Macro panels are stale or junk (ERP already inside WACC; `exogenous_panel` ~1 month behind prices).
+**Status:** **Spec'd (2026-09-04)** — not implemented.
+
+**Goal:** cap the 9-name universal book's drawdown with the item-14 floor machinery
+without giving up the gated-UP terminal wealth. The book is not TMI/BPI: it is a
+$300-ish, 9-name, all-equity position whose NAV path is `universal_book_weights`
+daily gated wealth (2,799-day common window, 2.85× gated).
+
+**Mechanics (Kouwenberg–Zhu style ratchet, daily, no lookahead, no leverage):**
+- NAV_t = book value at close t (holdings × last_close, cash = 0 residual)
+- Floor F_t = 0.90 × running peak NAV, ratcheted **up only** (never down)
+- Cushion C_t = NAV_t − F_t; equity exposure w_e(t) = min(1, m × C_t / NAV_t),
+  m ∈ {2, 3, 4}; the residual (1 − w_e) sits in cash
+- **The multiplier m scales the cushion, it is NOT leverage on the book** —
+  w_e ≤ 1 always. m=4 is the most aggressive de-risk profile, not borrowing.
+- De-risk when NAV threatens the floor (w_e falls), re-risk only when the new
+  peak ratchets the floor higher. No intraday; close-to-close only.
+
+**Bar (same convention as 14):** book+CPPI median maxDD **< 0.5 ×** book-alone
+maxDD AND median terminal **≥ 0.8 ×** book-alone terminal. Book-alone maxDD is
+~20% on the universal path; floor target ≤ ~10%.
+
+**Research leg:** re-use `cppi_backtest.py`'s 400 SHARED block-bootstrap paths —
+apply the floor to the gated-UP book wealth path (not raw TMI/BPI) so the floor
+is tested against the actual book engine. Single m pass → book tool; both bars
+fail → one-line fail, keep the book un-floored.
 
 **Checklist:**
-- [ ] Build hedge sleeves from liquid instruments: TIPS (bond proxy), USD (currency proxy), labor-income proxy (use SPY sector-neutral construction per Santos & Veronesi 2006)
-- [ ] Implement ICAPM hedging: estimate hedge coefficients from Merton's multi-factor model on rolling 252d windows
-- [ ] Backtest: ICAPM-hedged TMI vs TMI (net of hedge costs) on full history
-- [ ] BL views: only from Phase 1 signals that passed bars (ER hit-edge +6.3pp ✓; dyn weights ✗)
-- [ ] Write `icapm_hedge_sleeves.parquet` (date × sleeve × weight)
+- [ ] `UniversalEngine`/`PortfolioResult` gains `cppi_floor(m, floor=0.9)` method
+- [ ] Book run: 400 shared paths, floor overlay, maxDD + terminal per m
+- [ ] Narrow: live DAG job `universal_book_cppi` (after `universal_book`) writing
+      `universal_book_cppi_weights.parquet` (date × ticker × w_e × cppi_weight)
+- [ ] Dashboard tile: book NAV vs floored NAV + current w_e
 
-**Do not:** Put inflation/oil/CPI in `forecast_llm.py`. Do not invent a labor-income factor from GICS.
+**Do not:** Call the reactivation "market timing". Do not let the floor gate the
+universal rebalance (the §10 gate stays separate). Do not m > 4. Do not apply the
+floor to research paths and the book with different cost conventions.
+
+**Output:** `universal_book_cppi_weights.parquet`.
+
+### 15. Merton — ICAPM + Multi-Hedge (and the BL blend)
+
+**Status:** **Spec'd (2026-09-04) — not implemented.** `black_litterman.py` exists. Macro panels are stale or junk (ERP already inside WACC; `exogenous_panel` ~1 month behind prices).
+
+#### 15a. Spec — ICAPM hedge sleeves (broad research leg)
+
+**Goal:** price the personal book's exposure to the three non-market state
+variables Merton's ICAPM says a long-horizon investor hedges, and emit sleeves
+whose weights are estimated, not asserted.
+
+| sleeve | instrument proxy (from the hive, no new feeds) | why it is the proxy |
+|---|---|---|
+| bond/TIPS | TIP ETF daily total return | unexpected-inflation + real-rate state var that erodes nominal book |
+| currency | UUP (dollar) daily total return | USD shocks hit ADRs in the book (BAYRY, HMC) harder than pure domestics |
+| labor-income | SPY sector-neutral construction per Santos–Veronesi 2006 (long high-labour-share sectors vs short low-labour-share, within SPY) | human-capital payoff covariance the ICAPM says matters at horizon |
+
+**Mechanics:**
+- Daily returns of the three sleeves from `sector_prices.parquet` + hive ETFs.
+- Rolling 252d multivariate regression of book excess returns on
+  [market, sleeve1, sleeve2, sleeve3] → hedge coefficients β per sleeve.
+- Hedge sleeve weight = −β scaled by inverse-vol, capped: |w_sleeve| ≤ 0.30
+  (small book, no naked shorts beyond the pair structure; the sleeve stays
+  within the SPY pair, so it is a spread, not a directional bet).
+- Weekly rebalance (monthly was the TMI-leg convention); cost 0.10% charged
+  on the sleeve turn.
+- Backtest on full book window (2,799d): ICAPM-hedged book vs book alone vs
+  book + CPPI. **Bar:** hedged median maxDD < book-alone maxDD AND hedged
+  terminal ≥ 0.8 × book-alone terminal (same convention as 14). Hedge that
+  costs wealth is a failed hedge — go unhedged.
+
+**Checklist:**
+- [ ] 3 sleeve return builders (hive-only: TIP, UUP, SPY sector pair)
+- [ ] Rolling 252d OLS coefficients, inverse-vol scaling, ±0.30 cap
+- [ ] 400 shared bootstrap paths, weekly rebalance, 10bps cost
+- [ ] Compare hedged vs unhedged vs CPPI-overlaid on maxDD + terminal
+- [ ] Write `icapm_hedge_sleeves.parquet` (date × sleeve × weight) only if the bar passes
+
+**Do not:** Put inflation/oil/CPI in `forecast_llm.py`. Do not invent a
+labor-income factor from GICS (Santos–Veronesi construction only). Do not run
+the sleeve as the whole book (it is a hedge, max ±30% notional).
+
+#### 15b. Spec — Black-Litterman blend for the personal book (narrow)
+
+**Goal:** fold the *passed* active signals into the universal baseline as
+view-tilted weights — the one mechanism that gives the active layers a vote in
+**size**, not just a veto gate.
+
+**Inputs:**
+- Prior = the gated universal book weights (item 23) — the regret-optimal
+  no-lookahead baseline, NOT market-cap (the repo has no clean broad cap-weight
+  panel for a 9-name book; UP is the honest prior).
+- Views: **only** from Phase-1/2 signals that passed their own bars —
+  implied-r (>0 gate, item 11 PASS), QV∩NM quality (item 9), ER hit-edge
+  (+6.3pp ✓); dyn weights / meta-labeling / aggregator 0–1 scores stay OUT by
+  the existing do-nots.
+- View conviction τ: from the signal's own OOS IC (preferred 0.048, peer 0.177,
+  pair 0.127, cross 0.025, earnings 0.022 — the measured live ICs, item 3).
+
+**Mechanics (standard BL, one-line closed form):**
+- Baseline covariance from 252d book-name returns (hive, Polygon-priority).
+- View vector P·q with diagonal uncertainty Ω = diag(τ·P·Σ·Pᵀ) — conviction
+  scales the view, measured IC sets τ; no view on a name → posterior = prior.
+- Posterior w_BL = MAP of [universal prior, signal views]. Apply the Cover §10
+  cost gate to w_BL vs current holdings (same gate as the plain book).
+- Emit `bl_book_weights.parquet` (date × ticker × w_BL) + the CVaR/turnover
+  comparison vs the ungated-UP book.
+- **Bar:** BL book terminal ≥ UP-book terminal on the 400 shared paths AND
+  turnover ≤ 2× plain book. A blend that adds turnover without wealth loses.
+
+**Do not:** Feed signals that failed their bars into views. Do not use
+dynamic/aggregator scores. Do not let |w_BL − w_UP| exceed 0.05 per name per
+month (the tilt must be a tilt, not a rewrite). Do not treat BL as alpha —
+it is the mechanism that lets measured signals *adjust* the baseline.
+
+**Checklist:**
+- [ ] Prior/covariance/views plumbing on the 9-name book
+- [ ] 400 shared paths: UP vs BL (terminal, maxDD, turnover)
+- [ ] Live DAG job `universal_book_bl` after `universal_book` (writes
+      `bl_book_weights.parquet`, gate-honoring)
+- [ ] Dashboard: BL target row next to the UP/current rows
+
+**Outputs:** `icapm_hedge_sleeves.parquet`, `bl_book_weights.parquet`.
+
+**Ordering (per sequencing rules):** 14b (CPPI floor) first — it rides the
+existing engine and needs no new data. 15a then 15b order is flexible; 15b can
+proceed independently since its sleeve inputs are the same hive data. Neither
+touches `forecast_llm.py` or the hive writers.
 
 **Bar:** ICAPM-hedged TMI vs TMI: maxDD ratio **< 0.85** with net CAGR loss **< 1.5 pp/yr**. Else BL stays a view engine, not an ICAPM claim.
 
