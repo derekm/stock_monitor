@@ -557,6 +557,33 @@ touches `forecast_llm.py` or the hive writers.
 **Target:** `preferred_metrics.py`, `dupont_analysis.py`, `quality_scores.parquet`
 **Deliverable:** Full Novy-Marx quality factor (gross profitability, investment, accruals); replace our ad-hoc gate
 
+### 24. Macro — UMKC/MMT sectoral balances + KC Fed labor/natural rate (pulled forward 2026-09-05)
+
+**Status:** **Spec'd (2026-09-05)** — not implemented. Live layer is Keen/Minsky demand (`macro_fragility.py`) + oil/CPI/FFR supply (`macro_shock.py`) + a calendar that is mostly option-expiry (`economic_calendar.py`). Sector/macro stay **out** of `forecast_llm.py` (measured 2026-08-30).
+
+**Live state (do not invent):**
+- `macro_fragility.parquet` last **2026-01-01** (two quarters stale vs prices): debt/GDP **3.63**, impulse **0.209**, p_stress **0**, minsky_pctile **0.75**, `danger_zone=crisis_band`. Calm + levering is the FIH reading — the label is the bug (see below).
+- `macro_shock.parquet` last **2026-08-01**: oil 12m **+29%**, inflation surprise ~0, real rate ~0, `shock_zone=elevated`.
+- FRED cache: TCMDO, GDP, M2V, CPI, FEDFUNDS, WTI — **no** private-vs-federal split, **no** sectoral balances, **no** KC Fed LMCI / natural rate.
+
+**The load-bearing error (Keen × Wray):** `TCMDO` is **all sectors** (households + business + **federal**). Keen's FIH variable is **private** debt; Wray's "Kansas City" MMT says a floating-rate sovereign **cannot** be insolvent in its own currency — federal debt/GDP is not a Minsky crisis stock. Mixing them is why `danger_zone=crisis_band` can fire on Treasury issuance. Split TCMDO (or CMDEBT / household+nonfin business) vs FYGFD (federal). Private impulse stays the fragility claim; federal net injection is the **sectoral-balance** claim.
+
+**What to add (FRED + KC Fed public series, no new paid feeds):**
+
+1. **Sectoral balances (Godley / UMKC-Wray).** Private surplus ≈ public deficit + current account. Series: federal receipts/expenditures or net lending (NCBEILQ027S / FGEXPND / FGRECPT), current account. When the *private* sector is in deficit, that **is** the Keen impulse in MMT clothing. Output: `sectoral_balances.parquet` (date, private_balance, public_balance, cad).
+2. **Private-debt impulse (Keen, corrected).** Recompute `debt_impulse` on private debt only. Bar: private impulse vs NBER recession starts must not be worse than the all-sector series; if the Jan-2026 `crisis_band` **flips** after the split, that is a finding, not a patch — print both.
+3. **Inflation constraint, not solvency.** MMT: the binder is real resources + inflation, not the bond vigilante. Keep `inflation_surprise`; add core PCE and the **KC Fed Model-Based Natural Unemployment Rate** + unemployment gap (Glover/Oliyide Charting the Economy, Aug 2026: Taylor-rule FFR "should probably be higher — by how much is uncertain"). Real rate in `macro_shock` is FFR−CPI, not r*. Do not treat the sign of FFR−CPI as a natural-rate claim.
+4. **Labor buffer (JG proxy, not a JG).** Do not implement a job guarantee as a portfolio weight. Do ingest the **KC Fed Labor Market Conditions Index** (24-series LMCI — Schmid 2026 speech: cooling, still a touch above average). Bundick (KC Fed) / Cairó / Petrosky-Nadeau FEDS 2025-068: shortfalls vs deviations on maximum employment. Slack = inflation buffer in the UMKC buffer-stock story.
+5. **Tenth District (optional, local).** KC Fed manufacturing survey already sits in the Board MPR regional average. Not a book signal until it has a bar vs TMI.
+
+**Bar:** (a) private-debt series exists and is DATE-native quarterly; (b) `danger_zone` is computed from **private** impulse, not TCMDO-all; (c) sectoral balances last date within 1 quarter of FRED; (d) **no** new field in the LLM brief. If private impulse fails to lead recessions vs the current series, keep TCMDO as a published alternative column — do not silently swap.
+
+**Do not:** Put CPI/oil/MMT slogans in `forecast_llm.py`. Do not treat US federal debt/GDP as a solvency veto on T / RF / KEY. Do not size the book on the Minsky pctile (it's a regime flag, not a weight). Do not claim the job guarantee is in the engine.
+
+**Outputs:** `sectoral_balances.parquet`, `macro_fragility.parquet` (private + all-sector columns), optional `kc_labor.parquet` (LMCI + U-gap).
+
+**Ordering:** after item 15 sleeves (TIP already is the inflation hedge); does not block Cover/sizing. UMKC/Wray is the *interpretation* of the fiscal columns; Keen stays the *private-debt* mechanic.
+
 ---
 
 ## Cross-Cutting Infrastructure (Continuous)
